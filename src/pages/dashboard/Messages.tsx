@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from "react";
-import { Link } from "react-router";
+import { Link, useSearchParams } from "react-router";
 import { useMutation, useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
+import { toast } from "sonner";
 import {
   ArrowLeft,
   Loader2,
@@ -20,6 +21,18 @@ import { timeAgo } from "@/lib/format";
 export default function Messages() {
   const { user } = useAuth();
   const conversations = useQuery(api.messages.myConversations);
+  const [searchParams] = useSearchParams();
+  // Support starting a brand-new conversation: /dashboard/messages?to=<userId>
+  const toParam = searchParams.get("to");
+  const validTo =
+    toParam && /^[a-z0-9]{8,}$/.test(toParam) ? toParam : null;
+  const target = useQuery(
+    api.users.getPublicUser,
+    validTo ? { id: validTo as never } : "skip",
+  );
+  const existingThread = conversations?.find(
+    (c) => c.other?._id === validTo,
+  );
   const [threadId, setThreadId] = useState<string | null>(null);
   const thread = useQuery(
     api.messages.threadMessages,
@@ -42,12 +55,40 @@ export default function Messages() {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [thread?.length]);
 
+  // Once the first message creates the thread, open it automatically.
+  useEffect(() => {
+    if (existingThread && !threadId) setThreadId(existingThread.threadId);
+  }, [existingThread, threadId]);
+
   const handleSend = async () => {
     if (!active?.other || !body.trim()) return;
     setSending(true);
     try {
       await sendMessage({ receiverId: active.other._id, body });
       setBody("");
+    } catch (err) {
+      toast.error(
+        err instanceof Error ? err.message : "Could not send the message.",
+      );
+    } finally {
+      setSending(false);
+    }
+  };
+
+  const startCompose = async () => {
+    if (!validTo || !body.trim()) return;
+    if (validTo === user?._id) {
+      toast.error("You can't message yourself.");
+      return;
+    }
+    setSending(true);
+    try {
+      await sendMessage({ receiverId: validTo as never, body });
+      setBody("");
+    } catch (err) {
+      toast.error(
+        err instanceof Error ? err.message : "Could not send the message.",
+      );
     } finally {
       setSending(false);
     }
@@ -63,6 +104,37 @@ export default function Messages() {
       <div className="grid gap-5 lg:grid-cols-[320px_1fr]">
         {/* Conversation list */}
         <div className="space-y-2">
+          {validTo && !existingThread && (
+            <div className="rounded-2xl border border-lime-400/30 bg-lime-400/8 p-4">
+              <div className="flex items-center gap-3">
+                <Avatar name={target?.name ?? "…"} image={target?.image ?? null} />
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-sm font-semibold">
+                    New conversation with {target?.name ?? "…"}
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    Send the first message to get started.
+                  </p>
+                </div>
+              </div>
+              <div className="mt-3 flex gap-2">
+                <Input
+                  value={body}
+                  onChange={(e) => setBody(e.target.value)}
+                  onKeyDown={(e) => e.key === "Enter" && !e.shiftKey && startCompose()}
+                  placeholder="Write a message…"
+                  className="border-white/10 bg-black/20"
+                />
+                <Button
+                  onClick={() => void startCompose()}
+                  disabled={sending || !body.trim()}
+                  className="bg-lime-400 text-black hover:bg-lime-300"
+                >
+                  {sending ? <Loader2 className="size-4 animate-spin" /> : <Send className="size-4" />}
+                </Button>
+              </div>
+            </div>
+          )}
           {conversations === undefined ? (
             <div className="h-64 animate-pulse rounded-2xl border border-white/8 bg-card" />
           ) : conversations.length === 0 ? (

@@ -165,7 +165,9 @@ function DetailsForm({ courseId, initial }: { courseId?: string; initial?: Cours
   const save = async () => {
     setSaving(true);
     setError(null);
-    try {    const id = (await upsertCourse({
+    try {
+      if (!user) throw new Error("Sign in to create or edit courses.");
+      const id = (await upsertCourse({
       id: courseId ? (courseId as never) : undefined,
       title: form.title,
       subtitle: form.subtitle,

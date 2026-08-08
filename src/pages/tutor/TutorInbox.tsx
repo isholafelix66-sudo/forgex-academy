@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useMutation, useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
+import { toast } from "sonner";
 import { Loader2, MessageSquare, Send } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -42,6 +43,10 @@ export default function TutorInbox() {
     try {
       await sendMessage({ receiverId: active.other!._id as never, body });
       setBody("");
+    } catch (err) {
+      toast.error(
+        err instanceof Error ? err.message : "Could not send the message.",
+      );
     } finally {
       setSending(false);
     }

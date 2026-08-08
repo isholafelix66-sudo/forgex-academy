@@ -31,21 +31,37 @@ export async function requireAdmin(ctx: QueryCtx | MutationCtx) {
   return user;
 }
 
-/** Require the caller to be a tutor (or admin) whose application is active. */
+/**
+ * Require the caller to be a verified tutor (or an admin). The Tutor
+ * Dashboard is only usable by tutors that an admin has explicitly verified
+ * (`verified: true`); an approved-but-unverified application is not enough.
+ */
 export async function requireTutor(ctx: QueryCtx | MutationCtx) {
   const user = await requireUserDoc(ctx);
   if (user.role === ROLES.ADMIN) return user;
-  if (user.role !== ROLES.TUTOR) {
+  if (user.role !== ROLES.TUTOR || !user.verified) {
     throw new Error("Tutor access required.");
   }
-  const app = await ctx.db
-    .query("tutorApplications")
-    .withIndex("by_user", (q) => q.eq("userId", user._id))
-    .first();
-  const active =
-    !!app && (app.status === "approved" || app.status === "verified");
-  if (!active) {
-    throw new Error("Your tutor account is not active. Please check your application status.");
+  return user;
+}
+
+/**
+ * Query-only variant of `requireTutor` used by the tutor dashboard pages.
+ * When the caller isn't signed in at all (e.g. an admin session previewing
+ * the tutor dashboard without a user account) it returns `null`, and the
+ * calling query should return empty results. Signed-in non-tutors are still
+ * rejected with an error.
+ */
+export async function requireTutorPreview(
+  ctx: QueryCtx,
+): Promise<Doc<"users"> | null> {
+  const userId = await getAuthUserId(ctx);
+  if (userId === null) return null;
+  const user = await ctx.db.get(userId);
+  if (!user) return null;
+  if (user.role === ROLES.ADMIN) return user;
+  if (user.role !== ROLES.TUTOR || !user.verified) {
+    throw new Error("Tutor access required.");
   }
   return user;
 }

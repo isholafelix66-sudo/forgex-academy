@@ -6,6 +6,7 @@ import {
   BadgeCheck,
   BookOpen,
   ClipboardList,
+  GraduationCap,
   ImageIcon,
   KeyRound,
   LayoutDashboard,
@@ -135,6 +136,7 @@ export default function AdminShell() {
         },
         { to: "/admin/courses", label: "Courses", icon: <BookOpen className="size-4" /> },
         { to: "/admin/catalog", label: "Categories & roadmaps", icon: <ListChecks className="size-4" /> },
+        { to: "/tutor", label: "Tutor dashboard (preview)", icon: <GraduationCap className="size-4" /> },
       ],
     },
     {

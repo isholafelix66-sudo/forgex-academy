@@ -6,9 +6,11 @@ import {
   ArrowUpRight,
   Globe,
   GraduationCap,
+  MessageSquare,
   Star,
   Users,
 } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { PageShell } from "@/components/site/PageShell";
 import { Reveal } from "@/components/site/Reveal";
 import { Avatar } from "@/components/site/Avatar";
@@ -84,6 +86,14 @@ export default function TutorDetail() {
                     <p className="mt-1 text-muted-foreground">{tutor.headline}</p>
                   )}
                 </div>
+              </div>
+
+              <div className="mt-5">
+                <Link to={`/dashboard/messages?to=${tutor._id}`}>
+                  <Button className="gap-2 bg-lime-400 font-semibold text-black hover:bg-lime-300">
+                    <MessageSquare className="size-4" /> Message tutor
+                  </Button>
+                </Link>
               </div>
 
               <div className="mt-6 flex flex-wrap items-center gap-x-6 gap-y-3 text-sm text-muted-foreground">

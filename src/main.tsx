@@ -218,15 +218,14 @@ createRoot(document.getElementById("root")!).render(
                 <Route path="settings" element={<Settings />} />
               </Route>
 
-              {/* Tutor dashboard — only verified tutors */}
+              {/* Tutor dashboard — verified tutors only, or the admin session
+                  (password gate, no account) can preview it read-only. */}
               <Route
                 path="/tutor"
                 element={
-                  <RequireAuth>
-                    <RequireTutor>
-                      <TutorShell />
-                    </RequireTutor>
-                  </RequireAuth>
+                  <RequireTutor>
+                    <TutorShell />
+                  </RequireTutor>
                 }
               >
                 <Route index element={<TutorOverview />} />

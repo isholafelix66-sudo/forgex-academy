@@ -1,0 +1,17 @@
+import { useQuery } from "convex/react";
+import { api } from "@/convex/_generated/api";
+import { getAdminToken } from "@/lib/admin-session";
+
+/**
+ * Whether the password-gated admin session is currently unlocked. The admin
+ * area needs no user account, so this is also the only way the admin can
+ * preview the tutor dashboard without registering.
+ */
+export function useAdminSession() {
+  const token = getAdminToken();
+  const unlocked = useQuery(
+    api.admin.isAdminUnlocked,
+    token ? { token } : "skip",
+  );
+  return { token, isAdmin: unlocked === true };
+}

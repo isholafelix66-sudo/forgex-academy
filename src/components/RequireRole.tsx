@@ -1,8 +1,9 @@
 import type { ReactNode } from "react";
-import { Link } from "react-router";
+import { Link, Navigate, useLocation } from "react-router";
 import { Loader2, ShieldAlert, ShieldCheck, Clock } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/hooks/use-auth";
+import { useAdminSession } from "@/hooks/use-admin-session";
 import { useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
 
@@ -33,10 +34,12 @@ function GateScreen({
 
 export function RequireTutor({ children }: { children: ReactNode }) {
   const { isLoading, isAuthenticated, user } = useAuth();
+  const { isAdmin } = useAdminSession();
   const application = useQuery(
     api.users.myTutorApplication,
     isAuthenticated ? {} : "skip",
   );
+  const location = useLocation();
 
   if (isLoading) {
     return (
@@ -46,10 +49,24 @@ export function RequireTutor({ children }: { children: ReactNode }) {
     );
   }
 
-  const isTutor = user?.role === "tutor" && !!user.verified;
-  const isAdmin = user?.role === "admin";
+  // A valid admin session (password gate, no user account) can preview the
+  // tutor dashboard read-only — the admin needs no registration to view it.
+  if (isAdmin) return children;
 
-  if (isTutor || isAdmin) return children;
+  if (!isAuthenticated) {
+    const returnTo = `${location.pathname}${location.search}`;
+    return (
+      <Navigate
+        to={`/auth?returnTo=${encodeURIComponent(returnTo)}`}
+        replace
+      />
+    );
+  }
+
+  const isTutor = user?.role === "tutor" && !!user.verified;
+  const isAdminUser = user?.role === "admin";
+
+  if (isTutor || isAdminUser) return children;
 
   if (user?.role === "tutor" && !user.verified) {
     return (

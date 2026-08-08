@@ -2,7 +2,7 @@ import { getAuthUserId } from "@convex-dev/auth/server";
 import { internalQuery, mutation, query, QueryCtx } from "./_generated/server";
 import { v } from "convex/values";
 import { ROLES, socialsValidator } from "./schema";
-import { notify, requireUser, requireUserDoc } from "./lib";
+import { notify, publicUser, requireUser, requireUserDoc } from "./lib";
 
 /**
  * Get the current signed in user. Returns null if the user is not signed in.
@@ -57,6 +57,15 @@ export const touchActivity = mutation({
       await ctx.db.patch(userId, { lastActivity: now });
     }
     return true;
+  },
+});
+
+/** Public-safe profile of any user (used to start a new conversation). */
+export const getPublicUser = query({
+  args: { id: v.id("users") },
+  handler: async (ctx, { id }) => {
+    const u = await ctx.db.get(id);
+    return u ? publicUser(u) : null;
   },
 });
 

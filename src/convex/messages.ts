@@ -1,3 +1,4 @@
+import { getAuthUserId } from "@convex-dev/auth/server";
 import { mutation, query } from "./_generated/server";
 import { v } from "convex/values";
 import { notify, requireUser, requireUserDoc } from "./lib";
@@ -7,7 +8,10 @@ const threadKey = (a: string, b: string) => [a, b].sort().join("|");
 export const myConversations = query({
   args: {},
   handler: async (ctx) => {
-    const userId = await requireUser(ctx);
+    const userId = await getAuthUserId(ctx);
+    // Not signed in (e.g. an admin session previewing the tutor dashboard
+    // without an account) — there are no conversations to show.
+    if (userId === null) return [];
     const messages = await ctx.db.query("messages").collect();
     const mine = messages.filter(
       (m) => m.senderId === userId || m.receiverId === userId,
@@ -56,7 +60,12 @@ export const threadMessages = query({
       .query("messages")
       .withIndex("by_thread", (q) => q.eq("threadId", threadId))
       .collect();
-    return messages.sort((a, b) => a.createdAt - b.createdAt);
+    // Only thread participants may read the thread.
+    return messages
+      .filter(
+        (m) => m.senderId === userId || m.receiverId === userId,
+      )
+      .sort((a, b) => a.createdAt - b.createdAt);
   },
 });
 
@@ -68,6 +77,10 @@ export const markThreadRead = mutation({
       .query("messages")
       .withIndex("by_thread", (q) => q.eq("threadId", threadId))
       .collect();
+    const isParticipant = messages.some(
+      (m) => m.senderId === userId || m.receiverId === userId,
+    );
+    if (!isParticipant) return false;
     for (const m of messages) {
       if (m.receiverId === userId && !m.readAt) {
         await ctx.db.patch(m._id, { readAt: Date.now() });
@@ -101,7 +114,7 @@ export const sendMessage = mutation({
       title: `New message from ${user.name || "a student"}`,
       body: trimmed.slice(0, 90),
       type: "message",
-      link: "/dashboard/messages",
+      link: receiver.role === "tutor" ? "/tutor/inbox" : "/dashboard/messages",
     });
     return id;
   },

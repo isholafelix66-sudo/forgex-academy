@@ -439,8 +439,8 @@ export const reviewTutorApplication = mutation({
     const messages: Record<string, { title: string; body: string; link: string }> = {
       approve: {
         title: "Application approved 🎉",
-        body: "Your tutor application was approved. The Tutor Dashboard is now unlocked.",
-        link: "/tutor",
+        body: "Your tutor application was approved. Once an admin verifies your account, the Tutor Dashboard unlocks.",
+        link: "/become-tutor",
       },
       verify: {
         title: "You're now a verified tutor ✓",

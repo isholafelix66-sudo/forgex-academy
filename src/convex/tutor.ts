@@ -1,6 +1,6 @@
 import { mutation, query } from "./_generated/server";
 import { v } from "convex/values";
-import { hydrateCourse, publicUser, requireTutor, slugify } from "./lib";
+import { hydrateCourse, publicUser, requireTutor, requireTutorPreview, slugify } from "./lib";
 import { difficultyValidator, questionValidator, resourceValidator } from "./schema";
 
 // ---------------------------------------------------------------------------
@@ -10,7 +10,8 @@ import { difficultyValidator, questionValidator, resourceValidator } from "./sch
 export const myCourses = query({
   args: {},
   handler: async (ctx) => {
-    const tutor = await requireTutor(ctx);
+    const tutor = await requireTutorPreview(ctx);
+    if (!tutor) return []; // admin session preview — no tutor identity
     const courses = await ctx.db
       .query("courses")
       .withIndex("by_tutor", (q) => q.eq("tutorId", tutor._id))
@@ -44,7 +45,8 @@ export const myCourses = query({
 export const tutorStudents = query({
   args: {},
   handler: async (ctx) => {
-    const tutor = await requireTutor(ctx);
+    const tutor = await requireTutorPreview(ctx);
+    if (!tutor) return [];
     const courses = await ctx.db
       .query("courses")
       .withIndex("by_tutor", (q) => q.eq("tutorId", tutor._id))
@@ -89,7 +91,8 @@ export const tutorStudents = query({
 export const pendingSubmissions = query({
   args: {},
   handler: async (ctx) => {
-    const tutor = await requireTutor(ctx);
+    const tutor = await requireTutorPreview(ctx);
+    if (!tutor) return [];
     const courses = await ctx.db
       .query("courses")
       .withIndex("by_tutor", (q) => q.eq("tutorId", tutor._id))
@@ -131,7 +134,8 @@ export const pendingSubmissions = query({
 export const courseSubmissions = query({
   args: { courseId: v.id("courses") },
   handler: async (ctx, { courseId }) => {
-    const tutor = await requireTutor(ctx);
+    const tutor = await requireTutorPreview(ctx);
+    if (!tutor) return [];
     const course = await ctx.db.get(courseId);
     if (!course || (course.tutorId !== tutor._id && tutor.role !== "admin")) {
       throw new Error("Not your course.");
@@ -382,7 +386,8 @@ export const deleteLesson = mutation({
 export const courseQuizzesFull = query({
   args: { courseId: v.id("courses") },
   handler: async (ctx, { courseId }) => {
-    await requireTutor(ctx);
+    const tutor = await requireTutorPreview(ctx);
+    if (!tutor) return [];
     const quizzes = await ctx.db
       .query("quizzes")
       .withIndex("by_course", (q) => q.eq("courseId", courseId))
@@ -447,7 +452,8 @@ export const deleteQuiz = mutation({
 export const courseAssignmentsFull = query({
   args: { courseId: v.id("courses") },
   handler: async (ctx, { courseId }) => {
-    await requireTutor(ctx);
+    const tutor = await requireTutorPreview(ctx);
+    if (!tutor) return [];
     const docs = await ctx.db
       .query("assignments")
       .withIndex("by_course", (q) => q.eq("courseId", courseId))
@@ -562,7 +568,8 @@ export const deleteAnnouncement = mutation({
 export const allAnnouncements = query({
   args: {},
   handler: async (ctx) => {
-    await requireTutor(ctx);
+    const tutor = await requireTutorPreview(ctx);
+    if (!tutor) return [];
     const docs = await ctx.db.query("announcements").collect();
     const hydrated = await Promise.all(
       docs.map(async (a) => {

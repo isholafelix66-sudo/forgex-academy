@@ -1,16 +1,21 @@
+import { Link } from "react-router";
 import { useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import {
+  ArrowLeft,
   BookOpen,
   ClipboardCheck,
   LayoutDashboard,
   Megaphone,
   MessageSquare,
+  ShieldCheck,
   Users,
 } from "lucide-react";
 import { AppShell } from "@/components/dash/AppShell";
+import { useAdminSession } from "@/hooks/use-admin-session";
 
 export default function TutorShell() {
+  const { isAdmin } = useAdminSession();
   const pending = useQuery(api.tutor.pendingSubmissions);
   const conversations = useQuery(api.messages.myConversations);
   const unreadMessages = conversations?.reduce((s, c) => s + c.unread, 0) ?? 0;
@@ -54,5 +59,20 @@ export default function TutorShell() {
     },
   ];
 
-  return <AppShell sections={sections} title="Tutor dashboard" />;
+  const banner = isAdmin ? (
+    <div className="flex items-center justify-between gap-3 border-b border-lime-400/25 bg-lime-400/10 px-4 py-2 text-xs text-lime-200 sm:px-6">
+      <span className="inline-flex items-center gap-2 font-medium">
+        <ShieldCheck className="size-3.5 shrink-0" />
+        Admin preview — you're viewing the tutor dashboard without an account.
+      </span>
+      <Link
+        to="/admin"
+        className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-lime-400/30 bg-lime-400/10 px-2.5 py-1 font-semibold text-lime-300 transition-colors hover:bg-lime-400/20"
+      >
+        <ArrowLeft className="size-3.5" /> Back to admin
+      </Link>
+    </div>
+  ) : undefined;
+
+  return <AppShell sections={sections} title="Tutor dashboard" banner={banner} />;
 }

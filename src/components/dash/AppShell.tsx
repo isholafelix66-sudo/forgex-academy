@@ -24,10 +24,13 @@ export function AppShell({
   sections,
   footer,
   title,
+  banner,
 }: {
   sections: NavSection[];
   footer?: NavItem[];
   title: string;
+  /** Optional full-width strip rendered above the header (e.g. admin preview). */
+  banner?: ReactNode;
 }) {
   const { user, signOut } = useAuth();
   const navigate = useNavigate();
@@ -125,11 +128,11 @@ export function AppShell({
 
       <div className="border-t border-white/8 p-3">
         <div className="flex items-center gap-3 rounded-xl px-2 py-2">
-          <Avatar name={user?.name ?? "Student"} image={user?.image} className="size-9" />
+          <Avatar name={user?.name ?? "Guest"} image={user?.image} className="size-9" />
           <div className="min-w-0 flex-1">
-            <p className="truncate text-sm font-semibold">{user?.name || "Student"}</p>
+            <p className="truncate text-sm font-semibold">{user?.name || "Guest"}</p>
             <p className="truncate text-xs capitalize text-muted-foreground">
-              {user?.role ?? "student"}
+              {user?.role ?? "guest"}
             </p>
           </div>
           <Button variant="ghost" size="icon" onClick={handleSignOut} title="Sign out">
@@ -165,6 +168,7 @@ export function AppShell({
 
       {/* Main */}
       <div className="flex min-w-0 flex-1 flex-col lg:pl-64">
+        {banner}
         <header className="sticky top-0 z-30 flex h-16 items-center justify-between border-b border-white/8 bg-background/85 px-4 backdrop-blur-xl sm:px-6">
           <div className="flex items-center gap-3">
             <Button variant="ghost" size="icon" className="lg:hidden" onClick={() => setOpen(true)}>
@@ -181,7 +185,7 @@ export function AppShell({
               </Link>
             )}
             <Link to="/dashboard/profile">
-              <Avatar name={user?.name ?? "Student"} image={user?.image} className="size-9" />
+              <Avatar name={user?.name ?? "Guest"} image={user?.image} className="size-9" />
             </Link>
           </div>
         </header>
