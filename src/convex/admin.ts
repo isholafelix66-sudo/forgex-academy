@@ -1,6 +1,6 @@
 import { internal } from "./_generated/api";
 import { mutation, query, MutationCtx } from "./_generated/server";
-import { Id } from "./_generated/dataModel";
+import { Doc, Id } from "./_generated/dataModel";
 import { v } from "convex/values";
 import { hydrateCourses, makeAdminToken, notify, publicUser, requireAdminSession, slugify } from "./lib";
 import { difficultyValidator, ROLES, roleValidator } from "./schema";
@@ -1450,5 +1450,87 @@ export const purgeDemoData = mutation({
     }
     await audit(ctx, undefined, undefined, "demo-data-purged", "All demo/seeded content and accounts deleted");
     return true;
+  },
+});
+
+// ---------------------------------------------------------------------------
+// Admin chat oversight — admins can read every conversation on the platform.
+// Read-only: admins have no user account, so they can't participate in chats.
+// ---------------------------------------------------------------------------
+
+/** Every conversation across all users, newest first. */
+export const allConversations = query({
+  args: { token: v.string() },
+  handler: async (ctx, { token }) => {
+    await requireAdminSession(ctx, token);
+    const messages = await ctx.db.query("messages").collect();
+    const byThread = new Map<string, Doc<"messages">[]>();
+    for (const m of messages) {
+      const list = byThread.get(m.threadId) ?? [];
+      list.push(m);
+      byThread.set(m.threadId, list);
+    }
+    const conversations = await Promise.all(
+      [...byThread.entries()].map(async ([threadId, msgs]) => {
+        const sorted = msgs.sort((a, b) => a.createdAt - b.createdAt);
+        const last = sorted[sorted.length - 1];
+        const [aId, bId] = threadId.split("|");
+        const userA = await ctx.db.get(aId as Id<"users">);
+        const userB = await ctx.db.get(bId as Id<"users">);
+        const participants = [userA, userB]
+          .filter((u): u is Doc<"users"> => !!u)
+          .map((u) => ({
+            _id: u._id,
+            name: u.name || "Anonymous",
+            image: u.image ?? null,
+            role: u.role ?? "student",
+            email: u.email ?? null,
+            online: !!u.lastActivity && Date.now() - u.lastActivity < 60_000,
+          }));
+        return {
+          threadId,
+          participants,
+          lastMessage: last.body,
+          lastAt: last.createdAt,
+          messageCount: msgs.length,
+          unread: msgs.filter((m) => !m.readAt).length,
+        };
+      }),
+    );
+    return conversations.sort((a, b) => b.lastAt - a.lastAt);
+  },
+});
+
+/** All messages in one thread, with sender identity — for admin review. */
+export const conversationMessages = query({
+  args: { token: v.string(), threadId: v.string() },
+  handler: async (ctx, { token, threadId }) => {
+    await requireAdminSession(ctx, token);
+    const messages = await ctx.db
+      .query("messages")
+      .withIndex("by_thread", (q) => q.eq("threadId", threadId))
+      .collect();
+    const withSender = await Promise.all(
+      messages
+        .sort((a, b) => a.createdAt - b.createdAt)
+        .map(async (m) => {
+          const sender = await ctx.db.get(m.senderId);
+          return {
+            _id: m._id,
+            body: m.body,
+            createdAt: m.createdAt,
+            readAt: m.readAt ?? null,
+            sender: sender
+              ? {
+                  _id: sender._id,
+                  name: sender.name || "Anonymous",
+                  image: sender.image ?? null,
+                  role: sender.role ?? "student",
+                }
+              : null,
+          };
+        }),
+    );
+    return withSender;
   },
 });

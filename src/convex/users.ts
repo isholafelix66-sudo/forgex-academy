@@ -61,6 +61,20 @@ export const touchActivity = mutation({
   },
 });
 
+/**
+ * Presence heartbeat — called while the app is open so other users can see
+ * “online / offline”. Writes `lastActivity` every ~25s; a user is considered
+ * online when their last activity is within the last 60 seconds.
+ */
+export const presenceHeartbeat = mutation({
+  args: {},
+  handler: async (ctx) => {
+    const userId = await requireUser(ctx);
+    await ctx.db.patch(userId, { lastActivity: Date.now() });
+    return true;
+  },
+});
+
 /** Public-safe profile of any user (used to start a new conversation). */
 export const getPublicUser = query({
   args: { id: v.id("users") },

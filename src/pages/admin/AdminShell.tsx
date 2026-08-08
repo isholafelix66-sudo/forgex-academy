@@ -13,6 +13,7 @@ import {
   ListChecks,
   Loader2,
   Megaphone,
+  MessageSquare,
   PenSquare,
   ScrollText,
   ShieldAlert,
@@ -124,6 +125,7 @@ export default function AdminShell() {
       items: [
         { to: "/admin", label: "Overview", icon: <LayoutDashboard className="size-4" />, end: true },
         { to: "/admin/users", label: "Users & roles", icon: <Users className="size-4" /> },
+        { to: "/admin/chat", label: "Chat logs", icon: <MessageSquare className="size-4" /> },
         {
           to: "/admin/applications",
           label: "Tutor verification",

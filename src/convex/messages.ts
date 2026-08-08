@@ -1,9 +1,14 @@
 import { getAuthUserId } from "@convex-dev/auth/server";
+import { internal } from "./_generated/api";
 import { mutation, query } from "./_generated/server";
 import { v } from "convex/values";
 import { notify, requireUser, requireUserDoc } from "./lib";
 
 const threadKey = (a: string, b: string) => [a, b].sort().join("|");
+
+/** A user counts as online when their activity was within the last 60s. */
+const isOnline = (lastActivity?: number) =>
+  !!lastActivity && Date.now() - lastActivity < 60_000;
 
 export const myConversations = query({
   args: {},
@@ -44,7 +49,10 @@ export const myConversations = query({
             : null,
           lastMessage: last.body,
           lastAt: last.createdAt,
+          lastSenderId: last.senderId,
           unread,
+          otherOnline: other ? isOnline(other.lastActivity) : false,
+          otherLastSeen: other?.lastActivity ?? null,
         };
       }),
     );
@@ -102,6 +110,18 @@ export const sendMessage = mutation({
     if (receiverId === user._id) throw new Error("You can't message yourself.");
     const trimmed = body.trim();
     if (!trimmed) throw new Error("Message can't be empty.");
+
+    // Throttle emails: at most one per receiver every 5 minutes so rapid
+    // chats don't flood someone's inbox (the in-app notification always fires).
+    const prevToReceiver = await ctx.db
+      .query("messages")
+      .withIndex("by_receiver", (q) => q.eq("receiverId", receiverId))
+      .collect();
+    const lastIncoming = prevToReceiver.reduce(
+      (max, m) => Math.max(max, m.createdAt),
+      0,
+    );
+
     const id = await ctx.db.insert("messages", {
       threadId: threadKey(user._id, receiverId),
       senderId: user._id,
@@ -114,8 +134,49 @@ export const sendMessage = mutation({
       title: `New message from ${user.name || "a student"}`,
       body: trimmed.slice(0, 90),
       type: "message",
-      link: receiver.role === "tutor" ? "/tutor/inbox" : "/dashboard/messages",
+      link:
+        receiver.role === "tutor"
+          ? "/tutor/inbox"
+          : receiver.role === "admin"
+            ? "/admin/chat"
+            : "/dashboard/messages",
     });
+
+    // Email the recipient so they never miss a message even when offline.
+    if (receiver.email && Date.now() - lastIncoming > 5 * 60 * 1000) {
+      const site = (process.env.SITE_URL ?? "https://forgex.academy").replace(
+        /\/$/,
+        "",
+      );
+      const senderName = user.name || "a ForgeX user";
+      const inbox =
+        receiver.role === "tutor"
+          ? "/tutor/inbox"
+          : receiver.role === "admin"
+            ? "/admin/chat"
+            : "/dashboard/messages";
+      await ctx.scheduler.runAfter(0, internal.email.sendEmail, {
+        to: receiver.email,
+        subject: `New message from ${senderName} 💬`,
+        html: `
+          <div style="background:#0d0f0c;color:#e7e5e4;font-family:Segoe UI,Arial,sans-serif;padding:32px 16px">
+            <div style="max-width:560px;margin:0 auto;background:#14170f;border:1px solid #2a2e22;border-radius:16px;overflow:hidden">
+              <div style="background:#a3e635;padding:20px 28px"><p style="margin:0;color:#0d0f0c;font-weight:800;font-size:18px">⚡ ForgeX Academy</p></div>
+              <div style="padding:28px">
+                <p style="margin:0 0 16px;font-size:22px;font-weight:700;color:#a3e635">New message 💬</p>
+                <p style="margin:0 0 12px;font-size:14px;line-height:1.6;color:#d6d3d1">${senderName} sent you a message on ForgeX Academy:</p>
+                <div style="margin:0 0 20px;background:#0d0f0c;border:1px solid #2a2e22;border-radius:12px;padding:14px 16px;font-size:14px;color:#f5f5f4;line-height:1.6">“${trimmed.slice(0, 160)}”</div>
+                <div>
+                  <a href="${site}${inbox}" style="display:inline-block;background:#a3e635;color:#0d0f0c;text-decoration:none;font-weight:700;font-size:14px;padding:12px 22px;border-radius:10px">Open conversation</a>
+                </div>
+              </div>
+              <div style="padding:16px 28px;border-top:1px solid #2a2e22;font-size:12px;color:#78716c">You're receiving this because someone messaged you on ForgeX Academy.</div>
+            </div>
+          </div>`,
+        text: `You have a new message from ${senderName} on ForgeX Academy:\n\n“${trimmed}”\n\nOpen it here: ${site}${inbox}`,
+      });
+    }
+
     return id;
   },
 });
