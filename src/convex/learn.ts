@@ -216,7 +216,12 @@ export const roadmapProgress = query({
             levelCourses.map(async (c) => {
               const hc = await hydrateCourse(ctx, c);
               const enr = enrollments.find((e) => e.courseId === c._id);
-              return { ...hc, progress: enr?.progress ?? 0, status: enr?.status ?? null };
+              const { status: _courseStatus, ...rest } = hc;
+              return {
+                ...rest,
+                progress: enr?.progress ?? 0,
+                status: enr?.status ?? null,
+              };
             }),
           );
           const allDone =
@@ -238,7 +243,7 @@ export const roadmapProgress = query({
           levels: levelData as Array<
             (typeof rLevels)[number] & {
               courses: Array<
-                Awaited<ReturnType<typeof hydrateCourse>> & {
+                Omit<Awaited<ReturnType<typeof hydrateCourse>>, "status"> & {
                   progress: number;
                   status: "in-progress" | "completed" | null;
                 }

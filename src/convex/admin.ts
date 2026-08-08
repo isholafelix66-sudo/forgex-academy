@@ -1,6 +1,6 @@
 import { mutation, query } from "./_generated/server";
 import { v } from "convex/values";
-import { hydrateCourses, notify, publicUser, requireAdmin, slugify } from "./lib";
+import { hydrateCourses, notify, publicUser, requireAdmin, requireUserDoc, slugify } from "./lib";
 import { ROLES, roleValidator } from "./schema";
 
 // ---------------------------------------------------------------------------
@@ -30,7 +30,7 @@ export const stats = query({
       enrollments: enrollments.length,
       certificates: certificates.length,
       pendingApplications: applications.filter(
-        (a) => a.status === "pending",
+        (a) => a.status === "submitted" || a.status === "under-review",
       ).length,
     };
   },

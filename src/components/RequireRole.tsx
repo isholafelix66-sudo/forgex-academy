@@ -65,7 +65,10 @@ export function RequireTutor({ children }: { children: ReactNode }) {
     );
   }
 
-  if (application?.status === "pending") {
+  if (
+    application?.status === "submitted" ||
+    application?.status === "under-review"
+  ) {
     return (
       <GateScreen
         icon={<Clock className="size-7" />}

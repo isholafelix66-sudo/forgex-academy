@@ -1,6 +1,7 @@
 import '@vly-ai/integrations';
 import { Toaster } from "@/components/ui/sonner";
 import { RequireAuth } from "@/components/RequireAuth";
+import { RequireTutor, RequireAdmin } from "@/components/RequireRole";
 import { VlyToolbar } from "../vly-toolbar-readonly.tsx";
 import { ConvexAuthProvider } from "@convex-dev/auth/react";
 import { ConvexReactClient } from "convex/react";
@@ -9,11 +10,62 @@ import { createRoot } from "react-dom/client";
 import { BrowserRouter, Route, Routes, useLocation } from "react-router";
 import "./index.css";
 
-// Lazy load route components for better code splitting
+// ---------------------------------------------------------------------------
+// Public pages
+// ---------------------------------------------------------------------------
 const Landing = lazy(() => import("./pages/Landing.tsx"));
+const About = lazy(() => import("./pages/About.tsx"));
+const Courses = lazy(() => import("./pages/Courses.tsx"));
+const CourseDetail = lazy(() => import("./pages/CourseDetail.tsx"));
+const Tutors = lazy(() => import("./pages/Tutors.tsx"));
+const TutorDetail = lazy(() => import("./pages/TutorDetail.tsx"));
+const RoadmapPage = lazy(() => import("./pages/RoadmapPage.tsx"));
+const Updates = lazy(() => import("./pages/Updates.tsx"));
+const VerifyCertificate = lazy(() => import("./pages/VerifyCertificate.tsx"));
+const BecomeTutor = lazy(() => import("./pages/BecomeTutor.tsx"));
 const AuthPage = lazy(() => import("./pages/Auth.tsx"));
-const Dashboard = lazy(() => import("./pages/Dashboard.tsx"));
 const NotFound = lazy(() => import("./pages/NotFound.tsx"));
+
+// ---------------------------------------------------------------------------
+// Learning + student dashboard
+// ---------------------------------------------------------------------------
+const Learn = lazy(() => import("./pages/Learn.tsx"));
+const DashboardShell = lazy(() => import("./pages/dashboard/DashboardShell.tsx"));
+const DashboardHome = lazy(() => import("./pages/dashboard/DashboardHome.tsx"));
+const MyCourses = lazy(() => import("./pages/dashboard/MyCourses.tsx"));
+const RoadmapProgress = lazy(() => import("./pages/dashboard/RoadmapProgress.tsx"));
+const Assignments = lazy(() => import("./pages/dashboard/Assignments.tsx"));
+const Certificates = lazy(() => import("./pages/dashboard/Certificates.tsx"));
+const Messages = lazy(() => import("./pages/dashboard/Messages.tsx"));
+const Notifications = lazy(() => import("./pages/dashboard/Notifications.tsx"));
+const Profile = lazy(() => import("./pages/dashboard/Profile.tsx"));
+const Settings = lazy(() => import("./pages/dashboard/Settings.tsx"));
+
+// ---------------------------------------------------------------------------
+// Tutor dashboard
+// ---------------------------------------------------------------------------
+const TutorShell = lazy(() => import("./pages/tutor/TutorShell.tsx"));
+const TutorOverview = lazy(() => import("./pages/tutor/TutorOverview.tsx"));
+const TutorCourses = lazy(() => import("./pages/tutor/TutorCourses.tsx"));
+const CourseEditor = lazy(() => import("./pages/tutor/CourseEditor.tsx"));
+const TutorGrading = lazy(() => import("./pages/tutor/TutorGrading.tsx"));
+const TutorStudents = lazy(() => import("./pages/tutor/TutorStudents.tsx"));
+const TutorInbox = lazy(() => import("./pages/tutor/TutorInbox.tsx"));
+const TutorAnnouncements = lazy(() => import("./pages/tutor/TutorAnnouncements.tsx"));
+
+// ---------------------------------------------------------------------------
+// Admin dashboard
+// ---------------------------------------------------------------------------
+const AdminShell = lazy(() => import("./pages/admin/AdminShell.tsx"));
+const AdminOverview = lazy(() => import("./pages/admin/AdminOverview.tsx"));
+const AdminUsers = lazy(() => import("./pages/admin/AdminUsers.tsx"));
+const AdminApplications = lazy(() => import("./pages/admin/AdminApplications.tsx"));
+const AdminCourses = lazy(() => import("./pages/admin/AdminCourses.tsx"));
+const AdminCatalog = lazy(() => import("./pages/admin/AdminCatalog.tsx"));
+const AdminUpdates = lazy(() => import("./pages/admin/AdminUpdates.tsx"));
+const AdminCertificates = lazy(() => import("./pages/admin/AdminCertificates.tsx"));
+const AdminContent = lazy(() => import("./pages/admin/AdminContent.tsx"));
+const AdminAudit = lazy(() => import("./pages/admin/AdminAudit.tsx"));
 
 // Simple loading fallback for route transitions
 function RouteLoading() {
@@ -82,8 +134,6 @@ class RootErrorBoundary extends React.Component<
 
 const convex = new ConvexReactClient(import.meta.env.VITE_CONVEX_URL as string);
 
-
-
 function RouteSyncer() {
   const location = useLocation();
   useEffect(() => {
@@ -107,7 +157,6 @@ function RouteSyncer() {
   return null;
 }
 
-
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
     <RootErrorBoundary>
@@ -119,19 +168,94 @@ createRoot(document.getElementById("root")!).render(
           <RouteSyncer />
           <Suspense fallback={<RouteLoading />}>
             <Routes>
+              {/* Public */}
               <Route path="/" element={<Landing />} />
+              <Route path="/about" element={<About />} />
+              <Route path="/courses" element={<Courses />} />
+              <Route path="/courses/:slug" element={<CourseDetail />} />
+              <Route path="/tutors" element={<Tutors />} />
+              <Route path="/tutors/:id" element={<TutorDetail />} />
+              <Route path="/roadmap" element={<RoadmapPage />} />
+              <Route path="/updates" element={<Updates />} />
+              <Route path="/verify/:certificateId" element={<VerifyCertificate />} />
+              <Route path="/become-tutor" element={<BecomeTutor />} />
               <Route
                 path="/auth"
                 element={<AuthPage redirectAfterAuth="/dashboard" />}
               />
+
+              {/* Course player (signed in) */}
+              <Route
+                path="/learn/:slug"
+                element={
+                  <RequireAuth>
+                    <Learn />
+                  </RequireAuth>
+                }
+              />
+
+              {/* Student dashboard */}
               <Route
                 path="/dashboard"
                 element={
                   <RequireAuth>
-                    <Dashboard />
+                    <DashboardShell />
                   </RequireAuth>
                 }
-              />
+              >
+                <Route index element={<DashboardHome />} />
+                <Route path="my-courses" element={<MyCourses />} />
+                <Route path="roadmap" element={<RoadmapProgress />} />
+                <Route path="assignments" element={<Assignments />} />
+                <Route path="certificates" element={<Certificates />} />
+                <Route path="messages" element={<Messages />} />
+                <Route path="notifications" element={<Notifications />} />
+                <Route path="profile" element={<Profile />} />
+                <Route path="settings" element={<Settings />} />
+              </Route>
+
+              {/* Tutor dashboard — only verified tutors */}
+              <Route
+                path="/tutor"
+                element={
+                  <RequireAuth>
+                    <RequireTutor>
+                      <TutorShell />
+                    </RequireTutor>
+                  </RequireAuth>
+                }
+              >
+                <Route index element={<TutorOverview />} />
+                <Route path="courses" element={<TutorCourses />} />
+                <Route path="courses/:id" element={<CourseEditor />} />
+                <Route path="grading" element={<TutorGrading />} />
+                <Route path="students" element={<TutorStudents />} />
+                <Route path="inbox" element={<TutorInbox />} />
+                <Route path="announcements" element={<TutorAnnouncements />} />
+              </Route>
+
+              {/* Admin dashboard */}
+              <Route
+                path="/admin"
+                element={
+                  <RequireAuth>
+                    <RequireAdmin>
+                      <AdminShell />
+                    </RequireAdmin>
+                  </RequireAuth>
+                }
+              >
+                <Route index element={<AdminOverview />} />
+                <Route path="users" element={<AdminUsers />} />
+                <Route path="applications" element={<AdminApplications />} />
+                <Route path="courses" element={<AdminCourses />} />
+                <Route path="catalog" element={<AdminCatalog />} />
+                <Route path="updates" element={<AdminUpdates />} />
+                <Route path="certificates" element={<AdminCertificates />} />
+                <Route path="content" element={<AdminContent />} />
+                <Route path="audit" element={<AdminAudit />} />
+              </Route>
+
               <Route path="*" element={<NotFound />} />
             </Routes>
           </Suspense>

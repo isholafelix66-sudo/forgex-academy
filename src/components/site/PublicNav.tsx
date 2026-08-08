@@ -12,6 +12,7 @@ const LINKS = [
   { to: "/roadmap", label: "Roadmap" },
   { to: "/tutors", label: "Tutors" },
   { to: "/updates", label: "Updates" },
+  { to: "/become-tutor", label: "Teach" },
   { to: "/about", label: "About" },
 ];
 

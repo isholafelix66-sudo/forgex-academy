@@ -1,7 +1,7 @@
 import { getAuthUserId } from "@convex-dev/auth/server";
 import { mutation, query, QueryCtx } from "./_generated/server";
 import { v } from "convex/values";
-import { ROLES } from "./schema";
+import { ROLES, socialsValidator } from "./schema";
 import { notify, requireUser, requireUserDoc } from "./lib";
 
 /**
