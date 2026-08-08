@@ -1,72 +1,122 @@
 import html2canvas from "html2canvas";
 import { jsPDF } from "jspdf";
 
+/** Certificate design size (matches the template). */
+const DESIGN_W = 1280;
+const DESIGN_H = 905;
+const BG = "#0b0f0e";
+
 /**
- * Rasterize `node` (the 1280×905 certificate template) into a landscape PDF
- * and trigger a download. Waits for images inside the node to finish loading
- * so the logo / signature always appear in the PDF, then saves through a blob
- * anchor with an iOS-safe fallback (iOS Safari cannot always save blob links,
- * so the PDF is opened in a new tab where the user can share/save it).
+ * Rasterize the 1280×905 certificate node at 2×. Waits for fonts and images
+ * (logo / signature) so the export always matches what's on screen.
  */
-export async function downloadCertificatePdf(node: HTMLElement, fileName: string) {
+async function buildCanvas(node: HTMLElement): Promise<HTMLCanvasElement> {
+  if (typeof document !== "undefined" && document.fonts?.ready) {
+    try {
+      await document.fonts.ready;
+    } catch {
+      /* non-fatal */
+    }
+  }
   await waitForImages(node);
-  await new Promise((r) => setTimeout(r, 80));
+  await new Promise((r) => setTimeout(r, 120));
 
-  const width = node.offsetWidth || 1280;
-  const height = node.offsetHeight || 905;
-
-  // Capture at 2× for crisp print; retry at 1× if the browser rejects the
-  // high-res pass (some devices fail on very large canvases).
-  let canvas: HTMLCanvasElement;
+  // High-res pass first; some devices reject very large canvases, so retry
+  // at 1× if the browser throws.
   try {
-    canvas = await html2canvas(node, {
+    return await html2canvas(node, {
       scale: 2,
-      backgroundColor: "#0b0f0e",
+      backgroundColor: BG,
       useCORS: true,
       logging: false,
     });
   } catch {
-    canvas = await html2canvas(node, {
+    return await html2canvas(node, {
       scale: 1,
-      backgroundColor: "#0b0f0e",
+      backgroundColor: BG,
       useCORS: true,
       allowTaint: true,
       logging: false,
     });
   }
+}
+
+/** Safely turn a canvas into a data URL, falling back to PNG if JPEG taints. */
+function canvasDataUrl(canvas: HTMLCanvasElement, mime: string): string {
+  try {
+    return canvas.toDataURL(mime, 0.95);
+  } catch {
+    return canvas.toDataURL("image/png");
+  }
+}
+
+/**
+ * Save a blob the most reliable way available:
+ *   1. Mobile/tablet → OS share sheet (Save to Files / Photos) via navigator.share
+ *   2. Desktop → anchor download
+ *   3. Anything blocked → open the file in a new tab so it can be saved manually
+ */
+async function saveOrOpen(file: File): Promise<void> {
+  const nav = navigator as Navigator & {
+    canShare?: (data: { files: File[] }) => boolean;
+    share?: (data: { files: File[]; title: string }) => Promise<void>;
+  };
+
+  if (typeof nav.canShare === "function" && typeof nav.share === "function") {
+    try {
+      if (nav.canShare({ files: [file] })) {
+        await nav.share({ files: [file], title: file.name });
+        return; // Saved/shared through the OS
+      }
+    } catch (e) {
+      // "AbortError" = the user dismissed the sheet — not a failure.
+      if (e instanceof DOMException && e.name === "AbortError") return;
+      // Otherwise fall through to the download path.
+    }
+  }
+
+  const url = URL.createObjectURL(file);
+  try {
+    triggerDownload(url, file.name);
+  } catch {
+    window.open(url, "_blank", "noopener");
+  }
+  setTimeout(() => URL.revokeObjectURL(url), 60_000);
+}
+
+/**
+ * Rasterize `node` (the 1280×905 certificate template) into a landscape PDF
+ * and save/download it.
+ */
+export async function downloadCertificatePdf(node: HTMLElement, fileName: string) {
+  const canvas = await buildCanvas(node);
 
   const pdf = new jsPDF({
     orientation: "landscape",
     unit: "px",
-    format: [width, height],
+    format: [DESIGN_W, DESIGN_H],
   });
-  pdf.addImage(canvas.toDataURL("image/jpeg", 0.95), "JPEG", 0, 0, width, height);
+  const dataUrl = canvasDataUrl(canvas, "image/jpeg");
+  const mime = dataUrl.startsWith("data:image/png") ? "PNG" : "JPEG";
+  pdf.addImage(dataUrl, mime, 0, 0, DESIGN_W, DESIGN_H);
 
-  try {
-    const blob = pdf.output("blob");
-    const url = URL.createObjectURL(blob);
-    triggerDownload(url, fileName);
-    setTimeout(() => URL.revokeObjectURL(url), 60_000);
-  } catch {
-    // Last resort: open the PDF in a new tab so the user can save it.
-    const url = pdf.output("bloburl").toString();
-    window.open(url, "_blank", "noopener");
-  }
+  const blob = pdf.output("blob");
+  const file = new File([blob], fileName, { type: "application/pdf" });
+  await saveOrOpen(file);
+}
+
+/** Rasterize the certificate as a PNG image and save/download it. */
+export async function downloadCertificatePng(node: HTMLElement, fileName: string) {
+  const canvas = await buildCanvas(node);
+  const dataUrl = canvas.toDataURL("image/png");
+  const blob = await (await fetch(dataUrl)).blob();
+  const file = new File([blob], fileName.replace(/\.pdf$/i, ".png"), {
+    type: "image/png",
+  });
+  await saveOrOpen(file);
 }
 
 function triggerDownload(url: string, fileName: string) {
-  const isIOS =
-    /iPad|iPhone|iPod/.test(navigator.userAgent) ||
-    (/Macintosh|MacIntel/.test(navigator.userAgent) &&
-      typeof navigator.maxTouchPoints === "number" &&
-      navigator.maxTouchPoints > 1);
-
-  if (isIOS) {
-    // iOS Safari ignores <a download> for blob URLs — open the PDF in a tab.
-    window.open(url, "_blank", "noopener");
-    return;
-  }
-
   const a = document.createElement("a");
   a.href = url;
   a.download = fileName;
@@ -77,7 +127,7 @@ function triggerDownload(url: string, fileName: string) {
   a.remove();
 }
 
-function waitForImages(node: HTMLElement, timeoutMs = 4000): Promise<void> {
+function waitForImages(node: HTMLElement, timeoutMs = 5000): Promise<void> {
   const imgs = Array.from(node.querySelectorAll("img"));
   if (imgs.length === 0) return Promise.resolve();
 
@@ -96,10 +146,9 @@ function waitForImages(node: HTMLElement, timeoutMs = 4000): Promise<void> {
     ),
   );
 
-  // Never hang the download on a stuck image.
-  const allLoadedVoid: Promise<void> = allLoaded.then(() => undefined);
+  // Never hang the export on a stuck image.
   return Promise.race([
-    allLoadedVoid,
+    allLoaded.then(() => undefined),
     new Promise<void>((r) => setTimeout(r, timeoutMs)),
   ]);
 }

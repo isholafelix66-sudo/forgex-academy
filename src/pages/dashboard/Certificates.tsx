@@ -4,7 +4,14 @@ import { useQuery } from "convex/react";
 import { QRCodeSVG } from "qrcode.react";
 import { toast } from "sonner";
 import { api } from "@/convex/_generated/api";
-import { Award, Download, ExternalLink, Loader2, ShieldCheck } from "lucide-react";
+import {
+  Award,
+  Download,
+  ExternalLink,
+  ImageDown,
+  Loader2,
+  ShieldCheck,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { PageHeader } from "@/components/dash/PageHeader";
 import { EmptyState } from "@/components/site/EmptyState";
@@ -13,39 +20,48 @@ import {
   DEFAULT_CERTIFICATE_BRANDING,
   type CertificateData,
 } from "@/components/site/CertificateTemplate";
-import { downloadCertificatePdf } from "@/lib/certificate-pdf";
+import {
+  downloadCertificatePdf,
+  downloadCertificatePng,
+} from "@/lib/certificate-pdf";
 import { formatDate } from "@/lib/format";
 
 type DownloadTarget = CertificateData & { label: string };
+
+type ExportJob = { target: DownloadTarget; mode: "pdf" | "png" };
 
 export default function Certificates() {
   const certs = useQuery(api.certificates.myCertificates);
   const branding = useQuery(api.public.certificateBranding);
   const origin = typeof window !== "undefined" ? window.location.origin : "";
 
-  const [downloading, setDownloading] = useState<DownloadTarget | null>(null);
+  const [exporting, setExporting] = useState<ExportJob | null>(null);
   const captureRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    if (!downloading || !captureRef.current) return;
+    if (!exporting || !captureRef.current) return;
     let cancelled = false;
-    downloadCertificatePdf(
-      captureRef.current,
-      `ForgeX-Certificate-${downloading.certificateId}.pdf`,
-    )
+    const { target, mode } = exporting;
+    const base = `ForgeX-Certificate-${target.certificateId}`;
+    const job =
+      mode === "pdf"
+        ? downloadCertificatePdf(captureRef.current, `${base}.pdf`)
+        : downloadCertificatePng(captureRef.current, `${base}.png`);
+    job
       .then(() => {
-        if (!cancelled) toast.success("Certificate downloaded");
+        if (!cancelled)
+          toast.success(mode === "pdf" ? "Certificate PDF saved" : "Certificate image saved");
       })
       .catch(() => {
-        if (!cancelled) toast.error("Couldn't generate the PDF. Please try again.");
+        if (!cancelled) toast.error("Couldn't generate the file. Please try again.");
       })
       .finally(() => {
-        if (!cancelled) setDownloading(null);
+        if (!cancelled) setExporting(null);
       });
     return () => {
       cancelled = true;
     };
-  }, [downloading]);
+  }, [exporting]);
 
   return (
     <div className="space-y-8">
@@ -105,24 +121,55 @@ export default function Certificates() {
                     <div className="mt-3 flex flex-wrap gap-2">
                       <Button
                         size="sm"
-                        disabled={!!downloading}
+                        disabled={exporting !== null}
                         onClick={() =>
-                          setDownloading({
-                            certificateId: c.certificateId,
-                            studentName: c.studentName,
-                            courseTitle: c.courseTitle,
-                            issuedAt: c.issuedAt,
-                            label: c.courseTitle,
+                          setExporting({
+                            target: {
+                              certificateId: c.certificateId,
+                              studentName: c.studentName,
+                              courseTitle: c.courseTitle,
+                              issuedAt: c.issuedAt,
+                              label: c.courseTitle,
+                            },
+                            mode: "pdf",
                           })
                         }
                         className="gap-1.5 bg-lime-400 font-semibold text-black hover:bg-lime-300"
                       >
-                        {downloading?.certificateId === c.certificateId ? (
+                        {exporting?.target.certificateId === c.certificateId &&
+                        exporting.mode === "pdf" ? (
                           <Loader2 className="size-3.5 animate-spin" />
                         ) : (
                           <Download className="size-3.5" />
                         )}
                         Download PDF
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        disabled={exporting !== null}
+                        onClick={() =>
+                          setExporting({
+                            target: {
+                              certificateId: c.certificateId,
+                              studentName: c.studentName,
+                              courseTitle: c.courseTitle,
+                              issuedAt: c.issuedAt,
+                              label: c.courseTitle,
+                            },
+                            mode: "png",
+                          })
+                        }
+                        className="gap-1.5 border-white/15"
+                        title="Save the certificate as an image"
+                      >
+                        {exporting?.target.certificateId === c.certificateId &&
+                        exporting.mode === "png" ? (
+                          <Loader2 className="size-3.5 animate-spin" />
+                        ) : (
+                          <ImageDown className="size-3.5" />
+                        )}
+                        PNG
                       </Button>
                       <Link to={`/verify/${c.certificateId}`}>
                         <Button size="sm" variant="outline" className="gap-1.5 border-white/15">
@@ -149,18 +196,17 @@ export default function Certificates() {
         </div>
       )}
 
-      {/* Offscreen full-size template used for PDF capture (no scaling, no
+      {/* Offscreen full-size template used for export (no scaling, no
           Tailwind classes — rasterizes cleanly with html2canvas) */}
-      {downloading && (
-        <div
+      {exporting && (        <div
           aria-hidden
           style={{ position: "fixed", left: -10000, top: 0, zIndex: -1 }}
         >
           <div ref={captureRef} style={{ width: 1280, height: 905 }}>
             <CertificateTemplate
-              cert={downloading}
+              cert={exporting.target}
               branding={branding ?? DEFAULT_CERTIFICATE_BRANDING}
-              verifyUrl={`${origin}/verify/${downloading.certificateId}`}
+              verifyUrl={`${origin}/verify/${exporting.target.certificateId}`}
             />
           </div>
         </div>

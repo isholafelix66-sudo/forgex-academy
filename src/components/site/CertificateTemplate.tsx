@@ -95,7 +95,7 @@ export function CertificateTemplate({
   const bg = "#0b0f0e"; // electric black
   const ink = "#f4f4f5"; // off-white text
   const muted = "#9ca3af"; // muted text
-  const gold = "#eab308"; // yellow-gold (institution, ID)
+  const brand = "#a3e635"; // ForgeX lime green (institution, certificate ID)
 
   return (
     <div
@@ -171,7 +171,7 @@ export function CertificateTemplate({
             letterSpacing: "6px",
             textTransform: "uppercase",
             marginTop: 16,
-            color: gold,
+            color: brand,
           }}
         >
           {branding.institutionName}
@@ -280,7 +280,7 @@ export function CertificateTemplate({
               marginTop: 6,
               fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace",
               fontSize: 16,
-              color: gold,
+              color: brand,
             }}
           >
             {cert.certificateId}

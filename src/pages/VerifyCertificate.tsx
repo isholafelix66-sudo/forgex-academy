@@ -3,7 +3,7 @@ import { Link, useParams } from "react-router";
 import { useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import { toast } from "sonner";
-import { Award, CheckCircle2, Download, Loader2 } from "lucide-react";
+import { Award, CheckCircle2, Download, ImageDown, Loader2 } from "lucide-react";
 import { PageShell } from "@/components/site/PageShell";
 import { Reveal } from "@/components/site/Reveal";
 import { EmptyState } from "@/components/site/EmptyState";
@@ -13,7 +13,10 @@ import {
   DEFAULT_CERTIFICATE_BRANDING,
 } from "@/components/site/CertificateTemplate";
 import { Button } from "@/components/ui/button";
-import { downloadCertificatePdf } from "@/lib/certificate-pdf";
+import {
+  downloadCertificatePdf,
+  downloadCertificatePng,
+} from "@/lib/certificate-pdf";
 
 export default function VerifyCertificate() {
   const { certificateId } = useParams();
@@ -22,40 +25,43 @@ export default function VerifyCertificate() {
   });
   const branding = useQuery(api.public.certificateBranding);
   const captureRef = useRef<HTMLDivElement>(null);
-  const [downloading, setDownloading] = useState(false);
+  const [exporting, setExporting] = useState<"pdf" | "png" | null>(null);
 
   const verifyUrl =
     typeof window !== "undefined"
       ? `${window.location.origin}/verify/${certificateId}`
       : "";
 
-  const handleDownload = () => {
-    if (!cert) return;
-    setDownloading(true);
-  };
-
   // The offscreen capture node renders on the same commit that sets
-  // `downloading`, so trigger the export once it's in the DOM.
+  // `exporting`, so trigger the export once it's in the DOM.
   useEffect(() => {
-    if (!downloading || !cert || !captureRef.current) return;
+    if (!exporting || !cert || !captureRef.current) return;
     let cancelled = false;
-    downloadCertificatePdf(
-      captureRef.current,
-      `ForgeX-Certificate-${cert.certificateId}.pdf`,
-    )
+    const base = `ForgeX-Certificate-${cert.certificateId}`;
+    const job =
+      exporting === "pdf"
+        ? downloadCertificatePdf(captureRef.current, `${base}.pdf`)
+        : downloadCertificatePng(captureRef.current, `${base}.png`);
+    job
       .then(() => {
-        if (!cancelled) toast.success("Certificate downloaded");
+        if (!cancelled)
+          toast.success(
+            exporting === "pdf"
+              ? "Certificate PDF saved"
+              : "Certificate image saved",
+          );
       })
       .catch(() => {
-        if (!cancelled) toast.error("Couldn't generate the PDF. Please try again.");
+        if (!cancelled)
+          toast.error("Couldn't generate the file. Please try again.");
       })
       .finally(() => {
-        if (!cancelled) setDownloading(false);
+        if (!cancelled) setExporting(null);
       });
     return () => {
       cancelled = true;
     };
-  }, [downloading, cert]);
+  }, [exporting, cert]);
 
   if (cert === undefined) {
     return (
@@ -116,18 +122,33 @@ export default function VerifyCertificate() {
         </Reveal>
 
         <Reveal delay={0.12} className="mt-8 text-center">
-          <Button
-            onClick={() => void handleDownload()}
-            disabled={downloading}
-            className="gap-2 bg-lime-400 font-semibold text-black hover:bg-lime-300"
-          >
-            {downloading ? (
-              <Loader2 className="size-4 animate-spin" />
-            ) : (
-              <Download className="size-4" />
-            )}
-            Download as PDF
-          </Button>
+          <div className="flex flex-wrap items-center justify-center gap-3">
+            <Button
+              onClick={() => setExporting("pdf")}
+              disabled={exporting !== null}
+              className="gap-2 bg-lime-400 font-semibold text-black hover:bg-lime-300"
+            >
+              {exporting === "pdf" ? (
+                <Loader2 className="size-4 animate-spin" />
+              ) : (
+                <Download className="size-4" />
+              )}
+              Download as PDF
+            </Button>
+            <Button
+              onClick={() => setExporting("png")}
+              disabled={exporting !== null}
+              variant="outline"
+              className="gap-2 border-white/15 hover:border-lime-400/40 hover:text-lime-300"
+            >
+              {exporting === "png" ? (
+                <Loader2 className="size-4 animate-spin" />
+              ) : (
+                <ImageDown className="size-4" />
+              )}
+              Save as image
+            </Button>
+          </div>
           <p className="mt-4 text-sm text-muted-foreground">
             Recruiters can scan the QR code or visit the verification URL to
             confirm this credential at any time.
@@ -140,9 +161,9 @@ export default function VerifyCertificate() {
         </Reveal>
       </section>
 
-      {/* Offscreen full-size template used for PDF capture (no scaling, no
+      {/* Offscreen full-size template used for export (no scaling, no
           Tailwind classes — rasterizes cleanly with html2canvas) */}
-      {downloading && cert && (
+      {exporting && cert && (
         <div aria-hidden style={{ position: "fixed", left: -10000, top: 0, zIndex: -1 }}>
           <div ref={captureRef} style={{ width: 1280, height: 905 }}>
             <CertificateTemplate

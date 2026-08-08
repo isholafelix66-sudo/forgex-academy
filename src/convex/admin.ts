@@ -1534,3 +1534,124 @@ export const conversationMessages = query({
     return withSender;
   },
 });
+
+// ---------------------------------------------------------------------------
+// Admin chat replies — admins answer users directly as the ForgeX Admin
+// identity. Each reply lives in its own admin↔user thread, so the standard
+// two-participant conversation model stays intact everywhere.
+// ---------------------------------------------------------------------------
+
+const adminThreadKey = (a: string, b: string) => [a, b].sort().join("|");
+
+/** Find the platform-wide ForgeX Admin messaging identity (create on demand). */
+async function ensureAdminUser(ctx: MutationCtx): Promise<Doc<"users">> {
+  const existing = await ctx.db
+    .query("users")
+    .withIndex("email", (q) => q.eq("email", "admin@forgex.academy"))
+    .first();
+  if (existing) return existing;
+  const id = await ctx.db.insert("users", {
+    name: "ForgeX Admin",
+    email: "admin@forgex.academy",
+    role: ROLES.ADMIN,
+    verified: true,
+    headline: "Academy Support",
+    isSeed: true, // system identity — hidden from search & platform stats
+  });
+  const created = await ctx.db.get(id);
+  if (!created) throw new Error("Could not create the admin identity.");
+  return created;
+}
+
+/**
+ * Admin replies to any user from the chat oversight page. The reply is sent
+ * as “ForgeX Admin” into a dedicated admin↔user thread; the recipient is
+ * notified in-app and by email, exactly like a normal message.
+ */
+export const adminReply = mutation({
+  args: {
+    token: v.string(),
+    threadId: v.string(),
+    body: v.string(),
+    replyToUserId: v.id("users"),
+  },
+  handler: async (ctx, { token, threadId, body, replyToUserId }) => {
+    await requireAdminSession(ctx, token);
+    const trimmed = body.trim();
+    if (!trimmed) throw new Error("Message can't be empty.");
+
+    const recipient = await ctx.db.get(replyToUserId);
+    if (!recipient) throw new Error("Recipient not found.");
+
+    // The admin is replying inside a real conversation — verify the thread
+    // exists and that the chosen recipient is one of its participants.
+    const threadMessages = await ctx.db
+      .query("messages")
+      .withIndex("by_thread", (q) => q.eq("threadId", threadId))
+      .collect();
+    if (threadMessages.length === 0) {
+      throw new Error("Conversation not found.");
+    }
+    const isParticipant = threadMessages.some(
+      (m) => m.senderId === replyToUserId || m.receiverId === replyToUserId,
+    );
+    if (!isParticipant) {
+      throw new Error("That user isn't part of this conversation.");
+    }
+
+    const admin = await ensureAdminUser(ctx);
+    const senderName = admin.name || "ForgeX Admin";
+
+    const id = await ctx.db.insert("messages", {
+      threadId: adminThreadKey(admin._id, replyToUserId),
+      senderId: admin._id,
+      receiverId: replyToUserId,
+      body: trimmed,
+      createdAt: Date.now(),
+    });
+
+    await notify(ctx, {
+      userId: replyToUserId,
+      title: `New message from ${senderName}`,
+      body: trimmed.slice(0, 90),
+      type: "message",
+      link:
+        recipient.role === "tutor" ? "/tutor/inbox" : "/dashboard/messages",
+    });
+
+    // Email the recipient (throttled to one per 5 minutes per recipient).
+    if (recipient.email) {
+      const prev = await ctx.db
+        .query("messages")
+        .withIndex("by_receiver", (q) => q.eq("receiverId", replyToUserId))
+        .collect();
+      const lastIncoming = prev.reduce((max, m) => Math.max(max, m.createdAt), 0);
+      if (Date.now() - lastIncoming > 5 * 60 * 1000) {
+        const site = (SITE_URL ?? "https://forgex.academy").replace(/\/$/, "");
+        const inbox =
+          recipient.role === "tutor" ? "/tutor/inbox" : "/dashboard/messages";
+        await ctx.scheduler.runAfter(0, internal.email.sendEmail, {
+          to: recipient.email,
+          subject: `New message from ${senderName} 💬`,
+          html: `
+            <div style="background:#0d0f0c;color:#e7e5e4;font-family:Segoe UI,Arial,sans-serif;padding:32px 16px">
+              <div style="max-width:560px;margin:0 auto;background:#14170f;border:1px solid #2a2e22;border-radius:16px;overflow:hidden">
+                <div style="background:#a3e635;padding:20px 28px"><p style="margin:0;color:#0d0f0c;font-weight:800;font-size:18px">⚡ ForgeX Academy</p></div>
+                <div style="padding:28px">
+                  <p style="margin:0 0 16px;font-size:22px;font-weight:700;color:#a3e635">${senderName} replied 💬</p>
+                  <p style="margin:0 0 12px;font-size:14px;line-height:1.6;color:#d6d3d1">${senderName} sent you a message on ForgeX Academy:</p>
+                  <div style="margin:0 0 20px;background:#0d0f0c;border:1px solid #2a2e22;border-radius:12px;padding:14px 16px;font-size:14px;color:#f5f5f4;line-height:1.6">“${trimmed.slice(0, 160)}”</div>
+                  <a href="${site}${inbox}" style="display:inline-block;background:#a3e635;color:#0d0f0c;text-decoration:none;font-weight:700;font-size:14px;padding:12px 22px;border-radius:10px">Open conversation</a>
+                </div>
+                <div style="padding:16px 28px;border-top:1px solid #2a2e22;font-size:12px;color:#78716c">You're receiving this because ${senderName} messaged you on ForgeX Academy.</div>
+              </div>
+            </div>`,
+          text: `You have a new message from ${senderName} on ForgeX Academy:\n\n“${trimmed}”\n\nOpen it here: ${site}${inbox}`,
+        });
+      }
+    }
+
+    await audit(ctx, undefined, replyToUserId, "admin-reply", `Admin replied to ${recipient.name ?? "a user"}`);
+    return id;
+  },
+});
