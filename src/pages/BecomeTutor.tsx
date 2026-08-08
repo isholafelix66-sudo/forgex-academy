@@ -7,12 +7,35 @@ import {
   CheckCircle2,
   Clock,
   GraduationCap,
+  ImagePlus,
   Loader2,
+  Paperclip,
   Save,
   Send,
   ShieldCheck,
   XCircle,
 } from "lucide-react";
+
+/** Admin-configured custom form fields (stored in siteContent.tutorFormFields). */
+type CustomField = {
+  key: string;
+  label: string;
+  type: string;
+  required: boolean;
+  enabled: boolean;
+  help?: string;
+};
+
+function parseCustomFields(value: unknown): CustomField[] {
+  if (!Array.isArray(value)) return [];
+  return value.filter(
+    (f): f is CustomField =>
+      !!f && typeof f === "object" && typeof (f as CustomField).label === "string",
+  );
+}
+
+type CustomAnswer = string | string[];
+type CustomAnswers = Record<string, CustomAnswer>;
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -136,12 +159,17 @@ export default function BecomeTutor() {
     isAuthenticated ? {} : "skip",
   );
   const saveTutorApplication = useMutation(api.users.saveTutorApplication);
+  const siteContent = useQuery(api.public.siteContentAll);
+  const customFields = parseCustomFields(
+    siteContent?.tutorFormFields,
+  ).filter((f) => f.enabled);
 
   const [form, setForm] = useState<FormState>(() => ({
     ...initialState,
     fullName: user?.name ?? "",
     email: (user as { email?: string } | null | undefined)?.email ?? "",
   }));
+  const [customAnswers, setCustomAnswers] = useState<CustomAnswers>({});
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [savedNotice, setSavedNotice] = useState(false);
@@ -250,21 +278,145 @@ export default function BecomeTutor() {
         : [...form.teachingSubjects, s],
     );
 
-  const required = [
-    form.fullName.trim(),
-    form.phone.trim(),
-    form.residentialAddress.trim(),
-    form.city.trim(),
-    form.country.trim(),
-    form.professionalTitle.trim(),
-    form.biography.trim(),
-    form.yearsOfExperience,
-    form.highestQualification.trim(),
-    form.nin.trim(),
-    form.teachingStatement.trim(),
-    form.skills.length > 0,
-    form.acceptedAgreement,
-  ].every(Boolean);
+  const customRequired = customFields
+    .filter((f) => f.required)
+    .every((f) => {
+      const a = customAnswers[f.key];
+      if (Array.isArray(a)) return a.length > 0;
+      return typeof a === "string" && a.trim().length > 0;
+    });
+
+  const required =
+    [
+      form.fullName.trim(),
+      form.phone.trim(),
+      form.residentialAddress.trim(),
+      form.city.trim(),
+      form.country.trim(),
+      form.professionalTitle.trim(),
+      form.biography.trim(),
+      form.yearsOfExperience,
+      form.highestQualification.trim(),
+      form.nin.trim(),
+      form.teachingStatement.trim(),
+      form.skills.length > 0,
+      form.acceptedAgreement,
+    ].every(Boolean) && customRequired;
+
+  const setCustom = (key: string, value: CustomAnswer) =>
+    setCustomAnswers((c) => ({ ...c, [key]: value }));
+
+  const toggleCustomChoice = (field: CustomField, option: string) => {
+    const current = customAnswers[field.key];
+    const arr = Array.isArray(current) ? (current as string[]) : [];
+    setCustom(
+      field.key,
+      arr.includes(option) ? arr.filter((x) => x !== option) : [...arr, option],
+    );
+  };
+
+  const renderCustomField = (field: CustomField) => {
+    const value = customAnswers[field.key] ?? "";
+    const baseInput =
+      "h-10 w-full rounded-xl border border-white/10 bg-black/20 px-3 text-sm outline-none focus:border-lime-400/50";
+    switch (field.type) {
+      case "long-text":
+        return (
+          <Textarea
+            value={typeof value === "string" ? value : ""}
+            onChange={(e) => setCustom(field.key, e.target.value)}
+            rows={3}
+            className={inputCls}
+          />
+        );
+      case "dropdown":
+        return (
+          <select
+            value={typeof value === "string" ? value : ""}
+            onChange={(e) => setCustom(field.key, e.target.value)}
+            className={baseInput}
+          >
+            <option value="">Select…</option>
+            {["Option 1", "Option 2", "Option 3"].map((o) => (
+              <option key={o} value={o}>{o}</option>
+            ))}
+          </select>
+        );
+      case "multiple-choice":
+        return (
+          <div className="flex flex-wrap gap-2">
+            {["Option A", "Option B", "Option C"].map((o) => {
+              const arr = Array.isArray(value) ? value : [];
+              return (
+                <button
+                  type="button"
+                  key={o}
+                  onClick={() => toggleCustomChoice(field, o)}
+                  className={
+                    arr.includes(o)
+                      ? "rounded-full border border-lime-400/50 bg-lime-400/10 px-3 py-1 text-xs font-medium text-lime-300"
+                      : "rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs text-muted-foreground"
+                  }
+                >
+                  {o}
+                </button>
+              );
+            })}
+          </div>
+        );
+      case "checkbox": {
+        const arr = Array.isArray(value) ? value : [];
+        return (
+          <label className="flex items-center gap-2 text-sm">
+            <input
+              type="checkbox"
+              checked={arr.includes("yes")}
+              onChange={(e) => setCustom(field.key, e.target.checked ? ["yes"] : [])}
+              className="size-4 accent-lime-400"
+            />
+            Yes
+          </label>
+        );
+      }
+      case "file":
+      case "profile-image":
+        return (
+          <div className="flex items-center gap-2">
+            {field.type === "profile-image" ? (
+              <ImagePlus className="size-4 text-muted-foreground" />
+            ) : (
+              <Paperclip className="size-4 text-muted-foreground" />
+            )}
+            <Input
+              type="url"
+              value={typeof value === "string" ? value : ""}
+              onChange={(e) => setCustom(field.key, e.target.value)}
+              placeholder="https://… (public link to your file)"
+              className={inputCls}
+            />
+          </div>
+        );
+      default:
+        return (
+          <Input
+            type={
+              field.type === "email"
+                ? "email"
+                : field.type === "phone"
+                  ? "tel"
+                  : field.type === "number"
+                    ? "number"
+                    : field.type === "date"
+                      ? "date"
+                      : "text"
+            }
+            value={typeof value === "string" ? value : ""}
+            onChange={(e) => setCustom(field.key, e.target.value)}
+            className={inputCls}
+          />
+        );
+    }
+  };
 
   const save = async (submit: boolean) => {
     setSaving(true);
@@ -304,6 +456,8 @@ export default function BecomeTutor() {
         youtube: form.youtube || undefined,
         otherLink: form.otherLink || undefined,
         acceptedAgreement: form.acceptedAgreement,
+        customAnswers:
+          Object.keys(customAnswers).length > 0 ? customAnswers : undefined,
         submit,
       });
       if (submit) {
@@ -558,7 +712,28 @@ export default function BecomeTutor() {
               </div>
             </div>
 
-            {/* 6 — Agreement */}
+            {/* Custom admin-configured fields */}
+            {customFields.length > 0 && (
+              <div className="space-y-4 border-t border-white/10 pt-6">
+                <h2 className="font-display text-lg font-semibold">
+                  6. Additional information
+                </h2>
+                <p className="text-sm text-muted-foreground">
+                  Extra fields requested by ForgeX Academy.
+                </p>
+                <div className="grid gap-4 sm:grid-cols-2">
+                  {customFields.map((f) => (
+                    <div key={f.key} className={f.type === "long-text" ? "sm:col-span-2" : ""}>
+                      <Field label={f.label} required={f.required} hint={f.help}>
+                        {renderCustomField(f)}
+                      </Field>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* 7 — Agreement */}
             <div className="border-t border-white/10 pt-6">
               <label className="flex items-start gap-3 text-sm">
                 <input
@@ -607,7 +782,8 @@ export default function BecomeTutor() {
             {!required && (
               <p className="text-center text-xs text-muted-foreground">
                 Required: name, phone, address, city, country, title, bio, experience,
-                qualification, NIN, teaching statement, at least one skill, and the agreement.
+                qualification, NIN, teaching statement, at least one skill, the
+                agreement, and any fields marked * above.
               </p>
             )}
           </form>

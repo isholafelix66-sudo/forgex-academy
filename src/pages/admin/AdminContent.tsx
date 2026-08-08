@@ -1,27 +1,65 @@
 import { useState } from "react";
 import { useMutation, useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
-import { Check, Loader2, PenSquare } from "lucide-react";
+import {
+  Check,
+  ImageIcon,
+  Link2,
+  Loader2,
+  Mail,
+  MapPin,
+  Palette,
+  PenSquare,
+  Phone,
+  Plus,
+  Save,
+  Trash2,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { Label } from "@/components/ui/label";
 import { PageHeader } from "@/components/dash/PageHeader";
+import { ImageUploader, type UploadedImage } from "@/components/admin/ImageUploader";
 import { getAdminToken } from "@/lib/admin-session";
 
-const FIELDS: Array<{ key: string; label: string; hint: string; rows: number }> = [
-  { key: "mission", label: "Mission", hint: "Shown on the About page.", rows: 4 },
-  { key: "vision", label: "Vision", hint: "Shown on the About page.", rows: 4 },
-  { key: "about", label: "About us", hint: "Long-form About page copy.", rows: 8 },
-  { key: "heroTitle", label: "Homepage hero title", hint: "Headline on the landing page.", rows: 3 },
+const TEXT_FIELDS: Array<{ key: string; label: string; hint: string; rows: number }> = [
+  { key: "heroTitle", label: "Homepage hero title", hint: "Big headline on the landing page.", rows: 2 },
   { key: "heroSubtitle", label: "Homepage hero subtitle", hint: "Supporting line under the hero.", rows: 3 },
-  { key: "ctaTitle", label: "CTA section title", hint: "Bottom call-to-action heading.", rows: 3 },
+  { key: "ctaTitle", label: "CTA section title", hint: "Bottom call-to-action heading.", rows: 2 },
+  { key: "mission", label: "Mission statement", hint: "Shown on the About page.", rows: 4 },
+  { key: "vision", label: "Vision statement", hint: "Shown on the About page.", rows: 4 },
+  { key: "about", label: "About us (story)", hint: "Long-form About page copy.", rows: 8 },
 ];
 
-function EditorRow({
+const IMAGE_FIELDS: Array<{ key: string; label: string; hint: string }> = [
+  { key: "logo", label: "Website logo", hint: "Replaces the logo in the nav, footer and app." },
+  { key: "favicon", label: "Favicon", hint: "Small browser-tab icon." },
+  { key: "heroImage", label: "Homepage hero image", hint: "Background visual on the landing hero." },
+  { key: "missionImage", label: "Mission image", hint: "Shown beside the mission statement." },
+  { key: "visionImage", label: "Vision image", hint: "Shown beside the vision statement." },
+  { key: "aboutImage", label: "About image", hint: "Shown on the About page." },
+];
+
+const SOCIAL_PLATFORMS = [
+  "facebook",
+  "instagram",
+  "x",
+  "linkedin",
+  "youtube",
+  "tiktok",
+  "whatsapp",
+  "telegram",
+] as const;
+
+type Social = { platform: string; url: string; enabled: boolean; order: number };
+
+function TextEditor({
   field,
   initial,
   onSave,
 }: {
-  field: (typeof FIELDS)[number];
+  field: (typeof TEXT_FIELDS)[number];
   initial?: string;
   onSave: (key: string, value: string) => Promise<void>;
 }) {
@@ -47,26 +85,13 @@ function EditorRow({
           <p className="font-medium">{field.label}</p>
           <p className="text-xs text-muted-foreground">{field.hint}</p>
         </div>
-        <Button
-          size="sm"
-          onClick={() => void save()}
-          disabled={saving}
-          className={
-            saved
-              ? "gap-1.5 border border-lime-400/40 bg-lime-400/10 text-lime-300 hover:bg-lime-400/15"
-              : "gap-1.5 bg-lime-400 font-semibold text-black hover:bg-lime-300"
-          }
-        >
+        <Button size="sm" onClick={() => void save()} disabled={saving}
+          className={saved ? "gap-1.5 border border-lime-400/40 bg-lime-400/10 text-lime-300 hover:bg-lime-400/15" : "gap-1.5 bg-lime-400 font-semibold text-black hover:bg-lime-300"}>
           {saving ? <Loader2 className="size-3.5 animate-spin" /> : saved ? <Check className="size-3.5" /> : "Save"}
           {saved ? "Saved" : ""}
         </Button>
       </div>
-      <Textarea
-        value={value}
-        onChange={(e) => setValue(e.target.value)}
-        rows={field.rows}
-        className="mt-3 border-white/10 bg-black/20"
-      />
+      <Textarea value={value} onChange={(e) => setValue(e.target.value)} rows={field.rows} className="mt-3 border-white/10 bg-black/20" />
     </div>
   );
 }
@@ -76,15 +101,60 @@ export default function AdminContent() {
   const contentSet = useMutation(api.admin.contentSet);
   const token = getAdminToken() ?? "";
 
+  const [contact, setContact] = useState<{ email: string; phone: string; address: string } | null>(null);
+  const [savingContact, setSavingContact] = useState(false);
+  const [savedContact, setSavedContact] = useState(false);
+  const [socials, setSocials] = useState<Social[] | null>(null);
+  const [socialDraft, setSocialDraft] = useState<Social | null>(null);
+  const [savingSocials, setSavingSocials] = useState(false);
+  const [savedSocials, setSavedSocials] = useState(false);
+
   const save = async (key: string, value: string) => {
     await contentSet({ key, value, token });
+  };
+
+  const saveImage = async (key: string, img: UploadedImage) => {
+    await contentSet({ key, value: img.secureUrl, token });
+  };
+
+  const saveContact = async () => {
+    if (!contact) return;
+    setSavingContact(true);
+    try {
+      await contentSet({ key: "contact", value: contact, token });
+      setSavedContact(true);
+      setTimeout(() => setSavedContact(false), 2000);
+    } finally {
+      setSavingContact(false);
+    }
+  };
+
+  const saveSocials = async () => {
+    if (!socials) return;
+    setSavingSocials(true);
+    try {
+      await contentSet({ key: "socials", value: socials, token });
+      setSavedSocials(true);
+      setTimeout(() => setSavedSocials(false), 2000);
+    } finally {
+      setSavingSocials(false);
+    }
+  };
+
+  const loadedContact = contact ?? (content?.contact as { email?: string; phone?: string; address?: string } | undefined) ?? {};
+  const loadedSocials = socials ?? (content?.socials as Social[] | undefined) ?? [];
+
+  const shownContact = {
+    email: typeof loadedContact.email === "string" ? loadedContact.email : "",
+    phone: typeof loadedContact.phone === "string" ? loadedContact.phone : "",
+    address: typeof loadedContact.address === "string" ? loadedContact.address : "",
   };
 
   return (
     <div className="space-y-8">
       <PageHeader
-        title="Site content"
-        description="Edit homepage and About copy without touching code."
+        title="Website & branding"
+        description="Manage the logo, images, homepage copy, contact details and social media — live on the site instantly."
       />
 
       {content === undefined ? (
@@ -94,23 +164,160 @@ export default function AdminContent() {
           ))}
         </div>
       ) : (
-        <div className="space-y-4">
-          {FIELDS.map((f) => {
-            const v = content[f.key];
-            const initial = typeof v === "string" ? v : undefined;
-            return <EditorRow key={f.key} field={f} initial={initial} onSave={save} />;
-          })}
+        <div className="space-y-8">
+          {/* Branding images */}
+          <section className="rounded-2xl border border-white/10 bg-card p-6">
+            <h2 className="font-display flex items-center gap-2 text-base font-semibold">
+              <Palette className="size-4 text-lime-300" /> Logo & images
+            </h2>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Upload from your device — no image URLs needed. JPG, PNG and WebP.
+            </p>
+            <div className="mt-5 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              {IMAGE_FIELDS.map((f) => {
+                const v = content[f.key];
+                const current = typeof v === "string" ? v : undefined;
+                return (
+                  <div key={f.key} className="rounded-xl border border-white/10 bg-black/20 p-4">
+                    <div className="flex items-center gap-2">
+                      <ImageIcon className="size-4 text-lime-300" />
+                      <p className="text-sm font-medium">{f.label}</p>
+                    </div>
+                    <p className="mb-2 text-[11px] text-muted-foreground">{f.hint}</p>
+                    <ImageUploader
+                      value={current}
+                      label="Upload"
+                      onUploaded={(img) => void saveImage(f.key, img)}
+                      onClear={() => void contentSet({ key: f.key, value: "", token })}
+                    />
+                  </div>
+                );
+              })}
+            </div>
+          </section>
 
-          <div className="rounded-2xl border border-white/10 bg-black/20 p-5 text-sm text-muted-foreground">
-            <p className="flex items-center gap-2 font-medium text-foreground">
-              <PenSquare className="size-4 text-lime-300" /> How this works
+          {/* Text fields */}
+          <section className="rounded-2xl border border-white/10 bg-card p-6">
+            <h2 className="font-display flex items-center gap-2 text-base font-semibold">
+              <PenSquare className="size-4 text-lime-300" /> Homepage & About copy
+            </h2>
+            <div className="mt-5 space-y-4">
+              {TEXT_FIELDS.map((f) => {
+                const v = content[f.key];
+                const initial = typeof v === "string" ? v : undefined;
+                return <TextEditor key={f.key} field={f} initial={initial} onSave={save} />;
+              })}
+            </div>
+          </section>
+
+          {/* Contact */}
+          <section className="rounded-2xl border border-white/10 bg-card p-6">
+            <h2 className="font-display flex items-center gap-2 text-base font-semibold">
+              <Mail className="size-4 text-lime-300" /> Contact information
+            </h2>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Shown on the Contact page and in the footer of every page.
             </p>
-            <p className="mt-2 leading-relaxed">
-              Saving a field writes it to the site-content store and the public
-              pages render it live. If a field has never been saved, pages fall
-              back to their built-in defaults.
+            <div className="mt-5 grid gap-4 sm:grid-cols-3">
+              <div className="space-y-2">
+                <Label className="flex items-center gap-1.5"><Mail className="size-3.5" /> Email</Label>
+                <Input value={shownContact.email} onChange={(e) => setContact({ ...shownContact, email: e.target.value })} placeholder="hello@forgexacademy.com" className="border-white/10 bg-black/20" />
+              </div>
+              <div className="space-y-2">
+                <Label className="flex items-center gap-1.5"><Phone className="size-3.5" /> Phone</Label>
+                <Input value={shownContact.phone} onChange={(e) => setContact({ ...shownContact, phone: e.target.value })} placeholder="+1 555 000 0000" className="border-white/10 bg-black/20" />
+              </div>
+              <div className="space-y-2">
+                <Label className="flex items-center gap-1.5"><MapPin className="size-3.5" /> Address</Label>
+                <Input value={shownContact.address} onChange={(e) => setContact({ ...shownContact, address: e.target.value })} placeholder="City, Country" className="border-white/10 bg-black/20" />
+              </div>
+            </div>
+            <Button onClick={() => void saveContact()} disabled={savingContact}
+              className={savedContact ? "mt-4 gap-1.5 border border-lime-400/40 bg-lime-400/10 text-lime-300 hover:bg-lime-400/15" : "mt-4 gap-1.5 bg-lime-400 font-semibold text-black hover:bg-lime-300"}>
+              {savingContact ? <Loader2 className="size-4 animate-spin" /> : savedContact ? <Check className="size-4" /> : <Save className="size-4" />}
+              {savedContact ? "Saved" : "Save contact info"}
+            </Button>
+          </section>
+
+          {/* Social media */}
+          <section className="rounded-2xl border border-white/10 bg-card p-6">
+            <h2 className="font-display flex items-center gap-2 text-base font-semibold">
+              <Link2 className="size-4 text-lime-300" /> Social media
+            </h2>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Only platforms you enable appear in the footer and contact page.
             </p>
-          </div>
+
+            <div className="mt-5 space-y-2">
+              {loadedSocials.map((s, i) => (
+                <div key={`${s.platform}-${i}`} className="flex items-center gap-3 rounded-xl border border-white/10 bg-black/20 px-4 py-2.5">
+                  <input type="checkbox" checked={s.enabled !== false} onChange={(e) => {
+                    const next = [...loadedSocials];
+                    next[i] = { ...next[i], enabled: e.target.checked };
+                    setSocials(next);
+                  }} className="size-4 accent-lime-400" title="Enabled" />
+                  <span className="w-24 text-sm font-medium capitalize">{s.platform}</span>
+                  <a href={s.url} target="_blank" rel="noopener noreferrer" className="min-w-0 flex-1 truncate text-xs text-muted-foreground hover:text-lime-300">
+                    {s.url}
+                  </a>
+                  <Button variant="ghost" size="icon" onClick={() => setSocialDraft({ ...s })}>
+                    <PenSquare className="size-4" />
+                  </Button>
+                  <Button variant="ghost" size="icon" className="text-muted-foreground hover:text-rose-300" onClick={() => setSocials(loadedSocials.filter((_, x) => x !== i))}>
+                    <Trash2 className="size-4" />
+                  </Button>
+                </div>
+              ))}
+              {loadedSocials.length === 0 && (
+                <p className="rounded-xl border border-dashed border-white/10 p-5 text-center text-sm text-muted-foreground">
+                  No social platforms configured yet.
+                </p>
+              )}
+            </div>
+
+            {socialDraft && (
+              <div className="mt-4 space-y-3 rounded-xl border border-white/10 bg-black/20 p-4">
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <select value={socialDraft.platform} onChange={(e) => setSocialDraft({ ...socialDraft, platform: e.target.value })}
+                    className="h-10 rounded-xl border border-white/10 bg-black/30 px-3 text-sm outline-none">
+                    {SOCIAL_PLATFORMS.map((p) => (
+                      <option key={p} value={p}>{p}</option>
+                    ))}
+                  </select>
+                  <Input placeholder="https://…" value={socialDraft.url} onChange={(e) => setSocialDraft({ ...socialDraft, url: e.target.value })} className="border-white/10 bg-black/30" />
+                </div>
+                <div className="flex gap-2">
+                  <Button variant="ghost" onClick={() => setSocialDraft(null)}>Cancel</Button>
+                  <Button
+                    className="gap-1.5 bg-lime-400 font-semibold text-black hover:bg-lime-300"
+                    disabled={!socialDraft.url}
+                    onClick={() => {
+                      const exists = loadedSocials.some((s) => s.platform === socialDraft.platform);
+                      setSocials(
+                        exists
+                          ? loadedSocials.map((s) => (s.platform === socialDraft.platform ? { ...socialDraft, order: s.order } : s))
+                          : [...loadedSocials, { ...socialDraft, order: loadedSocials.length }],
+                      );
+                      setSocialDraft(null);
+                    }}
+                  >
+                    <Plus className="size-4" /> Save platform
+                  </Button>
+                </div>
+              </div>
+            )}
+
+            <div className="mt-4 flex flex-wrap items-center gap-3">
+              <Button variant="outline" className="gap-1.5 border-white/15" onClick={() => setSocialDraft({ platform: "facebook", url: "", enabled: true, order: loadedSocials.length })}>
+                <Plus className="size-4" /> Add platform
+              </Button>
+              <Button onClick={() => void saveSocials()} disabled={savingSocials}
+                className={savedSocials ? "gap-1.5 border border-lime-400/40 bg-lime-400/10 text-lime-300 hover:bg-lime-400/15" : "gap-1.5 bg-lime-400 font-semibold text-black hover:bg-lime-300"}>
+                {savingSocials ? <Loader2 className="size-4 animate-spin" /> : savedSocials ? <Check className="size-4" /> : <Save className="size-4" />}
+                {savedSocials ? "Saved" : "Save social links"}
+              </Button>
+            </div>
+          </section>
         </div>
       )}
     </div>

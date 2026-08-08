@@ -33,6 +33,33 @@ export const internalCurrentUser = internalQuery({
   },
 });
 
+/** Internal query: is this admin session token still valid? (for actions). */
+export const internalAdminSessionValid = internalQuery({
+  args: { token: v.string() },
+  handler: async (ctx, { token }) => {
+    const session = await ctx.db
+      .query("adminSessions")
+      .withIndex("by_token", (q) => q.eq("token", token))
+      .first();
+    if (!session) return false;
+    return Date.now() - session.createdAt <= 12 * 60 * 60 * 1000;
+  },
+});
+
+/** Record the user's last activity (called from the app shell). */
+export const touchActivity = mutation({
+  args: {},
+  handler: async (ctx) => {
+    const userId = await requireUser(ctx);
+    const now = Date.now();
+    const user = await ctx.db.get(userId);
+    if (user && (!user.lastActivity || now - user.lastActivity > 5 * 60 * 1000)) {
+      await ctx.db.patch(userId, { lastActivity: now });
+    }
+    return true;
+  },
+});
+
 /** First sign-in setup: assign default role, capture name, mark onboarded. */
 export const initializeUser = mutation({
   args: { name: v.optional(v.string()) },
@@ -105,6 +132,10 @@ const applicationFields = {
   youtube: v.optional(v.string()),
   otherLink: v.optional(v.string()),
   acceptedAgreement: v.boolean(),
+  // admin-configured custom form fields (label -> answer)
+  customAnswers: v.optional(
+    v.record(v.string(), v.union(v.string(), v.array(v.string()))),
+  ),
 };
 
 export const saveTutorApplication = mutation({

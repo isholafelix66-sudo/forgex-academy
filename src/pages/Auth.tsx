@@ -379,7 +379,7 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
 
           <p className="mt-4 flex items-center justify-center gap-1.5 text-xs text-muted-foreground">
             <Flame className="size-3.5 text-lime-400" />
-            Free forever · Learn. Build. Succeed.
+            Free forever · Discover. Express. Build.
           </p>
         </div>
       </div>

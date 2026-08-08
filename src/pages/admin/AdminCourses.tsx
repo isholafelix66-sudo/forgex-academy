@@ -1,45 +1,241 @@
 import { useState } from "react";
 import { useMutation, useQuery } from "convex/react";
+import type { FunctionReturnType } from "convex/server";
 import { api } from "@/convex/_generated/api";
-import { BookOpen, CheckCircle2, ExternalLink, Loader2, XCircle } from "lucide-react";
+import {
+  Archive,
+  ArchiveRestore,
+  BookOpen,
+  CheckCircle2,
+  Clock,
+  ExternalLink,
+  Loader2,
+  Pencil,
+  Plus,
+  Trash2,
+  XCircle,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { PageHeader } from "@/components/dash/PageHeader";
 import { Avatar } from "@/components/site/Avatar";
+import { ImageUploader, type UploadedImage } from "@/components/admin/ImageUploader";
+import { ConfirmDialog } from "@/components/admin/ConfirmDialog";
 import { StatusChip } from "@/pages/tutor/status";
 import { timeAgo } from "@/lib/format";
 import { getAdminToken } from "@/lib/admin-session";
+
+type CourseRow = FunctionReturnType<typeof api.admin.allCourses>[number];
+
+const EMPTY_DRAFT = {
+  id: undefined as string | undefined,
+  title: "",
+  subtitle: "",
+  description: "",
+  longDescription: "",
+  categoryId: "",
+  tutorId: "",
+  difficulty: "beginner" as string,
+  durationHours: 5,
+  image: undefined as string | undefined,
+  gradient: "",
+  icon: "",
+  prerequisites: "",
+  skills: "",
+  featured: false,
+  published: false,
+};
 
 export default function AdminCourses() {
   const token = getAdminToken() ?? "";
   const pending = useQuery(api.admin.coursesPendingReview, token ? { token } : "skip");
   const all = useQuery(api.admin.allCourses, token ? { token } : "skip");
-  const reviewCourse = useMutation(api.admin.reviewCourse);
+  const categories = useQuery(api.public.categoriesList);
+  const tutorOptions = useQuery(api.admin.userOptions, token ? { token, role: "tutor" } : "skip");
 
-  const [selected, setSelected] = useState<NonNullable<typeof pending>[number] | null>(null);
-  const [note, setNote] = useState("");
+  const reviewCourse = useMutation(api.admin.reviewCourse);
+  const adminUpsertCourse = useMutation(api.admin.adminUpsertCourse);
+  const setCoursePublished = useMutation(api.admin.setCoursePublished);
+  const setCourseArchived = useMutation(api.admin.setCourseArchived);
+  const adminDeleteCourse = useMutation(api.admin.adminDeleteCourse);
+  const adminUpsertLesson = useMutation(api.admin.adminUpsertLesson);
+  const adminDeleteLesson = useMutation(api.admin.adminDeleteLesson);
+  const adminUpsertQuiz = useMutation(api.admin.adminUpsertQuiz);
+  const adminDeleteQuiz = useMutation(api.admin.adminDeleteQuiz);
+  const adminUpsertAssignment = useMutation(api.admin.adminUpsertAssignment);
+  const adminDeleteAssignment = useMutation(api.admin.adminDeleteAssignment);
+
+  const [reviewing, setReviewing] = useState<CourseRow | null>(null);
+  const [reviewNote, setReviewNote] = useState("");
   const [busy, setBusy] = useState(false);
 
-  const act = async (approve: boolean) => {
-    if (!selected) return;
+  const [editor, setEditor] = useState<{ course?: CourseRow; draft: typeof EMPTY_DRAFT } | null>(null);
+  const [tab, setTab] = useState("details");
+  const [deleting, setDeleting] = useState<CourseRow | null>(null);
+  const [archiving, setArchiving] = useState<CourseRow | null>(null);
+
+  // Lesson mini-editor
+  const [lessonDraft, setLessonDraft] = useState<{
+    id?: string;
+    title: string;
+    order: number;
+    durationMinutes: number;
+    videoType: "youtube" | "mp4" | "";
+    videoUrl: string;
+    notes: string;
+  } | null>(null);
+
+  // Quiz / assignment mini-editors
+  const [quizDraft, setQuizDraft] = useState<{ id?: string; title: string; description: string; timeLimitMinutes: number } | null>(null);
+  const [assignDraft, setAssignDraft] = useState<{ id?: string; title: string; description: string; instructions: string; maxScore: number; deadline: string } | null>(null);
+
+  const rows = all ?? [];
+  const content = useQuery(
+    api.admin.courseContentDetail,
+    editor?.course && token ? { courseId: editor.course._id as never, token } : "skip",
+  );
+
+  const openNew = () => {
+    setEditor({
+      draft: {
+        ...EMPTY_DRAFT,
+        categoryId: categories?.[0]?._id ?? "",
+        tutorId: tutorOptions?.[0]?._id ?? "",
+      },
+    });
+    setTab("details");
+  };
+
+  const openEdit = (c: CourseRow) => {
+    setEditor({
+      course: c,
+      draft: {
+        id: c._id as string,
+        title: c.title,
+        subtitle: c.subtitle ?? "",
+        description: c.description ?? "",
+        longDescription: c.longDescription ?? "",
+        categoryId: (c as any).categoryId ?? categories?.[0]?._id ?? "",
+        tutorId: (c as any).tutorId ?? "",
+        difficulty: c.difficulty,
+        durationHours: c.durationHours,
+        image: c.image ?? undefined,
+        gradient: c.gradient ?? "",
+        icon: c.icon ?? "",
+        prerequisites: (c.prerequisites ?? []).join(", "),
+        skills: (c.skills ?? []).join(", "),
+        featured: c.featured,
+        published: c.published,
+      },
+    });
+    setTab("details");
+  };
+
+  const saveCourse = async () => {
+    if (!editor || !editor.draft.title.trim()) return;
     setBusy(true);
     try {
-      await reviewCourse({ courseId: selected._id as never, approve, note: note || undefined, token });
-      setSelected(null);
-      setNote("");
+      await adminUpsertCourse({
+        id: editor.draft.id ? (editor.draft.id as never) : undefined,
+        title: editor.draft.title,
+        subtitle: editor.draft.subtitle,
+        description: editor.draft.description,
+        longDescription: editor.draft.longDescription,
+        categoryId: editor.draft.categoryId as never,
+        tutorId: editor.draft.tutorId as never,
+        difficulty: editor.draft.difficulty as never,
+        durationHours: editor.draft.durationHours,
+        image: editor.draft.image || undefined,
+        gradient: editor.draft.gradient || undefined,
+        icon: editor.draft.icon || undefined,
+        prerequisites: editor.draft.prerequisites.split(",").map((s) => s.trim()).filter(Boolean),
+        skills: editor.draft.skills.split(",").map((s) => s.trim()).filter(Boolean),
+        featured: editor.draft.featured,
+        published: editor.draft.published,
+        token,
+      });
+      setEditor(null);
     } finally {
       setBusy(false);
     }
   };
 
-  const rows = all ?? [];
+  const saveLesson = async () => {
+    if (!editor?.course || !lessonDraft?.title.trim()) return;
+    await adminUpsertLesson({
+      id: lessonDraft.id ? (lessonDraft.id as never) : undefined,
+      courseId: editor.course._id as never,
+      title: lessonDraft.title,
+      order: lessonDraft.order,
+      durationMinutes: lessonDraft.durationMinutes,
+      videoUrl: lessonDraft.videoUrl || undefined,
+      videoType: lessonDraft.videoType || undefined,
+      notes: lessonDraft.notes,
+      transcript: "",
+      token,
+    });
+    setLessonDraft(null);
+  };
+
+  const saveQuiz = async () => {
+    if (!editor?.course || !quizDraft?.title.trim()) return;
+    await adminUpsertQuiz({
+      id: quizDraft.id ? (quizDraft.id as never) : undefined,
+      courseId: editor.course._id as never,
+      title: quizDraft.title,
+      description: quizDraft.description,
+      timeLimitMinutes: quizDraft.timeLimitMinutes,
+      token,
+    });
+    setQuizDraft(null);
+  };
+
+  const saveAssignment = async () => {
+    if (!editor?.course || !assignDraft?.title.trim()) return;
+    await adminUpsertAssignment({
+      id: assignDraft.id ? (assignDraft.id as never) : undefined,
+      courseId: editor.course._id as never,
+      title: assignDraft.title,
+      description: assignDraft.description,
+      instructions: assignDraft.instructions,
+      deadline: assignDraft.deadline ? new Date(assignDraft.deadline).getTime() : undefined,
+      maxScore: assignDraft.maxScore,
+      token,
+    });
+    setAssignDraft(null);
+  };
+
+  const approveOrReject = async (approve: boolean) => {
+    if (!reviewing) return;
+    setBusy(true);
+    try {
+      await reviewCourse({
+        courseId: reviewing._id as never,
+        approve,
+        note: reviewNote || undefined,
+        token,
+      });
+      setReviewing(null);
+      setReviewNote("");
+    } finally {
+      setBusy(false);
+    }
+  };
 
   return (
     <div className="space-y-8">
       <PageHeader
         title="Courses"
-        description="Approve tutor courses before they go live and review all courses."
+        description="Create, edit, publish, archive and delete every course on the platform."
+        actions={
+          <Button className="gap-2 bg-lime-400 font-semibold text-black hover:bg-lime-300" onClick={openNew}>
+            <Plus className="size-4" /> Add new course
+          </Button>
+        }
       />
 
       {/* Pending review */}
@@ -55,8 +251,8 @@ export default function AdminCourses() {
               <button
                 key={c._id}
                 onClick={() => {
-                  setSelected(c);
-                  setNote("");
+                  setReviewing(c);
+                  setReviewNote("");
                 }}
                 className="flex w-full items-center gap-3 rounded-xl border border-white/8 bg-black/20 px-4 py-3 text-left transition-colors hover:border-lime-400/40"
               >
@@ -83,76 +279,83 @@ export default function AdminCourses() {
         </div>
         <div className="divide-y divide-white/5">
           {rows.map((c) => (
-            <div key={c._id} className="flex items-center gap-3 px-5 py-3.5">
+            <div key={c._id} className="flex flex-wrap items-center gap-3 px-5 py-3.5">
               <Avatar name={c.tutor?.name ?? "?"} image={c.tutor?.image} className="size-8" />
               <div className="min-w-0 flex-1">
-                <p className="truncate text-sm font-medium">{c.title}</p>
+                <p className="truncate text-sm font-medium">
+                  {c.title}
+                  {c.archived && (
+                    <span className="ml-2 rounded-full bg-white/10 px-2 py-0.5 text-[10px] font-semibold text-muted-foreground">
+                      Archived
+                    </span>
+                  )}
+                </p>
                 <p className="truncate text-xs text-muted-foreground">
-                  {c.tutor?.name ?? "Unknown"} · {c.enrolledCount} students · {c.rating.toFixed(1)}★
-                  {c.status === "rejected" && c.reviewNote ? ` · ${c.reviewNote}` : ""}
+                  {c.tutor?.name ?? "Unknown"} · {c.enrolledCount} students · {c.rating.toFixed(1)}★ · {c.durationHours}h
                 </p>
               </div>
-              {c.published && (
-                <a
-                  href={`/courses/${c.slug}`}
-                  className="inline-flex items-center gap-1 text-xs text-lime-300 hover:underline"
-                >
-                  <ExternalLink className="size-3" /> View
-                </a>
-              )}
               <StatusChip status={c.status} published={c.published} />
+              <div className="flex shrink-0 items-center gap-1.5">
+                {c.published && (
+                  <a href={`/courses/${c.slug}`} className="inline-flex items-center gap-1 rounded-lg p-2 text-lime-300 hover:bg-lime-400/10" title="View">
+                    <ExternalLink className="size-4" />
+                  </a>
+                )}
+                <Button variant="ghost" size="icon" className="text-muted-foreground hover:text-foreground" title="Edit course" onClick={() => openEdit(c)}>
+                  <Pencil className="size-4" />
+                </Button>
+                {c.archived ? (
+                  <Button variant="ghost" size="icon" className="text-lime-300 hover:bg-lime-400/10" title="Restore" onClick={() => void setCourseArchived({ courseId: c._id as never, archived: false, token })}>
+                    <ArchiveRestore className="size-4" />
+                  </Button>
+                ) : (
+                  <Button variant="ghost" size="icon" className="text-amber-300 hover:bg-amber-400/10" title="Archive" onClick={() => setArchiving(c)}>
+                    <Archive className="size-4" />
+                  </Button>
+                )}
+                <Button variant="ghost" size="icon" className="text-muted-foreground hover:text-rose-300" title="Delete course" onClick={() => setDeleting(c)}>
+                  <Trash2 className="size-4" />
+                </Button>
+              </div>
             </div>
           ))}
         </div>
       </section>
 
-      <Dialog open={!!selected} onOpenChange={(o) => !o && setSelected(null)}>
+      {/* Review dialog */}
+      <Dialog open={!!reviewing} onOpenChange={(o) => !o && setReviewing(null)}>
         <DialogContent className="max-h-[90vh] overflow-y-auto border-white/10 bg-card sm:max-w-lg">
-          {selected && (
+          {reviewing && (
             <>
               <DialogHeader>
-                <DialogTitle className="font-display">{selected.title}</DialogTitle>
+                <DialogTitle className="font-display">{reviewing.title}</DialogTitle>
               </DialogHeader>
               <div className="space-y-3 text-sm">
                 <p className="rounded-xl border border-white/10 bg-black/20 p-4 leading-relaxed text-muted-foreground">
-                  {selected.longDescription}
+                  {reviewing.longDescription}
                 </p>
                 <div className="grid grid-cols-2 gap-3 text-xs text-muted-foreground">
-                  <p>Difficulty: <span className="text-foreground">{selected.difficulty}</span></p>
-                  <p>Duration: <span className="text-foreground">{selected.durationHours}h</span></p>
-                  <p>Tutor: <span className="text-foreground">{selected.tutor?.name}</span></p>
-                  <p>Category: <span className="text-foreground">{selected.category?.name}</span></p>
+                  <p>Difficulty: <span className="text-foreground">{reviewing.difficulty}</span></p>
+                  <p>Duration: <span className="text-foreground">{reviewing.durationHours}h</span></p>
+                  <p>Tutor: <span className="text-foreground">{reviewing.tutor?.name}</span></p>
+                  <p>Category: <span className="text-foreground">{reviewing.category?.name}</span></p>
                 </div>
-                {selected.skills.length > 0 && (
-                  <p className="text-xs text-muted-foreground">
-                    Skills: {selected.skills.join(", ")}
-                  </p>
-                )}
               </div>
               <div className="space-y-2">
                 <label className="text-sm font-medium">Note to tutor (optional)</label>
                 <Textarea
-                  value={note}
-                  onChange={(e) => setNote(e.target.value)}
+                  value={reviewNote}
+                  onChange={(e) => setReviewNote(e.target.value)}
                   rows={3}
                   placeholder="Appears on the tutor's course card (especially when rejected)…"
                   className="border-white/10 bg-black/20"
                 />
               </div>
               <div className="flex gap-2">
-                <Button
-                  disabled={busy}
-                  onClick={() => void act(false)}
-                  variant="outline"
-                  className="flex-1 gap-1.5 border-rose-400/30 text-rose-300 hover:bg-rose-400/10"
-                >
+                <Button disabled={busy} onClick={() => void approveOrReject(false)} variant="outline" className="flex-1 gap-1.5 border-rose-400/30 text-rose-300 hover:bg-rose-400/10">
                   <XCircle className="size-4" /> Reject
                 </Button>
-                <Button
-                  disabled={busy}
-                  onClick={() => void act(true)}
-                  className="flex-1 gap-1.5 bg-lime-400 font-semibold text-black hover:bg-lime-300"
-                >
+                <Button disabled={busy} onClick={() => void approveOrReject(true)} className="flex-1 gap-1.5 bg-lime-400 font-semibold text-black hover:bg-lime-300">
                   {busy ? <Loader2 className="size-4 animate-spin" /> : <CheckCircle2 className="size-4" />}
                   Approve & publish
                 </Button>
@@ -161,6 +364,258 @@ export default function AdminCourses() {
           )}
         </DialogContent>
       </Dialog>
+
+      {/* Course editor */}
+      <Dialog open={!!editor} onOpenChange={(o) => !o && setEditor(null)}>
+        <DialogContent className="max-h-[92vh] overflow-y-auto border-white/10 bg-card sm:max-w-3xl">
+          {editor && (
+            <>
+              <DialogHeader>
+                <DialogTitle className="font-display">
+                  {editor.draft.id ? `Edit — ${editor.draft.title}` : "Add new course"}
+                </DialogTitle>
+              </DialogHeader>
+              <Tabs value={tab} onValueChange={setTab}>
+                <TabsList className="grid w-full grid-cols-4">
+                  <TabsTrigger value="details">Details</TabsTrigger>
+                  <TabsTrigger value="lessons">Lessons</TabsTrigger>
+                  <TabsTrigger value="quizzes">Quizzes</TabsTrigger>
+                  <TabsTrigger value="assignments">Assignments</TabsTrigger>
+                </TabsList>
+
+                <TabsContent value="details" className="space-y-4 pt-4">
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    <div className="space-y-2 sm:col-span-2">
+                      <Label>Course title *</Label>
+                      <Input value={editor.draft.title} onChange={(e) => setEditor({ ...editor, draft: { ...editor.draft, title: e.target.value } })} className="border-white/10 bg-black/20" />
+                    </div>
+                    <div className="space-y-2 sm:col-span-2">
+                      <Label>Subtitle</Label>
+                      <Input value={editor.draft.subtitle} onChange={(e) => setEditor({ ...editor, draft: { ...editor.draft, subtitle: e.target.value } })} className="border-white/10 bg-black/20" />
+                    </div>
+                    <div className="space-y-2 sm:col-span-2">
+                      <Label>Short description</Label>
+                      <Textarea value={editor.draft.description} onChange={(e) => setEditor({ ...editor, draft: { ...editor.draft, description: e.target.value } })} rows={2} className="border-white/10 bg-black/20" />
+                    </div>
+                    <div className="space-y-2 sm:col-span-2">
+                      <Label>Long description</Label>
+                      <Textarea value={editor.draft.longDescription} onChange={(e) => setEditor({ ...editor, draft: { ...editor.draft, longDescription: e.target.value } })} rows={3} className="border-white/10 bg-black/20" />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Category</Label>
+                      <select value={editor.draft.categoryId} onChange={(e) => setEditor({ ...editor, draft: { ...editor.draft, categoryId: e.target.value } })} className="h-10 w-full rounded-xl border border-white/10 bg-black/20 px-3 text-sm outline-none">
+                        {(categories ?? []).map((c) => (
+                          <option key={c._id} value={c._id}>{c.name}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Assign tutor</Label>
+                      <select value={editor.draft.tutorId} onChange={(e) => setEditor({ ...editor, draft: { ...editor.draft, tutorId: e.target.value } })} className="h-10 w-full rounded-xl border border-white/10 bg-black/20 px-3 text-sm outline-none">
+                        {(tutorOptions ?? []).map((u) => (
+                          <option key={u._id} value={u._id}>{u.name}{u.isSeed ? " (demo)" : ""}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Difficulty</Label>
+                      <select value={editor.draft.difficulty} onChange={(e) => setEditor({ ...editor, draft: { ...editor.draft, difficulty: e.target.value } })} className="h-10 w-full rounded-xl border border-white/10 bg-black/20 px-3 text-sm outline-none">
+                        {["beginner", "intermediate", "advanced", "professional", "expert"].map((d) => (
+                          <option key={d} value={d}>{d}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Duration (hours)</Label>
+                      <Input type="number" min={1} value={editor.draft.durationHours} onChange={(e) => setEditor({ ...editor, draft: { ...editor.draft, durationHours: Number(e.target.value) } })} className="border-white/10 bg-black/20" />
+                    </div>
+                    <div className="space-y-2 sm:col-span-2">
+                      <Label>Course thumbnail</Label>
+                      <ImageUploader
+                        value={editor.draft.image}
+                        label="Upload thumbnail"
+                        onUploaded={(img: UploadedImage) => setEditor({ ...editor, draft: { ...editor.draft, image: img.secureUrl } })}
+                        onClear={() => setEditor({ ...editor, draft: { ...editor.draft, image: undefined } })}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Prerequisites (comma-separated)</Label>
+                      <Input value={editor.draft.prerequisites} onChange={(e) => setEditor({ ...editor, draft: { ...editor.draft, prerequisites: e.target.value } })} className="border-white/10 bg-black/20" />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Skills (comma-separated)</Label>
+                      <Input value={editor.draft.skills} onChange={(e) => setEditor({ ...editor, draft: { ...editor.draft, skills: e.target.value } })} className="border-white/10 bg-black/20" />
+                    </div>
+                    <div className="flex items-center gap-6 sm:col-span-2">
+                      <label className="flex items-center gap-2 text-sm">
+                        <input type="checkbox" checked={editor.draft.featured} onChange={(e) => setEditor({ ...editor, draft: { ...editor.draft, featured: e.target.checked } })} className="size-4 accent-lime-400" />
+                        Featured on homepage
+                      </label>
+                      <label className="flex items-center gap-2 text-sm">
+                        <input type="checkbox" checked={editor.draft.published} onChange={(e) => setEditor({ ...editor, draft: { ...editor.draft, published: e.target.checked } })} className="size-4 accent-lime-400" />
+                        Publish immediately
+                      </label>
+                    </div>
+                  </div>
+                  <Button onClick={() => void saveCourse()} disabled={busy || !editor.draft.title.trim()} className="w-full gap-2 bg-lime-400 font-semibold text-black hover:bg-lime-300">
+                    {busy ? <Loader2 className="size-4 animate-spin" /> : null}
+                    {editor.draft.id ? "Save changes" : "Create course"}
+                  </Button>
+                </TabsContent>
+
+                <TabsContent value="lessons" className="space-y-3 pt-4">
+                  {!editor.course ? (
+                    <p className="rounded-xl border border-dashed border-white/10 p-5 text-center text-sm text-muted-foreground">
+                      Save the course first, then add lessons.
+                    </p>
+                  ) : (
+                    <>
+                      {(content?.lessons ?? []).map((l, i) => (
+                        <div key={l._id} className="flex items-center gap-3 rounded-xl border border-white/10 bg-black/20 px-4 py-2.5">
+                          <span className="flex size-7 shrink-0 items-center justify-center rounded-lg bg-lime-400/12 text-xs font-bold text-lime-300">{i + 1}</span>
+                          <div className="min-w-0 flex-1">
+                            <p className="truncate text-sm font-medium">{l.title}</p>
+                            <p className="flex items-center gap-2 text-xs text-muted-foreground">
+                              <Clock className="size-3" /> {l.durationMinutes} min
+                              {l.videoType ? ` · ${l.videoType}` : ""}
+                              {l.muxPlaybackId ? " · Mux video" : ""}
+                            </p>
+                          </div>
+                          <Button variant="ghost" size="icon" onClick={() => setLessonDraft({ id: l._id as string, title: l.title, order: l.order, durationMinutes: l.durationMinutes, videoType: (l.videoType as any) ?? "", videoUrl: l.videoUrl ?? "", notes: l.notes })}>
+                            <Pencil className="size-4" />
+                          </Button>
+                          <Button variant="ghost" size="icon" className="text-muted-foreground hover:text-rose-300" onClick={() => void adminDeleteLesson({ id: l._id as never, token })}>
+                            <Trash2 className="size-4" />
+                          </Button>
+                        </div>
+                      ))}
+                      {(content?.lessons ?? []).length === 0 && (
+                        <p className="rounded-xl border border-dashed border-white/10 p-5 text-center text-sm text-muted-foreground">
+                          No lessons yet. Add the first one below.
+                        </p>
+                      )}
+                      <div className="space-y-3 rounded-xl border border-white/10 bg-black/20 p-4">
+                        <p className="text-sm font-semibold">{lessonDraft?.id ? "Edit lesson" : "Add lesson"}</p>
+                        <div className="grid gap-3 sm:grid-cols-2">
+                          <Input placeholder="Lesson title *" value={lessonDraft?.title ?? ""} onChange={(e) => setLessonDraft((d) => ({ ...(d ?? { title: "", order: (content?.lessons.length ?? 0) + 1, durationMinutes: 10, videoType: "", videoUrl: "", notes: "" }), title: e.target.value }))} className="border-white/10 bg-black/30 sm:col-span-2" />
+                          <Input type="number" placeholder="Order" value={lessonDraft?.order ?? (content?.lessons.length ?? 0) + 1} onChange={(e) => setLessonDraft((d) => ({ ...(d ?? { title: "", order: 1, durationMinutes: 10, videoType: "", videoUrl: "", notes: "" }), order: Number(e.target.value) }))} className="border-white/10 bg-black/30" />
+                          <Input type="number" placeholder="Minutes" value={lessonDraft?.durationMinutes ?? 10} onChange={(e) => setLessonDraft((d) => ({ ...(d ?? { title: "", order: 1, durationMinutes: 10, videoType: "", videoUrl: "", notes: "" }), durationMinutes: Number(e.target.value) }))} className="border-white/10 bg-black/30" />
+                          <select value={lessonDraft?.videoType ?? ""} onChange={(e) => setLessonDraft((d) => ({ ...(d ?? { title: "", order: 1, durationMinutes: 10, videoType: "", videoUrl: "", notes: "" }), videoType: e.target.value as "youtube" | "mp4" | "" }))} className="h-10 rounded-xl border border-white/10 bg-black/30 px-3 text-sm outline-none">
+                            <option value="">No video</option>
+                            <option value="youtube">YouTube</option>
+                            <option value="mp4">MP4 URL</option>
+                          </select>
+                          <Input placeholder="Video URL (YouTube / MP4)" value={lessonDraft?.videoUrl ?? ""} onChange={(e) => setLessonDraft((d) => ({ ...(d ?? { title: "", order: 1, durationMinutes: 10, videoType: "", videoUrl: "", notes: "" }), videoUrl: e.target.value }))} className="border-white/10 bg-black/30" />
+                          <Textarea placeholder="Lesson notes" rows={2} value={lessonDraft?.notes ?? ""} onChange={(e) => setLessonDraft((d) => ({ ...(d ?? { title: "", order: 1, durationMinutes: 10, videoType: "", videoUrl: "", notes: "" }), notes: e.target.value }))} className="border-white/10 bg-black/30 sm:col-span-2" />
+                        </div>
+                        <div className="flex gap-2">
+                          {lessonDraft && (
+                            <Button variant="ghost" onClick={() => setLessonDraft(null)}>Cancel</Button>
+                          )}
+                          <Button className="gap-1.5 bg-lime-400 font-semibold text-black hover:bg-lime-300" onClick={() => void saveLesson()}>
+                            <Plus className="size-4" /> {lessonDraft?.id ? "Save lesson" : "Add lesson"}
+                          </Button>
+                        </div>
+                      </div>
+                    </>
+                  )}
+                </TabsContent>
+
+                <TabsContent value="quizzes" className="space-y-3 pt-4">
+                  {(content?.quizzes ?? []).map((q) => (
+                    <div key={q._id} className="flex items-center gap-3 rounded-xl border border-white/10 bg-black/20 px-4 py-2.5">
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-sm font-medium">{q.title}</p>
+                        <p className="truncate text-xs text-muted-foreground">
+                          {q.timeLimitMinutes} min · {q.questions.length} questions
+                        </p>
+                      </div>
+                      <Button variant="ghost" size="icon" onClick={() => setQuizDraft({ id: q._id as string, title: q.title, description: q.description, timeLimitMinutes: q.timeLimitMinutes })}>
+                        <Pencil className="size-4" />
+                      </Button>
+                      <Button variant="ghost" size="icon" className="text-muted-foreground hover:text-rose-300" onClick={() => void adminDeleteQuiz({ id: q._id as never, token })}>
+                        <Trash2 className="size-4" />
+                      </Button>
+                    </div>
+                  ))}
+                  <div className="space-y-3 rounded-xl border border-white/10 bg-black/20 p-4">
+                    <p className="text-sm font-semibold">{quizDraft?.id ? "Edit quiz" : "Add quiz"}</p>
+                    <Input placeholder="Quiz title *" value={quizDraft?.title ?? ""} onChange={(e) => setQuizDraft((d) => ({ ...(d ?? { title: "", description: "", timeLimitMinutes: 10 }), title: e.target.value }))} className="border-white/10 bg-black/30" />
+                    <Input placeholder="Description" value={quizDraft?.description ?? ""} onChange={(e) => setQuizDraft((d) => ({ ...(d ?? { title: "", description: "", timeLimitMinutes: 10 }), description: e.target.value }))} className="border-white/10 bg-black/30" />
+                    <Input type="number" placeholder="Time limit (minutes)" value={quizDraft?.timeLimitMinutes ?? 10} onChange={(e) => setQuizDraft((d) => ({ ...(d ?? { title: "", description: "", timeLimitMinutes: 10 }), timeLimitMinutes: Number(e.target.value) }))} className="border-white/10 bg-black/30" />
+                    <div className="flex gap-2">
+                      {quizDraft && <Button variant="ghost" onClick={() => setQuizDraft(null)}>Cancel</Button>}
+                      <Button className="gap-1.5 bg-lime-400 font-semibold text-black hover:bg-lime-300" onClick={() => void saveQuiz()}>
+                        <Plus className="size-4" /> {quizDraft?.id ? "Save quiz" : "Add quiz"}
+                      </Button>
+                    </div>
+                  </div>
+                </TabsContent>
+
+                <TabsContent value="assignments" className="space-y-3 pt-4">
+                  {(content?.assignments ?? []).map((a) => (
+                    <div key={a._id} className="flex items-center gap-3 rounded-xl border border-white/10 bg-black/20 px-4 py-2.5">
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-sm font-medium">{a.title}</p>
+                        <p className="truncate text-xs text-muted-foreground">Max {a.maxScore} pts</p>
+                      </div>
+                      <Button variant="ghost" size="icon" onClick={() => setAssignDraft({ id: a._id as string, title: a.title, description: a.description, instructions: a.instructions, maxScore: a.maxScore, deadline: a.deadline ? new Date(a.deadline).toISOString().slice(0, 10) : "" })}>
+                        <Pencil className="size-4" />
+                      </Button>
+                      <Button variant="ghost" size="icon" className="text-muted-foreground hover:text-rose-300" onClick={() => void adminDeleteAssignment({ id: a._id as never, token })}>
+                        <Trash2 className="size-4" />
+                      </Button>
+                    </div>
+                  ))}
+                  <div className="space-y-3 rounded-xl border border-white/10 bg-black/20 p-4">
+                    <p className="text-sm font-semibold">{assignDraft?.id ? "Edit assignment" : "Add assignment"}</p>
+                    <Input placeholder="Assignment title *" value={assignDraft?.title ?? ""} onChange={(e) => setAssignDraft((d) => ({ ...(d ?? { title: "", description: "", instructions: "", maxScore: 100, deadline: "" }), title: e.target.value }))} className="border-white/10 bg-black/30" />
+                    <Input placeholder="Description" value={assignDraft?.description ?? ""} onChange={(e) => setAssignDraft((d) => ({ ...(d ?? { title: "", description: "", instructions: "", maxScore: 100, deadline: "" }), description: e.target.value }))} className="border-white/10 bg-black/30" />
+                    <Textarea placeholder="Instructions" rows={2} value={assignDraft?.instructions ?? ""} onChange={(e) => setAssignDraft((d) => ({ ...(d ?? { title: "", description: "", instructions: "", maxScore: 100, deadline: "" }), instructions: e.target.value }))} className="border-white/10 bg-black/30" />
+                    <div className="grid grid-cols-2 gap-3">
+                      <Input type="number" placeholder="Max score" value={assignDraft?.maxScore ?? 100} onChange={(e) => setAssignDraft((d) => ({ ...(d ?? { title: "", description: "", instructions: "", maxScore: 100, deadline: "" }), maxScore: Number(e.target.value) }))} className="border-white/10 bg-black/30" />
+                      <Input type="date" value={assignDraft?.deadline ?? ""} onChange={(e) => setAssignDraft((d) => ({ ...(d ?? { title: "", description: "", instructions: "", maxScore: 100, deadline: "" }), deadline: e.target.value }))} className="border-white/10 bg-black/30" />
+                    </div>
+                    <div className="flex gap-2">
+                      {assignDraft && <Button variant="ghost" onClick={() => setAssignDraft(null)}>Cancel</Button>}
+                      <Button className="gap-1.5 bg-lime-400 font-semibold text-black hover:bg-lime-300" onClick={() => void saveAssignment()}>
+                        <Plus className="size-4" /> {assignDraft?.id ? "Save assignment" : "Add assignment"}
+                      </Button>
+                    </div>
+                  </div>
+                </TabsContent>
+              </Tabs>
+            </>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Archive confirm */}
+      <ConfirmDialog
+        open={!!archiving}
+        onOpenChange={(o) => !o && setArchiving(null)}
+        title={`Archive "${archiving?.title}"?`}
+        description="The course is hidden from students and removed from the public catalog. It is not deleted and can be restored at any time."
+        confirmLabel="Archive course"
+        danger={false}
+        onConfirm={() => {
+          if (archiving) void setCourseArchived({ courseId: archiving._id as never, archived: true, token });
+          setArchiving(null);
+        }}
+      />
+
+      {/* Delete confirm */}
+      <ConfirmDialog
+        open={!!deleting}
+        onOpenChange={(o) => !o && setDeleting(null)}
+        title={`Delete "${deleting?.title}"?`}
+        description="This permanently removes the course and all of its lessons, quizzes, assignments, enrollments and certificates from the database. This cannot be undone."
+        confirmLabel="Confirm delete"
+        onConfirm={() => {
+          if (deleting) void adminDeleteCourse({ courseId: deleting._id as never, token });
+          setDeleting(null);
+        }}
+      />
     </div>
   );
 }

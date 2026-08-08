@@ -1,27 +1,33 @@
 import { useEffect, useState } from "react";
 import { Link, NavLink, useLocation, useNavigate } from "react-router";
-import { Menu, X, LogOut, LayoutDashboard } from "lucide-react";
+import { useQuery } from "convex/react";
+import { api } from "@/convex/_generated/api";
+import { Menu, X, LogOut, LayoutDashboard, User } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/hooks/use-auth";
 import logo from "@/assets/logo.svg";
 import { Avatar } from "./Avatar";
 
-const LINKS = [
+const LINKS: Array<{ to: string; label: string; end?: boolean }> = [
+  { to: "/", label: "Home", end: true },
   { to: "/courses", label: "Courses" },
-  { to: "/roadmap", label: "Roadmap" },
   { to: "/tutors", label: "Tutors" },
+  { to: "/roadmap", label: "Roadmap" },
   { to: "/updates", label: "Updates" },
-  { to: "/become-tutor", label: "Teach" },
+  { to: "/contact", label: "Contact" },
   { to: "/about", label: "About" },
 ];
 
 export function PublicNav() {
   const { isAuthenticated, user, signOut } = useAuth();
+  const content = useQuery(api.public.siteContentAll);
   const navigate = useNavigate();
   const location = useLocation();
   const [open, setOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
+
+  const brandLogo = (content?.logo as string | undefined) || logo;
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 12);
@@ -37,6 +43,20 @@ export function PublicNav() {
     navigate("/");
   };
 
+  const linkClass = ({ isActive }: { isActive: boolean }) =>
+    cn(
+      "rounded-full px-3.5 py-2 text-sm font-medium transition-colors",
+      isActive
+        ? "bg-lime-400/10 text-lime-300"
+        : "text-muted-foreground hover:bg-white/5 hover:text-foreground",
+    );
+
+  const mobileLinkClass = ({ isActive }: { isActive: boolean }) =>
+    cn(
+      "rounded-lg px-3 py-2.5 text-sm font-medium",
+      isActive ? "bg-lime-400/10 text-lime-300" : "text-muted-foreground hover:bg-white/5",
+    );
+
   return (
     <header
       className={cn(
@@ -48,26 +68,15 @@ export function PublicNav() {
     >
       <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-4 sm:px-6">
         <Link to="/" className="flex items-center gap-2.5">
-          <img src={logo} alt="ForgeX Academy" className="size-9 rounded-xl" />
+          <img src={brandLogo} alt="ForgeX Academy" className="size-9 rounded-xl" />
           <span className="font-display text-lg font-bold tracking-tight">
             ForgeX<span className="text-lime-400"> Academy</span>
           </span>
         </Link>
 
-        <nav className="hidden items-center gap-1 md:flex">
+        <nav className="hidden items-center gap-1 lg:flex">
           {LINKS.map((l) => (
-            <NavLink
-              key={l.to}
-              to={l.to}
-              className={({ isActive }) =>
-                cn(
-                  "rounded-full px-3.5 py-2 text-sm font-medium transition-colors",
-                  isActive
-                    ? "bg-lime-400/10 text-lime-300"
-                    : "text-muted-foreground hover:bg-white/5 hover:text-foreground",
-                )
-              }
-            >
+            <NavLink key={l.to} to={l.to} end={l.end} className={linkClass}>
               {l.label}
             </NavLink>
           ))}
@@ -80,6 +89,10 @@ export function PublicNav() {
                 <LayoutDashboard className="mr-2 size-4" />
                 Dashboard
               </Button>
+              <Button variant="ghost" size="sm" onClick={() => navigate("/dashboard/profile")}>
+                <User className="mr-2 size-4" />
+                Profile
+              </Button>
               <Button variant="ghost" size="icon" className="rounded-full" onClick={handleSignOut} title="Sign out">
                 <LogOut className="size-4" />
               </Button>
@@ -90,14 +103,14 @@ export function PublicNav() {
           ) : (
             <>
               <Button variant="ghost" size="sm" onClick={() => navigate("/auth?mode=signin")}>
-                Sign in
+                Login
               </Button>
               <Button
                 size="sm"
                 className="bg-lime-400 font-semibold text-black hover:bg-lime-300 glow-lime-soft"
                 onClick={() => navigate("/auth?mode=signup")}
               >
-                Join free
+                Sign up
               </Button>
             </>
           )}
@@ -108,6 +121,7 @@ export function PublicNav() {
           size="icon"
           className="md:hidden"
           onClick={() => setOpen((v) => !v)}
+          aria-label="Toggle menu"
         >
           {open ? <X className="size-5" /> : <Menu className="size-5" />}
         </Button>
@@ -117,38 +131,30 @@ export function PublicNav() {
         <div className="border-t border-white/10 bg-[#0d0f0c]/95 px-4 pb-4 pt-2 backdrop-blur-xl md:hidden">
           <nav className="flex flex-col gap-1">
             {LINKS.map((l) => (
-              <NavLink
-                key={l.to}
-                to={l.to}
-                className={({ isActive }) =>
-                  cn(
-                    "rounded-lg px-3 py-2.5 text-sm font-medium",
-                    isActive
-                      ? "bg-lime-400/10 text-lime-300"
-                      : "text-muted-foreground hover:bg-white/5",
-                  )
-                }
-              >
+              <NavLink key={l.to} to={l.to} end={l.end} className={mobileLinkClass}>
                 {l.label}
               </NavLink>
             ))}
-            <div className="mt-2 flex gap-2 border-t border-white/10 pt-3">
+            <div className="mt-2 flex flex-col gap-2 border-t border-white/10 pt-3">
               {isAuthenticated ? (
                 <>
-                  <Button className="flex-1" onClick={() => navigate("/dashboard")}>
+                  <Button className="w-full" onClick={() => navigate("/dashboard")}>
                     Dashboard
                   </Button>
-                  <Button variant="outline" className="flex-1" onClick={handleSignOut}>
-                    Sign out
+                  <Button variant="outline" className="w-full" onClick={() => navigate("/dashboard/profile")}>
+                    Profile
+                  </Button>
+                  <Button variant="outline" className="w-full text-rose-300" onClick={handleSignOut}>
+                    Logout
                   </Button>
                 </>
               ) : (
                 <>
-                  <Button variant="outline" className="flex-1" onClick={() => navigate("/auth?mode=signin")}>
-                    Sign in
+                  <Button variant="outline" className="w-full" onClick={() => navigate("/auth?mode=signin")}>
+                    Login
                   </Button>
-                  <Button className="flex-1" onClick={() => navigate("/auth?mode=signup")}>
-                    Join free
+                  <Button className="w-full" onClick={() => navigate("/auth?mode=signup")}>
+                    Sign up
                   </Button>
                 </>
               )}

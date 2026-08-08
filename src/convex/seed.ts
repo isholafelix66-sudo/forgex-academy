@@ -754,7 +754,7 @@ export const ensureSeedData = mutation({
     const content: Array<[string, unknown]> = [
       ["hero", {
         badge: "The learning platform of ForgeX Network",
-        title: "Learn. Build. Succeed.",
+        title: "Discover. Express. Build.",
         subtitle: "ForgeX Academy turns curiosity into career-ready skills — structured roadmaps, hands-on projects, expert tutors and verifiable certificates. Free to start, forever useful.",
         primaryCta: { label: "Start learning free", link: "/courses" },
         secondaryCta: { label: "Explore roadmaps", link: "/roadmap" },
@@ -794,7 +794,7 @@ export const ensureSeedData = mutation({
       ]],
       ["settings", {
         siteName: "ForgeX Academy",
-        tagline: "Learn. Build. Succeed.",
+        tagline: "Discover. Express. Build.",
         supportEmail: "support@forgex.academy",
       }],
     ];

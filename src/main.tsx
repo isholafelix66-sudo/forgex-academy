@@ -21,6 +21,7 @@ const Tutors = lazy(() => import("./pages/Tutors.tsx"));
 const TutorDetail = lazy(() => import("./pages/TutorDetail.tsx"));
 const RoadmapPage = lazy(() => import("./pages/RoadmapPage.tsx"));
 const Updates = lazy(() => import("./pages/Updates.tsx"));
+const Contact = lazy(() => import("./pages/Contact.tsx"));
 const VerifyCertificate = lazy(() => import("./pages/VerifyCertificate.tsx"));
 const BecomeTutor = lazy(() => import("./pages/BecomeTutor.tsx"));
 const AuthPage = lazy(() => import("./pages/Auth.tsx"));
@@ -65,6 +66,8 @@ const AdminCatalog = lazy(() => import("./pages/admin/AdminCatalog.tsx"));
 const AdminUpdates = lazy(() => import("./pages/admin/AdminUpdates.tsx"));
 const AdminCertificates = lazy(() => import("./pages/admin/AdminCertificates.tsx"));
 const AdminContent = lazy(() => import("./pages/admin/AdminContent.tsx"));
+const AdminMedia = lazy(() => import("./pages/admin/AdminMedia.tsx"));
+const AdminFormBuilder = lazy(() => import("./pages/admin/AdminFormBuilder.tsx"));
 const AdminAudit = lazy(() => import("./pages/admin/AdminAudit.tsx"));
 
 // Simple loading fallback for route transitions
@@ -177,6 +180,7 @@ createRoot(document.getElementById("root")!).render(
               <Route path="/tutors/:id" element={<TutorDetail />} />
               <Route path="/roadmap" element={<RoadmapPage />} />
               <Route path="/updates" element={<Updates />} />
+              <Route path="/contact" element={<Contact />} />
               <Route path="/verify/:certificateId" element={<VerifyCertificate />} />
               <Route path="/become-tutor" element={<BecomeTutor />} />
               <Route
@@ -244,6 +248,8 @@ createRoot(document.getElementById("root")!).render(
                 <Route path="updates" element={<AdminUpdates />} />
                 <Route path="certificates" element={<AdminCertificates />} />
                 <Route path="content" element={<AdminContent />} />
+                <Route path="media" element={<AdminMedia />} />
+                <Route path="form-builder" element={<AdminFormBuilder />} />
                 <Route path="audit" element={<AdminAudit />} />
               </Route>
 

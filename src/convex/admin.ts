@@ -1,7 +1,8 @@
 import { mutation, query, MutationCtx } from "./_generated/server";
+import { Id } from "./_generated/dataModel";
 import { v } from "convex/values";
 import { hydrateCourses, makeAdminToken, notify, publicUser, requireAdminSession, slugify } from "./lib";
-import { ROLES, roleValidator } from "./schema";
+import { difficultyValidator, ROLES, roleValidator } from "./schema";
 
 // ---------------------------------------------------------------------------
 // Admin password gate (access is URL-only: /admin + this password)
@@ -74,18 +75,55 @@ export const stats = query({
         ctx.db.query("tutorApplications").collect(),
       ]);
     const real = users.filter((u) => !u.isSeed);
+    const pendingApplications = applications.filter(
+      (a) => a.status === "submitted" || a.status === "under-review",
+    );
     return {
       users: real.length,
       students: real.filter((u) => u.role === ROLES.STUDENT).length,
       tutors: real.filter((u) => u.role === ROLES.TUTOR).length,
+      verifiedTutors: real.filter((u) => u.role === ROLES.TUTOR && !!u.verified).length,
       admins: real.filter((u) => u.role === ROLES.ADMIN).length,
       courses: courses.length,
-      publishedCourses: courses.filter((c) => c.published).length,
+      publishedCourses: courses.filter((c) => c.published && !c.archived).length,
+      archivedCourses: courses.filter((c) => c.archived).length,
       enrollments: enrollments.length,
       certificates: certificates.length,
-      pendingApplications: applications.filter(
-        (a) => a.status === "submitted" || a.status === "under-review",
-      ).length,
+      pendingApplications: pendingApplications.length,
+      recentUsers: real
+        .sort((a, b) => b._creationTime - a._creationTime)
+        .slice(0, 6)
+        .map((u) => ({
+          _id: u._id,
+          name: u.name ?? "Unnamed",
+          image: u.image ?? null,
+          email: u.email ?? null,
+          role: u.role ?? "student",
+          suspended: !!u.suspended,
+          createdAt: u._creationTime,
+        })),
+      recentApplications: applications
+        .sort((a, b) => (b.submittedAt ?? b.updatedAt ?? 0) - (a.submittedAt ?? a.updatedAt ?? 0))
+        .slice(0, 6)
+        .map((a) => ({
+          _id: a._id,
+          fullName: a.fullName,
+          professionalTitle: a.professionalTitle,
+          status: a.status,
+          submittedAt: a.submittedAt ?? null,
+        })),
+      recentCourses: courses
+        .sort((a, b) => b.createdAt - a.createdAt)
+        .slice(0, 6)
+        .map((c) => ({
+          _id: c._id,
+          title: c.title,
+          slug: c.slug,
+          status: c.status ?? "draft",
+          published: c.published,
+          archived: !!c.archived,
+          createdAt: c.createdAt,
+        })),
     };
   },
 });
@@ -95,33 +133,112 @@ export const stats = query({
 // ---------------------------------------------------------------------------
 
 export const usersList = query({
-  args: { search: v.optional(v.string()), token: v.string() },
-  handler: async (ctx, { search, token }) => {
+  args: {
+    search: v.optional(v.string()),
+    role: v.optional(roleValidator),
+    status: v.optional(
+      v.union(
+        v.literal("pending"),
+        v.literal("approved"),
+        v.literal("verified"),
+        v.literal("suspended"),
+      ),
+    ),
+    token: v.string(),
+  },
+  handler: async (ctx, { search, role, status, token }) => {
     await requireAdminSession(ctx, token);
     const users = await ctx.db.query("users").collect();
-    const [enrollments, certificates] = await Promise.all([
+    const [enrollments, certificates, applications] = await Promise.all([
       ctx.db.query("enrollments").collect(),
       ctx.db.query("certificates").collect(),
+      ctx.db.query("tutorApplications").collect(),
     ]);
     const q = (search ?? "").trim().toLowerCase();
     const hydrated = users
-      .map((u) => ({
-        ...publicUser(u),
-        email: u.email ?? null,
-        bio: u.bio ?? "",
-        skills: u.skills ?? [],
-        isAnonymous: !!u.isAnonymous,
-        enrollments: enrollments.filter((e) => e.studentId === u._id).length,
-        certificates: certificates.filter((c) => c.studentId === u._id).length,
-        joinedAt: u._creationTime,
-      }))
-      .filter(
-        (u) =>
-          !q ||
-          u.name.toLowerCase().includes(q) ||
-          (u.email ?? "").toLowerCase().includes(q),
-      );
+      .map((u) => {
+        const app = applications.find((a) => a.userId === u._id);
+        return {
+          ...publicUser(u),
+          email: u.email ?? null,
+          bio: u.bio ?? "",
+          skills: u.skills ?? [],
+          isAnonymous: !!u.isAnonymous,
+          isSeed: !!u.isSeed,
+          suspended: !!u.suspended,
+          lastActivity: u.lastActivity ?? null,
+          appStatus: app?.status ?? null,
+          enrollments: enrollments.filter((e) => e.studentId === u._id).length,
+          certificates: certificates.filter((c) => c.studentId === u._id).length,
+          joinedAt: u._creationTime,
+        };
+      })
+      .filter((u) => {
+        if (q && !u.name.toLowerCase().includes(q) && !(u.email ?? "").toLowerCase().includes(q)) return false;
+        if (role && u.role !== role) return false;
+        if (status === "suspended" && !u.suspended) return false;
+        if (status === "verified" && !(u.role === ROLES.TUTOR && u.verified)) return false;
+        if (status === "approved" && u.appStatus !== "approved") return false;
+        if (status === "pending" && u.appStatus !== "submitted" && u.appStatus !== "under-review" && u.appStatus !== "information-required") return false;
+        return true;
+      });
     return hydrated.sort((a, b) => b.joinedAt - a.joinedAt);
+  },
+});
+
+/** Lightweight id/name/role list for dropdowns (e.g. assigning course tutors). */
+export const userOptions = query({
+  args: { token: v.string(), role: v.optional(roleValidator) },
+  handler: async (ctx, { token, role }) => {
+    await requireAdminSession(ctx, token);
+    const users = await ctx.db.query("users").collect();
+    return users
+      .filter((u) => !role || u.role === role)
+      .map((u) => ({
+        _id: u._id,
+        name: u.name ?? "Unnamed",
+        role: u.role ?? "student",
+        isSeed: !!u.isSeed,
+        suspended: !!u.suspended,
+      }))
+      .sort((a, b) => a.name.localeCompare(b.name));
+  },
+});
+
+/** Suspend a user account (blocks access but keeps their data). */
+export const suspendUser = mutation({
+  args: { userId: v.id("users"), token: v.string() },
+  handler: async (ctx, { userId, token }) => {
+    await requireAdminSession(ctx, token);
+    await ctx.db.patch(userId, { suspended: true });
+    await audit(ctx, undefined, userId, "user-suspended", `User suspended: ${(await ctx.db.get(userId))?.name ?? userId}`);
+    return true;
+  },
+});
+
+/** Reactivate a suspended account. */
+export const reactivateUser = mutation({
+  args: { userId: v.id("users"), token: v.string() },
+  handler: async (ctx, { userId, token }) => {
+    await requireAdminSession(ctx, token);
+    await ctx.db.patch(userId, { suspended: false });
+    await audit(ctx, undefined, userId, "user-reactivated", `User reactivated: ${(await ctx.db.get(userId))?.name ?? userId}`);
+    return true;
+  },
+});
+
+/** Permanently delete a user and all associated records (enrollments,
+ *  certificates, applications, submissions, attempts, messages, notifications,
+ *  their courses + course content, and auth accounts). */
+export const deleteUser = mutation({
+  args: { userId: v.id("users"), token: v.string() },
+  handler: async (ctx, { userId, token }) => {
+    await requireAdminSession(ctx, token);
+    const user = await ctx.db.get(userId);
+    if (!user) return false;
+    await deleteUserData(ctx, userId);
+    await audit(ctx, undefined, undefined, "user-deleted", `User permanently deleted: ${user.name ?? user.email ?? userId} (+ associated records)`);
+    return true;
   },
 });
 
@@ -395,7 +512,7 @@ export const coursesPendingReview = query({
     await requireAdminSession(ctx, token);
     const courses = await ctx.db.query("courses").collect();
     const pending = courses.filter(
-      (c) => c.status === "pending" || c.status === undefined,
+      (c) => (c.status === "pending" || c.status === undefined) && !c.archived,
     );
     return hydrateCourses(ctx, pending.sort((a, b) => b.createdAt - a.createdAt));
   },
@@ -789,6 +906,409 @@ export const deleteContent = mutation({
       .withIndex("by_key", (q) => q.eq("key", key))
       .first();
     if (existing) await ctx.db.delete(existing._id);
+    return true;
+  },
+});
+
+// ---------------------------------------------------------------------------
+// Cascade-delete helpers (real database cleanup, not just UI hiding)
+// ---------------------------------------------------------------------------
+
+async function deleteCourseData(ctx: MutationCtx, courseId: Id<"courses">) {
+  const lessons = await ctx.db
+    .query("lessons")
+    .withIndex("by_courseId", (q) => q.eq("courseId", courseId))
+    .collect();
+  for (const r of lessons) await ctx.db.delete(r._id);
+  const quizzes = await ctx.db
+    .query("quizzes")
+    .withIndex("by_course", (q) => q.eq("courseId", courseId))
+    .collect();
+  for (const r of quizzes) {
+    const attempts = await ctx.db
+      .query("quizAttempts")
+      .withIndex("by_quiz", (q) => q.eq("quizId", r._id))
+      .collect();
+    for (const a of attempts) await ctx.db.delete(a._id);
+    await ctx.db.delete(r._id);
+  }
+  const assignments = await ctx.db
+    .query("assignments")
+    .withIndex("by_course", (q) => q.eq("courseId", courseId))
+    .collect();
+  for (const r of assignments) await ctx.db.delete(r._id);
+  const submissions = await ctx.db
+    .query("submissions")
+    .withIndex("by_course", (q) => q.eq("courseId", courseId))
+    .collect();
+  for (const r of submissions) await ctx.db.delete(r._id);
+  const enrollments = await ctx.db
+    .query("enrollments")
+    .withIndex("by_course", (q) => q.eq("courseId", courseId))
+    .collect();
+  for (const r of enrollments) await ctx.db.delete(r._id);
+  const certs = await ctx.db
+    .query("certificates")
+    .withIndex("by_course", (q) => q.eq("courseId", courseId))
+    .collect();
+  for (const r of certs) await ctx.db.delete(r._id);
+  await ctx.db.delete(courseId);
+}
+
+async function deleteUserData(ctx: MutationCtx, userId: Id<"users">) {
+  const enrollments = await ctx.db
+    .query("enrollments")
+    .withIndex("by_student", (q) => q.eq("studentId", userId))
+    .collect();
+  for (const r of enrollments) await ctx.db.delete(r._id);
+  const certs = await ctx.db
+    .query("certificates")
+    .withIndex("by_student", (q) => q.eq("studentId", userId))
+    .collect();
+  for (const r of certs) await ctx.db.delete(r._id);
+  const submissions = await ctx.db
+    .query("submissions")
+    .withIndex("by_student", (q) => q.eq("studentId", userId))
+    .collect();
+  for (const r of submissions) await ctx.db.delete(r._id);
+  const attempts = await ctx.db
+    .query("quizAttempts")
+    .withIndex("by_student", (q) => q.eq("studentId", userId))
+    .collect();
+  for (const r of attempts) await ctx.db.delete(r._id);
+  const apps = await ctx.db
+    .query("tutorApplications")
+    .withIndex("by_user", (q) => q.eq("userId", userId))
+    .collect();
+  for (const r of apps) await ctx.db.delete(r._id);
+  const notifs = await ctx.db
+    .query("notifications")
+    .withIndex("by_userId", (q) => q.eq("userId", userId))
+    .collect();
+  for (const r of notifs) await ctx.db.delete(r._id);
+  const messages = await ctx.db.query("messages").collect();
+  for (const m of messages) {
+    if (m.senderId === userId || m.receiverId === userId) await ctx.db.delete(m._id);
+  }
+  // Courses the user created as a tutor (with all their content)
+  const courses = await ctx.db
+    .query("courses")
+    .withIndex("by_tutor", (q) => q.eq("tutorId", userId))
+    .collect();
+  for (const c of courses) await deleteCourseData(ctx, c._id);
+  // Revoke sign-in by removing auth accounts linked to this user
+  const accounts = await ctx.db.query("authAccounts").collect();
+  for (const a of accounts) {
+    if ((a as { userId?: Id<"users"> }).userId === userId) await ctx.db.delete(a._id);
+  }
+  await ctx.db.delete(userId);
+}
+
+// ---------------------------------------------------------------------------
+// Course management — full admin control (create / edit / publish / archive)
+// ---------------------------------------------------------------------------
+
+export const adminUpsertCourse = mutation({
+  args: {
+    id: v.optional(v.id("courses")),
+    title: v.string(),
+    subtitle: v.string(),
+    description: v.string(),
+    longDescription: v.string(),
+    categoryId: v.id("categories"),
+    tutorId: v.id("users"),
+    roadmapId: v.optional(v.id("roadmaps")),
+    levelId: v.optional(v.id("roadmapLevels")),
+    difficulty: difficultyValidator,
+    durationHours: v.number(),
+    image: v.optional(v.string()),
+    gradient: v.optional(v.string()),
+    icon: v.optional(v.string()),
+    prerequisites: v.array(v.string()),
+    skills: v.array(v.string()),
+    featured: v.boolean(),
+    published: v.boolean(),
+    token: v.string(),
+  },
+  handler: async (ctx, args) => {
+    await requireAdminSession(ctx, args.token);
+    const { token, id, ...data } = args;
+    const baseSlug = slugify(data.title) || `course-${Date.now()}`;
+    const exists = await ctx.db
+      .query("courses")
+      .withIndex("by_slug", (q) => q.eq("slug", baseSlug))
+      .first();
+    const slug =
+      exists && exists._id !== id ? `${baseSlug}-${Date.now().toString(36)}` : baseSlug;
+    if (id) {
+      await ctx.db.patch(id, {
+        ...data,
+        slug,
+        status: data.published ? "approved" : "draft",
+        reviewNote: undefined,
+      });
+      await audit(ctx, undefined, undefined, "course-edited", `Course edited: ${data.title}`);
+      return id;
+    }
+    const newId = await ctx.db.insert("courses", {
+      ...data,
+      slug,
+      rating: 0,
+      ratingCount: 0,
+      status: data.published ? "approved" : "draft",
+      archived: false,
+      enrolledCount: 0,
+      createdAt: Date.now(),
+    });
+    await audit(ctx, undefined, undefined, "course-created", `Course created: ${data.title}`);
+    return newId;
+  },
+});
+
+export const setCoursePublished = mutation({
+  args: { courseId: v.id("courses"), published: v.boolean(), token: v.string() },
+  handler: async (ctx, { courseId, published, token }) => {
+    await requireAdminSession(ctx, token);
+    await ctx.db.patch(courseId, {
+      published,
+      status: published ? "approved" : "draft",
+    });
+    await audit(ctx, undefined, undefined, published ? "course-published" : "course-unpublished", `Course ${published ? "published" : "unpublished"}`);
+    return true;
+  },
+});
+
+export const setCourseArchived = mutation({
+  args: { courseId: v.id("courses"), archived: v.boolean(), token: v.string() },
+  handler: async (ctx, { courseId, archived, token }) => {
+    await requireAdminSession(ctx, token);
+    await ctx.db.patch(courseId, {
+      archived,
+      published: archived ? false : true,
+    });
+    await audit(ctx, undefined, undefined, archived ? "course-archived" : "course-restored", `Course ${archived ? "archived" : "restored"}`);
+    return true;
+  },
+});
+
+export const adminDeleteCourse = mutation({
+  args: { courseId: v.id("courses"), token: v.string() },
+  handler: async (ctx, { courseId, token }) => {
+    await requireAdminSession(ctx, token);
+    const course = await ctx.db.get(courseId);
+    if (!course) return false;
+    await deleteCourseData(ctx, courseId);
+    await audit(ctx, undefined, undefined, "course-deleted", `Course deleted: ${course.title} (+ lessons, quizzes, assignments, enrollments)`);
+    return true;
+  },
+});
+
+// ---------------------------------------------------------------------------
+// Admin lesson / quiz / assignment management
+// ---------------------------------------------------------------------------
+
+export const adminUpsertLesson = mutation({
+  args: {
+    id: v.optional(v.id("lessons")),
+    courseId: v.id("courses"),
+    title: v.string(),
+    order: v.number(),
+    durationMinutes: v.number(),
+    videoUrl: v.optional(v.string()),
+    videoType: v.optional(v.union(v.literal("youtube"), v.literal("mp4"))),
+    notes: v.string(),
+    transcript: v.string(),
+    token: v.string(),
+  },
+  handler: async (ctx, args) => {
+    await requireAdminSession(ctx, args.token);
+    const { token, id, ...data } = args;
+    if (id) {
+      await ctx.db.patch(id, {
+        ...data,
+        muxAssetId: undefined,
+        muxPlaybackId: undefined,
+      });
+      await audit(ctx, undefined, undefined, "lesson-edited", `Lesson edited: ${data.title}`);
+      return id;
+    }
+    const newId = await ctx.db.insert("lessons", { ...data, resources: [] });
+    await audit(ctx, undefined, undefined, "lesson-created", `Lesson created: ${data.title}`);
+    return newId;
+  },
+});
+
+export const adminDeleteLesson = mutation({
+  args: { id: v.id("lessons"), token: v.string() },
+  handler: async (ctx, { id, token }) => {
+    await requireAdminSession(ctx, token);
+    await ctx.db.delete(id);
+    await audit(ctx, undefined, undefined, "lesson-deleted", "Lesson deleted");
+    return true;
+  },
+});
+
+/** Admin-only: full lesson / quiz / assignment content of one course. */
+export const courseContentDetail = query({
+  args: { courseId: v.id("courses"), token: v.string() },
+  handler: async (ctx, { courseId, token }) => {
+    await requireAdminSession(ctx, token);
+    const [lessons, quizzes, assignments] = await Promise.all([
+      ctx.db
+        .query("lessons")
+        .withIndex("by_courseId", (q) => q.eq("courseId", courseId))
+        .collect(),
+      ctx.db
+        .query("quizzes")
+        .withIndex("by_course", (q) => q.eq("courseId", courseId))
+        .collect(),
+      ctx.db
+        .query("assignments")
+        .withIndex("by_course", (q) => q.eq("courseId", courseId))
+        .collect(),
+    ]);
+    return {
+      lessons: lessons.sort((a, b) => a.order - b.order),
+      quizzes: quizzes.sort((a, b) => a.createdAt - b.createdAt),
+      assignments: assignments.sort((a, b) => (a.deadline ?? Infinity) - (b.deadline ?? Infinity)),
+    };
+  },
+});
+
+export const adminUpsertQuiz = mutation({
+  args: {
+    id: v.optional(v.id("quizzes")),
+    courseId: v.id("courses"),
+    title: v.string(),
+    description: v.string(),
+    timeLimitMinutes: v.number(),
+    token: v.string(),
+  },
+  handler: async (ctx, args) => {
+    await requireAdminSession(ctx, args.token);
+    const { token, id, courseId, title, description, timeLimitMinutes } = args;
+    if (id) {
+      await ctx.db.patch(id, { title, description, timeLimitMinutes });
+      return id;
+    }
+    const course = await ctx.db.get(courseId);
+    return await ctx.db.insert("quizzes", {
+      courseId,
+      tutorId: course?.tutorId ?? ("" as Id<"users">),
+      title,
+      description,
+      timeLimitMinutes,
+      questions: [],
+      createdAt: Date.now(),
+    });
+  },
+});
+
+export const adminDeleteQuiz = mutation({
+  args: { id: v.id("quizzes"), token: v.string() },
+  handler: async (ctx, { id, token }) => {
+    await requireAdminSession(ctx, token);
+    const attempts = await ctx.db
+      .query("quizAttempts")
+      .withIndex("by_quiz", (q) => q.eq("quizId", id))
+      .collect();
+    for (const a of attempts) await ctx.db.delete(a._id);
+    await ctx.db.delete(id);
+    return true;
+  },
+});
+
+export const adminUpsertAssignment = mutation({
+  args: {
+    id: v.optional(v.id("assignments")),
+    courseId: v.id("courses"),
+    title: v.string(),
+    description: v.string(),
+    instructions: v.string(),
+    deadline: v.optional(v.number()),
+    maxScore: v.number(),
+    token: v.string(),
+  },
+  handler: async (ctx, args) => {
+    await requireAdminSession(ctx, args.token);
+    const { token, id, courseId, title, description, instructions, deadline, maxScore } = args;
+    if (id) {
+      await ctx.db.patch(id, { title, description, instructions, deadline, maxScore });
+      return id;
+    }
+    const course = await ctx.db.get(courseId);
+    return await ctx.db.insert("assignments", {
+      courseId,
+      tutorId: course?.tutorId ?? ("" as Id<"users">),
+      title,
+      description,
+      instructions,
+      deadline,
+      maxScore,
+      files: [],
+      createdAt: Date.now(),
+    });
+  },
+});
+
+export const adminDeleteAssignment = mutation({
+  args: { id: v.id("assignments"), token: v.string() },
+  handler: async (ctx, { id, token }) => {
+    await requireAdminSession(ctx, token);
+    const subs = await ctx.db
+      .query("submissions")
+      .withIndex("by_assignment", (q) => q.eq("assignmentId", id))
+      .collect();
+    for (const s of subs) await ctx.db.delete(s._id);
+    await ctx.db.delete(id);
+    return true;
+  },
+});
+
+// ---------------------------------------------------------------------------
+// Demo data control — admin can wipe all seeded content (real DB records)
+// ---------------------------------------------------------------------------
+
+export const purgeDemoData = mutation({
+  args: { token: v.string() },
+  handler: async (ctx, { token }) => {
+    await requireAdminSession(ctx, token);
+    const tables = [
+      "lessons",
+      "quizzes",
+      "quizAttempts",
+      "assignments",
+      "submissions",
+      "enrollments",
+      "certificates",
+      "announcements",
+      "updates",
+      "categories",
+      "roadmaps",
+      "roadmapLevels",
+      "siteContent",
+      "tutorApplications",
+      "media",
+    ] as const;
+    for (const t of tables) {
+      const rows = await ctx.db.query(t).collect();
+      for (const r of rows) await ctx.db.delete(r._id);
+    }
+    // Seed users + their messages / notifications
+    const users = await ctx.db.query("users").collect();
+    const messages = await ctx.db.query("messages").collect();
+    const notifs = await ctx.db.query("notifications").collect();
+    for (const u of users) {
+      if (!u.isSeed) continue;
+      for (const m of messages) {
+        if (m.senderId === u._id || m.receiverId === u._id) await ctx.db.delete(m._id);
+      }
+      for (const n of notifs) {
+        if (n.userId === u._id) await ctx.db.delete(n._id);
+      }
+      await ctx.db.delete(u._id);
+    }
+    await audit(ctx, undefined, undefined, "demo-data-purged", "All demo/seeded content and accounts deleted");
     return true;
   },
 });

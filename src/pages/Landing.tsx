@@ -101,7 +101,7 @@ export default function Landing() {
               variants={item}
               className="font-display mt-6 max-w-4xl text-5xl font-bold leading-[1.05] tracking-tight sm:text-7xl"
             >
-              Learn. <span className="text-gradient">Build.</span> Succeed.
+              Discover. <span className="text-gradient">Express.</span> Build.
             </motion.h1>
 
             <motion.p

@@ -93,6 +93,8 @@ const schema = defineSchema(
       onboarded: v.optional(v.boolean()),
       isSeed: v.optional(v.boolean()), // demo/system account created by the seed
       adminAccess: v.optional(v.boolean()), // unlocked via the /admin password gate
+      suspended: v.optional(v.boolean()), // account disabled by an admin
+      lastActivity: v.optional(v.number()), // ms epoch of last sign-in activity
       // gamification
       streak: v.optional(v.number()),
       streakLastDay: v.optional(v.number()), // yyyymmdd
@@ -159,6 +161,7 @@ const schema = defineSchema(
       ),
       reviewNote: v.optional(v.string()),
       enrolledCount: v.number(),
+      archived: v.optional(v.boolean()), // soft-deleted by an admin
       createdAt: v.number(),
     })
       .index("by_slug", ["slug"])
@@ -356,6 +359,10 @@ const schema = defineSchema(
       reviewedAt: v.optional(v.number()),
       reviewedBy: v.optional(v.id("users")),
       reviewNote: v.optional(v.string()),
+      // custom fields from the admin-controlled tutor registration form
+      customAnswers: v.optional(
+        v.record(v.string(), v.union(v.string(), v.array(v.string()))),
+      ),
     })
       .index("by_user", ["userId"])
       .index("by_status", ["status"]),
@@ -376,6 +383,15 @@ const schema = defineSchema(
       token: v.string(),
       createdAt: v.number(),
     }).index("by_token", ["token"]),
+
+    /** Media library — uploaded images tracked for admin management. */
+    media: defineTable({
+      publicId: v.string(), // Cloudinary public id
+      secureUrl: v.string(), // optimized Cloudinary URL
+      kind: v.string(), // e.g. logo | hero | course | general
+      label: v.optional(v.string()),
+      createdAt: v.number(),
+    }).index("by_created", ["createdAt"]),
 
     messages: defineTable({
       threadId: v.string(),
