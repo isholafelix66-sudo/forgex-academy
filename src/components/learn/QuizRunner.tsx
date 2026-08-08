@@ -13,7 +13,15 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import type { Question } from "@/convex/_generated/dataModel";
+
+type Question = {
+  type: "multiple-choice" | "true-false" | "short-answer";
+  question: string;
+  options?: string[];
+  answer?: string;
+  points?: number;
+  explanation?: string;
+};
 
 type Phase = "intro" | "running" | "done";
 

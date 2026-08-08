@@ -47,7 +47,8 @@ export default function Assignments() {
 
   const submitAssignment = useMutation(api.submissions.submitAssignment);
 
-  const openDialog = (s: (typeof submissions)[number]) => {
+  type SubmissionRow = NonNullable<typeof submissions>[number];
+  const openDialog = (s: SubmissionRow) => {
     setSelected({
       assignmentId: s.assignmentId,
       title: s.assignment?.title ?? "Assignment",

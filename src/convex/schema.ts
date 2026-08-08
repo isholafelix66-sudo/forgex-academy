@@ -92,6 +92,7 @@ const schema = defineSchema(
       verified: v.optional(v.boolean()), // verified tutor
       onboarded: v.optional(v.boolean()),
       isSeed: v.optional(v.boolean()), // demo/system account created by the seed
+      adminAccess: v.optional(v.boolean()), // unlocked via the /admin password gate
       // gamification
       streak: v.optional(v.number()),
       streakLastDay: v.optional(v.number()), // yyyymmdd
@@ -148,6 +149,15 @@ const schema = defineSchema(
       skills: v.array(v.string()), // what you'll learn
       featured: v.boolean(),
       published: v.boolean(),
+      status: v.optional(
+        v.union(
+          v.literal("draft"),
+          v.literal("pending"),
+          v.literal("approved"),
+          v.literal("rejected"),
+        ),
+      ),
+      reviewNote: v.optional(v.string()),
       enrolledCount: v.number(),
       createdAt: v.number(),
     })
@@ -289,21 +299,75 @@ const schema = defineSchema(
     tutorApplications: defineTable({
       userId: v.id("users"),
       status: v.union(
-        v.literal("pending"),
+        v.literal("draft"),
+        v.literal("submitted"),
+        v.literal("under-review"),
+        v.literal("information-required"),
         v.literal("approved"),
+        v.literal("verified"),
         v.literal("rejected"),
+        v.literal("suspended"),
       ),
-      headline: v.string(),
-      bio: v.string(),
-      expertise: v.array(v.string()),
-      socials: v.optional(socialsValidator),
-      submittedAt: v.number(),
+      wasVerified: v.optional(v.boolean()),
+      // Step 1 — personal
+      fullName: v.string(),
+      email: v.string(),
+      phone: v.string(),
+      profilePictureUrl: v.optional(v.string()),
+      residentialAddress: v.string(),
+      city: v.string(),
+      state: v.string(),
+      country: v.string(),
+      // Step 2 — professional
+      professionalTitle: v.string(),
+      biography: v.string(),
+      yearsOfExperience: v.string(),
+      currentOccupation: v.string(),
+      highestQualification: v.string(),
+      fieldOfStudy: v.string(),
+      institution: v.string(),
+      graduationYear: v.string(),
+      // Step 3 — skills & expertise
+      skills: v.array(v.string()),
+      areasOfExpertise: v.string(),
+      // Step 4 — teaching
+      teachingExperience: v.string(),
+      teachingSubjects: v.array(v.string()),
+      teachingFormat: v.string(),
+      teachingStatement: v.string(),
+      whyForgeX: v.string(),
+      // Step 5 — CV & verification (private: admin-only)
+      cvUrl: v.optional(v.string()),
+      cvFileName: v.optional(v.string()),
+      nin: v.string(),
+      // Step 6 — links
+      linkedin: v.optional(v.string()),
+      website: v.optional(v.string()),
+      portfolio: v.optional(v.string()),
+      github: v.optional(v.string()),
+      youtube: v.optional(v.string()),
+      otherLink: v.optional(v.string()),
+      // Step 7 — agreement
+      acceptedAgreement: v.boolean(),
+      submittedAt: v.optional(v.number()),
+      updatedAt: v.optional(v.number()),
       reviewedAt: v.optional(v.number()),
       reviewedBy: v.optional(v.id("users")),
-      notes: v.optional(v.string()),
+      reviewNote: v.optional(v.string()),
     })
       .index("by_user", ["userId"])
       .index("by_status", ["status"]),
+
+    auditLogs: defineTable({
+      adminId: v.id("users"),
+      tutorId: v.optional(v.id("users")),
+      action: v.string(),
+      detail: v.string(),
+      reason: v.optional(v.string()),
+      createdAt: v.number(),
+    })
+      .index("by_created", ["createdAt"])
+      .index("by_tutor", ["tutorId"]),
 
     messages: defineTable({
       threadId: v.string(),

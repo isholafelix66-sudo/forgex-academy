@@ -31,14 +31,21 @@ export async function requireAdmin(ctx: QueryCtx | MutationCtx) {
   return user;
 }
 
-/** Require the caller to be a verified tutor (or an admin). */
+/** Require the caller to be a tutor (or admin) whose application is active. */
 export async function requireTutor(ctx: QueryCtx | MutationCtx) {
   const user = await requireUserDoc(ctx);
-  if (user.role !== ROLES.ADMIN && user.role !== ROLES.TUTOR) {
+  if (user.role === ROLES.ADMIN) return user;
+  if (user.role !== ROLES.TUTOR) {
     throw new Error("Tutor access required.");
   }
-  if (user.role === ROLES.TUTOR && !user.verified) {
-    throw new Error("Your tutor account is still pending verification.");
+  const app = await ctx.db
+    .query("tutorApplications")
+    .withIndex("by_user", (q) => q.eq("userId", user._id))
+    .first();
+  const active =
+    !!app && (app.status === "approved" || app.status === "verified");
+  if (!active) {
+    throw new Error("Your tutor account is not active. Please check your application status.");
   }
   return user;
 }

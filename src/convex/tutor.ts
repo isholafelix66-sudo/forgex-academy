@@ -182,19 +182,31 @@ export const upsertCourse = mutation({
     prerequisites: v.array(v.string()),
     skills: v.array(v.string()),
     featured: v.boolean(),
-    published: v.boolean(),
+    published: v.optional(v.boolean()),
   },
   handler: async (ctx, args) => {
     const tutor = await requireTutor(ctx);
     if (args.tutorId !== tutor._id && tutor.role !== "admin") {
       throw new Error("You can only create courses for yourself.");
     }
+    const isAdmin = tutor.role === "admin";
+
+    // Admins can publish directly; tutors always save as draft and must
+    // submit for review before the course can go live.
+    const published = isAdmin ? !!args.published : false;
+    const status = isAdmin
+      ? (args.published ? "approved" : "draft")
+      : "draft";
+
     const baseSlug = slugify(args.title) || `course-${Date.now()}`;
     const exists = await ctx.db
       .query("courses")
       .withIndex("by_slug", (q) => q.eq("slug", baseSlug))
       .first();
-    const slug = exists && exists._id !== args.id ? `${baseSlug}-${Date.now().toString(36)}` : baseSlug;
+    const slug =
+      exists && exists._id !== args.id
+        ? `${baseSlug}-${Date.now().toString(36)}`
+        : baseSlug;
     if (args.id) {
       await ctx.db.patch(args.id, {
         title: args.title,
@@ -213,7 +225,8 @@ export const upsertCourse = mutation({
         prerequisites: args.prerequisites,
         skills: args.skills,
         featured: args.featured,
-        published: args.published,
+        published,
+        status,
       });
       return args.id;
     }
@@ -237,10 +250,29 @@ export const upsertCourse = mutation({
       prerequisites: args.prerequisites,
       skills: args.skills,
       featured: args.featured,
-      published: args.published,
+      published,
+      status,
       enrolledCount: 0,
       createdAt: Date.now(),
     });
+  },
+});
+
+/** Tutor submits their course for admin review (goes live only if approved). */
+export const submitCourseForReview = mutation({
+  args: { courseId: v.id("courses") },
+  handler: async (ctx, { courseId }) => {
+    const tutor = await requireTutor(ctx);
+    const course = await ctx.db.get(courseId);
+    if (!course || (course.tutorId !== tutor._id && tutor.role !== "admin")) {
+      throw new Error("Not your course.");
+    }
+    await ctx.db.patch(courseId, {
+      status: "pending",
+      published: false,
+      reviewNote: undefined,
+    });
+    return true;
   },
 });
 

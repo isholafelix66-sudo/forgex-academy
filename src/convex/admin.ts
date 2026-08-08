@@ -106,59 +106,325 @@ export const setUserVerified = mutation({
 });
 
 // ---------------------------------------------------------------------------
-// Tutor applications
+// Admin password gate (access is URL-only: /admin + this password)
 // ---------------------------------------------------------------------------
 
-export const tutorApplications = query({
-  args: {},
-  handler: async (ctx) => {
-    await requireAdmin(ctx);
-    const apps = await ctx.db.query("tutorApplications").collect();
-    const hydrated = await Promise.all(
-      apps.map(async (a) => {
-        const user = await ctx.db.get(a.userId);
-        return { ...a, user: user ? publicUser(user) : null };
-      }),
-    );
-    return hydrated.sort((a, b) => b.submittedAt - a.submittedAt);
+const ADMIN_PASSWORD = process.env.ADMIN_ACCESS_PASSWORD ?? "DISCOVERY";
+
+/** Verify the admin access password. Never rendered in any UI copy. */
+export const verifyAccessPassword = mutation({
+  args: { password: v.string() },
+  handler: async (ctx, { password }) => {
+    const user = await requireUserDoc(ctx);
+    if (password !== ADMIN_PASSWORD) {
+      throw new Error("Incorrect access password.");
+    }
+    if (user.role !== ROLES.ADMIN) {
+      throw new Error("Administrator role required.");
+    }
+    await ctx.db.patch(user._id, { adminAccess: true });
+    await audit(ctx, user._id, undefined, "admin-access", "Admin password gate unlocked");
+    return true;
   },
 });
 
+export const isAdminUnlocked = query({
+  args: {},
+  handler: async (ctx) => {
+    await requireAdmin(ctx);
+    const user = await requireUserDoc(ctx);
+    return !!user.adminAccess;
+  },
+});
+
+export const lockAdmin = mutation({
+  args: {},
+  handler: async (ctx) => {
+    const user = await requireUserDoc(ctx);
+    await ctx.db.patch(user._id, { adminAccess: false });
+    return true;
+  },
+});
+
+// ---------------------------------------------------------------------------
+// Audit log
+// ---------------------------------------------------------------------------
+
+async function audit(
+  ctx: import("./_generated/server").MutationCtx,
+  adminId: string,
+  tutorId: string | undefined,
+  action: string,
+  detail: string,
+  reason?: string,
+) {
+  await ctx.db.insert("auditLogs", {
+    adminId: adminId as never,
+    tutorId: tutorId ? (tutorId as never) : undefined,
+    action,
+    detail,
+    reason,
+    createdAt: Date.now(),
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Tutor applications — READ-ONLY review portal
+// ---------------------------------------------------------------------------
+
+export const tutorApplications = query({
+  args: { search: v.optional(v.string()) },
+  handler: async (ctx, { search }) => {
+    await requireAdmin(ctx);
+    const apps = await ctx.db.query("tutorApplications").collect();
+    const q = (search ?? "").trim().toLowerCase();
+    const hydrated = await Promise.all(
+      apps.map(async (a) => {
+        const user = await ctx.db.get(a.userId);
+        return {
+          ...a,
+          user: user ? publicUser(user) : null,
+        };
+      }),
+    );
+    return hydrated
+      .filter(
+        (a) =>
+          !q ||
+          a.fullName.toLowerCase().includes(q) ||
+          a.professionalTitle.toLowerCase().includes(q) ||
+          (a.user?.name ?? "").toLowerCase().includes(q),
+      )
+      .sort((a, b) => (b.submittedAt ?? b.updatedAt ?? 0) - (a.submittedAt ?? a.updatedAt ?? 0));
+  },
+});
+
+/** Full application detail — admin only. Contains private NIN / CV / contact data. */
+export const applicationDetail = query({
+  args: { id: v.id("tutorApplications") },
+  handler: async (ctx, { id }) => {
+    await requireAdmin(ctx);
+    const app = await ctx.db.get(id);
+    if (!app) return null;
+    const user = await ctx.db.get(app.userId);
+    const auditRows = await ctx.db
+      .query("auditLogs")
+      .withIndex("by_tutor", (q) => q.eq("tutorId", app.userId))
+      .collect();
+    return {
+      ...app,
+      user: user ? publicUser(user) : null,
+      auditRows: auditRows.sort((a, b) => b.createdAt - a.createdAt),
+    };
+  },
+});
+
+/**
+ * Admin review actions. Admins VERIFY/REVIEW — they never edit the
+ * application data itself.
+ *   approve        -> approved (dashboard access, no badge yet)
+ *   verify         -> verified (✓ badge)
+ *   reject         -> rejected + reason
+ *   request-info   -> information-required + reason
+ *   suspend        -> suspended (revokes access)
+ *   reactivate     -> approved (or verified if previously verified)
+ */
 export const reviewTutorApplication = mutation({
   args: {
     applicationId: v.id("tutorApplications"),
-    approve: v.boolean(),
-    notes: v.optional(v.string()),
+    action: v.union(
+      v.literal("approve"),
+      v.literal("verify"),
+      v.literal("reject"),
+      v.literal("request-info"),
+      v.literal("suspend"),
+      v.literal("reactivate"),
+    ),
+    reason: v.optional(v.string()),
   },
-  handler: async (ctx, { applicationId, approve, notes }) => {
+  handler: async (ctx, { applicationId, action, reason }) => {
     const admin = await requireAdmin(ctx);
     const app = await ctx.db.get(applicationId);
     if (!app) throw new Error("Application not found.");
-    if (app.status !== "pending") throw new Error("Already reviewed.");
+
+    if (action === "reject" && !reason?.trim()) {
+      throw new Error("A rejection reason is required.");
+    }
+    if (action === "request-info" && !reason?.trim()) {
+      throw new Error("Please describe what information is required.");
+    }
+
+    const tutorId = app.userId;
+    let nextStatus: typeof app.status = app.status;
+    let nextVerified = !!app.wasVerified;
+
+    switch (action) {
+      case "approve":
+        nextStatus = "approved";
+        nextVerified = false;
+        break;
+      case "verify":
+        nextStatus = "verified";
+        nextVerified = true;
+        break;
+      case "reject":
+        nextStatus = "rejected";
+        nextVerified = false;
+        break;
+      case "request-info":
+        nextStatus = "information-required";
+        break;
+      case "suspend":
+        nextStatus = "suspended";
+        nextVerified = false;
+        break;
+      case "reactivate":
+        nextStatus = app.wasVerified ? "verified" : "approved";
+        nextVerified = !!app.wasVerified;
+        break;
+    }
+
     await ctx.db.patch(applicationId, {
-      status: approve ? "approved" : "rejected",
+      status: nextStatus,
+      wasVerified: nextVerified,
       reviewedAt: Date.now(),
       reviewedBy: admin._id,
-      notes,
+      reviewNote: reason,
     });
-    await ctx.db.patch(app.userId, {
-      role: ROLES.TUTOR,
-      verified: approve,
-      headline: approve ? app.headline : undefined,
-      bio: approve ? app.bio : undefined,
-      skills: approve ? app.expertise : undefined,
-      socials: approve ? app.socials : undefined,
-    });
+
+    // Tutor profile flags: the application data itself is never touched.
+    const user = await ctx.db.get(tutorId);
+    if (user) {
+      if (action === "approve" || action === "verify" || action === "reactivate") {
+        await ctx.db.patch(tutorId, {
+          role: ROLES.TUTOR,
+          verified: nextVerified,
+          name: user.name || app.fullName,
+          headline: user.headline || app.professionalTitle,
+          bio: user.bio || app.biography,
+          skills: user.skills?.length ? user.skills : app.skills,
+        });
+      } else if (action === "suspend") {
+        await ctx.db.patch(tutorId, { verified: false });
+      }
+    }
+
+    const messages: Record<string, { title: string; body: string; link: string }> = {
+      approve: {
+        title: "Application approved 🎉",
+        body: "Your tutor application was approved. The Tutor Dashboard is now unlocked.",
+        link: "/tutor",
+      },
+      verify: {
+        title: "You're now a verified tutor ✓",
+        body: "The verified badge now appears on your profile, courses and the tutor directory.",
+        link: "/tutor",
+      },
+      reject: {
+        title: "Application not approved",
+        body: reason ?? "Your application could not be approved.",
+        link: "/become-tutor",
+      },
+      "request-info": {
+        title: "More information required",
+        body: reason ?? "Please update your application with the requested information.",
+        link: "/become-tutor",
+      },
+      suspend: {
+        title: "Account suspended",
+        body: reason ?? "Your tutor account was suspended. Dashboard access is revoked.",
+        link: "/become-tutor",
+      },
+      reactivate: {
+        title: "Account reactivated",
+        body: "Your tutor account has been reactivated. Welcome back!",
+        link: "/tutor",
+      },
+    };
+
     await notify(ctx, {
-      userId: app.userId,
-      title: approve ? "Application approved 🎉" : "Application not approved",
-      body: approve
-        ? "Welcome aboard! Your tutor account is verified and the Tutor Dashboard is now unlocked."
-        : notes
-          ? `Your tutor application was not approved. Reason: ${notes}`
-          : "Your tutor application was not approved. You can re-apply anytime.",
+      userId: tutorId,
+      title: messages[action].title,
+      body: messages[action].body,
       type: "tutor",
-      link: approve ? "/tutor" : "/become-tutor",
+      link: messages[action].link,
+    });
+
+    await audit(ctx, admin._id, tutorId, action, `Tutor: ${app.fullName}`, reason);
+    return true;
+  },
+});
+
+export const auditLogs = query({
+  args: {},
+  handler: async (ctx) => {
+    await requireAdmin(ctx);
+    const rows = await ctx.db.query("auditLogs").collect();
+    const hydrated = await Promise.all(
+      rows.map(async (r) => {
+        const admin = await ctx.db.get(r.adminId);
+        const tutor = r.tutorId ? await ctx.db.get(r.tutorId) : null;
+        return {
+          ...r,
+          adminName: admin?.name ?? "Unknown",
+          tutorName: tutor?.name ?? null,
+        };
+      }),
+    );
+    return hydrated.sort((a, b) => b.createdAt - a.createdAt).slice(0, 100);
+  },
+});
+
+// ---------------------------------------------------------------------------
+// Course review — admin verifies tutor courses before they go live
+// ---------------------------------------------------------------------------
+
+export const coursesPendingReview = query({
+  args: {},
+  handler: async (ctx) => {
+    await requireAdmin(ctx);
+    const courses = await ctx.db.query("courses").collect();
+    const pending = courses.filter(
+      (c) => c.status === "pending" || c.status === undefined,
+    );
+    return hydrateCourses(ctx, pending.sort((a, b) => b.createdAt - a.createdAt));
+  },
+});
+
+export const reviewCourse = mutation({
+  args: {
+    courseId: v.id("courses"),
+    approve: v.boolean(),
+    note: v.optional(v.string()),
+  },
+  handler: async (ctx, { courseId, approve, note }) => {
+    const admin = await requireAdmin(ctx);
+    const course = await ctx.db.get(courseId);
+    if (!course) throw new Error("Course not found.");
+    if (approve) {
+      await ctx.db.patch(courseId, {
+        status: "approved",
+        published: true,
+        reviewNote: undefined,
+      });
+    } else {
+      await ctx.db.patch(courseId, {
+        status: "rejected",
+        published: false,
+        reviewNote: note,
+      });
+    }
+    await audit(ctx, admin._id, course.tutorId, approve ? "course-approved" : "course-rejected", `Course: ${course.title}`, note);
+    await notify(ctx, {
+      userId: course.tutorId,
+      title: approve ? "Course approved ✓" : "Course needs changes",
+      body: approve
+        ? `"${course.title}" is now live on ForgeX Academy.`
+        : note
+          ? `"${course.title}" was not approved. ${note}`
+          : `"${course.title}" was not approved.`,
+      type: "course",
+      link: "/tutor/courses",
     });
     return true;
   },

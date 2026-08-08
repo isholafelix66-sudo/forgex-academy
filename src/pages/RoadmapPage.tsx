@@ -58,6 +58,9 @@ export default function RoadmapPage() {
           <div className="mt-12 space-y-12">
             {roadmaps.map((rm, ri) => {
               const mine = withProgress(rm._id);
+              const mineLevel = (id: string) => mine?.levels.find((l) => l._id === id);
+              const mineCourse = (id: string) =>
+                mine?.levels.flatMap((l) => l.courses).find((c) => c._id === id);
               return (
                 <Reveal key={rm._id} delay={ri * 0.05}>
                   <div className="overflow-hidden rounded-3xl border border-white/10 bg-card">
@@ -97,7 +100,9 @@ export default function RoadmapPage() {
                     <div className="grid gap-0 p-6 sm:p-8 lg:grid-cols-5">
                       {rm.levels.map((lvl, i) => {
                         const isLast = i === rm.levels.length - 1;
-                        const unlocked = !mine || lvl.unlocked;
+                        const prog = mineLevel(lvl._id);
+                        const unlocked = !mine ? true : (prog?.unlocked ?? false);
+                        const done = prog?.done ?? false;
                         return (
                           <div key={lvl._id} className="relative">
                             {!isLast && (
@@ -107,14 +112,14 @@ export default function RoadmapPage() {
                               <div
                                 className={cn(
                                   "relative z-10 flex size-12 items-center justify-center rounded-full border text-sm font-bold",
-                                  lvl.done
+                                  done
                                     ? "border-lime-400 bg-lime-400 text-black"
                                     : unlocked
                                       ? "border-lime-400/40 bg-lime-400/10 text-lime-300"
                                       : "border-white/10 bg-white/5 text-muted-foreground",
                                 )}
                               >
-                                {lvl.done ? (
+                                {done ? (
                                   <CheckCircle2 className="size-6" />
                                 ) : unlocked ? (
                                   i + 1
@@ -140,28 +145,31 @@ export default function RoadmapPage() {
                               </div>
 
                               <div className="mt-1 flex flex-col gap-2">
-                                {lvl.courses.map((c) => (
-                                  <Link
-                                    key={c._id}
-                                    to={`/courses/${c.slug}`}
-                                    className={cn(
-                                      "flex w-full items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs transition-colors hover:border-lime-400/40",
-                                      unlocked
-                                        ? "hover:text-lime-300"
-                                        : "pointer-events-none opacity-50",
-                                    )}
-                                  >
-                                    <PlayCircle className="size-3.5 shrink-0" />
-                                    <span className="truncate">{c.title}</span>
-                                    {c.status === "completed" ? (
-                                      <CheckCircle2 className="ml-auto size-3.5 shrink-0 text-lime-400" />
-                                    ) : (
-                                      <span className="ml-auto shrink-0 text-[10px] text-muted-foreground">
-                                        {c.progress > 0 ? `${c.progress}%` : ""}
-                                      </span>
-                                    )}
-                                  </Link>
-                                ))}
+                                {lvl.courses.map((c) => {
+                                  const cp = mineCourse(c._id);
+                                  return (
+                                    <Link
+                                      key={c._id}
+                                      to={`/courses/${c.slug}`}
+                                      className={cn(
+                                        "flex w-full items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs transition-colors hover:border-lime-400/40",
+                                        unlocked
+                                          ? "hover:text-lime-300"
+                                          : "pointer-events-none opacity-50",
+                                      )}
+                                    >
+                                      <PlayCircle className="size-3.5 shrink-0" />
+                                      <span className="truncate">{c.title}</span>
+                                      {cp?.status === "completed" ? (
+                                        <CheckCircle2 className="ml-auto size-3.5 shrink-0 text-lime-400" />
+                                      ) : (
+                                        <span className="ml-auto shrink-0 text-[10px] text-muted-foreground">
+                                          {cp && cp.progress > 0 ? `${cp.progress}%` : ""}
+                                        </span>
+                                      )}
+                                    </Link>
+                                  );
+                                })}
                                 {lvl.courses.length === 0 && (
                                   <span className="rounded-xl border border-dashed border-white/10 px-3 py-2 text-xs text-muted-foreground/60">
                                     Courses coming soon
