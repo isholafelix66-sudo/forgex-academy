@@ -41,12 +41,13 @@ export function AppShell({
     navigate("/");
   };
 
+  // The admin dashboard is password-gated and reachable ONLY by visiting
+  // /admin directly — it must never appear as a button to students, tutors
+  // or even signed-in admins. Verified tutors get a link to their dashboard.
   const roleLink =
-    user?.role === "admin"
-      ? { to: "/admin", label: "Admin dashboard" }
-      : user?.role === "tutor" && user.verified
-        ? { to: "/tutor", label: "Tutor dashboard" }
-        : null;
+    user?.role === "tutor" && user.verified
+      ? { to: "/tutor", label: "Tutor dashboard" }
+      : null;
 
   const sidebar = (
     <div className="flex h-full flex-col">
@@ -96,7 +97,7 @@ export function AppShell({
             className="flex items-center gap-3 rounded-xl border border-lime-400/25 bg-lime-400/8 px-3 py-2.5 text-sm font-medium text-lime-300 transition-colors hover:bg-lime-400/15"
           >
             <span className="flex size-5 items-center justify-center rounded-md bg-lime-400/15 text-[10px] font-bold">
-              {roleLink.label === "Admin dashboard" ? "A" : "T"}
+              T
             </span>
             {roleLink.label}
           </Link>

@@ -87,13 +87,6 @@ export default function Settings() {
                 </Button>
               </Link>
             )}
-            {user?.role === "admin" && (
-              <Link to="/admin">
-                <Button variant="outline" className="gap-2 border-white/15">
-                  <ShieldCheck className="size-4" /> Admin dashboard
-                </Button>
-              </Link>
-            )}
           </div>
         </section>
 
