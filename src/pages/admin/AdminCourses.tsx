@@ -9,10 +9,12 @@ import { PageHeader } from "@/components/dash/PageHeader";
 import { Avatar } from "@/components/site/Avatar";
 import { StatusChip } from "@/pages/tutor/status";
 import { timeAgo } from "@/lib/format";
+import { getAdminToken } from "@/lib/admin-session";
 
 export default function AdminCourses() {
-  const pending = useQuery(api.admin.coursesPendingReview);
-  const all = useQuery(api.admin.allCourses);
+  const token = getAdminToken() ?? "";
+  const pending = useQuery(api.admin.coursesPendingReview, token ? { token } : "skip");
+  const all = useQuery(api.admin.allCourses, token ? { token } : "skip");
   const reviewCourse = useMutation(api.admin.reviewCourse);
 
   const [selected, setSelected] = useState<NonNullable<typeof pending>[number] | null>(null);
@@ -23,7 +25,7 @@ export default function AdminCourses() {
     if (!selected) return;
     setBusy(true);
     try {
-      await reviewCourse({ courseId: selected._id as never, approve, note: note || undefined });
+      await reviewCourse({ courseId: selected._id as never, approve, note: note || undefined, token });
       setSelected(null);
       setNote("");
     } finally {

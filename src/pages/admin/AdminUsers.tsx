@@ -8,10 +8,15 @@ import { PageHeader } from "@/components/dash/PageHeader";
 import { Avatar } from "@/components/site/Avatar";
 import { cn } from "@/lib/utils";
 import { timeAgo } from "@/lib/format";
+import { getAdminToken } from "@/lib/admin-session";
 
 export default function AdminUsers() {
   const [search, setSearch] = useState("");
-  const users = useQuery(api.admin.usersList, { search: search || undefined });
+  const token = getAdminToken() ?? "";
+  const users = useQuery(
+    api.admin.usersList,
+    token ? { search: search || undefined, token } : "skip",
+  );
   const setUserRole = useMutation(api.admin.setUserRole);
   const setUserVerified = useMutation(api.admin.setUserVerified);
 
@@ -69,7 +74,7 @@ export default function AdminUsers() {
               <div className="flex shrink-0 flex-wrap items-center gap-2">
                 <select
                   value={u.role}
-                  onChange={(e) => void setUserRole({ userId: u._id as never, role: e.target.value as never })}
+                  onChange={(e) => void setUserRole({ userId: u._id as never, role: e.target.value as never, token })}
                   className={cn(
                     "h-9 rounded-lg border border-white/10 bg-black/20 px-2.5 text-xs outline-none",
                     u.role === "admin" && "text-lime-300",
@@ -87,7 +92,7 @@ export default function AdminUsers() {
                       "gap-1.5 border-white/15",
                       u.verified && "border-lime-400/40 text-lime-300",
                     )}
-                    onClick={() => void setUserVerified({ userId: u._id as never, verified: !u.verified })}
+                    onClick={() => void setUserVerified({ userId: u._id as never, verified: !u.verified, token })}
                   >
                     <ShieldCheck className="size-3.5" />
                     {u.verified ? "Verified" : "Verify"}

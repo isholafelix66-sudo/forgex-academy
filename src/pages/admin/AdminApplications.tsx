@@ -23,6 +23,7 @@ import { PageHeader } from "@/components/dash/PageHeader";
 import { Avatar } from "@/components/site/Avatar";
 import { cn } from "@/lib/utils";
 import { formatDate, timeAgo } from "@/lib/format";
+import { getAdminToken } from "@/lib/admin-session";
 
 const STATUS_META: Record<string, { label: string; cls: string }> = {
   draft: { label: "Draft", cls: "bg-white/8 text-muted-foreground" },
@@ -47,10 +48,14 @@ function Field({ label, value }: { label: string; value?: React.ReactNode }) {
 export default function AdminApplications() {
   const [search, setSearch] = useState("");
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const apps = useQuery(api.admin.tutorApplications, { search: search || undefined });
+  const token = getAdminToken() ?? "";
+  const apps = useQuery(
+    api.admin.tutorApplications,
+    token ? { search: search || undefined, token } : "skip",
+  );
   const detail = useQuery(
     api.admin.applicationDetail,
-    selectedId ? { id: selectedId as never } : "skip",
+    token && selectedId ? { id: selectedId as never, token } : "skip",
   );
   const review = useMutation(api.admin.reviewTutorApplication);
   const [reason, setReason] = useState("");
@@ -65,6 +70,7 @@ export default function AdminApplications() {
         applicationId: selectedId as never,
         action: action as never,
         reason: reason || undefined,
+        token,
       });
       setConfirming(null);
       setReason("");

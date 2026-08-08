@@ -346,7 +346,7 @@ export const announcementsList = query({
     published.sort((a, b) => Number(b.pinned) - Number(a.pinned) || b.createdAt - a.createdAt);
     const hydrated = await Promise.all(
       published.map(async (a) => {
-        const author = await ctx.db.get(a.authorId);
+        const author = a.authorId ? await ctx.db.get(a.authorId) : null;
         return { ...a, author: author ? publicUser(author) : null };
       }),
     );

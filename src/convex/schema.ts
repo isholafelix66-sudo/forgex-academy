@@ -263,7 +263,7 @@ const schema = defineSchema(
     // Communication & content
     // -----------------------------------------------------------------------
     announcements: defineTable({
-      authorId: v.id("users"),
+      authorId: v.optional(v.id("users")),
       title: v.string(),
       body: v.string(),
       category: v.union(
@@ -361,7 +361,7 @@ const schema = defineSchema(
       .index("by_status", ["status"]),
 
     auditLogs: defineTable({
-      adminId: v.id("users"),
+      adminId: v.optional(v.id("users")),
       tutorId: v.optional(v.id("users")),
       action: v.string(),
       detail: v.string(),
@@ -370,6 +370,12 @@ const schema = defineSchema(
     })
       .index("by_created", ["createdAt"])
       .index("by_tutor", ["tutorId"]),
+
+    /** Password-unlocked admin sessions (no user account required). */
+    adminSessions: defineTable({
+      token: v.string(),
+      createdAt: v.number(),
+    }).index("by_token", ["token"]),
 
     messages: defineTable({
       threadId: v.string(),

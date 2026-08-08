@@ -5,9 +5,11 @@ import { Button } from "@/components/ui/button";
 import { PageHeader } from "@/components/dash/PageHeader";
 import { Avatar } from "@/components/site/Avatar";
 import { formatDate } from "@/lib/format";
+import { getAdminToken } from "@/lib/admin-session";
 
 export default function AdminCertificates() {
-  const certs = useQuery(api.admin.certificatesList);
+  const token = getAdminToken() ?? "";
+  const certs = useQuery(api.admin.certificatesList, token ? { token } : "skip");
   const deleteCertificate = useMutation(api.admin.deleteCertificate);
   const origin = typeof window !== "undefined" ? window.location.origin : "";
 
@@ -58,7 +60,7 @@ export default function AdminCertificates() {
                   variant="ghost"
                   size="icon"
                   className="shrink-0 text-muted-foreground hover:text-rose-300"
-                  onClick={() => void deleteCertificate({ id: c._id as never })}
+                  onClick={() => void deleteCertificate({ id: c._id as never, token })}
                   title="Delete certificate"
                 >
                   <Trash2 className="size-4" />

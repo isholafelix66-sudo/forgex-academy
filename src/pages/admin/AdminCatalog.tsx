@@ -8,11 +8,13 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { PageHeader } from "@/components/dash/PageHeader";
+import { getAdminToken } from "@/lib/admin-session";
 
 // ---------------------------------------------------------------------------
 // Categories
 // ---------------------------------------------------------------------------
 function CategoriesManager() {
+  const token = getAdminToken() ?? "";
   const categories = useQuery(api.public.categoriesList);
   const upsertCategory = useMutation(api.admin.upsertCategory);
   const deleteCategory = useMutation(api.admin.deleteCategory);
@@ -34,6 +36,7 @@ function CategoriesManager() {
       description: draft.description,
       icon: draft.icon || "Circle",
       color: draft.color || "lime",
+      token,
     });
     setSaving(false);
     setDraft(null);
@@ -60,7 +63,7 @@ function CategoriesManager() {
             <Button variant="ghost" size="icon" onClick={() => setDraft({ id: c._id, name: c.name, description: c.description, icon: c.icon, color: c.color })}>
               <Pencil className="size-4" />
             </Button>
-            <Button variant="ghost" size="icon" className="text-muted-foreground hover:text-rose-300" onClick={() => void deleteCategory({ id: c._id as never })}>
+            <Button variant="ghost" size="icon" className="text-muted-foreground hover:text-rose-300" onClick={() => void deleteCategory({ id: c._id as never, token })}>
               <Trash2 className="size-4" />
             </Button>
           </div>
@@ -116,6 +119,7 @@ function CategoriesManager() {
 type LevelDraft = { id?: string; title: string; description: string };
 
 function RoadmapsManager() {
+  const token = getAdminToken() ?? "";
   const roadmaps = useQuery(api.public.roadmapsAll);
   const upsertRoadmap = useMutation(api.admin.upsertRoadmap);
   const deleteRoadmap = useMutation(api.admin.deleteRoadmap);
@@ -150,6 +154,7 @@ function RoadmapsManager() {
           description: l.description,
           order: i,
         })),
+      token,
     });
     setSaving(false);
     setDraft(null);
@@ -197,7 +202,7 @@ function RoadmapsManager() {
             <Button variant="ghost" size="icon" onClick={() => open(r)}>
               <Pencil className="size-4" />
             </Button>
-            <Button variant="ghost" size="icon" className="text-muted-foreground hover:text-rose-300" onClick={() => void deleteRoadmap({ id: r._id as never })}>
+            <Button variant="ghost" size="icon" className="text-muted-foreground hover:text-rose-300" onClick={() => void deleteRoadmap({ id: r._id as never, token })}>
               <Trash2 className="size-4" />
             </Button>
           </div>

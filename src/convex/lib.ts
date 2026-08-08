@@ -53,6 +53,39 @@ export async function requireTutor(ctx: QueryCtx | MutationCtx) {
 export const isAdminUser = (u: Doc<"users"> | null | undefined) =>
   u?.role === ROLES.ADMIN;
 
+// ---------------------------------------------------------------------------
+// Password-only admin sessions (no user account required)
+// ---------------------------------------------------------------------------
+
+const ADMIN_SESSION_TTL = 12 * 60 * 60 * 1000; // 12 hours
+
+/** Create a fresh admin session token. */
+export function makeAdminToken(): string {
+  const rand = () => Math.random().toString(36).slice(2, 10);
+  return `${Date.now().toString(36)}-${rand()}${rand()}${rand()}`;
+}
+
+/**
+ * Require a valid, unexpired admin session token. The admin dashboard is
+ * unlocked purely by the access password — no user account is involved.
+ */
+export async function requireAdminSession(
+  ctx: QueryCtx | MutationCtx,
+  token: string,
+): Promise<boolean> {
+  if (!token) throw new Error("Admin access required.");
+  const session = await ctx.db
+    .query("adminSessions")
+    .withIndex("by_token", (q) => q.eq("token", token))
+    .first();
+  if (!session) throw new Error("Admin access required.");
+  if (Date.now() - session.createdAt > ADMIN_SESSION_TTL) {
+    throw new Error("Admin session expired. Enter the access password again.");
+  }
+  return true;
+}
+
+
 export const isTutorUser = (u: Doc<"users"> | null | undefined) =>
   u?.role === ROLES.TUTOR && !!u?.verified;
 

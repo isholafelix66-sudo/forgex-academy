@@ -66,36 +66,6 @@ export const updateProfile = mutation({
   },
 });
 
-/** True when no real (non-seed) admin account exists yet. */
-export const hasAdmins = query({
-  args: {},
-  handler: async (ctx) => {
-    const all = await ctx.db.query("users").collect();
-    return all.some((u) => u.role === ROLES.ADMIN && !u.isSeed);
-  },
-});
-
-/** Promote the caller to admin — only allowed while no real admin exists. */
-export const claimAdmin = mutation({
-  args: {},
-  handler: async (ctx) => {
-    const user = await requireUserDoc(ctx);
-    const all = await ctx.db.query("users").collect();
-    if (all.some((u) => u.role === ROLES.ADMIN && !u.isSeed)) {
-      throw new Error("An administrator already exists.");
-    }
-    await ctx.db.patch(user._id, { role: ROLES.ADMIN });
-    await notify(ctx, {
-      userId: user._id,
-      title: "Administrator access granted",
-      body: "You are now an administrator of ForgeX Academy. The Admin Dashboard is unlocked.",
-      type: "role",
-      link: "/admin",
-    });
-    return true;
-  },
-});
-
 // ---------------------------------------------------------------------------
 // Tutor application flow — the tutor owns & maintains this data.
 // Admins may only review / verify — never edit it.

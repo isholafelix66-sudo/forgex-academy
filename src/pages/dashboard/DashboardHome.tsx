@@ -1,5 +1,5 @@
-import { Link, useNavigate } from "react-router";
-import { useMutation, useQuery } from "convex/react";
+import { Link } from "react-router";
+import { useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import {
   ArrowRight,
@@ -10,9 +10,7 @@ import {
   Flame,
   GraduationCap,
   Percent,
-  ShieldCheck,
   Sparkles,
-  UserPlus,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { PageHeader } from "@/components/dash/PageHeader";
@@ -25,9 +23,6 @@ import { formatDateShort, timeAgo } from "@/lib/format";
 
 export default function DashboardHome() {
   const { user } = useAuth();
-  const navigate = useNavigate();
-  const claimAdmin = useMutation(api.users.claimAdmin);
-  const hasAdmins = useQuery(api.users.hasAdmins);
   const enrollments = useQuery(api.learn.myEnrollments);
   const deadlines = useQuery(api.submissions.upcomingDeadlines);
   const announcements = useQuery(api.public.announcementsList);
@@ -65,28 +60,6 @@ export default function DashboardHome() {
           </Link>
         }
       />
-
-      {hasAdmins === false && (
-        <div className="flex flex-col gap-4 rounded-2xl border border-lime-400/30 bg-lime-400/10 p-5 sm:flex-row sm:items-center">
-          <ShieldCheck className="size-8 shrink-0 text-lime-300" />
-          <div className="flex-1">
-            <p className="font-display font-semibold">Bootstrap administrator access</p>
-            <p className="text-sm text-muted-foreground">
-              No administrator exists yet. As the first user, you can claim the
-              Admin Dashboard to manage users, courses and content.
-            </p>
-          </div>
-          <Button
-            className="bg-lime-400 font-semibold text-black hover:bg-lime-300"
-            onClick={async () => {
-              await claimAdmin();
-              navigate("/admin");
-            }}
-          >
-            <UserPlus className="mr-2 size-4" /> Claim admin
-          </Button>
-        </div>
-      )}
 
       {/* Stats */}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">

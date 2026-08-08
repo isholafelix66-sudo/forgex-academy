@@ -1,7 +1,7 @@
 import '@vly-ai/integrations';
 import { Toaster } from "@/components/ui/sonner";
 import { RequireAuth } from "@/components/RequireAuth";
-import { RequireTutor, RequireAdmin } from "@/components/RequireRole";
+import { RequireTutor } from "@/components/RequireRole";
 import { VlyToolbar } from "../vly-toolbar-readonly.tsx";
 import { ConvexAuthProvider } from "@convex-dev/auth/react";
 import { ConvexReactClient } from "convex/react";
@@ -234,17 +234,8 @@ createRoot(document.getElementById("root")!).render(
                 <Route path="announcements" element={<TutorAnnouncements />} />
               </Route>
 
-              {/* Admin dashboard */}
-              <Route
-                path="/admin"
-                element={
-                  <RequireAuth>
-                    <RequireAdmin>
-                      <AdminShell />
-                    </RequireAdmin>
-                  </RequireAuth>
-                }
-              >
+              {/* Admin dashboard — password-gated only, no user account needed */}
+              <Route path="/admin" element={<AdminShell />}>
                 <Route index element={<AdminOverview />} />
                 <Route path="users" element={<AdminUsers />} />
                 <Route path="applications" element={<AdminApplications />} />

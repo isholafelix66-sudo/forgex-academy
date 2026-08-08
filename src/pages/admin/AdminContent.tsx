@@ -5,6 +5,7 @@ import { Check, Loader2, PenSquare } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { PageHeader } from "@/components/dash/PageHeader";
+import { getAdminToken } from "@/lib/admin-session";
 
 const FIELDS: Array<{ key: string; label: string; hint: string; rows: number }> = [
   { key: "mission", label: "Mission", hint: "Shown on the About page.", rows: 4 },
@@ -73,9 +74,10 @@ function EditorRow({
 export default function AdminContent() {
   const content = useQuery(api.public.siteContentAll);
   const contentSet = useMutation(api.admin.contentSet);
+  const token = getAdminToken() ?? "";
 
   const save = async (key: string, value: string) => {
-    await contentSet({ key, value });
+    await contentSet({ key, value, token });
   };
 
   return (

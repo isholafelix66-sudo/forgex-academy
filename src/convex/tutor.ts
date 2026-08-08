@@ -556,7 +556,7 @@ export const allAnnouncements = query({
     const docs = await ctx.db.query("announcements").collect();
     const hydrated = await Promise.all(
       docs.map(async (a) => {
-        const author = await ctx.db.get(a.authorId);
+        const author = a.authorId ? await ctx.db.get(a.authorId) : null;
         return { ...a, author: author ? publicUser(author) : null };
       }),
     );

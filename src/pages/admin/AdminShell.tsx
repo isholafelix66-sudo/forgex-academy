@@ -5,7 +5,6 @@ import {
   Award,
   BadgeCheck,
   BookOpen,
-  FileText,
   KeyRound,
   LayoutDashboard,
   ListChecks,
@@ -19,9 +18,11 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { AppShell } from "@/components/dash/AppShell";
+import { clearAdminToken, getAdminToken, setAdminToken } from "@/lib/admin-session";
 
-/** Password gate — /admin is reachable only with the admin access password. */
-function AdminGate() {
+/** Password gate — /admin is reachable only with the admin access password.
+ *  No user account is required: the password mints a session token. */
+function AdminGate({ onUnlocked }: { onUnlocked: (token: string) => void }) {
   const verify = useMutation(api.admin.verifyAccessPassword);
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
@@ -32,7 +33,8 @@ function AdminGate() {
     setLoading(true);
     setError(null);
     try {
-      await verify({ password });
+      const { token } = await verify({ password });
+      onUnlocked(token);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Incorrect password.");
       setLoading(false);
@@ -47,8 +49,8 @@ function AdminGate() {
         </span>
         <h1 className="font-display mt-5 text-2xl font-bold">Admin access</h1>
         <p className="mt-2 text-sm text-muted-foreground">
-          The Admin Dashboard is protected. Enter the administrator access
-          password to continue.
+          The Admin Dashboard is protected by the administrator access password.
+          Enter it to continue — no account required.
         </p>
         <form onSubmit={(e) => void submit(e)} className="mt-6 space-y-3">
           <Input
@@ -79,11 +81,26 @@ function AdminGate() {
 }
 
 export default function AdminShell() {
-  const unlocked = useQuery(api.admin.isAdminUnlocked, {});
-  const pendingApps = useQuery(api.admin.tutorApplications, {});
-  const pendingCourses = useQuery(api.admin.coursesPendingReview, {});
+  const [token, setToken] = useState<string | null>(() => getAdminToken());
+  const unlocked = useQuery(
+    api.admin.isAdminUnlocked,
+    token ? { token } : "skip",
+  );
+  const pendingApps = useQuery(
+    api.admin.tutorApplications,
+    token ? { token } : "skip",
+  );
+  const pendingCourses = useQuery(
+    api.admin.coursesPendingReview,
+    token ? { token } : "skip",
+  );
 
-  if (unlocked === undefined) {
+  const handleUnlocked = (t: string) => {
+    setAdminToken(t);
+    setToken(t);
+  };
+
+  if (unlocked === undefined && token) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-background">
         <Loader2 className="size-6 animate-spin text-muted-foreground" />
@@ -91,7 +108,7 @@ export default function AdminShell() {
     );
   }
 
-  if (!unlocked) return <AdminGate />;
+  if (!unlocked) return <AdminGate onUnlocked={handleUnlocked} />;
 
   const pendingCount =
     (pendingApps?.filter((a) => a.status === "submitted" || a.status === "under-review").length ?? 0) +

@@ -14,11 +14,13 @@ import { PageHeader } from "@/components/dash/PageHeader";
 import { StatCard } from "@/components/dash/StatCard";
 import { Avatar } from "@/components/site/Avatar";
 import { StatusChip } from "@/pages/tutor/status";
+import { getAdminToken } from "@/lib/admin-session";
 
 export default function AdminOverview() {
-  const stats = useQuery(api.admin.stats, {});
-  const applications = useQuery(api.admin.tutorApplications, {});
-  const pendingCourses = useQuery(api.admin.coursesPendingReview, {});
+  const token = getAdminToken() ?? "";
+  const stats = useQuery(api.admin.stats, token ? { token } : "skip");
+  const applications = useQuery(api.admin.tutorApplications, token ? { token } : "skip");
+  const pendingCourses = useQuery(api.admin.coursesPendingReview, token ? { token } : "skip");
 
   const pendingApps = (applications ?? []).filter(
     (a) => a.status === "submitted" || a.status === "under-review",

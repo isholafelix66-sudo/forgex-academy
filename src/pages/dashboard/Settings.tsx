@@ -1,14 +1,6 @@
 import { Link, useNavigate } from "react-router";
-import { useMutation, useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
-import {
-  BadgeCheck,
-  GraduationCap,
-  LogOut,
-  Mail,
-  ShieldCheck,
-  UserPlus,
-} from "lucide-react";
+import { BadgeCheck, GraduationCap, LogOut, Mail, ShieldCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { PageHeader } from "@/components/dash/PageHeader";
 import { useAuth } from "@/hooks/use-auth";
@@ -16,8 +8,6 @@ import { useAuth } from "@/hooks/use-auth";
 export default function Settings() {
   const { user, signOut } = useAuth();
   const navigate = useNavigate();
-  const claimAdmin = useMutation(api.users.claimAdmin);
-  const hasAdmins = useQuery(api.users.hasAdmins);
 
   const handleSignOut = async () => {
     await signOut();
@@ -106,27 +96,6 @@ export default function Settings() {
             )}
           </div>
         </section>
-
-        {/* Admin bootstrap */}
-        {hasAdmins === false && user?.role !== "admin" && (
-          <section className="rounded-3xl border border-lime-400/30 bg-lime-400/8 p-6 sm:p-8">
-            <h2 className="font-display text-lg font-bold">Administrator access</h2>
-            <p className="mt-2 text-sm text-muted-foreground">
-              No admin exists yet. As the first user of this Academy you can
-              claim the Admin Dashboard to manage users, tutors, courses and
-              site content — all without code.
-            </p>
-            <Button
-              className="mt-4 gap-2 bg-lime-400 font-semibold text-black hover:bg-lime-300"
-              onClick={async () => {
-                await claimAdmin();
-                navigate("/admin");
-              }}
-            >
-              <UserPlus className="size-4" /> Claim administrator access
-            </Button>
-          </section>
-        )}
 
         {/* Danger zone */}
         <section className="rounded-3xl border border-rose-400/20 bg-card p-6 sm:p-8">

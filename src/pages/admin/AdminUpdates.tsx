@@ -9,6 +9,7 @@ import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { PageHeader } from "@/components/dash/PageHeader";
 import { formatDate, timeAgo } from "@/lib/format";
+import { getAdminToken } from "@/lib/admin-session";
 
 const UPDATE_TYPES = ["new-course", "maintenance", "event", "competition", "platform-news"] as const;
 const TYPE_LABEL: Record<string, string> = {
@@ -20,7 +21,8 @@ const TYPE_LABEL: Record<string, string> = {
 };
 
 function UpdatesManager() {
-  const updates = useQuery(api.admin.updatesAll);
+  const token = getAdminToken() ?? "";
+  const updates = useQuery(api.admin.updatesAll, token ? { token } : "skip");
   const upsertUpdate = useMutation(api.admin.upsertUpdate);
   const deleteUpdate = useMutation(api.admin.deleteUpdate);
   const [draft, setDraft] = useState<{
@@ -45,6 +47,7 @@ function UpdatesManager() {
       date: draft.date ? new Date(draft.date).getTime() : Date.now(),
       link: draft.link || undefined,
       published: draft.published,
+      token,
     });
     setSaving(false);
     setDraft(null);
@@ -96,7 +99,7 @@ function UpdatesManager() {
             <Button variant="ghost" size="icon" onClick={() => open(u)}>
               <Pencil className="size-4" />
             </Button>
-            <Button variant="ghost" size="icon" className="text-muted-foreground hover:text-rose-300" onClick={() => void deleteUpdate({ id: u._id as never })}>
+            <Button variant="ghost" size="icon" className="text-muted-foreground hover:text-rose-300" onClick={() => void deleteUpdate({ id: u._id as never, token })}>
               <Trash2 className="size-4" />
             </Button>
           </div>
@@ -164,9 +167,13 @@ function UpdatesManager() {
 }
 
 function AnnouncementsManager() {
-  const announcements = useQuery(api.tutor.allAnnouncements);
-  const upsertAnnouncement = useMutation(api.tutor.upsertAnnouncement);
-  const deleteAnnouncement = useMutation(api.tutor.deleteAnnouncement);
+  const token = getAdminToken() ?? "";
+  const announcements = useQuery(
+    api.admin.adminAnnouncementsList,
+    token ? { token } : "skip",
+  );
+  const upsertAnnouncement = useMutation(api.admin.adminUpsertAnnouncement);
+  const deleteAnnouncement = useMutation(api.admin.adminDeleteAnnouncement);
   const [draft, setDraft] = useState<{
     id?: string;
     title: string;
@@ -187,6 +194,7 @@ function AnnouncementsManager() {
       category: draft.category,
       pinned: draft.pinned,
       published: draft.published,
+      token,
     });
     setSaving(false);
     setDraft(null);
@@ -220,7 +228,7 @@ function AnnouncementsManager() {
             <Button variant="ghost" size="icon" onClick={() => setDraft({ id: a._id, title: a.title, body: a.body, category: a.category as never, pinned: a.pinned, published: a.published })}>
               <Pencil className="size-4" />
             </Button>
-            <Button variant="ghost" size="icon" className="text-muted-foreground hover:text-rose-300" onClick={() => void deleteAnnouncement({ id: a._id as never })}>
+            <Button variant="ghost" size="icon" className="text-muted-foreground hover:text-rose-300" onClick={() => void deleteAnnouncement({ id: a._id as never, token })}>
               <Trash2 className="size-4" />
             </Button>
           </div>

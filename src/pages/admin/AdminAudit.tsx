@@ -1,14 +1,24 @@
 import { useMutation, useQuery } from "convex/react";
+import { useNavigate } from "react-router";
 import { api } from "@/convex/_generated/api";
 import { Lock, ScrollText } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { PageHeader } from "@/components/dash/PageHeader";
 import { Avatar } from "@/components/site/Avatar";
 import { formatDate } from "@/lib/format";
+import { clearAdminToken, getAdminToken } from "@/lib/admin-session";
 
 export default function AdminAudit() {
-  const logs = useQuery(api.admin.auditLogs);
+  const navigate = useNavigate();
+  const token = getAdminToken() ?? "";
+  const logs = useQuery(api.admin.auditLogs, token ? { token } : "skip");
   const lockAdmin = useMutation(api.admin.lockAdmin);
+
+  const handleLock = async () => {
+    if (token) await lockAdmin({ token });
+    clearAdminToken();
+    navigate("/admin");
+  };
 
   return (
     <div className="space-y-8">
@@ -20,7 +30,7 @@ export default function AdminAudit() {
             variant="outline"
             size="sm"
             className="gap-1.5 border-rose-400/30 text-rose-300 hover:bg-rose-400/10"
-            onClick={() => void lockAdmin()}
+            onClick={() => void handleLock()}
           >
             <Lock className="size-3.5" /> Lock admin access
           </Button>

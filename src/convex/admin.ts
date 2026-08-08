@@ -1,16 +1,70 @@
-import { mutation, query } from "./_generated/server";
+import { mutation, query, MutationCtx } from "./_generated/server";
 import { v } from "convex/values";
-import { hydrateCourses, notify, publicUser, requireAdmin, requireUserDoc, slugify } from "./lib";
+import { hydrateCourses, makeAdminToken, notify, publicUser, requireAdminSession, slugify } from "./lib";
 import { ROLES, roleValidator } from "./schema";
+
+// ---------------------------------------------------------------------------
+// Admin password gate (access is URL-only: /admin + this password)
+//
+// The Admin Dashboard is unlocked purely by the access password. No user
+// account is involved — the password gate issues a session token that every
+// admin function validates. Default password: "Discovery" (case-insensitive),
+// overridable via the ADMIN_ACCESS_PASSWORD environment key.
+// ---------------------------------------------------------------------------
+
+const ADMIN_PASSWORD = process.env.ADMIN_ACCESS_PASSWORD ?? "Discovery";
+
+const matches = (a: string, b: string) =>
+  a.trim().toLowerCase() === b.trim().toLowerCase();
+
+/** Verify the admin access password and mint a session token. */
+export const verifyAccessPassword = mutation({
+  args: { password: v.string() },
+  handler: async (ctx, { password }) => {
+    if (!matches(password, ADMIN_PASSWORD)) {
+      throw new Error("Incorrect access password.");
+    }
+    const token = makeAdminToken();
+    await ctx.db.insert("adminSessions", { token, createdAt: Date.now() });
+    await audit(ctx, undefined, undefined, "admin-access", "Admin dashboard unlocked with password");
+    return { token };
+  },
+});
+
+/** Whether a session token is still valid (client calls on every admin page). */
+export const isAdminUnlocked = query({
+  args: { token: v.string() },
+  handler: async (ctx, { token }) => {
+    const session = await ctx.db
+      .query("adminSessions")
+      .withIndex("by_token", (q) => q.eq("token", token))
+      .first();
+    if (!session) return false;
+    return Date.now() - session.createdAt <= 12 * 60 * 60 * 1000;
+  },
+});
+
+/** Invalidate a session token (locks the dashboard). */
+export const lockAdmin = mutation({
+  args: { token: v.string() },
+  handler: async (ctx, { token }) => {
+    const session = await ctx.db
+      .query("adminSessions")
+      .withIndex("by_token", (q) => q.eq("token", token))
+      .first();
+    if (session) await ctx.db.delete(session._id);
+    return true;
+  },
+});
 
 // ---------------------------------------------------------------------------
 // Overview
 // ---------------------------------------------------------------------------
 
 export const stats = query({
-  args: {},
-  handler: async (ctx) => {
-    await requireAdmin(ctx);
+  args: { token: v.string() },
+  handler: async (ctx, { token }) => {
+    await requireAdminSession(ctx, token);
     const [users, courses, enrollments, certificates, applications] =
       await Promise.all([
         ctx.db.query("users").collect(),
@@ -41,9 +95,9 @@ export const stats = query({
 // ---------------------------------------------------------------------------
 
 export const usersList = query({
-  args: { search: v.optional(v.string()) },
-  handler: async (ctx, { search }) => {
-    await requireAdmin(ctx);
+  args: { search: v.optional(v.string()), token: v.string() },
+  handler: async (ctx, { search, token }) => {
+    await requireAdminSession(ctx, token);
     const users = await ctx.db.query("users").collect();
     const [enrollments, certificates] = await Promise.all([
       ctx.db.query("enrollments").collect(),
@@ -72,12 +126,9 @@ export const usersList = query({
 });
 
 export const setUserRole = mutation({
-  args: { userId: v.id("users"), role: roleValidator },
-  handler: async (ctx, { userId, role }) => {
-    const admin = await requireAdmin(ctx);
-    if (userId === admin._id && role !== ROLES.ADMIN) {
-      throw new Error("You can't demote yourself.");
-    }
+  args: { userId: v.id("users"), role: roleValidator, token: v.string() },
+  handler: async (ctx, { userId, role, token }) => {
+    await requireAdminSession(ctx, token);
     await ctx.db.patch(userId, { role });
     await notify(ctx, {
       userId,
@@ -97,51 +148,10 @@ export const setUserRole = mutation({
 });
 
 export const setUserVerified = mutation({
-  args: { userId: v.id("users"), verified: v.boolean() },
-  handler: async (ctx, { userId, verified }) => {
-    await requireAdmin(ctx);
+  args: { userId: v.id("users"), verified: v.boolean(), token: v.string() },
+  handler: async (ctx, { userId, verified, token }) => {
+    await requireAdminSession(ctx, token);
     await ctx.db.patch(userId, { verified });
-    return true;
-  },
-});
-
-// ---------------------------------------------------------------------------
-// Admin password gate (access is URL-only: /admin + this password)
-// ---------------------------------------------------------------------------
-
-const ADMIN_PASSWORD = process.env.ADMIN_ACCESS_PASSWORD ?? "DISCOVERY";
-
-/** Verify the admin access password. Never rendered in any UI copy. */
-export const verifyAccessPassword = mutation({
-  args: { password: v.string() },
-  handler: async (ctx, { password }) => {
-    const user = await requireUserDoc(ctx);
-    if (password !== ADMIN_PASSWORD) {
-      throw new Error("Incorrect access password.");
-    }
-    if (user.role !== ROLES.ADMIN) {
-      throw new Error("Administrator role required.");
-    }
-    await ctx.db.patch(user._id, { adminAccess: true });
-    await audit(ctx, user._id, undefined, "admin-access", "Admin password gate unlocked");
-    return true;
-  },
-});
-
-export const isAdminUnlocked = query({
-  args: {},
-  handler: async (ctx) => {
-    await requireAdmin(ctx);
-    const user = await requireUserDoc(ctx);
-    return !!user.adminAccess;
-  },
-});
-
-export const lockAdmin = mutation({
-  args: {},
-  handler: async (ctx) => {
-    const user = await requireUserDoc(ctx);
-    await ctx.db.patch(user._id, { adminAccess: false });
     return true;
   },
 });
@@ -151,15 +161,15 @@ export const lockAdmin = mutation({
 // ---------------------------------------------------------------------------
 
 async function audit(
-  ctx: import("./_generated/server").MutationCtx,
-  adminId: string,
+  ctx: MutationCtx,
+  adminId: string | undefined,
   tutorId: string | undefined,
   action: string,
   detail: string,
   reason?: string,
 ) {
   await ctx.db.insert("auditLogs", {
-    adminId: adminId as never,
+    adminId: adminId ? (adminId as never) : undefined,
     tutorId: tutorId ? (tutorId as never) : undefined,
     action,
     detail,
@@ -173,9 +183,9 @@ async function audit(
 // ---------------------------------------------------------------------------
 
 export const tutorApplications = query({
-  args: { search: v.optional(v.string()) },
-  handler: async (ctx, { search }) => {
-    await requireAdmin(ctx);
+  args: { search: v.optional(v.string()), token: v.string() },
+  handler: async (ctx, { search, token }) => {
+    await requireAdminSession(ctx, token);
     const apps = await ctx.db.query("tutorApplications").collect();
     const q = (search ?? "").trim().toLowerCase();
     const hydrated = await Promise.all(
@@ -201,9 +211,9 @@ export const tutorApplications = query({
 
 /** Full application detail — admin only. Contains private NIN / CV / contact data. */
 export const applicationDetail = query({
-  args: { id: v.id("tutorApplications") },
-  handler: async (ctx, { id }) => {
-    await requireAdmin(ctx);
+  args: { id: v.id("tutorApplications"), token: v.string() },
+  handler: async (ctx, { id, token }) => {
+    await requireAdminSession(ctx, token);
     const app = await ctx.db.get(id);
     if (!app) return null;
     const user = await ctx.db.get(app.userId);
@@ -241,9 +251,10 @@ export const reviewTutorApplication = mutation({
       v.literal("reactivate"),
     ),
     reason: v.optional(v.string()),
+    token: v.string(),
   },
-  handler: async (ctx, { applicationId, action, reason }) => {
-    const admin = await requireAdmin(ctx);
+  handler: async (ctx, { applicationId, action, reason, token }) => {
+    await requireAdminSession(ctx, token);
     const app = await ctx.db.get(applicationId);
     if (!app) throw new Error("Application not found.");
 
@@ -288,7 +299,6 @@ export const reviewTutorApplication = mutation({
       status: nextStatus,
       wasVerified: nextVerified,
       reviewedAt: Date.now(),
-      reviewedBy: admin._id,
       reviewNote: reason,
     });
 
@@ -350,23 +360,23 @@ export const reviewTutorApplication = mutation({
       link: messages[action].link,
     });
 
-    await audit(ctx, admin._id, tutorId, action, `Tutor: ${app.fullName}`, reason);
+    await audit(ctx, undefined, tutorId, action, `Tutor: ${app.fullName}`, reason);
     return true;
   },
 });
 
 export const auditLogs = query({
-  args: {},
-  handler: async (ctx) => {
-    await requireAdmin(ctx);
+  args: { token: v.string() },
+  handler: async (ctx, { token }) => {
+    await requireAdminSession(ctx, token);
     const rows = await ctx.db.query("auditLogs").collect();
     const hydrated = await Promise.all(
       rows.map(async (r) => {
-        const admin = await ctx.db.get(r.adminId);
+        const admin = r.adminId ? await ctx.db.get(r.adminId) : null;
         const tutor = r.tutorId ? await ctx.db.get(r.tutorId) : null;
         return {
           ...r,
-          adminName: admin?.name ?? "Unknown",
+          adminName: admin?.name ?? "System Admin",
           tutorName: tutor?.name ?? null,
         };
       }),
@@ -380,9 +390,9 @@ export const auditLogs = query({
 // ---------------------------------------------------------------------------
 
 export const coursesPendingReview = query({
-  args: {},
-  handler: async (ctx) => {
-    await requireAdmin(ctx);
+  args: { token: v.string() },
+  handler: async (ctx, { token }) => {
+    await requireAdminSession(ctx, token);
     const courses = await ctx.db.query("courses").collect();
     const pending = courses.filter(
       (c) => c.status === "pending" || c.status === undefined,
@@ -396,9 +406,10 @@ export const reviewCourse = mutation({
     courseId: v.id("courses"),
     approve: v.boolean(),
     note: v.optional(v.string()),
+    token: v.string(),
   },
-  handler: async (ctx, { courseId, approve, note }) => {
-    const admin = await requireAdmin(ctx);
+  handler: async (ctx, { courseId, approve, note, token }) => {
+    await requireAdminSession(ctx, token);
     const course = await ctx.db.get(courseId);
     if (!course) throw new Error("Course not found.");
     if (approve) {
@@ -414,7 +425,7 @@ export const reviewCourse = mutation({
         reviewNote: note,
       });
     }
-    await audit(ctx, admin._id, course.tutorId, approve ? "course-approved" : "course-rejected", `Course: ${course.title}`, note);
+    await audit(ctx, undefined, course.tutorId, approve ? "course-approved" : "course-rejected", `Course: ${course.title}`, note);
     await notify(ctx, {
       userId: course.tutorId,
       title: approve ? "Course approved ✓" : "Course needs changes",
@@ -443,9 +454,10 @@ export const upsertCategory = mutation({
     icon: v.string(),
     color: v.string(),
     order: v.optional(v.number()),
+    token: v.string(),
   },
   handler: async (ctx, args) => {
-    await requireAdmin(ctx);
+    await requireAdminSession(ctx, args.token);
     const slug = args.slug || slugify(args.name);
     if (args.id) {
       await ctx.db.patch(args.id, {
@@ -469,9 +481,9 @@ export const upsertCategory = mutation({
 });
 
 export const deleteCategory = mutation({
-  args: { id: v.id("categories") },
-  handler: async (ctx, { id }) => {
-    await requireAdmin(ctx);
+  args: { id: v.id("categories"), token: v.string() },
+  handler: async (ctx, { id, token }) => {
+    await requireAdminSession(ctx, token);
     await ctx.db.delete(id);
     return true;
   },
@@ -495,9 +507,10 @@ export const upsertRoadmap = mutation({
         order: v.number(),
       }),
     ),
+    token: v.string(),
   },
   handler: async (ctx, args) => {
-    await requireAdmin(ctx);
+    await requireAdminSession(ctx, args.token);
     const slug = args.slug || slugify(args.name);
     let roadmapId: string;
     if (args.id) {
@@ -554,9 +567,9 @@ export const upsertRoadmap = mutation({
 });
 
 export const deleteRoadmap = mutation({
-  args: { id: v.id("roadmaps") },
-  handler: async (ctx, { id }) => {
-    await requireAdmin(ctx);
+  args: { id: v.id("roadmaps"), token: v.string() },
+  handler: async (ctx, { id, token }) => {
+    await requireAdminSession(ctx, token);
     const levels = await ctx.db
       .query("roadmapLevels")
       .withIndex("by_roadmap", (q) => q.eq("roadmapId", id))
@@ -572,9 +585,9 @@ export const deleteRoadmap = mutation({
 // ---------------------------------------------------------------------------
 
 export const allCourses = query({
-  args: {},
-  handler: async (ctx) => {
-    await requireAdmin(ctx);
+  args: { token: v.string() },
+  handler: async (ctx, { token }) => {
+    await requireAdminSession(ctx, token);
     const courses = await ctx.db.query("courses").collect();
     return hydrateCourses(
       ctx,
@@ -588,9 +601,9 @@ export const allCourses = query({
 // ---------------------------------------------------------------------------
 
 export const updatesAll = query({
-  args: {},
-  handler: async (ctx) => {
-    await requireAdmin(ctx);
+  args: { token: v.string() },
+  handler: async (ctx, { token }) => {
+    await requireAdminSession(ctx, token);
     const docs = await ctx.db.query("updates").collect();
     return docs.sort((a, b) => b.date - a.date);
   },
@@ -611,9 +624,10 @@ export const upsertUpdate = mutation({
     date: v.number(),
     link: v.optional(v.string()),
     published: v.boolean(),
+    token: v.string(),
   },
   handler: async (ctx, args) => {
-    await requireAdmin(ctx);
+    await requireAdminSession(ctx, args.token);
     if (args.id) {
       await ctx.db.patch(args.id, {
         type: args.type,
@@ -637,9 +651,77 @@ export const upsertUpdate = mutation({
 });
 
 export const deleteUpdate = mutation({
-  args: { id: v.id("updates") },
-  handler: async (ctx, { id }) => {
-    await requireAdmin(ctx);
+  args: { id: v.id("updates"), token: v.string() },
+  handler: async (ctx, { id, token }) => {
+    await requireAdminSession(ctx, token);
+    await ctx.db.delete(id);
+    return true;
+  },
+});
+
+// ---------------------------------------------------------------------------
+// Announcements (admin versions — password-session access, no user needed)
+// ---------------------------------------------------------------------------
+
+export const adminAnnouncementsList = query({
+  args: { token: v.string() },
+  handler: async (ctx, { token }) => {
+    await requireAdminSession(ctx, token);
+    const docs = await ctx.db.query("announcements").collect();
+    const hydrated = await Promise.all(
+      docs.map(async (a) => {
+        const author = a.authorId ? await ctx.db.get(a.authorId) : null;
+        return { ...a, author: author ? publicUser(author) : null };
+      }),
+    );
+    return hydrated.sort((a, b) => b.createdAt - a.createdAt);
+  },
+});
+
+export const adminUpsertAnnouncement = mutation({
+  args: {
+    id: v.optional(v.id("announcements")),
+    title: v.string(),
+    body: v.string(),
+    category: v.union(
+      v.literal("Announcement"),
+      v.literal("Event"),
+      v.literal("Competition"),
+      v.literal("Maintenance"),
+      v.literal("News"),
+    ),
+    pinned: v.boolean(),
+    published: v.boolean(),
+    token: v.string(),
+  },
+  handler: async (ctx, args) => {
+    await requireAdminSession(ctx, args.token);
+    if (args.id) {
+      await ctx.db.patch(args.id, {
+        title: args.title,
+        body: args.body,
+        category: args.category,
+        pinned: args.pinned,
+        published: args.published,
+      });
+      return args.id;
+    }
+    // No user is associated with password-only admin sessions.
+    return await ctx.db.insert("announcements", {
+      title: args.title,
+      body: args.body,
+      category: args.category,
+      pinned: args.pinned,
+      published: args.published,
+      createdAt: Date.now(),
+    });
+  },
+});
+
+export const adminDeleteAnnouncement = mutation({
+  args: { id: v.id("announcements"), token: v.string() },
+  handler: async (ctx, { id, token }) => {
+    await requireAdminSession(ctx, token);
     await ctx.db.delete(id);
     return true;
   },
@@ -650,9 +732,9 @@ export const deleteUpdate = mutation({
 // ---------------------------------------------------------------------------
 
 export const certificatesList = query({
-  args: {},
-  handler: async (ctx) => {
-    await requireAdmin(ctx);
+  args: { token: v.string() },
+  handler: async (ctx, { token }) => {
+    await requireAdminSession(ctx, token);
     const certs = await ctx.db.query("certificates").collect();
     const hydrated = await Promise.all(
       certs.map(async (c) => {
@@ -670,9 +752,9 @@ export const certificatesList = query({
 });
 
 export const deleteCertificate = mutation({
-  args: { id: v.id("certificates") },
-  handler: async (ctx, { id }) => {
-    await requireAdmin(ctx);
+  args: { id: v.id("certificates"), token: v.string() },
+  handler: async (ctx, { id, token }) => {
+    await requireAdminSession(ctx, token);
     await ctx.db.delete(id);
     return true;
   },
@@ -683,9 +765,9 @@ export const deleteCertificate = mutation({
 // ---------------------------------------------------------------------------
 
 export const contentSet = mutation({
-  args: { key: v.string(), value: v.any() },
-  handler: async (ctx, { key, value }) => {
-    await requireAdmin(ctx);
+  args: { key: v.string(), value: v.any(), token: v.string() },
+  handler: async (ctx, { key, value, token }) => {
+    await requireAdminSession(ctx, token);
     const existing = await ctx.db
       .query("siteContent")
       .withIndex("by_key", (q) => q.eq("key", key))
@@ -699,9 +781,9 @@ export const contentSet = mutation({
 });
 
 export const deleteContent = mutation({
-  args: { key: v.string() },
-  handler: async (ctx, { key }) => {
-    await requireAdmin(ctx);
+  args: { key: v.string(), token: v.string() },
+  handler: async (ctx, { key, token }) => {
+    await requireAdminSession(ctx, token);
     const existing = await ctx.db
       .query("siteContent")
       .withIndex("by_key", (q) => q.eq("key", key))
