@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link, useParams } from "react-router";
 import { useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
@@ -7,7 +7,11 @@ import { Award, CheckCircle2, Download, Loader2 } from "lucide-react";
 import { PageShell } from "@/components/site/PageShell";
 import { Reveal } from "@/components/site/Reveal";
 import { EmptyState } from "@/components/site/EmptyState";
-import { CertificateView } from "@/components/site/CertificateTemplate";
+import {
+  CertificateTemplate,
+  CertificateView,
+  DEFAULT_CERTIFICATE_BRANDING,
+} from "@/components/site/CertificateTemplate";
 import { Button } from "@/components/ui/button";
 import { downloadCertificatePdf } from "@/lib/certificate-pdf";
 
@@ -25,21 +29,33 @@ export default function VerifyCertificate() {
       ? `${window.location.origin}/verify/${certificateId}`
       : "";
 
-  const handleDownload = async () => {
-    if (!captureRef.current || !cert) return;
+  const handleDownload = () => {
+    if (!cert) return;
     setDownloading(true);
-    try {
-      await downloadCertificatePdf(
-        captureRef.current,
-        `ForgeX-Certificate-${cert.certificateId}.pdf`,
-      );
-      toast.success("Certificate downloaded");
-    } catch {
-      toast.error("Couldn't generate the PDF. Please try again.");
-    } finally {
-      setDownloading(false);
-    }
   };
+
+  // The offscreen capture node renders on the same commit that sets
+  // `downloading`, so trigger the export once it's in the DOM.
+  useEffect(() => {
+    if (!downloading || !cert || !captureRef.current) return;
+    let cancelled = false;
+    downloadCertificatePdf(
+      captureRef.current,
+      `ForgeX-Certificate-${cert.certificateId}.pdf`,
+    )
+      .then(() => {
+        if (!cancelled) toast.success("Certificate downloaded");
+      })
+      .catch(() => {
+        if (!cancelled) toast.error("Couldn't generate the PDF. Please try again.");
+      })
+      .finally(() => {
+        if (!cancelled) setDownloading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [downloading, cert]);
 
   if (cert === undefined) {
     return (
@@ -95,8 +111,7 @@ export default function VerifyCertificate() {
             }}
             branding={branding}
             verifyUrl={verifyUrl}
-            captureRef={captureRef}
-            className="overflow-hidden rounded-3xl border border-lime-400/25 shadow-2xl shadow-lime-400/5"
+            className="overflow-hidden rounded-3xl border border-white/15 shadow-2xl shadow-black/40"
           />
         </Reveal>
 
@@ -124,6 +139,25 @@ export default function VerifyCertificate() {
           </Link>
         </Reveal>
       </section>
+
+      {/* Offscreen full-size template used for PDF capture (no scaling, no
+          Tailwind classes — rasterizes cleanly with html2canvas) */}
+      {downloading && cert && (
+        <div aria-hidden style={{ position: "fixed", left: -10000, top: 0, zIndex: -1 }}>
+          <div ref={captureRef} style={{ width: 1280, height: 905 }}>
+            <CertificateTemplate
+              cert={{
+                certificateId: cert.certificateId,
+                studentName: cert.studentName,
+                courseTitle: cert.courseTitle,
+                issuedAt: cert.issuedAt,
+              }}
+              branding={branding ?? DEFAULT_CERTIFICATE_BRANDING}
+              verifyUrl={verifyUrl}
+            />
+          </div>
+        </div>
+      )}
     </PageShell>
   );
 }

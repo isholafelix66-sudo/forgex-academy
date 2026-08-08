@@ -1,6 +1,14 @@
 import { useEffect, useRef, useState, type Ref } from "react";
 import { QRCodeCanvas } from "qrcode.react";
-import { formatDate } from "@/lib/format";
+
+/** Day-first date, exactly like the reference design: “Awarded 8 Aug 2026”. */
+function formatDayFirst(ts: number): string {
+  return new Date(ts).toLocaleDateString(undefined, {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+  });
+}
 
 /**
  * Certificate template + responsive viewer.
@@ -57,11 +65,11 @@ function rgba(hex: string, alpha: number): string {
 }
 
 /** Small crisp check icon (stroke colored via accent). */
-function CheckIcon({ color }: { color: string }) {
+function CheckIcon({ color, size = 13 }: { color: string; size?: number }) {
   return (
     <svg
-      width="13"
-      height="13"
+      width={size}
+      height={size}
       viewBox="0 0 24 24"
       fill="none"
       stroke={color}
@@ -151,12 +159,9 @@ export function CertificateTemplate({
               display: "flex",
               alignItems: "center",
               justifyContent: "center",
-              fontSize: 32,
-              color: accent,
-              lineHeight: 1,
             }}
           >
-            ✓
+            <CheckIcon color={accent} size={34} />
           </div>
         )}
         <div
@@ -171,19 +176,6 @@ export function CertificateTemplate({
         >
           {branding.institutionName}
         </div>
-        {branding.motto ? (
-          <div
-            style={{
-              fontSize: 15,
-              fontStyle: "italic",
-              letterSpacing: "1.5px",
-              color: muted,
-              marginTop: 8,
-            }}
-          >
-            {branding.motto}
-          </div>
-        ) : null}
       </div>
 
       {/* Body */}
@@ -253,7 +245,7 @@ export function CertificateTemplate({
           {cert.courseTitle}
         </div>
         <div style={{ fontSize: 15, color: muted, marginTop: 22 }}>
-          Awarded {formatDate(cert.issuedAt)}
+          Awarded {formatDayFirst(cert.issuedAt)}
         </div>
       </div>
 
@@ -359,10 +351,9 @@ export function CertificateTemplate({
           <div
             style={{
               background: "#ffffff",
-              borderRadius: 12,
+              borderRadius: 10,
               padding: 10,
               display: "inline-block",
-              border: "1px solid rgba(255,255,255,0.25)",
             }}
           >
             <QRCodeCanvas

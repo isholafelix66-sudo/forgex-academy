@@ -9,7 +9,8 @@ import { Button } from "@/components/ui/button";
 import { PageHeader } from "@/components/dash/PageHeader";
 import { EmptyState } from "@/components/site/EmptyState";
 import {
-  CertificateView,
+  CertificateTemplate,
+  DEFAULT_CERTIFICATE_BRANDING,
   type CertificateData,
 } from "@/components/site/CertificateTemplate";
 import { downloadCertificatePdf } from "@/lib/certificate-pdf";
@@ -148,16 +149,17 @@ export default function Certificates() {
         </div>
       )}
 
-      {/* Offscreen full-size template used for PDF capture */}
+      {/* Offscreen full-size template used for PDF capture (no scaling, no
+          Tailwind classes — rasterizes cleanly with html2canvas) */}
       {downloading && (
         <div
           aria-hidden
           style={{ position: "fixed", left: -10000, top: 0, zIndex: -1 }}
         >
           <div ref={captureRef} style={{ width: 1280, height: 905 }}>
-            <CertificateView
+            <CertificateTemplate
               cert={downloading}
-              branding={branding}
+              branding={branding ?? DEFAULT_CERTIFICATE_BRANDING}
               verifyUrl={`${origin}/verify/${downloading.certificateId}`}
             />
           </div>

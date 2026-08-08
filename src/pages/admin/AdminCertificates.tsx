@@ -82,23 +82,13 @@ export default function AdminCertificates() {
           <div className="mt-5 grid gap-6 lg:grid-cols-[1fr_1.4fr]">
             {/* Editor */}
             <div className="space-y-4">
-              <div className="grid gap-4 sm:grid-cols-2">
-                <div className="space-y-2">
-                  <Label>Institution name</Label>
-                  <Input
-                    value={shown.institutionName}
-                    onChange={(e) => patch({ institutionName: e.target.value })}
-                    className="border-white/10 bg-black/20"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label>Motto / tagline</Label>
-                  <Input
-                    value={shown.motto}
-                    onChange={(e) => patch({ motto: e.target.value })}
-                    className="border-white/10 bg-black/20"
-                  />
-                </div>
+              <div className="space-y-2">
+                <Label>Institution name</Label>
+                <Input
+                  value={shown.institutionName}
+                  onChange={(e) => patch({ institutionName: e.target.value })}
+                  className="border-white/10 bg-black/20"
+                />
               </div>
 
               <div className="grid gap-4 sm:grid-cols-2">
