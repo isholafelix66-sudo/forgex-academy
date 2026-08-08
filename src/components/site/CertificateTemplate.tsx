@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type Ref } from "react";
-import { QRCodeSVG } from "qrcode.react";
+import { QRCodeCanvas } from "qrcode.react";
 import { formatDate } from "@/lib/format";
 
 /**
@@ -8,6 +8,7 @@ import { formatDate } from "@/lib/format";
  * The template is rendered at a fixed 1280×905 design size using ONLY inline
  * styles with hex colors, so it rasterizes pixel-perfectly to a PDF via
  * html2canvas (Tailwind v4 oklch tokens are deliberately avoided here).
+ * The QR code uses a <canvas> (not SVG) so html2canvas captures it natively.
  * `CertificateView` scales that design to fit any container and exposes an
  * unscaled `captureRef` node for high-resolution PDF export.
  */
@@ -55,6 +56,24 @@ function rgba(hex: string, alpha: number): string {
   return `rgba(${r}, ${g}, ${b}, ${alpha})`;
 }
 
+/** Small crisp check icon (stroke colored via accent). */
+function CheckIcon({ color }: { color: string }) {
+  return (
+    <svg
+      width="13"
+      height="13"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke={color}
+      strokeWidth="3.2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <polyline points="20 6 9 17 4 12" />
+    </svg>
+  );
+}
+
 export function CertificateTemplate({
   cert,
   branding,
@@ -65,17 +84,10 @@ export function CertificateTemplate({
   verifyUrl: string;
 }) {
   const accent = normalizeAccent(branding.accentColor);
-  const bg = "#0d0f0c"; // electric black
+  const bg = "#0b0f0e"; // electric black
   const ink = "#f4f4f5"; // off-white text
   const muted = "#9ca3af"; // muted text
-  const limeSoft = "#bef264"; // student-name accent
-
-  const corners = [
-    { top: 36, left: 36 },
-    { top: 36, right: 36 },
-    { bottom: 36, left: 36 },
-    { bottom: 36, right: 36 },
-  ];
+  const gold = "#eab308"; // yellow-gold (institution, ID)
 
   return (
     <div
@@ -90,63 +102,35 @@ export function CertificateTemplate({
         boxSizing: "border-box",
       }}
     >
-      {/* Grid texture */}
+      {/* Faint grid texture */}
       <div
         style={{
           position: "absolute",
           inset: 0,
           backgroundImage:
-            "repeating-linear-gradient(0deg, rgba(255,255,255,0.035) 0 1px, transparent 1px 52px), repeating-linear-gradient(90deg, rgba(255,255,255,0.035) 0 1px, transparent 1px 52px)",
-        }}
-      />
-      {/* Lime gradient wash */}
-      <div
-        style={{
-          position: "absolute",
-          inset: 0,
-          background: `linear-gradient(180deg, ${rgba(accent, 0.16)} 0%, rgba(13,15,12,0) 58%)`,
+            "repeating-linear-gradient(0deg, rgba(255,255,255,0.04) 0 1px, transparent 1px 54px), repeating-linear-gradient(90deg, rgba(255,255,255,0.04) 0 1px, transparent 1px 54px)",
         }}
       />
 
-      {/* Frames */}
+      {/* Thin card border */}
       <div
         style={{
           position: "absolute",
           inset: 22,
-          border: `2.5px solid ${accent}`,
-          borderRadius: 16,
+          border: "1px solid rgba(255,255,255,0.16)",
+          borderRadius: 20,
         }}
       />
-      <div
-        style={{
-          position: "absolute",
-          inset: 30,
-          border: "1px solid rgba(255,255,255,0.12)",
-          borderRadius: 10,
-        }}
-      />
-      {corners.map((c, i) => (
-        <span
-          key={i}
-          style={{
-            position: "absolute",
-            width: 13,
-            height: 13,
-            background: accent,
-            ...c,
-          }}
-        />
-      ))}
 
       {/* Brand header */}
       <div
         style={{
           position: "absolute",
-          top: 62,
+          top: 96,
           left: 0,
           right: 0,
           textAlign: "center",
-          padding: "0 120px",
+          padding: "0 140px",
         }}
       >
         {branding.logoUrl ? (
@@ -158,16 +142,16 @@ export function CertificateTemplate({
         ) : (
           <div
             style={{
-              width: 72,
-              height: 72,
+              width: 68,
+              height: 68,
               margin: "0 auto",
               borderRadius: "50%",
-              border: `3px solid ${accent}`,
+              border: `2px solid ${accent}`,
               background: rgba(accent, 0.14),
               display: "flex",
               alignItems: "center",
               justifyContent: "center",
-              fontSize: 36,
+              fontSize: 32,
               color: accent,
               lineHeight: 1,
             }}
@@ -177,51 +161,36 @@ export function CertificateTemplate({
         )}
         <div
           style={{
-            fontSize: 30,
+            fontSize: 22,
             fontWeight: 700,
-            letterSpacing: "8px",
+            letterSpacing: "6px",
             textTransform: "uppercase",
-            marginTop: 12,
-            color: ink,
+            marginTop: 16,
+            color: gold,
           }}
         >
           {branding.institutionName}
         </div>
-        <div
-          style={{
-            fontSize: 16,
-            fontStyle: "italic",
-            letterSpacing: "2px",
-            color: muted,
-            marginTop: 6,
-          }}
-        >
-          {branding.motto}
-        </div>
-      </div>
-
-      {/* Divider */}
-      <div
-        style={{
-          position: "absolute",
-          top: 236,
-          left: 240,
-          right: 240,
-          display: "flex",
-          alignItems: "center",
-          gap: 14,
-        }}
-      >
-        <div style={{ flex: 1, height: 1, background: rgba(accent, 0.55) }} />
-        <span style={{ fontSize: 15, color: accent }}>✦</span>
-        <div style={{ flex: 1, height: 1, background: rgba(accent, 0.55) }} />
+        {branding.motto ? (
+          <div
+            style={{
+              fontSize: 15,
+              fontStyle: "italic",
+              letterSpacing: "1.5px",
+              color: muted,
+              marginTop: 8,
+            }}
+          >
+            {branding.motto}
+          </div>
+        ) : null}
       </div>
 
       {/* Body */}
       <div
         style={{
           position: "absolute",
-          top: 258,
+          top: 302,
           left: 0,
           right: 0,
           textAlign: "center",
@@ -232,7 +201,7 @@ export function CertificateTemplate({
           style={{
             fontSize: 46,
             fontWeight: 700,
-            letterSpacing: "2px",
+            letterSpacing: "1px",
             color: ink,
           }}
         >
@@ -243,7 +212,7 @@ export function CertificateTemplate({
             fontSize: 19,
             fontStyle: "italic",
             color: muted,
-            marginTop: 30,
+            marginTop: 26,
           }}
         >
           This certifies that
@@ -252,8 +221,8 @@ export function CertificateTemplate({
           style={{
             fontSize: 54,
             fontWeight: 700,
-            color: limeSoft,
-            marginTop: 10,
+            color: accent,
+            marginTop: 12,
             lineHeight: 1.15,
             overflowWrap: "break-word",
           }}
@@ -262,18 +231,10 @@ export function CertificateTemplate({
         </div>
         <div
           style={{
-            width: 260,
-            height: 2,
-            background: accent,
-            margin: "18px auto 0",
-          }}
-        />
-        <div
-          style={{
             fontSize: 19,
             fontStyle: "italic",
             color: muted,
-            marginTop: 18,
+            marginTop: 16,
           }}
         >
           has successfully completed the course
@@ -281,15 +242,17 @@ export function CertificateTemplate({
         <div
           style={{
             fontSize: 30,
-            fontWeight: 600,
+            fontWeight: 700,
+            textTransform: "uppercase",
+            letterSpacing: "1px",
             color: ink,
-            marginTop: 8,
+            marginTop: 10,
             overflowWrap: "break-word",
           }}
         >
           {cert.courseTitle}
         </div>
-        <div style={{ fontSize: 15, color: muted, marginTop: 24 }}>
+        <div style={{ fontSize: 15, color: muted, marginTop: 22 }}>
           Awarded {formatDate(cert.issuedAt)}
         </div>
       </div>
@@ -298,56 +261,17 @@ export function CertificateTemplate({
       <div
         style={{
           position: "absolute",
-          bottom: 88,
-          left: 130,
-          right: 130,
+          bottom: 92,
+          left: 118,
+          right: 118,
           display: "flex",
           alignItems: "flex-end",
           justifyContent: "space-between",
           gap: 40,
         }}
       >
-        {/* Signature */}
-        <div style={{ textAlign: "center", width: 330 }}>
-          {branding.signatureUrl ? (
-            <img
-              src={branding.signatureUrl}
-              alt=""
-              style={{
-                height: 58,
-                objectFit: "contain",
-                maxWidth: 330,
-                marginBottom: 4,
-              }}
-            />
-          ) : (
-            <div style={{ height: 62 }} />
-          )}
-          <div
-            style={{
-              borderTop: "1px solid rgba(255,255,255,0.28)",
-              paddingTop: 8,
-              fontWeight: 700,
-              fontSize: 18,
-              color: ink,
-            }}
-          >
-            {branding.signatoryName || "Signature"}
-          </div>
-          <div
-            style={{
-              fontSize: 13,
-              color: muted,
-              marginTop: 3,
-              letterSpacing: "1px",
-            }}
-          >
-            {branding.signatoryTitle}
-          </div>
-        </div>
-
-        {/* Certificate ID */}
-        <div style={{ textAlign: "center", width: 330 }}>
+        {/* Certificate ID + Verified online */}
+        <div style={{ width: 320 }}>
           <div
             style={{
               fontSize: 11,
@@ -364,25 +288,89 @@ export function CertificateTemplate({
               marginTop: 6,
               fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace",
               fontSize: 16,
-              color: limeSoft,
+              color: gold,
             }}
           >
             {cert.certificateId}
           </div>
+          <div
+            style={{
+              marginTop: 14,
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 6,
+              padding: "6px 13px",
+              borderRadius: 999,
+              background: rgba(accent, 0.12),
+              border: `1px solid ${rgba(accent, 0.4)}`,
+              fontSize: 12,
+              fontWeight: 600,
+              letterSpacing: "0.3px",
+              color: accent,
+            }}
+          >
+            <CheckIcon color={accent} /> Verified online
+          </div>
         </div>
 
+        {/* Signature (only when configured) */}
+        {(branding.signatureUrl || branding.signatoryName) && (
+          <div style={{ textAlign: "center", width: 330 }}>
+            {branding.signatureUrl ? (
+              <img
+                src={branding.signatureUrl}
+                alt=""
+                style={{
+                  height: 54,
+                  objectFit: "contain",
+                  maxWidth: 330,
+                  marginBottom: 4,
+                }}
+              />
+            ) : (
+              <div style={{ height: 58 }} />
+            )}
+            <div
+              style={{
+                borderTop: "1px solid rgba(255,255,255,0.25)",
+                paddingTop: 8,
+                fontWeight: 700,
+                fontSize: 16,
+                color: ink,
+              }}
+            >
+              {branding.signatoryName}
+            </div>
+            <div
+              style={{
+                fontSize: 12,
+                color: muted,
+                marginTop: 3,
+                letterSpacing: "1px",
+              }}
+            >
+              {branding.signatoryTitle}
+            </div>
+          </div>
+        )}
+
         {/* QR */}
-        <div style={{ textAlign: "center" }}>
+        <div>
           <div
             style={{
               background: "#ffffff",
               borderRadius: 12,
               padding: 10,
               display: "inline-block",
-              border: `1px solid ${rgba(accent, 0.4)}`,
+              border: "1px solid rgba(255,255,255,0.25)",
             }}
           >
-            <QRCodeSVG value={verifyUrl} size={112} fgColor="#0a0a0a" bgColor="#ffffff" />
+            <QRCodeCanvas
+              value={verifyUrl}
+              size={104}
+              fgColor="#0a0a0a"
+              bgColor="#ffffff"
+            />
           </div>
         </div>
       </div>

@@ -3,7 +3,7 @@ import { Link, useParams } from "react-router";
 import { useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import { toast } from "sonner";
-import { Award, Download, Loader2, ShieldCheck } from "lucide-react";
+import { Award, CheckCircle2, Download, Loader2 } from "lucide-react";
 import { PageShell } from "@/components/site/PageShell";
 import { Reveal } from "@/components/site/Reveal";
 import { EmptyState } from "@/components/site/EmptyState";
@@ -75,7 +75,7 @@ export default function VerifyCertificate() {
       <section className="mx-auto max-w-5xl px-4 pb-24 pt-14 sm:px-6">
         <Reveal className="text-center">
           <span className="inline-flex items-center gap-2 rounded-full border border-lime-400/30 bg-lime-400/10 px-4 py-1.5 text-xs font-semibold text-lime-300">
-            <ShieldCheck className="size-3.5" /> Official verification
+            <CheckCircle2 className="size-3.5" /> Official verification
           </span>
           <h1 className="font-display mt-5 text-4xl font-bold tracking-tight">
             This certificate is <span className="text-gradient">genuine</span>
