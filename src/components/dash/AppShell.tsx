@@ -4,6 +4,9 @@ import { LogOut, Menu, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/hooks/use-auth";
+import { useAdminSession } from "@/hooks/use-admin-session";
+import { useQuery } from "convex/react";
+import { api } from "@/convex/_generated/api";
 import { Avatar } from "@/components/site/Avatar";
 import logo from "@/assets/logo.svg";
 
@@ -33,11 +36,25 @@ export function AppShell({
   banner?: ReactNode;
 }) {
   const { user, signOut } = useAuth();
+  const { isAdmin } = useAdminSession();
+  const siteContent = useQuery(api.public.siteContentAll);
   const navigate = useNavigate();
   const location = useLocation();
   const [open, setOpen] = useState(false);
 
   useEffect(() => setOpen(false), [location.pathname]);
+
+  // Password-gated admin sessions have no user account — fall back to the
+  // admin profile stored in site content so the header never says "Guest".
+  const adminProfile = (siteContent?.adminProfile ?? {}) as {
+    name?: string;
+    title?: string;
+    image?: string;
+  };
+  const hasAccount = !!user;
+  const identityName = user?.name ?? (isAdmin ? adminProfile.name || "Administrator" : "Guest");
+  const identityImage = user?.image ?? (isAdmin ? adminProfile.image : undefined);
+  const identityRole = user?.role ?? (isAdmin ? adminProfile.title || "admin" : "guest");
 
   const handleSignOut = async () => {
     await signOut();
@@ -128,16 +145,18 @@ export function AppShell({
 
       <div className="border-t border-white/8 p-3">
         <div className="flex items-center gap-3 rounded-xl px-2 py-2">
-          <Avatar name={user?.name ?? "Guest"} image={user?.image} className="size-9" />
+          <Avatar name={identityName} image={identityImage} className="size-9" />
           <div className="min-w-0 flex-1">
-            <p className="truncate text-sm font-semibold">{user?.name || "Guest"}</p>
+            <p className="truncate text-sm font-semibold">{identityName}</p>
             <p className="truncate text-xs capitalize text-muted-foreground">
-              {user?.role ?? "guest"}
+              {identityRole}
             </p>
           </div>
-          <Button variant="ghost" size="icon" onClick={handleSignOut} title="Sign out">
-            <LogOut className="size-4" />
-          </Button>
+          {hasAccount && (
+            <Button variant="ghost" size="icon" onClick={handleSignOut} title="Sign out">
+              <LogOut className="size-4" />
+            </Button>
+          )}
         </div>
       </div>
     </div>
@@ -184,9 +203,13 @@ export function AppShell({
                 </Button>
               </Link>
             )}
-            <Link to="/dashboard/profile">
-              <Avatar name={user?.name ?? "Guest"} image={user?.image} className="size-9" />
-            </Link>
+            {hasAccount ? (
+              <Link to="/dashboard/profile">
+                <Avatar name={identityName} image={identityImage} className="size-9" />
+              </Link>
+            ) : (
+              <Avatar name={identityName} image={identityImage} className="size-9" />
+            )}
           </div>
         </header>
 

@@ -1,4 +1,5 @@
 import { getAuthUserId } from "@convex-dev/auth/server";
+import { internal } from "./_generated/api";
 import { internalQuery, mutation, query, QueryCtx } from "./_generated/server";
 import { v } from "convex/values";
 import { ROLES, socialsValidator } from "./schema";
@@ -172,17 +173,43 @@ export const saveTutorApplication = mutation({
       reviewNote: undefined,
     };
 
-    if (existing) {
-      await ctx.db.patch(existing._id, { ...base, status: nextStatus });
-      if (submit) {
-        await notify(ctx, {
-          userId: user._id,
-          title: "Application submitted",
-          body: "Your tutor application is in for review. You'll be notified when a decision is made.",
-          type: "tutor",
-          link: "/become-tutor",
+    const confirmSubmitted = async () => {
+      await notify(ctx, {
+        userId: user._id,
+        title: "Application submitted",
+        body: "Your tutor application is in for review. Expect a decision within 24 hours or less — we'll email you as soon as an admin decides.",
+        type: "tutor",
+        link: "/become-tutor",
+      });
+      if (fields.email) {
+        const site = (process.env.SITE_URL ?? "https://forgex.academy").replace(/\/$/, "");
+        await ctx.scheduler.runAfter(0, internal.email.sendEmail, {
+          to: fields.email,
+          subject: "We received your tutor application 📬",
+          html: `
+            <div style="background:#0d0f0c;color:#e7e5e4;font-family:Segoe UI,Arial,sans-serif;padding:32px 16px">
+              <div style="max-width:560px;margin:0 auto;background:#14170f;border:1px solid #2a2e22;border-radius:16px;overflow:hidden">
+                <div style="background:#a3e635;padding:20px 28px"><p style="margin:0;color:#0d0f0c;font-weight:800;font-size:18px">⚡ ForgeX Academy</p></div>
+                <div style="padding:28px">
+                  <p style="margin:0 0 16px;font-size:22px;font-weight:700;color:#a3e635">Application received ✓</p>
+                  <p style="margin:0 0 10px;font-size:14px;line-height:1.6;color:#d6d3d1">Hi ${fields.fullName},</p>
+                  <p style="margin:0 0 10px;font-size:14px;line-height:1.6;color:#d6d3d1">Thanks for applying to teach on ForgeX Academy. Your application is now under review.</p>
+                  <p style="margin:0 0 10px;font-size:14px;line-height:1.6;color:#d6d3d1">Most decisions are made within <b>24 hours or less</b> — we'll email you the moment an admin approves, verifies or needs more from you.</p>
+                  <div style="margin-top:24px">
+                    <a href="${site}/become-tutor" style="display:inline-block;background:#a3e635;color:#0d0f0c;text-decoration:none;font-weight:700;font-size:14px;padding:12px 22px;border-radius:10px">Check application status</a>
+                  </div>
+                </div>
+                <div style="padding:16px 28px;border-top:1px solid #2a2e22;font-size:12px;color:#78716c">You're receiving this because you applied to teach on ForgeX Academy.</div>
+              </div>
+            </div>`,
+          text: `Hi ${fields.fullName},\n\nThanks for applying to teach on ForgeX Academy. Your application is now under review.\n\nMost decisions are made within 24 hours or less — we'll email you the moment an admin approves, verifies or needs more from you.\n\nCheck application status: ${site}/become-tutor`,
         });
       }
+    };
+
+    if (existing) {
+      await ctx.db.patch(existing._id, { ...base, status: nextStatus });
+      if (submit) await confirmSubmitted();
       return existing._id;
     }
 
@@ -191,15 +218,7 @@ export const saveTutorApplication = mutation({
       status: nextStatus,
       wasVerified: false,
     });
-    if (submit) {
-      await notify(ctx, {
-        userId: user._id,
-        title: "Application submitted",
-        body: "Your tutor application is in for review. You'll be notified when a decision is made.",
-        type: "tutor",
-        link: "/become-tutor",
-      });
-    }
+    if (submit) await confirmSubmitted();
     return id;
   },
 });

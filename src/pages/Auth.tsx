@@ -22,7 +22,6 @@ import {
   Loader2,
   Mail,
   ShieldCheck,
-  Sparkles,
   UserPlus,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -121,18 +120,6 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
       console.error("OTP verification error:", err);
       setError("That code isn't right. Double-check and try again.");
       setOtp("");
-      setIsLoading(false);
-    }
-  };
-
-  const handleGuest = async () => {
-    setIsLoading(true);
-    setError(null);
-    try {
-      await signIn("anonymous");
-    } catch (err) {
-      console.error("Guest login error:", err);
-      setError("Guest sign-in failed. Try email instead.");
       setIsLoading(false);
     }
   };
@@ -260,28 +247,6 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
                     )}
                   </div>
                 )}
-
-                <div className="relative py-1">
-                  <div className="absolute inset-0 flex items-center">
-                    <span className="w-full border-t border-white/10" />
-                  </div>
-                  <div className="relative flex justify-center">
-                    <span className="bg-card px-2 text-xs uppercase tracking-wider text-muted-foreground">
-                      Or
-                    </span>
-                  </div>
-                </div>
-
-                <Button
-                  type="button"
-                  variant="outline"
-                  className="w-full border-white/10"
-                  onClick={handleGuest}
-                  disabled={isLoading}
-                >
-                  <Sparkles className="mr-2 size-4 text-lime-300" />
-                  Continue as guest
-                </Button>
 
                 {mode !== "reset" && (
                   <button

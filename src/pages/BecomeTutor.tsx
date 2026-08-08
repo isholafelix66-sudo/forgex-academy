@@ -198,7 +198,9 @@ export default function BecomeTutor() {
           </p>
           <Button
             className="mt-6 gap-2 bg-lime-400 font-semibold text-black hover:bg-lime-300"
-            onClick={() => navigate("/auth?mode=signup")}
+            onClick={() =>
+              navigate("/auth?mode=signup&returnTo=/become-tutor")
+            }
           >
             Sign in to apply <ArrowRight className="size-4" />
           </Button>
@@ -238,18 +240,18 @@ export default function BecomeTutor() {
             Application under review
           </h1>
           <p className="mt-3 text-muted-foreground">
-            Thanks for applying! Our admin team will verify your tutor account
-            shortly. The tutor dashboard unlocks automatically once you're
-            approved — we'll notify you.
+            Thanks for applying! Your application is still under review — most
+            decisions are made within 24 hours or less. Watch your inbox: we'll
+            email you the moment an admin decides.
           </p>
           <div className="mx-auto mt-8 max-w-md rounded-2xl border border-white/10 bg-card p-5 text-left">
             <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
               What happens next
             </p>
             <ul className="mt-3 space-y-2.5 text-sm text-muted-foreground">
-              <li className="flex gap-2"><ShieldCheck className="mt-0.5 size-4 shrink-0 text-lime-400" /> An admin reviews your application</li>
-              <li className="flex gap-2"><ShieldCheck className="mt-0.5 size-4 shrink-0 text-lime-400" /> Your role switches to verified tutor</li>
-              <li className="flex gap-2"><ShieldCheck className="mt-0.5 size-4 shrink-0 text-lime-400" /> You can create courses & start teaching</li>
+              <li className="flex gap-2"><Clock className="mt-0.5 size-4 shrink-0 text-amber-300" /> An admin reviews your application — expect an answer within 24 hours or less</li>
+              <li className="flex gap-2"><ShieldCheck className="mt-0.5 size-4 shrink-0 text-lime-400" /> You're emailed the decision (approved, verified or needs changes)</li>
+              <li className="flex gap-2"><ShieldCheck className="mt-0.5 size-4 shrink-0 text-lime-400" /> Once verified, the tutor dashboard unlocks automatically</li>
             </ul>
           </div>
           <Link to="/dashboard" className="mt-8 inline-block text-sm text-lime-300 hover:underline">

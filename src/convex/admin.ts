@@ -1,3 +1,4 @@
+import { internal } from "./_generated/api";
 import { mutation, query, MutationCtx } from "./_generated/server";
 import { Id } from "./_generated/dataModel";
 import { v } from "convex/values";
@@ -346,6 +347,94 @@ export const applicationDetail = query({
   },
 });
 
+const SITE_URL = process.env.SITE_URL ?? "https://forgex.academy";
+
+/** Build the transactional email body for an application decision. */
+function decisionEmail(
+  action: string,
+  fullName: string,
+  reason?: string,
+): { subject: string; html: string; text: string } | null {
+  const site = SITE_URL.replace(/\/$/, "");
+  const shell = (heading: string, lines: string[], cta: { label: string; href: string }) => `
+    <div style="background:#0d0f0c;color:#e7e5e4;font-family:Segoe UI,Arial,sans-serif;padding:32px 16px">
+      <div style="max-width:560px;margin:0 auto;background:#14170f;border:1px solid #2a2e22;border-radius:16px;overflow:hidden">
+        <div style="background:#a3e635;padding:20px 28px">
+          <p style="margin:0;color:#0d0f0c;font-weight:800;font-size:18px">⚡ ForgeX Academy</p>
+        </div>
+        <div style="padding:28px">
+          <p style="margin:0 0 16px;font-size:22px;font-weight:700;color:#a3e635">${heading}</p>
+          ${lines.map((l) => `<p style="margin:0 0 10px;font-size:14px;line-height:1.6;color:#d6d3d1">${l}</p>`).join("")}
+          <div style="margin-top:24px">
+            <a href="${cta.href}" style="display:inline-block;background:#a3e635;color:#0d0f0c;text-decoration:none;font-weight:700;font-size:14px;padding:12px 22px;border-radius:10px">${cta.label}</a>
+          </div>
+        </div>
+        <div style="padding:16px 28px;border-top:1px solid #2a2e22;font-size:12px;color:#78716c">
+          You're receiving this because you applied to teach on ForgeX Academy.
+        </div>
+      </div>
+    </div>`;
+  const plain = (lines: string[], cta: { label: string; href: string }) =>
+    `${lines.join("\n\n")}\n\n${cta.label}: ${cta.href}`;
+
+  switch (action) {
+    case "approve":
+      return {
+        subject: "Your ForgeX Academy tutor application was approved 🎉",
+        html: shell("Application approved 🎉", [
+          `Hi ${fullName},`, "Our admin team approved your application.",
+          "The tutor dashboard unlocks once your account is verified — most verifications happen within 24 hours or less. We'll email you as soon as it's done.",
+        ], { label: "View application status", href: `${site}/become-tutor` }),
+        text: plain([`Hi ${fullName},`, "Our admin team approved your application.", "The tutor dashboard unlocks once your account is verified — most verifications happen within 24 hours or less."], { label: "View application status", href: `${site}/become-tutor` }),
+      };
+    case "verify":
+      return {
+        subject: "You're now a verified ForgeX tutor ✓",
+        html: shell("You're now a verified tutor ✓", [
+          `Congratulations ${fullName},`, "An admin verified your account. Your verified badge is live and the tutor dashboard is unlocked — you can start creating courses right away.",
+        ], { label: "Open your tutor dashboard", href: `${site}/tutor` }),
+        text: plain([`Congratulations ${fullName},`, "An admin verified your account. Your verified badge is live and the tutor dashboard is unlocked."], { label: "Open your tutor dashboard", href: `${site}/tutor` }),
+      };
+    case "reject":
+      return {
+        subject: "Update on your tutor application",
+        html: shell("Application not approved", [
+          `Hi ${fullName},`, "Unfortunately your application could not be approved at this time.",
+          reason ? `Reason: ${reason}` : "", "You're welcome to re-apply with more detail — we'd love to have you teach.",
+        ], { label: "Review & re-apply", href: `${site}/become-tutor` }),
+        text: plain([`Hi ${fullName},`, "Unfortunately your application could not be approved at this time.", reason ? `Reason: ${reason}` : "", "You're welcome to re-apply with more detail."], { label: "Review & re-apply", href: `${site}/become-tutor` }),
+      };
+    case "request-info":
+      return {
+        subject: "More information needed for your tutor application",
+        html: shell("More information required", [
+          `Hi ${fullName},`, "Before we can verify your account we need a little more from you.",
+          reason ? `What's needed: ${reason}` : "", "Please update your application and resubmit — we'll review it within 24 hours or less.",
+        ], { label: "Update your application", href: `${site}/become-tutor` }),
+        text: plain([`Hi ${fullName},`, "Before we can verify your account we need a little more from you.", reason ? `What's needed: ${reason}` : "", "Please update your application and resubmit."], { label: "Update your application", href: `${site}/become-tutor` }),
+      };
+    case "suspend":
+      return {
+        subject: "Your tutor account was suspended",
+        html: shell("Account suspended", [
+          `Hi ${fullName},`, "Your tutor account was suspended and dashboard access has been revoked.",
+          reason ? `Reason: ${reason}` : "", "If you believe this is a mistake, contact the ForgeX support team.",
+        ], { label: "Learn more", href: `${site}/become-tutor` }),
+        text: plain([`Hi ${fullName},`, "Your tutor account was suspended and dashboard access has been revoked.", reason ? `Reason: ${reason}` : ""], { label: "Learn more", href: `${site}/become-tutor` }),
+      };
+    case "reactivate":
+      return {
+        subject: "Your tutor account is back ✓",
+        html: shell("Account reactivated", [
+          `Welcome back ${fullName}!`, "Your tutor account has been reactivated and your dashboard access is restored.",
+        ], { label: "Open your tutor dashboard", href: `${site}/tutor` }),
+        text: plain([`Welcome back ${fullName}!`, "Your tutor account has been reactivated and your dashboard access is restored."], { label: "Open your tutor dashboard", href: `${site}/tutor` }),
+      };
+    default:
+      return null;
+  }
+}
+
 /**
  * Admin review actions. Admins VERIFY/REVIEW — they never edit the
  * application data itself.
@@ -476,6 +565,19 @@ export const reviewTutorApplication = mutation({
       type: "tutor",
       link: messages[action].link,
     });
+
+    // Email the decision to the applicant (async — sending happens in an action).
+    if (app.email) {
+      const mail = decisionEmail(action, app.fullName, reason);
+      if (mail) {
+        await ctx.scheduler.runAfter(0, internal.email.sendEmail, {
+          to: app.email,
+          subject: mail.subject,
+          html: mail.html,
+          text: mail.text,
+        });
+      }
+    }
 
     await audit(ctx, undefined, tutorId, action, `Tutor: ${app.fullName}`, reason);
     return true;

@@ -16,6 +16,7 @@ import {
   PenSquare,
   ScrollText,
   ShieldAlert,
+  UserCircle,
   Users,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -148,6 +149,12 @@ export default function AdminShell() {
         { to: "/admin/form-builder", label: "Tutor registration form", icon: <ClipboardList className="size-4" /> },
         { to: "/admin/certificates", label: "Certificates", icon: <Award className="size-4" /> },
         { to: "/admin/audit", label: "Audit log", icon: <ScrollText className="size-4" /> },
+      ],
+    },
+    {
+      label: "Account",
+      items: [
+        { to: "/admin/profile", label: "Admin profile", icon: <UserCircle className="size-4" /> },
       ],
     },
   ];

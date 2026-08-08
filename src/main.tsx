@@ -69,6 +69,7 @@ const AdminContent = lazy(() => import("./pages/admin/AdminContent.tsx"));
 const AdminMedia = lazy(() => import("./pages/admin/AdminMedia.tsx"));
 const AdminFormBuilder = lazy(() => import("./pages/admin/AdminFormBuilder.tsx"));
 const AdminAudit = lazy(() => import("./pages/admin/AdminAudit.tsx"));
+const AdminProfile = lazy(() => import("./pages/admin/AdminProfile.tsx"));
 
 // Simple loading fallback for route transitions
 function RouteLoading() {
@@ -250,6 +251,7 @@ createRoot(document.getElementById("root")!).render(
                 <Route path="media" element={<AdminMedia />} />
                 <Route path="form-builder" element={<AdminFormBuilder />} />
                 <Route path="audit" element={<AdminAudit />} />
+                <Route path="profile" element={<AdminProfile />} />
               </Route>
 
               <Route path="*" element={<NotFound />} />

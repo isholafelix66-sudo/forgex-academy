@@ -73,7 +73,7 @@ export function RequireTutor({ children }: { children: ReactNode }) {
       <GateScreen
         icon={<Clock className="size-7" />}
         title="Tutor verification pending"
-        body="Your tutor account is still under review by our admin team. The Tutor Dashboard unlocks as soon as you're verified — you'll get a notification."
+        body="Your tutor account is still under review — most decisions are made within 24 hours or less. The Tutor Dashboard unlocks as soon as an admin verifies you, and we'll email you the decision."
       >
         <Link to="/dashboard">
           <Button variant="outline">Back to dashboard</Button>
@@ -90,7 +90,7 @@ export function RequireTutor({ children }: { children: ReactNode }) {
       <GateScreen
         icon={<Clock className="size-7" />}
         title="Application under review"
-        body="You've applied to become a tutor. An admin will verify your account soon — the Tutor Dashboard unlocks automatically once approved."
+        body="Your application is under review — check back within the next 24 hours or less. An admin will verify your account, and we'll email you the moment a decision is made. The Tutor Dashboard unlocks automatically once verified."
       >
         <Link to="/dashboard">
           <Button variant="outline">Back to dashboard</Button>
