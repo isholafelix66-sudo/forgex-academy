@@ -174,6 +174,8 @@ const schema = defineSchema(
       durationMinutes: v.number(),
       videoUrl: v.optional(v.string()),
       videoType: v.optional(v.union(v.literal("youtube"), v.literal("mp4"))),
+      muxAssetId: v.optional(v.string()),
+      muxPlaybackId: v.optional(v.string()),
       notes: v.string(),
       transcript: v.string(),
       resources: v.array(resourceValidator),

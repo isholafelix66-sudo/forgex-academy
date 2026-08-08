@@ -259,6 +259,7 @@ export default function Learn() {
               <VideoPlayer
                 url={activeLesson.videoUrl}
                 type={activeLesson.videoType}
+                muxPlaybackId={activeLesson.muxPlaybackId}
                 title={activeLesson.title}
               />
 

@@ -1,9 +1,11 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router";
-import { useMutation, useQuery } from "convex/react";
+import { useAction, useMutation, useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
+import MuxUploader from "@mux/mux-uploader-react";
 import {
   ArrowLeft,
+  CloudUpload,
   FileText,
   ListChecks,
   Loader2,
@@ -11,6 +13,8 @@ import {
   Plus,
   Save,
   Trash2,
+  Video,
+  X,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -39,6 +43,8 @@ type LessonDraft = {
   durationMinutes: number;
   videoUrl: string;
   videoType: "youtube" | "mp4";
+  muxAssetId?: string;
+  muxPlaybackId?: string;
   notes: string;
   transcript: string;
   resources: Resource[];
@@ -321,8 +327,86 @@ function LessonsTab({ courseId }: { courseId: string }) {
   const lessons = useQuery(api.public.lessonsByCourse, { courseId: courseId as never });
   const upsertLesson = useMutation(api.tutor.upsertLesson);
   const deleteLesson = useMutation(api.tutor.deleteLesson);
+  const createUpload = useAction(api.mux.createUpload);
+  const getPlaybackId = useAction(api.mux.getPlaybackId);
   const [draft, setDraft] = useState<LessonDraft | null>(null);
   const [saving, setSaving] = useState(false);
+
+  // Mux direct-upload flow state
+  const [uploadUrl, setUploadUrl] = useState<string | null>(null);
+  const [uploadId, setUploadId] = useState<string | null>(null);
+  const [uploading, setUploading] = useState(false);
+  const [processing, setProcessing] = useState(false);
+  const [uploadError, setUploadError] = useState<string | null>(null);
+  const uploaderRef = useRef<HTMLElement | null>(null);
+
+  // Close upload state when the dialog closes
+  useEffect(() => {
+    if (!draft) {
+      setUploadUrl(null);
+      setUploadId(null);
+      setUploading(false);
+      setProcessing(false);
+      setUploadError(null);
+    }
+  }, [draft]);
+
+  const startUpload = async () => {
+    setUploadError(null);
+    setProcessing(false);
+    setUploading(true);
+    try {
+      const res = await createUpload({
+        title: draft?.title || "Lesson video",
+        corsOrigin: window.location.origin,
+      });
+      setUploadUrl(res.uploadUrl);
+      setUploadId(res.uploadId);
+    } catch (err) {
+      setUploadError(
+        err instanceof Error ? err.message : "Could not start the upload.",
+      );
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  // Once the upload completes, poll Mux until the asset is playable, then
+  // attach the playback id to the lesson draft.
+  const onUploadSuccess = async (e: Event) => {
+    const detail = (e as CustomEvent).detail as { uploadId?: string } | undefined;
+    const id = detail?.uploadId ?? uploadId;
+    if (!id) return;
+    setUploading(false);
+    setProcessing(true);
+    const deadline = Date.now() + 10 * 60 * 1000; // give up after 10 min
+    while (Date.now() < deadline) {
+      try {
+        const info = await getPlaybackId({ uploadId: id });
+        if (info?.playbackId) {
+          setDraft((d) =>
+            d
+              ? {
+                  ...d,
+                  muxAssetId: info.assetId,
+                  muxPlaybackId: info.playbackId,
+                  videoUrl: "",
+                  videoType: "mp4",
+                }
+              : d,
+          );
+          setProcessing(false);
+          setUploadUrl(null);
+          return;
+        }
+      } catch {
+        // transient — keep polling
+      }
+      await new Promise((r) => setTimeout(r, 5000));
+    }
+    setProcessing(false);
+    setUploadError("Mux is still processing the video. Save the lesson and check back later, or re-open this dialog to retry.");
+  };
 
   const open = (l?: NonNullable<typeof lessons>[number]) => {
     setDraft(
@@ -334,6 +418,8 @@ function LessonsTab({ courseId }: { courseId: string }) {
             durationMinutes: l.durationMinutes,
             videoUrl: l.videoUrl ?? "",
             videoType: (l.videoType as "youtube" | "mp4") ?? "youtube",
+            muxAssetId: l.muxAssetId ?? undefined,
+            muxPlaybackId: l.muxPlaybackId ?? undefined,
             notes: l.notes,
             transcript: l.transcript,
             resources: l.resources,
@@ -353,6 +439,8 @@ function LessonsTab({ courseId }: { courseId: string }) {
       durationMinutes: Number(draft.durationMinutes) || 0,
       videoUrl: draft.videoUrl || undefined,
       videoType: draft.videoType,
+      muxAssetId: draft.muxAssetId,
+      muxPlaybackId: draft.muxPlaybackId,
       notes: draft.notes,
       transcript: draft.transcript,
       resources: draft.resources.filter((r) => r.name && r.url),
@@ -421,16 +509,95 @@ function LessonsTab({ courseId }: { courseId: string }) {
                   <Input type="number" value={draft.durationMinutes} onChange={(e) => setDraft({ ...draft, durationMinutes: Number(e.target.value) })} className="border-white/10 bg-black/20" />
                 </div>
                 <div className="space-y-2">
+                  <Label>Video source</Label>
+                  <div className="flex h-10 items-center gap-2 rounded-xl border border-white/10 bg-black/20 px-3 text-xs text-muted-foreground">
+                    {draft.muxPlaybackId ? (
+                      <><Video className="size-3.5 text-lime-300" /> Mux stream</>
+                    ) : (
+                      <>{draft.videoType === "youtube" ? "YouTube" : "MP4 URL"} · below</>
+                    )}
+                  </div>
+                </div>
+              </div>
+              <div className="rounded-xl border border-lime-400/20 bg-lime-400/5 p-4">
+                <div className="flex items-center gap-2">
+                  <Video className="size-4 text-lime-300" />
+                  <p className="text-sm font-semibold">Mux-hosted video</p>
+                  {draft.muxPlaybackId && (
+                    <span className="ml-auto inline-flex items-center gap-1 rounded-full border border-lime-400/30 bg-lime-400/10 px-2 py-0.5 text-[11px] font-semibold text-lime-300">
+                      <CloudUpload className="size-3" /> Uploaded
+                    </span>
+                  )}
+                </div>
+                <p className="mt-1.5 text-xs leading-relaxed text-muted-foreground">
+                  Upload an MP4/MOV straight from this browser. Mux transcodes and
+                  streams it with adaptive bitrate — no storage hosting needed.
+                </p>
+
+                {draft.muxPlaybackId ? (
+                  <div className="mt-3 flex items-center gap-2 text-xs text-lime-300/90">
+                    <span className="truncate font-mono">playback: {draft.muxPlaybackId}</span>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="ml-auto h-7 gap-1 text-muted-foreground hover:text-rose-300"
+                      onClick={() =>
+                        setDraft({ ...draft, muxAssetId: undefined, muxPlaybackId: undefined })
+                      }
+                    >
+                      <X className="size-3.5" /> Remove
+                    </Button>
+                  </div>
+                ) : uploadUrl ? (
+                  <div className="mt-3">
+                    <MuxUploader
+                      ref={uploaderRef as never}
+                      endpoint={uploadUrl}
+                      onSuccess={onUploadSuccess}
+                      className="w-full"
+                    />
+                    {processing && (
+                      <p className="mt-2 flex items-center gap-2 text-xs text-lime-300">
+                        <Loader2 className="size-3.5 animate-spin" /> Upload complete — Mux is
+                        processing the video…
+                      </p>
+                    )}
+                  </div>
+                ) : (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="mt-3 gap-1.5 border-lime-400/30 text-lime-300"
+                    onClick={() => void startUpload()}
+                    disabled={uploading}
+                  >
+                    {uploading ? (
+                      <Loader2 className="size-3.5 animate-spin" />
+                    ) : (
+                      <CloudUpload className="size-3.5" />
+                    )}
+                    {uploading ? "Preparing upload…" : "Upload video with Mux"}
+                  </Button>
+                )}
+                {uploadError && (
+                  <p className="mt-2 rounded-lg border border-rose-400/25 bg-rose-400/8 p-2.5 text-xs text-rose-300">
+                    {uploadError}
+                  </p>
+                )}
+              </div>
+
+              <div className="grid grid-cols-[1fr_130px] gap-3 items-end">
+                <div className="space-y-2">
+                  <Label>Video URL (YouTube or MP4)</Label>
+                  <Input value={draft.videoUrl} onChange={(e) => setDraft({ ...draft, videoUrl: e.target.value })} placeholder="https://youtube.com/watch?v=… or https://…/lesson.mp4" className="border-white/10 bg-black/20" />
+                </div>
+                <div className="space-y-2">
                   <Label>Video type</Label>
                   <select value={draft.videoType} onChange={(e) => setDraft({ ...draft, videoType: e.target.value as "youtube" | "mp4" })} className="h-10 w-full rounded-xl border border-white/10 bg-black/20 px-3 text-sm outline-none">
                     <option value="youtube">YouTube</option>
                     <option value="mp4">MP4 file</option>
                   </select>
                 </div>
-              </div>
-              <div className="space-y-2">
-                <Label>Video URL</Label>
-                <Input value={draft.videoUrl} onChange={(e) => setDraft({ ...draft, videoUrl: e.target.value })} placeholder="https://youtube.com/watch?v=… or https://…/lesson.mp4" className="border-white/10 bg-black/20" />
               </div>
               <div className="space-y-2">
                 <Label>Lesson notes</Label>

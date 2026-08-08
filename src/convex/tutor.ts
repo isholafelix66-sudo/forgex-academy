@@ -302,6 +302,8 @@ export const upsertLesson = mutation({
     durationMinutes: v.number(),
     videoUrl: v.optional(v.string()),
     videoType: v.optional(v.union(v.literal("youtube"), v.literal("mp4"))),
+    muxAssetId: v.optional(v.string()),
+    muxPlaybackId: v.optional(v.string()),
     notes: v.string(),
     transcript: v.string(),
     resources: v.array(resourceValidator),
@@ -316,6 +318,8 @@ export const upsertLesson = mutation({
         durationMinutes: args.durationMinutes,
         videoUrl: args.videoUrl,
         videoType: args.videoType,
+        muxAssetId: args.muxAssetId,
+        muxPlaybackId: args.muxPlaybackId,
         notes: args.notes,
         transcript: args.transcript,
         resources: args.resources,
@@ -329,10 +333,26 @@ export const upsertLesson = mutation({
       durationMinutes: args.durationMinutes,
       videoUrl: args.videoUrl,
       videoType: args.videoType,
+      muxAssetId: args.muxAssetId,
+      muxPlaybackId: args.muxPlaybackId,
       notes: args.notes,
       transcript: args.transcript,
       resources: args.resources,
     });
+  },
+});
+
+/** Attach a finished Mux upload (asset + playback id) to an existing lesson. */
+export const setLessonMux = mutation({
+  args: {
+    lessonId: v.id("lessons"),
+    muxAssetId: v.string(),
+    muxPlaybackId: v.string(),
+  },
+  handler: async (ctx, { lessonId, muxAssetId, muxPlaybackId }) => {
+    await requireTutor(ctx);
+    await ctx.db.patch(lessonId, { muxAssetId, muxPlaybackId });
+    return true;
   },
 });
 

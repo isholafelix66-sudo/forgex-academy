@@ -1,5 +1,5 @@
 import { getAuthUserId } from "@convex-dev/auth/server";
-import { mutation, query, QueryCtx } from "./_generated/server";
+import { internalQuery, mutation, query, QueryCtx } from "./_generated/server";
 import { v } from "convex/values";
 import { ROLES, socialsValidator } from "./schema";
 import { notify, requireUser, requireUserDoc } from "./lib";
@@ -22,6 +22,16 @@ export const getCurrentUser = async (ctx: QueryCtx) => {
   if (userId === null) return null;
   return await ctx.db.get(userId);
 };
+
+/** Internal query used by actions that need the caller's role/verified flags. */
+export const internalCurrentUser = internalQuery({
+  args: {},
+  handler: async (ctx) => {
+    const userId = await getAuthUserId(ctx);
+    if (userId === null) return null;
+    return await ctx.db.get(userId);
+  },
+});
 
 /** First sign-in setup: assign default role, capture name, mark onboarded. */
 export const initializeUser = mutation({

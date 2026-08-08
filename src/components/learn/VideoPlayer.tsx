@@ -1,4 +1,5 @@
 import { PlayCircle } from "lucide-react";
+import MuxPlayer from "@mux/mux-player-react";
 
 export function youtubeId(url: string): string | null {
   const m =
@@ -12,11 +13,31 @@ export function VideoPlayer({
   url,
   type,
   title,
+  muxPlaybackId,
 }: {
   url?: string | null;
   type?: string | null;
   title?: string;
+  /** Mux asset playback ID — streams via the Mux player when present. */
+  muxPlaybackId?: string | null;
 }) {
+  if (muxPlaybackId) {
+    return (
+      <div className="aspect-video w-full overflow-hidden rounded-2xl border border-white/10 bg-black">
+        <MuxPlayer
+          playbackId={muxPlaybackId}
+          streamType="on-demand"
+          accentColor="#a3e635"
+          metadata={{
+            video_title: title ?? "Lesson video",
+            player_name: "ForgeX Academy",
+          }}
+          className="size-full"
+        />
+      </div>
+    );
+  }
+
   if (!url) {
     return (
       <div className="flex aspect-video w-full flex-col items-center justify-center gap-3 rounded-2xl border border-white/10 bg-black/40 text-center">
