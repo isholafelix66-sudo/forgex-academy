@@ -1175,6 +1175,32 @@ export const courseContentDetail = query({
   },
 });
 
+/** Enrolled students for one course — admin control-center view. */
+export const adminCourseStudents = query({
+  args: { courseId: v.id("courses"), token: v.string() },
+  handler: async (ctx, { courseId, token }) => {
+    await requireAdminSession(ctx, token);
+    const enrollments = await ctx.db
+      .query("enrollments")
+      .withIndex("by_course", (q) => q.eq("courseId", courseId))
+      .collect();
+    const hydrated = await Promise.all(
+      enrollments.map(async (e) => {
+        const student = await ctx.db.get(e.studentId);
+        return {
+          ...e,
+          student: student ? publicUser(student) : null,
+          email: student?.email ?? null,
+          joinedAt: student?._creationTime ?? null,
+        };
+      }),
+    );
+    return hydrated.sort(
+      (a, b) => b.progress - a.progress || a.enrolledAt - b.enrolledAt,
+    );
+  },
+});
+
 export const adminUpsertQuiz = mutation({
   args: {
     id: v.optional(v.id("quizzes")),

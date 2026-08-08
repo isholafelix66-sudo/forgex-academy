@@ -98,6 +98,10 @@ export default function AdminCourses() {
     api.admin.courseContentDetail,
     editor?.course && token ? { courseId: editor.course._id as never, token } : "skip",
   );
+  const courseStudents = useQuery(
+    api.admin.adminCourseStudents,
+    editor?.course && token ? { courseId: editor.course._id as never, token } : "skip",
+  );
 
   const openNew = () => {
     setEditor({
@@ -376,11 +380,12 @@ export default function AdminCourses() {
                 </DialogTitle>
               </DialogHeader>
               <Tabs value={tab} onValueChange={setTab}>
-                <TabsList className="grid w-full grid-cols-4">
+                <TabsList className="grid w-full grid-cols-5">
                   <TabsTrigger value="details">Details</TabsTrigger>
                   <TabsTrigger value="lessons">Lessons</TabsTrigger>
                   <TabsTrigger value="quizzes">Quizzes</TabsTrigger>
                   <TabsTrigger value="assignments">Assignments</TabsTrigger>
+                  <TabsTrigger value="students">Students</TabsTrigger>
                 </TabsList>
 
                 <TabsContent value="details" className="space-y-4 pt-4">
@@ -550,6 +555,45 @@ export default function AdminCourses() {
                       </Button>
                     </div>
                   </div>
+                </TabsContent>
+
+                <TabsContent value="students" className="space-y-3 pt-4">
+                  {!editor.course ? (
+                    <p className="rounded-xl border border-dashed border-white/10 p-5 text-center text-sm text-muted-foreground">
+                      Save the course first, then review its students.
+                    </p>
+                  ) : (courseStudents ?? []).length === 0 ? (
+                    <p className="rounded-xl border border-dashed border-white/10 p-5 text-center text-sm text-muted-foreground">
+                      No students have enrolled in this course yet.
+                    </p>
+                  ) : (
+                    <div className="space-y-2">
+                      {(courseStudents ?? []).map((s) => (
+                        <div key={s._id} className="flex flex-wrap items-center gap-3 rounded-xl border border-white/10 bg-black/20 px-4 py-3">
+                          <Avatar name={s.student?.name ?? "Student"} image={s.student?.image} className="size-9" />
+                          <div className="min-w-0 flex-1">
+                            <p className="truncate text-sm font-medium">
+                              {s.student?.name ?? "Anonymous"}
+                              {s.status === "completed" && (
+                                <span className="ml-2 inline-flex items-center gap-1 rounded-full bg-lime-400/12 px-2 py-0.5 text-[10px] font-semibold text-lime-300">
+                                  <CheckCircle2 className="size-3" /> Completed
+                                </span>
+                              )}
+                            </p>
+                            <p className="truncate text-xs text-muted-foreground">
+                              {s.email ?? "No email"} · enrolled {timeAgo(s.enrolledAt)}
+                            </p>
+                          </div>
+                          <div className="flex shrink-0 items-center gap-2">
+                            <div className="h-1.5 w-24 overflow-hidden rounded-full bg-white/10">
+                              <div className="h-full rounded-full bg-lime-400" style={{ width: `${s.progress}%` }} />
+                            </div>
+                            <span className="w-10 text-right text-xs font-semibold text-lime-300">{s.progress}%</span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </TabsContent>
 
                 <TabsContent value="assignments" className="space-y-3 pt-4">
