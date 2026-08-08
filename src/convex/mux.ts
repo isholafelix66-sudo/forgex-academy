@@ -92,3 +92,9 @@ export const getPlaybackId = action({
     return playbackId ? { assetId, playbackId } : null;
   },
 });
+
+/**
+ * Mux video records for the media library live in `src/convex/media.ts`
+ * (`recordVideo` / `videosList`) — they are mutations/queries that cannot run
+ * in this Node-runtime action file.
+ */

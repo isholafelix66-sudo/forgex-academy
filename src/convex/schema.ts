@@ -176,7 +176,16 @@ const schema = defineSchema(
       order: v.number(),
       durationMinutes: v.number(),
       videoUrl: v.optional(v.string()),
-      videoType: v.optional(v.union(v.literal("youtube"), v.literal("mp4"))),
+      videoType: v.optional(
+        v.union(
+          v.literal("youtube"),
+          v.literal("mp4"),
+          v.literal("vimeo"),
+          v.literal("loom"),
+        ),
+      ),
+      // Lesson cover image — stored on Cloudinary (never binary data).
+      image: v.optional(v.string()),
       muxAssetId: v.optional(v.string()),
       muxPlaybackId: v.optional(v.string()),
       notes: v.string(),
@@ -384,12 +393,52 @@ const schema = defineSchema(
       createdAt: v.number(),
     }).index("by_token", ["token"]),
 
-    /** Media library — uploaded images tracked for admin management. */
+    /** Media library — IMAGES ONLY. Uploaded images tracked for admin
+     *  management. Stored on Cloudinary (public_id + optimized URL, never the
+     *  binary data). Videos live in `mediaVideos`, private docs in `documents`.
+     */
     media: defineTable({
       publicId: v.string(), // Cloudinary public id
       secureUrl: v.string(), // optimized Cloudinary URL
-      kind: v.string(), // e.g. logo | hero | course | general
+      kind: v.string(), // e.g. logo | hero | course | profile | general
       label: v.optional(v.string()),
+      width: v.optional(v.number()), // intrinsic width (px)
+      height: v.optional(v.number()), // intrinsic height (px)
+      format: v.optional(v.string()), // jpg | png | webp
+      bytes: v.optional(v.number()), // file size in bytes
+      alt: v.optional(v.string()),
+      uploadedBy: v.optional(v.id("users")),
+      createdAt: v.number(),
+    }).index("by_created", ["createdAt"]),
+
+    /** Mux videos — every hosted course video is tracked here. */
+    mediaVideos: defineTable({
+      uploadId: v.string(), // Mux direct-upload id
+      assetId: v.optional(v.string()),
+      playbackId: v.optional(v.string()),
+      title: v.string(),
+      status: v.union(
+        v.literal("uploading"),
+        v.literal("processing"),
+        v.literal("ready"),
+      ),
+      uploadedBy: v.id("users"),
+      courseId: v.optional(v.id("courses")),
+      lessonId: v.optional(v.id("lessons")),
+      createdAt: v.number(),
+    })
+      .index("by_created", ["createdAt"])
+      .index("by_upload", ["uploadId"]),
+
+    /** Private documents — CVs, verification files. Never public images. */
+    documents: defineTable({
+      name: v.string(), // original file name
+      mime: v.string(),
+      size: v.optional(v.number()),
+      storageId: v.optional(v.id("_storage")),
+      url: v.optional(v.string()),
+      purpose: v.string(), // e.g. cv | verification
+      uploadedBy: v.id("users"),
       createdAt: v.number(),
     }).index("by_created", ["createdAt"]),
 

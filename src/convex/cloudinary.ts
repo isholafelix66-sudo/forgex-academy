@@ -1,7 +1,8 @@
 import { action, mutation, query } from "./_generated/server";
 import { api, internal } from "./_generated/api";
 import { v } from "convex/values";
-import { requireAdminSession } from "./lib";
+import type { Id } from "./_generated/dataModel";
+import { requireAdminSession, requireUser } from "./lib";
 
 // ---------------------------------------------------------------------------
 // Cloudinary — image hosting for the media library and website assets.
@@ -45,29 +46,46 @@ export const mediaList = query({
   },
 });
 
-/** Admin-only: record an uploaded image into the media library + audit log. */
+/**
+ * Record an uploaded image into the media library + audit log.
+ *
+ * Called from the reusable ImageUploader wherever an image is uploaded:
+ *   - with `token`  -> password-gated admin session (media page, branding)
+ *   - without token -> any signed-in user (tutor/student/profile uploads)
+ * Stores Cloudinary metadata (public_id, optimized URL, width, height,
+ * format, bytes) — never binary image data.
+ */
 export const mediaRecord = mutation({
   args: {
     publicId: v.string(),
     secureUrl: v.string(),
     kind: v.string(),
     label: v.optional(v.string()),
-    token: v.string(),
+    width: v.optional(v.number()),
+    height: v.optional(v.number()),
+    format: v.optional(v.string()),
+    bytes: v.optional(v.number()),
+    alt: v.optional(v.string()),
+    token: v.optional(v.string()),
   },
-  handler: async (ctx, { publicId, secureUrl, kind, label, token }) => {
-    await requireAdminSession(ctx, token);
+  handler: async (ctx, args) => {
+    const { token, ...data } = args;
+    let uploadedBy: Id<"users"> | undefined;
+    if (token) {
+      await requireAdminSession(ctx, token);
+    } else {
+      uploadedBy = await requireUser(ctx);
+    }
     const id = await ctx.db.insert("media", {
-      publicId,
-      secureUrl,
-      kind,
-      label,
+      ...data,
+      uploadedBy,
       createdAt: Date.now(),
     });
     await ctx.db.insert("auditLogs", {
       adminId: undefined,
-      tutorId: undefined,
+      tutorId: uploadedBy ?? undefined,
       action: "image-uploaded",
-      detail: `Image uploaded (${label ?? kind}): ${publicId}`,
+      detail: `Image uploaded (${data.label ?? data.kind}): ${data.publicId}`,
       reason: undefined,
       createdAt: Date.now(),
     });

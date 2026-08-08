@@ -42,6 +42,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { PageShell } from "@/components/site/PageShell";
 import { Reveal } from "@/components/site/Reveal";
 import { useAuth } from "@/hooks/use-auth";
+import { ImageUploader } from "@/components/media/ImageUploader";
+import { PrivateDocUploader } from "@/components/media/PrivateDocUploader";
 
 const SUGGESTED_SKILLS = [
   "Design", "Development", "Data", "Marketing", "Business", "AI",
@@ -536,8 +538,15 @@ export default function BecomeTutor() {
                 <Field label="Phone" required>
                   <Input value={form.phone} onChange={(e) => set("phone", e.target.value)} placeholder="+234 800 000 0000" className={inputCls} />
                 </Field>
-                <Field label="Profile picture URL (optional)">
-                  <Input value={form.profilePictureUrl} onChange={(e) => set("profilePictureUrl", e.target.value)} placeholder="https://…/photo.jpg" className={inputCls} />
+                <Field label="Profile picture" hint="Upload from your device — works on mobile and desktop.">
+                  <ImageUploader
+                    value={form.profilePictureUrl || null}
+                    label="Upload photo"
+                    record={{ kind: "profile", label: `${form.fullName || "Tutor"} profile photo` }}
+                    onUploaded={(img) => set("profilePictureUrl", img.secureUrl)}
+                    onClear={() => set("profilePictureUrl", "")}
+                    compact
+                  />
                 </Field>
                 <Field label="Residential address" required>
                   <Input value={form.residentialAddress} onChange={(e) => set("residentialAddress", e.target.value)} className={inputCls} />
@@ -674,14 +683,23 @@ export default function BecomeTutor() {
             {/* 4 — CV & verification */}
             <div className="space-y-4 border-t border-white/10 pt-6">
               <h2 className="font-display text-lg font-semibold">4. CV & verification</h2>
-              <div className="grid gap-4 sm:grid-cols-2">
-                <Field label="CV / resume URL" hint="Public link to your CV (Google Drive, Dropbox…)" >
-                  <Input value={form.cvUrl} onChange={(e) => set("cvUrl", e.target.value)} placeholder="https://…/cv.pdf" className={inputCls} />
-                </Field>
-                <Field label="CV file name">
-                  <Input value={form.cvFileName} onChange={(e) => set("cvFileName", e.target.value)} placeholder="Ada-Lovelace-CV.pdf" className={inputCls} />
-                </Field>
-              </div>
+              <Field
+                label="CV / resume"
+                hint="PDF, DOC or DOCX. Stored in secure private storage — visible only to ForgeX admins for verification."
+              >
+                <PrivateDocUploader
+                  value={{ name: form.cvFileName || null, url: form.cvUrl || null }}
+                  purpose="cv"
+                  onUploaded={(doc) => {
+                    set("cvUrl", doc.url);
+                    set("cvFileName", doc.name);
+                  }}
+                  onClear={() => {
+                    set("cvUrl", "");
+                    set("cvFileName", "");
+                  }}
+                />
+              </Field>
               <Field label="National ID number (NIN)" required hint="Used for identity verification — visible only to admins.">
                 <Input value={form.nin} onChange={(e) => set("nin", e.target.value)} className={inputCls} />
               </Field>

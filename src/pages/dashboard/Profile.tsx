@@ -15,6 +15,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { PageHeader } from "@/components/dash/PageHeader";
 import { Avatar } from "@/components/site/Avatar";
 import { useAuth } from "@/hooks/use-auth";
+import { ImageUploader } from "@/components/media/ImageUploader";
 
 export default function Profile() {
   const { user } = useAuth();
@@ -141,8 +142,16 @@ export default function Profile() {
               <Input value={name} onChange={(e) => setName(e.target.value)} className="border-white/10 bg-black/20" />
             </div>
             <div>
-              <label className="mb-1.5 block text-sm font-medium">Profile photo URL</label>
-              <Input value={image} onChange={(e) => setImage(e.target.value)} placeholder="https://…" className="border-white/10 bg-black/20" />
+              <label className="mb-1.5 block text-sm font-medium">Profile photo</label>
+              <ImageUploader
+                value={image || null}
+                label="Upload photo"
+                hint="Profile photo"
+                record={{ kind: "profile", label: `${name || "Student"} profile photo` }}
+                onUploaded={(img) => setImage(img.secureUrl)}
+                onClear={() => setImage("")}
+                compact
+              />
             </div>
           </div>
 

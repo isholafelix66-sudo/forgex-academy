@@ -30,19 +30,23 @@ import {
 import { PageHeader } from "@/components/dash/PageHeader";
 import { useAuth } from "@/hooks/use-auth";
 import { cn } from "@/lib/utils";
+import { ImageUploader } from "@/components/media/ImageUploader";
 
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
 type Resource = { name: string; url: string };
 
+type VideoSource = "youtube" | "mp4" | "vimeo" | "loom";
+
 type LessonDraft = {
   id?: string;
   title: string;
   order: number;
   durationMinutes: number;
+  image: string; // lesson cover image (Cloudinary)
   videoUrl: string;
-  videoType: "youtube" | "mp4";
+  videoType: VideoSource;
   muxAssetId?: string;
   muxPlaybackId?: string;
   notes: string;
@@ -81,6 +85,7 @@ const emptyLesson = (order: number): LessonDraft => ({
   title: "",
   order,
   durationMinutes: 10,
+  image: "",
   videoUrl: "",
   videoType: "youtube",
   notes: "",
@@ -329,8 +334,10 @@ function LessonsTab({ courseId }: { courseId: string }) {
   const deleteLesson = useMutation(api.tutor.deleteLesson);
   const createUpload = useAction(api.mux.createUpload);
   const getPlaybackId = useAction(api.mux.getPlaybackId);
+  const recordVideo = useMutation(api.media.recordVideo);
   const [draft, setDraft] = useState<LessonDraft | null>(null);
   const [saving, setSaving] = useState(false);
+  const [mediaMode, setMediaMode] = useState<"image" | "video" | "url">("url");
 
   // Mux direct-upload flow state
   const [uploadUrl, setUploadUrl] = useState<string | null>(null);
@@ -397,6 +404,16 @@ function LessonsTab({ courseId }: { courseId: string }) {
           );
           setProcessing(false);
           setUploadUrl(null);
+          // Track the video in the media library (Videos tab) — separate from
+          // Cloudinary image records.
+          void recordVideo({
+            uploadId: id,
+            title: draft?.title || "Lesson video",
+            status: "ready",
+            assetId: info.assetId,
+            playbackId: info.playbackId,
+            courseId: courseId as never,
+          });
           return;
         }
       } catch {
@@ -409,6 +426,7 @@ function LessonsTab({ courseId }: { courseId: string }) {
   };
 
   const open = (l?: NonNullable<typeof lessons>[number]) => {
+    setMediaMode(l?.image ? "image" : l?.muxPlaybackId ? "video" : "url");
     setDraft(
       l
         ? {
@@ -416,8 +434,9 @@ function LessonsTab({ courseId }: { courseId: string }) {
             title: l.title,
             order: l.order,
             durationMinutes: l.durationMinutes,
+            image: l.image ?? "",
             videoUrl: l.videoUrl ?? "",
-            videoType: (l.videoType as "youtube" | "mp4") ?? "youtube",
+            videoType: (l.videoType as VideoSource) ?? "youtube",
             muxAssetId: l.muxAssetId ?? undefined,
             muxPlaybackId: l.muxPlaybackId ?? undefined,
             notes: l.notes,
@@ -426,6 +445,23 @@ function LessonsTab({ courseId }: { courseId: string }) {
           }
         : emptyLesson((lessons?.length ?? 0) + 1),
     );
+  };
+
+  /** Switch media type, clearing the other media fields so only one is used. */
+  const chooseMediaMode = (m: "image" | "video" | "url") => {
+    setMediaMode(m);
+    setDraft((d) => {
+      if (!d) return d;
+      if (m === "image") {
+        return { ...d, videoUrl: "", muxAssetId: undefined, muxPlaybackId: undefined };
+      }
+      if (m === "video") {
+        return { ...d, image: "", videoUrl: "" };
+      }
+      return { ...d, image: "", muxAssetId: undefined, muxPlaybackId: undefined };
+    });
+    setUploadUrl(null);
+    setUploadId(null);
   };
 
   const saveLesson = async () => {
@@ -439,6 +475,7 @@ function LessonsTab({ courseId }: { courseId: string }) {
       durationMinutes: Number(draft.durationMinutes) || 0,
       videoUrl: draft.videoUrl || undefined,
       videoType: draft.videoType,
+      image: draft.image || undefined,
       muxAssetId: draft.muxAssetId,
       muxPlaybackId: draft.muxPlaybackId,
       notes: draft.notes,
@@ -509,96 +546,126 @@ function LessonsTab({ courseId }: { courseId: string }) {
                   <Input type="number" value={draft.durationMinutes} onChange={(e) => setDraft({ ...draft, durationMinutes: Number(e.target.value) })} className="border-white/10 bg-black/20" />
                 </div>
                 <div className="space-y-2">
-                  <Label>Video source</Label>
-                  <div className="flex h-10 items-center gap-2 rounded-xl border border-white/10 bg-black/20 px-3 text-xs text-muted-foreground">
-                    {draft.muxPlaybackId ? (
-                      <><Video className="size-3.5 text-lime-300" /> Mux stream</>
-                    ) : (
-                      <>{draft.videoType === "youtube" ? "YouTube" : "MP4 URL"} · below</>
-                    )}
+                  <Label>Media type</Label>
+                  <div className="grid h-10 grid-cols-3 overflow-hidden rounded-xl border border-white/10 bg-black/20 text-xs font-medium">
+                    {(["image", "video", "url"] as const).map((m) => (
+                      <button
+                        key={m}
+                        type="button"
+                        onClick={() => chooseMediaMode(m)}
+                        className={cn(
+                          "transition-colors",
+                          mediaMode === m
+                            ? "bg-lime-400/15 text-lime-300"
+                            : "text-muted-foreground hover:text-foreground",
+                        )}
+                      >
+                        {m === "image" ? "Image" : m === "video" ? "Video" : "URL"}
+                      </button>
+                    ))}
                   </div>
                 </div>
               </div>
-              <div className="rounded-xl border border-lime-400/20 bg-lime-400/5 p-4">
-                <div className="flex items-center gap-2">
-                  <Video className="size-4 text-lime-300" />
-                  <p className="text-sm font-semibold">Mux-hosted video</p>
-                  {draft.muxPlaybackId && (
-                    <span className="ml-auto inline-flex items-center gap-1 rounded-full border border-lime-400/30 bg-lime-400/10 px-2 py-0.5 text-[11px] font-semibold text-lime-300">
-                      <CloudUpload className="size-3" /> Uploaded
-                    </span>
+
+              {mediaMode === "image" && (
+                <div className="space-y-2">
+                  <Label>Lesson image (Cloudinary)</Label>
+                  <ImageUploader
+                    value={draft.image || null}
+                    label="Upload lesson image"
+                    record={{ kind: "lesson", label: draft.title || "Lesson image" }}
+                    onUploaded={(img) => setDraft({ ...draft, image: img.secureUrl })}
+                    onClear={() => setDraft({ ...draft, image: "" })}
+                  />
+                </div>
+              )}
+
+              {mediaMode === "video" && (
+                <div className="rounded-xl border border-lime-400/20 bg-lime-400/5 p-4">
+                  <div className="flex items-center gap-2">
+                    <Video className="size-4 text-lime-300" />
+                    <p className="text-sm font-semibold">Mux-hosted video</p>
+                    {draft.muxPlaybackId && (
+                      <span className="ml-auto inline-flex items-center gap-1 rounded-full border border-lime-400/30 bg-lime-400/10 px-2 py-0.5 text-[11px] font-semibold text-lime-300">
+                        <CloudUpload className="size-3" /> Uploaded
+                      </span>
+                    )}
+                  </div>
+                  <p className="mt-1.5 text-xs leading-relaxed text-muted-foreground">
+                    Upload an MP4/MOV straight from this browser. Mux transcodes and
+                    streams it with adaptive bitrate — no storage hosting needed.
+                  </p>
+
+                  {draft.muxPlaybackId ? (
+                    <div className="mt-3 flex items-center gap-2 text-xs text-lime-300/90">
+                      <span className="truncate font-mono">playback: {draft.muxPlaybackId}</span>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="ml-auto h-7 gap-1 text-muted-foreground hover:text-rose-300"
+                        onClick={() =>
+                          setDraft({ ...draft, muxAssetId: undefined, muxPlaybackId: undefined })
+                        }
+                      >
+                        <X className="size-3.5" /> Remove
+                      </Button>
+                    </div>
+                  ) : uploadUrl ? (
+                    <div className="mt-3">
+                      <MuxUploader
+                        ref={uploaderRef as never}
+                        endpoint={uploadUrl}
+                        onSuccess={onUploadSuccess}
+                        className="w-full"
+                      />
+                      {processing && (
+                        <p className="mt-2 flex items-center gap-2 text-xs text-lime-300">
+                          <Loader2 className="size-3.5 animate-spin" /> Upload complete — Mux is
+                          processing the video…
+                        </p>
+                      )}
+                    </div>
+                  ) : (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="mt-3 gap-1.5 border-lime-400/30 text-lime-300"
+                      onClick={() => void startUpload()}
+                      disabled={uploading}
+                    >
+                      {uploading ? (
+                        <Loader2 className="size-3.5 animate-spin" />
+                      ) : (
+                        <CloudUpload className="size-3.5" />
+                      )}
+                      {uploading ? "Preparing upload…" : "Upload video with Mux"}
+                    </Button>
+                  )}
+                  {uploadError && (
+                    <p className="mt-2 rounded-lg border border-rose-400/25 bg-rose-400/8 p-2.5 text-xs text-rose-300">
+                      {uploadError}
+                    </p>
                   )}
                 </div>
-                <p className="mt-1.5 text-xs leading-relaxed text-muted-foreground">
-                  Upload an MP4/MOV straight from this browser. Mux transcodes and
-                  streams it with adaptive bitrate — no storage hosting needed.
-                </p>
+              )}
 
-                {draft.muxPlaybackId ? (
-                  <div className="mt-3 flex items-center gap-2 text-xs text-lime-300/90">
-                    <span className="truncate font-mono">playback: {draft.muxPlaybackId}</span>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="ml-auto h-7 gap-1 text-muted-foreground hover:text-rose-300"
-                      onClick={() =>
-                        setDraft({ ...draft, muxAssetId: undefined, muxPlaybackId: undefined })
-                      }
-                    >
-                      <X className="size-3.5" /> Remove
-                    </Button>
+              {mediaMode === "url" && (
+                <div className="grid grid-cols-[1fr_130px] gap-3 items-end">
+                  <div className="space-y-2">
+                    <Label>Video URL (YouTube / Vimeo / Loom / MP4)</Label>
+                    <Input value={draft.videoUrl} onChange={(e) => setDraft({ ...draft, videoUrl: e.target.value })} placeholder="https://youtube.com/watch?v=… or https://…/lesson.mp4" className="border-white/10 bg-black/20" />
                   </div>
-                ) : uploadUrl ? (
-                  <div className="mt-3">
-                    <MuxUploader
-                      ref={uploaderRef as never}
-                      endpoint={uploadUrl}
-                      onSuccess={onUploadSuccess}
-                      className="w-full"
-                    />
-                    {processing && (
-                      <p className="mt-2 flex items-center gap-2 text-xs text-lime-300">
-                        <Loader2 className="size-3.5 animate-spin" /> Upload complete — Mux is
-                        processing the video…
-                      </p>
-                    )}
+                  <div className="space-y-2">
+                    <Label>Video type</Label>
+                    <select value={draft.videoType} onChange={(e) => setDraft({ ...draft, videoType: e.target.value as VideoSource })} className="h-10 w-full rounded-xl border border-white/10 bg-black/20 px-3 text-sm outline-none">
+                      <option value="youtube">YouTube</option>
+                      <option value="vimeo">Vimeo</option>
+                      <option value="loom">Loom</option>
+                      <option value="mp4">MP4 file</option>
+                    </select>
                   </div>
-                ) : (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="mt-3 gap-1.5 border-lime-400/30 text-lime-300"
-                    onClick={() => void startUpload()}
-                    disabled={uploading}
-                  >
-                    {uploading ? (
-                      <Loader2 className="size-3.5 animate-spin" />
-                    ) : (
-                      <CloudUpload className="size-3.5" />
-                    )}
-                    {uploading ? "Preparing upload…" : "Upload video with Mux"}
-                  </Button>
-                )}
-                {uploadError && (
-                  <p className="mt-2 rounded-lg border border-rose-400/25 bg-rose-400/8 p-2.5 text-xs text-rose-300">
-                    {uploadError}
-                  </p>
-                )}
-              </div>
-
-              <div className="grid grid-cols-[1fr_130px] gap-3 items-end">
-                <div className="space-y-2">
-                  <Label>Video URL (YouTube or MP4)</Label>
-                  <Input value={draft.videoUrl} onChange={(e) => setDraft({ ...draft, videoUrl: e.target.value })} placeholder="https://youtube.com/watch?v=… or https://…/lesson.mp4" className="border-white/10 bg-black/20" />
                 </div>
-                <div className="space-y-2">
-                  <Label>Video type</Label>
-                  <select value={draft.videoType} onChange={(e) => setDraft({ ...draft, videoType: e.target.value as "youtube" | "mp4" })} className="h-10 w-full rounded-xl border border-white/10 bg-black/20 px-3 text-sm outline-none">
-                    <option value="youtube">YouTube</option>
-                    <option value="mp4">MP4 file</option>
-                  </select>
-                </div>
-              </div>
+              )}
               <div className="space-y-2">
                 <Label>Lesson notes</Label>
                 <Textarea value={draft.notes} onChange={(e) => setDraft({ ...draft, notes: e.target.value })} rows={4} className="border-white/10 bg-black/20" />

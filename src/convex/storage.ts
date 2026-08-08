@@ -1,6 +1,6 @@
 import { mutation, query } from "./_generated/server";
 import { v } from "convex/values";
-import { requireUser } from "./lib";
+import { requireAdminSession, requireUser } from "./lib";
 
 /**
  * Generate a URL the client can PUT a file to (works from any device /
@@ -30,5 +30,48 @@ export const deleteFile = mutation({
     await requireUser(ctx);
     await ctx.storage.delete(storageId);
     return true;
+  },
+});
+
+/**
+ * Record a private document (CV, verification file) in the `documents` table.
+ * Files live in Convex private file storage with an unguessable URL — never
+ * in the public Cloudinary media library. Only admins can list them.
+ */
+export const recordDocument = mutation({
+  args: {
+    name: v.string(),
+    mime: v.string(),
+    size: v.optional(v.number()),
+    storageId: v.id("_storage"),
+    url: v.string(),
+    purpose: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const userId = await requireUser(ctx);
+    return await ctx.db.insert("documents", {
+      ...args,
+      uploadedBy: userId,
+      createdAt: Date.now(),
+    });
+  },
+});
+
+/** Admin-only: private documents (CVs, verification files) in the media library. */
+export const documentsList = query({
+  args: { token: v.string() },
+  handler: async (ctx, { token }) => {
+    await requireAdminSession(ctx, token);
+    const rows = await ctx.db.query("documents").collect();
+    const hydrated = await Promise.all(
+      rows.map(async (r) => {
+        const uploader = await ctx.db.get(r.uploadedBy);
+        return {
+          ...r,
+          uploaderName: uploader?.name ?? "Unknown",
+        };
+      }),
+    );
+    return hydrated.sort((a, b) => b.createdAt - a.createdAt);
   },
 });

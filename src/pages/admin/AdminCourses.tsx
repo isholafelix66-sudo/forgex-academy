@@ -84,7 +84,8 @@ export default function AdminCourses() {
     title: string;
     order: number;
     durationMinutes: number;
-    videoType: "youtube" | "mp4" | "";
+    image: string;
+    videoType: "youtube" | "mp4" | "vimeo" | "loom" | "";
     videoUrl: string;
     notes: string;
   } | null>(null);
@@ -178,6 +179,7 @@ export default function AdminCourses() {
       durationMinutes: lessonDraft.durationMinutes,
       videoUrl: lessonDraft.videoUrl || undefined,
       videoType: lessonDraft.videoType || undefined,
+      image: lessonDraft.image || undefined,
       notes: lessonDraft.notes,
       transcript: "",
       token,
@@ -486,7 +488,7 @@ export default function AdminCourses() {
                               {l.muxPlaybackId ? " · Mux video" : ""}
                             </p>
                           </div>
-                          <Button variant="ghost" size="icon" onClick={() => setLessonDraft({ id: l._id as string, title: l.title, order: l.order, durationMinutes: l.durationMinutes, videoType: (l.videoType as any) ?? "", videoUrl: l.videoUrl ?? "", notes: l.notes })}>
+                          <Button variant="ghost" size="icon" onClick={() => setLessonDraft({ id: l._id as string, title: l.title, order: l.order, durationMinutes: l.durationMinutes, image: l.image ?? "", videoType: (l.videoType as any) ?? "", videoUrl: l.videoUrl ?? "", notes: l.notes })}>
                             <Pencil className="size-4" />
                           </Button>
                           <Button variant="ghost" size="icon" className="text-muted-foreground hover:text-rose-300" onClick={() => void adminDeleteLesson({ id: l._id as never, token })}>
@@ -502,16 +504,28 @@ export default function AdminCourses() {
                       <div className="space-y-3 rounded-xl border border-white/10 bg-black/20 p-4">
                         <p className="text-sm font-semibold">{lessonDraft?.id ? "Edit lesson" : "Add lesson"}</p>
                         <div className="grid gap-3 sm:grid-cols-2">
-                          <Input placeholder="Lesson title *" value={lessonDraft?.title ?? ""} onChange={(e) => setLessonDraft((d) => ({ ...(d ?? { title: "", order: (content?.lessons.length ?? 0) + 1, durationMinutes: 10, videoType: "", videoUrl: "", notes: "" }), title: e.target.value }))} className="border-white/10 bg-black/30 sm:col-span-2" />
-                          <Input type="number" placeholder="Order" value={lessonDraft?.order ?? (content?.lessons.length ?? 0) + 1} onChange={(e) => setLessonDraft((d) => ({ ...(d ?? { title: "", order: 1, durationMinutes: 10, videoType: "", videoUrl: "", notes: "" }), order: Number(e.target.value) }))} className="border-white/10 bg-black/30" />
-                          <Input type="number" placeholder="Minutes" value={lessonDraft?.durationMinutes ?? 10} onChange={(e) => setLessonDraft((d) => ({ ...(d ?? { title: "", order: 1, durationMinutes: 10, videoType: "", videoUrl: "", notes: "" }), durationMinutes: Number(e.target.value) }))} className="border-white/10 bg-black/30" />
-                          <select value={lessonDraft?.videoType ?? ""} onChange={(e) => setLessonDraft((d) => ({ ...(d ?? { title: "", order: 1, durationMinutes: 10, videoType: "", videoUrl: "", notes: "" }), videoType: e.target.value as "youtube" | "mp4" | "" }))} className="h-10 rounded-xl border border-white/10 bg-black/30 px-3 text-sm outline-none">
+                          <Input placeholder="Lesson title *" value={lessonDraft?.title ?? ""} onChange={(e) => setLessonDraft((d) => ({ ...(d ?? { title: "", order: (content?.lessons.length ?? 0) + 1, durationMinutes: 10, image: "", videoType: "", videoUrl: "", notes: "" }), title: e.target.value }))} className="border-white/10 bg-black/30 sm:col-span-2" />
+                          <Input type="number" placeholder="Order" value={lessonDraft?.order ?? (content?.lessons.length ?? 0) + 1} onChange={(e) => setLessonDraft((d) => ({ ...(d ?? { title: "", order: 1, durationMinutes: 10, image: "", videoType: "", videoUrl: "", notes: "" }), order: Number(e.target.value) }))} className="border-white/10 bg-black/30" />
+                          <Input type="number" placeholder="Minutes" value={lessonDraft?.durationMinutes ?? 10} onChange={(e) => setLessonDraft((d) => ({ ...(d ?? { title: "", order: 1, durationMinutes: 10, image: "", videoType: "", videoUrl: "", notes: "" }), durationMinutes: Number(e.target.value) }))} className="border-white/10 bg-black/30" />
+                          <select value={lessonDraft?.videoType ?? ""} onChange={(e) => setLessonDraft((d) => ({ ...(d ?? { title: "", order: 1, durationMinutes: 10, image: "", videoType: "", videoUrl: "", notes: "" }), videoType: e.target.value as "youtube" | "mp4" | "vimeo" | "loom" | "" }))} className="h-10 rounded-xl border border-white/10 bg-black/30 px-3 text-sm outline-none">
                             <option value="">No video</option>
                             <option value="youtube">YouTube</option>
+                            <option value="vimeo">Vimeo</option>
+                            <option value="loom">Loom</option>
                             <option value="mp4">MP4 URL</option>
                           </select>
-                          <Input placeholder="Video URL (YouTube / MP4)" value={lessonDraft?.videoUrl ?? ""} onChange={(e) => setLessonDraft((d) => ({ ...(d ?? { title: "", order: 1, durationMinutes: 10, videoType: "", videoUrl: "", notes: "" }), videoUrl: e.target.value }))} className="border-white/10 bg-black/30" />
-                          <Textarea placeholder="Lesson notes" rows={2} value={lessonDraft?.notes ?? ""} onChange={(e) => setLessonDraft((d) => ({ ...(d ?? { title: "", order: 1, durationMinutes: 10, videoType: "", videoUrl: "", notes: "" }), notes: e.target.value }))} className="border-white/10 bg-black/30 sm:col-span-2" />
+                          <Input placeholder="Video URL (YouTube / Vimeo / Loom / MP4)" value={lessonDraft?.videoUrl ?? ""} onChange={(e) => setLessonDraft((d) => ({ ...(d ?? { title: "", order: 1, durationMinutes: 10, image: "", videoType: "", videoUrl: "", notes: "" }), videoUrl: e.target.value }))} className="border-white/10 bg-black/30" />
+                          <div className="sm:col-span-2">
+                            <ImageUploader
+                              value={lessonDraft?.image || null}
+                              label="Lesson image (Cloudinary)"
+                              record={{ kind: "lesson", label: lessonDraft?.title || "Lesson image" }}
+                              onUploaded={(img) => setLessonDraft((d) => ({ ...(d ?? { title: "", order: 1, durationMinutes: 10, image: "", videoType: "", videoUrl: "", notes: "" }), image: img.secureUrl }))}
+                              onClear={() => setLessonDraft((d) => (d ? { ...d, image: "" } : d))}
+                              compact
+                            />
+                          </div>
+                          <Textarea placeholder="Lesson notes" rows={2} value={lessonDraft?.notes ?? ""} onChange={(e) => setLessonDraft((d) => ({ ...(d ?? { title: "", order: 1, durationMinutes: 10, image: "", videoType: "", videoUrl: "", notes: "" }), notes: e.target.value }))} className="border-white/10 bg-black/30 sm:col-span-2" />
                         </div>
                         <div className="flex gap-2">
                           {lessonDraft && (

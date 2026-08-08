@@ -1115,7 +1115,15 @@ export const adminUpsertLesson = mutation({
     order: v.number(),
     durationMinutes: v.number(),
     videoUrl: v.optional(v.string()),
-    videoType: v.optional(v.union(v.literal("youtube"), v.literal("mp4"))),
+    videoType: v.optional(
+      v.union(
+        v.literal("youtube"),
+        v.literal("mp4"),
+        v.literal("vimeo"),
+        v.literal("loom"),
+      ),
+    ),
+    image: v.optional(v.string()),
     notes: v.string(),
     transcript: v.string(),
     token: v.string(),
@@ -1132,7 +1140,11 @@ export const adminUpsertLesson = mutation({
       await audit(ctx, undefined, undefined, "lesson-edited", `Lesson edited: ${data.title}`);
       return id;
     }
-    const newId = await ctx.db.insert("lessons", { ...data, resources: [] });
+    const newId = await ctx.db.insert("lessons", {
+      ...data,
+      image: data.image,
+      resources: [],
+    });
     await audit(ctx, undefined, undefined, "lesson-created", `Lesson created: ${data.title}`);
     return newId;
   },
