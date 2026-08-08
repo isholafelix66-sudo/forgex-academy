@@ -13,6 +13,7 @@ import {
   GraduationCap,
   ListChecks,
   Loader2,
+  MessageSquare,
   MessageSquareText,
   PlayCircle,
   Rocket,
@@ -36,6 +37,7 @@ import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { Textarea } from "@/components/ui/textarea";
 import { useAuth } from "@/hooks/use-auth";
+import { openChatWith } from "@/lib/chat-open";
 import { formatHours } from "@/lib/format";
 
 function formatRelative(ts: number) {
@@ -115,6 +117,14 @@ export default function CourseDetail() {
   };
 
   const isEnrolled = !!enrollment;
+
+  const handleMessageTutor = () => {
+    if (!isAuthenticated) {
+      navigate(`/auth?returnTo=${encodeURIComponent(`/courses/${course.slug}`)}`);
+      return;
+    }
+    openChatWith(course.tutorId);
+  };
 
   const handleSubmitReview = async () => {
     if (star < 1) {
@@ -215,30 +225,39 @@ export default function CourseDetail() {
             {/* Tutor */}
             {course.tutorProfile && (
               <Reveal className="mt-8">
-                <Link
-                  to={`/tutors/${course.tutorId}`}
-                  className="flex items-center gap-4 rounded-2xl border border-white/10 bg-card p-5 transition-colors hover:border-lime-400/30"
-                >
-                  <Avatar
-                    name={course.tutorProfile.name}
-                    image={course.tutorProfile.image}
-                    className="size-14 text-lg"
-                  />
-                  <div className="min-w-0">
-                    <p className="text-xs font-semibold uppercase tracking-wider text-lime-400/80">
-                      Course tutor
-                    </p>
-                    <h3 className="font-display text-base font-semibold">
-                      {course.tutorProfile.name}
-                    </h3>
-                    {course.tutorProfile.headline && (
-                      <p className="truncate text-sm text-muted-foreground">
-                        {course.tutorProfile.headline}
+                <div className="flex items-center gap-4 rounded-2xl border border-white/10 bg-card p-5 transition-colors hover:border-lime-400/30">
+                  <Link
+                    to={`/tutors/${course.tutorId}`}
+                    className="flex min-w-0 flex-1 items-center gap-4"
+                  >
+                    <Avatar
+                      name={course.tutorProfile.name}
+                      image={course.tutorProfile.image}
+                      className="size-14 text-lg"
+                    />
+                    <div className="min-w-0">
+                      <p className="text-xs font-semibold uppercase tracking-wider text-lime-400/80">
+                        Course tutor
                       </p>
-                    )}
-                  </div>
-                  <ArrowRight className="ml-auto size-4 shrink-0 text-muted-foreground" />
-                </Link>
+                      <h3 className="font-display text-base font-semibold">
+                        {course.tutorProfile.name}
+                      </h3>
+                      {course.tutorProfile.headline && (
+                        <p className="truncate text-sm text-muted-foreground">
+                          {course.tutorProfile.headline}
+                        </p>
+                      )}
+                    </div>
+                    <ArrowRight className="ml-auto size-4 shrink-0 text-muted-foreground" />
+                  </Link>
+                  <Button
+                    size="sm"
+                    onClick={handleMessageTutor}
+                    className="shrink-0 gap-1.5 bg-lime-400 font-semibold text-black hover:bg-lime-300"
+                  >
+                    <MessageSquare className="size-3.5" /> Message tutor
+                  </Button>
+                </div>
               </Reveal>
             )}
 

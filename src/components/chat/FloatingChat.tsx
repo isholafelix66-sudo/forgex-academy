@@ -7,7 +7,9 @@ import {
   ArrowLeft,
   Loader2,
   MessageSquare,
+  Search,
   Send,
+  SquarePen,
   Volume2,
   VolumeX,
   X,
@@ -18,15 +20,17 @@ import { Input } from "@/components/ui/input";
 import { useAuth } from "@/hooks/use-auth";
 import { useMessageSound } from "@/hooks/use-message-notifications";
 import { getChatSoundEnabled, setChatSoundEnabled } from "@/lib/chat-sound";
+import { OPEN_CHAT_EVENT } from "@/lib/chat-open";
 import { cn } from "@/lib/utils";
 import { timeAgo } from "@/lib/format";
 
 /**
- * WhatsApp-style floating chat for signed-in users. Mounted once in the app
- * shell so it floats over every dashboard page: green FAB with an unread
- * badge, a conversation list with online/offline presence dots, and a thread
- * view with message bubbles. Also runs the presence heartbeat that drives the
- * “online now / last seen” statuses everywhere.
+ * WhatsApp-style floating chat, mounted globally. Signed-in users get a green
+ * FAB with an unread badge; the panel shows conversations with online/offline
+ * presence dots, a thread view with bubbles, and a “new chat” composer to
+ * start a conversation with any user. Any page can call `openChatWith(userId)`
+ * to open the panel focused on a specific person (tutor profiles, courses…).
+ * Also runs the presence heartbeat that drives online/offline statuses.
  */
 export function FloatingChat() {
   const { user } = useAuth();
@@ -37,6 +41,9 @@ export function FloatingChat() {
 
   const [open, setOpen] = useState(false);
   const [threadId, setThreadId] = useState<string | null>(null);
+  const [draftTo, setDraftTo] = useState<string | null>(null);
+  const [composing, setComposing] = useState(false);
+  const [search, setSearch] = useState("");
   const [body, setBody] = useState("");
   const [sending, setSending] = useState(false);
   const [soundOn, setSoundOn] = useState(() => getChatSoundEnabled());
@@ -44,6 +51,40 @@ export function FloatingChat() {
 
   // Notification sound on new incoming messages.
   useMessageSound();
+
+  // Latest conversations, readable from the event listener below.
+  const convRef = useRef(conversations);
+  convRef.current = conversations;
+
+  const targetUser = useQuery(
+    api.users.getPublicUser,
+    draftTo ? { id: draftTo as never } : "skip",
+  );
+  const results = useQuery(
+    api.users.searchUsers,
+    composing && search.trim() ? { q: search } : "skip",
+  );
+
+  // Open the chat focused on a specific user (fired from anywhere in the app).
+  useEffect(() => {
+    const onOpen = (e: Event) => {
+      const detail = (e as CustomEvent<{ userId?: string }>).detail;
+      const userId = detail?.userId;
+      if (!userId) return;
+      setOpen(true);
+      setComposing(false);
+      const existing = convRef.current?.find((c) => c.other?._id === userId);
+      if (existing) {
+        setThreadId(existing.threadId);
+        setDraftTo(null);
+      } else {
+        setThreadId(null);
+        setDraftTo(userId);
+      }
+    };
+    window.addEventListener(OPEN_CHAT_EVENT, onOpen);
+    return () => window.removeEventListener(OPEN_CHAT_EVENT, onOpen);
+  }, []);
 
   // Presence heartbeat — keep us “online” while the app is open.
   useEffect(() => {
@@ -68,18 +109,29 @@ export function FloatingChat() {
     if (threadId) void markRead({ threadId });
   }, [threadId, markRead, thread?.length]);
 
+  // Once a draft conversation is created, switch to the real thread.
+  useEffect(() => {
+    if (!draftTo) return;
+    const existing = conversations?.find((c) => c.other?._id === draftTo);
+    if (existing) {
+      setThreadId(existing.threadId);
+      setDraftTo(null);
+    }
+  }, [draftTo, conversations]);
+
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight });
   }, [thread?.length, open]);
 
   const active = conversations?.find((c) => c.threadId === threadId) ?? null;
   const unreadTotal = conversations?.reduce((s, c) => s + c.unread, 0) ?? 0;
+  const receiverId = threadId ? active?.other?._id : draftTo;
 
   const send = async () => {
-    if (!active?.other || !body.trim()) return;
+    if (!receiverId || !body.trim()) return;
     setSending(true);
     try {
-      await sendMessage({ receiverId: active.other._id, body });
+      await sendMessage({ receiverId: receiverId as never, body });
       setBody("");
     } catch (err) {
       toast.error(
@@ -92,6 +144,15 @@ export function FloatingChat() {
 
   // Admin sessions have no user account — nothing to chat with.
   if (!user?._id) return null;
+
+  const back = () => {
+    if (composing) setComposing(false);
+    else if (threadId) setThreadId(null);
+    else if (draftTo) setDraftTo(null);
+  };
+
+  const inThread = !!threadId && !!active;
+  const inDraft = !!draftTo && !inThread;
 
   return (
     <>
@@ -107,22 +168,30 @@ export function FloatingChat() {
           >
             {/* Header */}
             <div className="flex items-center gap-2.5 border-b border-white/10 bg-gradient-to-r from-lime-400/15 to-transparent px-3.5 py-3">
-              {threadId ? (
+              {(composing || threadId || draftTo) && (
                 <Button
                   variant="ghost"
                   size="icon"
                   className="size-8 text-muted-foreground"
-                  onClick={() => setThreadId(null)}
+                  onClick={back}
                 >
                   <ArrowLeft className="size-4" />
                 </Button>
-              ) : (
+              )}
+              {!composing && !inThread && !inDraft && (
                 <span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-lime-400/15 text-lime-300">
                   <MessageSquare className="size-4" />
                 </span>
               )}
               <div className="min-w-0 flex-1">
-                {threadId && active ? (
+                {composing ? (
+                  <>
+                    <p className="text-sm font-semibold">New chat</p>
+                    <p className="text-[11px] text-muted-foreground">
+                      Find someone to message
+                    </p>
+                  </>
+                ) : inThread ? (
                   <>
                     <p className="truncate text-sm font-semibold">
                       {active.other?.name}
@@ -150,6 +219,15 @@ export function FloatingChat() {
                           : "offline"}
                     </p>
                   </>
+                ) : inDraft ? (
+                  <>
+                    <p className="truncate text-sm font-semibold">
+                      {targetUser?.name ?? "New chat"}
+                    </p>
+                    <p className="text-[11px] capitalize text-muted-foreground">
+                      {targetUser?.role ?? "user"}
+                    </p>
+                  </>
                 ) : (
                   <>
                     <p className="text-sm font-semibold">Messages</p>
@@ -161,6 +239,15 @@ export function FloatingChat() {
                   </>
                 )}
               </div>
+              {!composing && !inThread && !inDraft && (
+                <button
+                  onClick={() => setComposing(true)}
+                  className="rounded-lg p-2 text-muted-foreground transition-colors hover:bg-white/10 hover:text-lime-300"
+                  title="Start a new conversation"
+                >
+                  <SquarePen className="size-4" />
+                </button>
+              )}
               <button
                 onClick={() => {
                   const next = !soundOn;
@@ -168,7 +255,9 @@ export function FloatingChat() {
                   setChatSoundEnabled(next);
                 }}
                 className="rounded-lg p-2 text-muted-foreground transition-colors hover:bg-white/10 hover:text-lime-300"
-                title={soundOn ? "Mute message sounds" : "Enable message sounds"}
+                title={
+                  soundOn ? "Mute message sounds" : "Enable message sounds"
+                }
               >
                 {soundOn ? (
                   <Volume2 className="size-4" />
@@ -185,8 +274,71 @@ export function FloatingChat() {
               </button>
             </div>
 
-            {/* Thread view */}
-            {threadId && active ? (
+            {/* Composer: search users */}
+            {composing ? (
+              <div className="flex-1 overflow-y-auto p-3">
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+                  <Input
+                    value={search}
+                    onChange={(e) => setSearch(e.target.value)}
+                    placeholder="Search by name…"
+                    autoFocus
+                    className="border-white/10 bg-black/20 pl-9"
+                  />
+                </div>
+                <div className="mt-2">
+                  {!search.trim() ? (
+                    <p className="px-2 py-6 text-center text-xs text-muted-foreground">
+                      Search for a tutor or student to start chatting.
+                    </p>
+                  ) : results === undefined ? (
+                    <div className="space-y-2 p-2">
+                      {Array.from({ length: 3 }).map((_, i) => (
+                        <div
+                          key={i}
+                          className="h-12 animate-pulse rounded-xl bg-white/5"
+                        />
+                      ))}
+                    </div>
+                  ) : results.length === 0 ? (
+                    <p className="px-2 py-6 text-center text-xs text-muted-foreground">
+                      No one found — try a different name.
+                    </p>
+                  ) : (
+                    results.map((r) => (
+                      <button
+                        key={r._id}
+                        onClick={() => {
+                          setDraftTo(r._id);
+                          setComposing(false);
+                          setSearch("");
+                        }}
+                        className="flex w-full items-center gap-3 rounded-2xl px-3 py-2.5 text-left transition-colors hover:bg-white/5"
+                      >
+                        <div className="relative shrink-0">
+                          <Avatar name={r.name} image={r.image} className="size-10" />
+                          <span
+                            className={cn(
+                              "absolute -bottom-0.5 -right-0.5 size-3 rounded-full border-2 border-card",
+                              r.online ? "bg-emerald-400" : "bg-zinc-600",
+                            )}
+                          />
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate text-sm font-semibold">{r.name}</p>
+                          <p className="truncate text-xs capitalize text-muted-foreground">
+                            {r.role}
+                            {r.headline ? ` · ${r.headline}` : ""}
+                          </p>
+                        </div>
+                        <MessageSquare className="size-4 shrink-0 text-lime-300" />
+                      </button>
+                    ))
+                  )}
+                </div>
+              </div>
+            ) : inThread ? (
               <>
                 <div
                   ref={scrollRef}
@@ -197,7 +349,10 @@ export function FloatingChat() {
                     return (
                       <div
                         key={m._id}
-                        className={cn("flex", mine ? "justify-end" : "justify-start")}
+                        className={cn(
+                          "flex",
+                          mine ? "justify-end" : "justify-start",
+                        )}
                       >
                         <div
                           className={cn(
@@ -253,6 +408,54 @@ export function FloatingChat() {
                   </Button>
                 </div>
               </>
+            ) : inDraft ? (
+              <>
+                <div className="bg-grid flex-1 overflow-y-auto p-4">
+                  <div className="flex flex-col items-center gap-2 pt-10 text-center">
+                    <Avatar
+                      name={targetUser?.name ?? "?"}
+                      image={targetUser?.image}
+                      className="size-14"
+                    />
+                    <p className="mt-2 text-sm font-semibold">
+                      {targetUser?.name ?? "…"}
+                    </p>
+                    <p className="text-xs capitalize text-muted-foreground">
+                      {targetUser?.role ?? "user"}
+                    </p>
+                    <p className="mt-4 text-sm text-muted-foreground">
+                      Say hello to start the conversation 👋
+                    </p>
+                  </div>
+                </div>
+                <div className="flex gap-2 border-t border-white/10 p-3">
+                  <Input
+                    value={body}
+                    onChange={(e) => setBody(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" && !e.shiftKey) {
+                        e.preventDefault();
+                        void send();
+                      }
+                    }}
+                    placeholder="Type a message…"
+                    autoFocus
+                    className="border-white/10 bg-black/20"
+                  />
+                  <Button
+                    onClick={() => void send()}
+                    disabled={sending || !body.trim()}
+                    size="icon"
+                    className="shrink-0 bg-lime-400 text-black hover:bg-lime-300"
+                  >
+                    {sending ? (
+                      <Loader2 className="size-4 animate-spin" />
+                    ) : (
+                      <Send className="size-4" />
+                    )}
+                  </Button>
+                </div>
+              </>
             ) : (
               /* Conversation list */
               <div className="flex-1 overflow-y-auto">
@@ -270,7 +473,8 @@ export function FloatingChat() {
                     <MessageSquare className="size-7 text-muted-foreground/40" />
                     <p className="text-sm font-medium">No conversations yet</p>
                     <p className="text-xs text-muted-foreground">
-                      Message a tutor from their profile page to start chatting.
+                      Message a tutor from their profile or course page, or tap
+                      the ✏️ button to start a new chat.
                     </p>
                   </div>
                 ) : (

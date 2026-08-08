@@ -8,7 +8,6 @@ import { useAdminSession } from "@/hooks/use-admin-session";
 import { useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import { Avatar } from "@/components/site/Avatar";
-import { FloatingChat } from "@/components/chat/FloatingChat";
 import logo from "@/assets/logo.svg";
 
 export type NavItem = {
@@ -220,10 +219,6 @@ export function AppShell({
           </div>
         </main>
       </div>
-
-      {/* WhatsApp-style floating chat — visible for signed-in users only
-          (admin password sessions have no account and get nothing) */}
-      <FloatingChat />
     </div>
   );
 }

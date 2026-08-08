@@ -16,6 +16,8 @@ import { Reveal } from "@/components/site/Reveal";
 import { Avatar } from "@/components/site/Avatar";
 import { CourseCard } from "@/components/site/CourseCard";
 import { EmptyState } from "@/components/site/EmptyState";
+import { useAuth } from "@/hooks/use-auth";
+import { openChatWith } from "@/lib/chat-open";
 
 const SOCIAL_LINKS: Array<{
   key: string;
@@ -31,6 +33,7 @@ const SOCIAL_LINKS: Array<{
 
 export default function TutorDetail() {
   const { id } = useParams();
+  const { isAuthenticated } = useAuth();
   const tutor = useQuery(api.public.tutorDetail, { id: id as never });
 
   if (!tutor) {
@@ -89,11 +92,22 @@ export default function TutorDetail() {
               </div>
 
               <div className="mt-5">
-                <Link to={`/dashboard/messages?to=${tutor._id}`}>
-                  <Button className="gap-2 bg-lime-400 font-semibold text-black hover:bg-lime-300">
+                {isAuthenticated ? (
+                  <Button
+                    onClick={() => openChatWith(tutor._id)}
+                    className="gap-2 bg-lime-400 font-semibold text-black hover:bg-lime-300"
+                  >
                     <MessageSquare className="size-4" /> Message tutor
                   </Button>
-                </Link>
+                ) : (
+                  <Link
+                    to={`/auth?returnTo=${encodeURIComponent(`/tutors/${tutor._id}`)}`}
+                  >
+                    <Button className="gap-2 bg-lime-400 font-semibold text-black hover:bg-lime-300">
+                      <MessageSquare className="size-4" /> Message tutor
+                    </Button>
+                  </Link>
+                )}
               </div>
 
               <div className="mt-6 flex flex-wrap items-center gap-x-6 gap-y-3 text-sm text-muted-foreground">

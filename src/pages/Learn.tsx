@@ -13,6 +13,7 @@ import {
   GraduationCap,
   ListChecks,
   Loader2,
+  MessageSquare,
   PlayCircle,
   ScrollText,
   StickyNote,
@@ -29,6 +30,7 @@ import { Rating } from "@/components/site/Rating";
 import { Avatar } from "@/components/site/Avatar";
 import { EmptyState } from "@/components/site/EmptyState";
 import { useAuth } from "@/hooks/use-auth";
+import { openChatWith } from "@/lib/chat-open";
 import { cn } from "@/lib/utils";
 import { formatHours } from "@/lib/format";
 
@@ -470,6 +472,14 @@ export default function Learn() {
               <p className="truncate text-sm font-medium">{course.tutor.name}</p>
               <p className="text-xs text-muted-foreground">Course tutor</p>
             </div>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => openChatWith(course.tutorId)}
+              className="shrink-0 gap-1.5 border-white/15 text-lime-300 hover:bg-lime-400/10"
+            >
+              <MessageSquare className="size-3.5" /> Message tutor
+            </Button>
             <Link to={`/tutors/${course.tutorId}`} className="text-xs text-lime-300 hover:underline">
               View profile
             </Link>

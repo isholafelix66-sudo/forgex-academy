@@ -4,8 +4,10 @@ import { Progress as ProgressBar } from "@/components/ui/progress";
 import { PageHeader } from "@/components/dash/PageHeader";
 import { EmptyState } from "@/components/site/EmptyState";
 import { Avatar } from "@/components/site/Avatar";
-import { Users } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { MessageSquare, Users } from "lucide-react";
 import { Link } from "react-router";
+import { openChatWith } from "@/lib/chat-open";
 
 export default function TutorStudents() {
   const students = useQuery(api.tutor.tutorStudents);
@@ -50,6 +52,14 @@ export default function TutorStudents() {
                 <span className="w-10 shrink-0 text-right text-xs font-bold text-lime-300">
                   {Math.round(row.avgProgress)}%
                 </span>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => row.student?._id && openChatWith(row.student._id)}
+                  className="shrink-0 gap-1.5 border-white/15 text-lime-300 hover:bg-lime-400/10"
+                >
+                  <MessageSquare className="size-3.5" /> Message
+                </Button>
               </div>
               <div className="mt-3 space-y-1.5 border-t border-white/5 pt-3">
                 {row.enrolledCourses.map((c) => (

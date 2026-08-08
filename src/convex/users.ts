@@ -75,6 +75,36 @@ export const presenceHeartbeat = mutation({
   },
 });
 
+/**
+ * Search platform users (tutors, students, admins) to start a new
+ * conversation. Excludes yourself and seeded demo accounts.
+ */
+export const searchUsers = query({
+  args: { q: v.string() },
+  handler: async (ctx, { q }) => {
+    const me = await requireUserDoc(ctx);
+    const term = q.trim().toLowerCase();
+    if (!term) return [];
+    const users = await ctx.db.query("users").collect();
+    return users
+      .filter((u) => u._id !== me._id && !u.isSeed)
+      .filter((u) => {
+        const name = (u.name ?? "").toLowerCase();
+        const email = (u.email ?? "").toLowerCase();
+        return name.includes(term) || email.includes(term);
+      })
+      .slice(0, 15)
+      .map((u) => ({
+        _id: u._id,
+        name: u.name || "Anonymous",
+        image: u.image ?? null,
+        role: u.role ?? "student",
+        headline: u.headline ?? null,
+        online: !!u.lastActivity && Date.now() - u.lastActivity < 60_000,
+      }));
+  },
+});
+
 /** Public-safe profile of any user (used to start a new conversation). */
 export const getPublicUser = query({
   args: { id: v.id("users") },
