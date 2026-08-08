@@ -12,9 +12,13 @@ import {
   FileText,
   GraduationCap,
   ListChecks,
+  Loader2,
+  MessageSquareText,
   PlayCircle,
   Rocket,
+  Send,
   Star,
+  Trash2,
   Users,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -27,8 +31,27 @@ import { DifficultyBadge } from "@/components/site/DifficultyBadge";
 import { Rating } from "@/components/site/Rating";
 import { ProgressRing } from "@/components/site/ProgressRing";
 import { EmptyState } from "@/components/site/EmptyState";
+import { useEffect, useState } from "react";
+import { toast } from "sonner";
+import { cn } from "@/lib/utils";
+import { Textarea } from "@/components/ui/textarea";
 import { useAuth } from "@/hooks/use-auth";
 import { formatHours } from "@/lib/format";
+
+function formatRelative(ts: number) {
+  const diff = Date.now() - ts;
+  const mins = Math.max(1, Math.floor(diff / 60000));
+  if (mins < 60) return `${mins}m ago`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `${hrs}h ago`;
+  const days = Math.floor(hrs / 24);
+  if (days < 7) return `${days}d ago`;
+  return new Date(ts).toLocaleDateString(undefined, {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
+}
 
 export default function CourseDetail() {
   const { slug } = useParams();
@@ -40,6 +63,28 @@ export default function CourseDetail() {
     api.learn.enrollmentStatus,
     isAuthenticated && course ? { courseId: course._id } : "skip",
   );
+  const reviews = useQuery(
+    api.reviews.listByCourse,
+    course ? { courseId: course._id } : "skip",
+  );
+  const myReview = useQuery(
+    api.reviews.myReview,
+    isAuthenticated && course ? { courseId: course._id } : "skip",
+  );
+  const upsertReview = useMutation(api.reviews.upsert);
+  const removeReview = useMutation(api.reviews.remove);
+
+  const [star, setStar] = useState(0);
+  const [hoverStar, setHoverStar] = useState(0);
+  const [reviewComment, setReviewComment] = useState("");
+  const [submittingReview, setSubmittingReview] = useState(false);
+
+  useEffect(() => {
+    if (myReview) {
+      setStar(myReview.rating);
+      setReviewComment(myReview.comment);
+    }
+  }, [myReview]);
 
   if (!course) {
     return (
@@ -70,6 +115,36 @@ export default function CourseDetail() {
   };
 
   const isEnrolled = !!enrollment;
+
+  const handleSubmitReview = async () => {
+    if (star < 1) {
+      toast.error("Pick a star rating first.");
+      return;
+    }
+    setSubmittingReview(true);
+    try {
+      await upsertReview({ courseId: course._id, rating: star, comment: reviewComment });
+      toast.success(myReview ? "Review updated" : "Thanks — your review is live!");
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Couldn't submit your review.");
+    } finally {
+      setSubmittingReview(false);
+    }
+  };
+
+  const handleDeleteReview = async () => {
+    setSubmittingReview(true);
+    try {
+      await removeReview({ courseId: course._id });
+      setStar(0);
+      setReviewComment("");
+      toast.success("Review removed.");
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Couldn't remove your review.");
+    } finally {
+      setSubmittingReview(false);
+    }
+  };
 
   return (
     <PageShell>
@@ -290,6 +365,222 @@ export default function CourseDetail() {
                     Complete every lesson to earn your certificate — it ships
                     with a unique ID and QR code anyone can verify online.
                   </p>
+                </div>
+              </div>
+            </Reveal>
+
+            {/* Ratings & reviews */}
+            <Reveal className="mt-10">
+              <div className="rounded-3xl border border-white/10 bg-card p-6 sm:p-8">
+                <div className="flex items-center gap-3">
+                  <span className="flex size-11 shrink-0 items-center justify-center rounded-2xl bg-lime-400/12 text-lime-300">
+                    <MessageSquareText className="size-5" />
+                  </span>
+                  <div>
+                    <h2 className="font-display text-2xl font-bold">Ratings &amp; reviews</h2>
+                    <p className="text-sm text-muted-foreground">
+                      {course.ratingCount > 0
+                        ? "What learners say about this course"
+                        : "Be the first to rate this course"}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="mt-6 grid gap-6 sm:grid-cols-[170px_1fr]">
+                  {/* Summary */}
+                  <div className="text-center sm:border-r sm:border-white/10 sm:pr-6">
+                    <p className="font-display text-5xl font-bold text-gradient">
+                      {course.rating.toFixed(1)}
+                    </p>
+                    <div className="mt-2 flex justify-center">
+                      <Rating value={course.rating} size="md" />
+                    </div>
+                    <p className="mt-2 text-xs text-muted-foreground">
+                      {course.ratingCount.toLocaleString()}{" "}
+                      {course.ratingCount === 1 ? "review" : "reviews"}
+                    </p>
+                  </div>
+
+                  {/* Distribution */}
+                  <div className="space-y-2">
+                    {[5, 4, 3, 2, 1].map((n) => {
+                      const count = reviews?.distribution[n] ?? 0;
+                      const total = reviews?.total ?? course.ratingCount;
+                      const pct = total > 0 ? Math.round((count / total) * 100) : 0;
+                      return (
+                        <div key={n} className="flex items-center gap-3 text-xs">
+                          <span className="flex w-8 items-center gap-1 font-medium text-muted-foreground">
+                            {n}
+                            <Star className="size-3 fill-amber-400 text-amber-400" />
+                          </span>
+                          <div className="h-2 flex-1 overflow-hidden rounded-full bg-white/8">
+                            <div
+                              className="h-full rounded-full bg-gradient-to-r from-lime-400/70 to-lime-300 transition-all duration-500"
+                              style={{ width: `${pct}%` }}
+                            />
+                          </div>
+                          <span className="w-6 text-right tabular-nums text-muted-foreground">
+                            {count}
+                          </span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* Write a review */}
+                <div className="mt-8 border-t border-white/10 pt-6">
+                  {!isAuthenticated ? (
+                    <div className="flex flex-col items-center gap-3 rounded-2xl border border-dashed border-white/15 bg-black/20 px-6 py-8 text-center">
+                      <Star className="size-6 text-lime-400/70" />
+                      <p className="text-sm text-muted-foreground">
+                        Learned something great? Sign in to rate and review this course.
+                      </p>
+                      <Button
+                        onClick={() =>
+                          navigate(
+                            `/auth?returnTo=${encodeURIComponent(`/courses/${course.slug}`)}`,
+                          )
+                        }
+                        className="gap-2 bg-lime-400 font-semibold text-black hover:bg-lime-300"
+                      >
+                        Sign in to review
+                      </Button>
+                    </div>
+                  ) : (
+                    <div>
+                      <div className="flex flex-wrap items-center justify-between gap-3">
+                        <p className="text-sm font-medium">
+                          {myReview ? "Update your review" : "Rate this course"}
+                        </p>
+                        <div className="flex items-center gap-1">
+                          {[1, 2, 3, 4, 5].map((n) => (
+                            <button
+                              key={n}
+                              type="button"
+                              aria-label={`${n} star${n > 1 ? "s" : ""}`}
+                              onMouseEnter={() => setHoverStar(n)}
+                              onMouseLeave={() => setHoverStar(0)}
+                              onClick={() => setStar(n)}
+                              className="rounded-md p-0.5 transition-transform hover:scale-125"
+                            >
+                              <Star
+                                className={cn(
+                                  "size-6 transition-colors",
+                                  n <= (hoverStar || star)
+                                    ? "fill-amber-400 text-amber-400"
+                                    : "fill-transparent text-muted-foreground/30",
+                                )}
+                              />
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                      <Textarea
+                        value={reviewComment}
+                        onChange={(e) => setReviewComment(e.target.value)}
+                        placeholder="What did you like? What could be better? (optional)"
+                        rows={3}
+                        maxLength={1000}
+                        className="mt-3"
+                      />
+                      <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
+                        <p className="text-xs text-muted-foreground">
+                          {star > 0 ? `${star} of 5 stars` : "Tap a star to pick your rating"}
+                        </p>
+                        <div className="flex items-center gap-2">
+                          {myReview && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              disabled={submittingReview}
+                              onClick={handleDeleteReview}
+                              className="text-muted-foreground hover:text-rose-300"
+                            >
+                              <Trash2 className="size-4" /> Remove
+                            </Button>
+                          )}
+                          <Button
+                            size="sm"
+                            disabled={submittingReview || star < 1}
+                            onClick={handleSubmitReview}
+                            className="gap-2 bg-lime-400 font-semibold text-black hover:bg-lime-300"
+                          >
+                            {submittingReview ? (
+                              <Loader2 className="size-4 animate-spin" />
+                            ) : (
+                              <Send className="size-4" />
+                            )}
+                            {myReview ? "Update review" : "Publish review"}
+                          </Button>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Review list */}
+                <div className="mt-8 space-y-4">
+                  {reviews === undefined ? (
+                    <div className="space-y-4">
+                      {[0, 1].map((i) => (
+                        <div
+                          key={i}
+                          className="h-24 animate-pulse rounded-2xl border border-white/8 bg-black/20"
+                        />
+                      ))}
+                    </div>
+                  ) : reviews.reviews.length === 0 ? (
+                    <div className="rounded-2xl border border-dashed border-white/15 bg-black/20 px-6 py-10 text-center">
+                      <p className="text-sm text-muted-foreground">
+                        No reviews yet — your rating will help other learners pick this course.
+                      </p>
+                    </div>
+                  ) : (
+                    reviews.reviews.map((r) => (
+                      <div
+                        key={r._id}
+                        className="flex gap-4 rounded-2xl border border-white/10 bg-black/20 p-5"
+                      >
+                        <Avatar
+                          name={r.author.name}
+                          image={r.author.image}
+                          className="size-10 shrink-0"
+                        />
+                        <div className="min-w-0 flex-1">
+                          <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                            <p className="text-sm font-semibold">{r.author.name}</p>
+                            <span className="inline-flex items-center gap-0.5">
+                              {[1, 2, 3, 4, 5].map((n) => (
+                                <Star
+                                  key={n}
+                                  className={cn(
+                                    "size-3",
+                                    n <= r.rating
+                                      ? "fill-amber-400 text-amber-400"
+                                      : "fill-transparent text-muted-foreground/25",
+                                  )}
+                                />
+                              ))}
+                            </span>
+                            <span className="text-xs text-muted-foreground">
+                              {formatRelative(r.createdAt)}
+                              {r.updatedAt !== r.createdAt ? " · edited" : ""}
+                            </span>
+                          </div>
+                          {r.comment ? (
+                            <p className="mt-1.5 whitespace-pre-line text-sm leading-relaxed text-muted-foreground">
+                              {r.comment}
+                            </p>
+                          ) : (
+                            <p className="mt-1.5 text-sm italic text-muted-foreground/60">
+                              Rated {r.rating} star{r.rating > 1 ? "s" : ""} — no written comment.
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                    ))
+                  )}
                 </div>
               </div>
             </Reveal>

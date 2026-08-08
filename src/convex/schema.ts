@@ -259,6 +259,21 @@ const schema = defineSchema(
       .index("by_student", ["studentId"])
       .index("by_course", ["courseId"]),
 
+    /** Learner reviews + ratings for a course (one review per user per course).
+     *  The course's `rating` / `ratingCount` fields are derived from these
+     *  docs and recomputed whenever a review is added, updated or removed.
+     */
+    courseReviews: defineTable({
+      courseId: v.id("courses"),
+      userId: v.id("users"),
+      rating: v.number(), // 1–5 stars
+      comment: v.string(), // may be empty
+      createdAt: v.number(),
+      updatedAt: v.number(),
+    })
+      .index("by_course", ["courseId", "createdAt"])
+      .index("by_user_course", ["userId", "courseId"]),
+
     certificates: defineTable({
       certificateId: v.string(),
       studentId: v.id("users"),
