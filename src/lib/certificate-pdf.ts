@@ -16,7 +16,7 @@ export async function downloadCertificatePdf(node: HTMLElement, fileName: string
 
   const canvas = await html2canvas(node, {
     scale: 2, // 2× for crisp print output
-    backgroundColor: "#f7f5ee",
+    backgroundColor: "#0d0f0c",
     useCORS: true,
     logging: false,
     windowWidth: document.documentElement.scrollWidth,

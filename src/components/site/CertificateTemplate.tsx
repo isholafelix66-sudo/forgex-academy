@@ -46,6 +46,15 @@ function normalizeAccent(color: string): string {
   return /^#[0-9a-fA-F]{6}$/.test(color) ? color : "#a3e635";
 }
 
+/** #rrggbb -> rgba() string (html2canvas-safe alpha). */
+function rgba(hex: string, alpha: number): string {
+  const m = hex.replace("#", "");
+  const r = parseInt(m.slice(0, 2), 16);
+  const g = parseInt(m.slice(2, 4), 16);
+  const b = parseInt(m.slice(4, 6), 16);
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+}
+
 export function CertificateTemplate({
   cert,
   branding,
@@ -56,15 +65,16 @@ export function CertificateTemplate({
   verifyUrl: string;
 }) {
   const accent = normalizeAccent(branding.accentColor);
-  const ink = "#171a1e";
-  const muted = "#5b6169";
-  const paper = "#f7f5ee";
+  const bg = "#0d0f0c"; // electric black
+  const ink = "#f4f4f5"; // off-white text
+  const muted = "#9ca3af"; // muted text
+  const limeSoft = "#bef264"; // student-name accent
 
   const corners = [
-    { top: 34, left: 34 },
-    { top: 34, right: 34 },
-    { bottom: 34, left: 34 },
-    { bottom: 34, right: 34 },
+    { top: 36, left: 36 },
+    { top: 36, right: 36 },
+    { bottom: 36, left: 36 },
+    { bottom: 36, right: 36 },
   ];
 
   return (
@@ -72,29 +82,47 @@ export function CertificateTemplate({
       style={{
         width: CERTIFICATE_W,
         height: CERTIFICATE_H,
-        background: paper,
+        background: bg,
         color: ink,
-        fontFamily: "Georgia, 'Times New Roman', serif",
+        fontFamily: "'Segoe UI', system-ui, -apple-system, sans-serif",
         position: "relative",
         overflow: "hidden",
         boxSizing: "border-box",
       }}
     >
+      {/* Grid texture */}
+      <div
+        style={{
+          position: "absolute",
+          inset: 0,
+          backgroundImage:
+            "repeating-linear-gradient(0deg, rgba(255,255,255,0.035) 0 1px, transparent 1px 52px), repeating-linear-gradient(90deg, rgba(255,255,255,0.035) 0 1px, transparent 1px 52px)",
+        }}
+      />
+      {/* Lime gradient wash */}
+      <div
+        style={{
+          position: "absolute",
+          inset: 0,
+          background: `linear-gradient(180deg, ${rgba(accent, 0.16)} 0%, rgba(13,15,12,0) 58%)`,
+        }}
+      />
+
       {/* Frames */}
       <div
         style={{
           position: "absolute",
-          inset: 20,
-          border: `3px solid ${accent}`,
-          borderRadius: 14,
+          inset: 22,
+          border: `2.5px solid ${accent}`,
+          borderRadius: 16,
         }}
       />
       <div
         style={{
           position: "absolute",
           inset: 30,
-          border: "1px solid rgba(23,26,30,0.4)",
-          borderRadius: 8,
+          border: "1px solid rgba(255,255,255,0.12)",
+          borderRadius: 10,
         }}
       />
       {corners.map((c, i) => (
@@ -102,8 +130,8 @@ export function CertificateTemplate({
           key={i}
           style={{
             position: "absolute",
-            width: 14,
-            height: 14,
+            width: 13,
+            height: 13,
             background: accent,
             ...c,
           }}
@@ -114,7 +142,7 @@ export function CertificateTemplate({
       <div
         style={{
           position: "absolute",
-          top: 66,
+          top: 62,
           left: 0,
           right: 0,
           textAlign: "center",
@@ -125,18 +153,36 @@ export function CertificateTemplate({
           <img
             src={branding.logoUrl}
             alt=""
-            style={{ height: 70, objectFit: "contain", maxWidth: 260 }}
+            style={{ height: 66, objectFit: "contain", maxWidth: 280 }}
           />
         ) : (
-          <span style={{ fontSize: 54, color: accent, lineHeight: 1 }}>✦</span>
+          <div
+            style={{
+              width: 72,
+              height: 72,
+              margin: "0 auto",
+              borderRadius: "50%",
+              border: `3px solid ${accent}`,
+              background: rgba(accent, 0.14),
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              fontSize: 36,
+              color: accent,
+              lineHeight: 1,
+            }}
+          >
+            ✓
+          </div>
         )}
         <div
           style={{
-            fontSize: 32,
+            fontSize: 30,
             fontWeight: 700,
-            letterSpacing: "6px",
+            letterSpacing: "8px",
             textTransform: "uppercase",
-            marginTop: 10,
+            marginTop: 12,
+            color: ink,
           }}
         >
           {branding.institutionName}
@@ -145,9 +191,9 @@ export function CertificateTemplate({
           style={{
             fontSize: 16,
             fontStyle: "italic",
-            letterSpacing: "1px",
+            letterSpacing: "2px",
             color: muted,
-            marginTop: 5,
+            marginTop: 6,
           }}
         >
           {branding.motto}
@@ -158,24 +204,24 @@ export function CertificateTemplate({
       <div
         style={{
           position: "absolute",
-          top: 232,
-          left: 230,
-          right: 230,
+          top: 236,
+          left: 240,
+          right: 240,
           display: "flex",
           alignItems: "center",
           gap: 14,
         }}
       >
-        <div style={{ flex: 1, height: 1, background: accent }} />
-        <span style={{ fontSize: 16, color: accent }}>✦</span>
-        <div style={{ flex: 1, height: 1, background: accent }} />
+        <div style={{ flex: 1, height: 1, background: rgba(accent, 0.55) }} />
+        <span style={{ fontSize: 15, color: accent }}>✦</span>
+        <div style={{ flex: 1, height: 1, background: rgba(accent, 0.55) }} />
       </div>
 
       {/* Body */}
       <div
         style={{
           position: "absolute",
-          top: 254,
+          top: 258,
           left: 0,
           right: 0,
           textAlign: "center",
@@ -184,10 +230,10 @@ export function CertificateTemplate({
       >
         <div
           style={{
-            fontSize: 40,
+            fontSize: 46,
             fontWeight: 700,
-            letterSpacing: "4px",
-            textTransform: "uppercase",
+            letterSpacing: "2px",
+            color: ink,
           }}
         >
           Certificate of Completion
@@ -197,15 +243,16 @@ export function CertificateTemplate({
             fontSize: 19,
             fontStyle: "italic",
             color: muted,
-            marginTop: 26,
+            marginTop: 30,
           }}
         >
-          This is proudly presented to
+          This certifies that
         </div>
         <div
           style={{
-            fontSize: 56,
+            fontSize: 54,
             fontWeight: 700,
+            color: limeSoft,
             marginTop: 10,
             lineHeight: 1.15,
             overflowWrap: "break-word",
@@ -215,10 +262,10 @@ export function CertificateTemplate({
         </div>
         <div
           style={{
-            width: 250,
+            width: 260,
             height: 2,
             background: accent,
-            margin: "16px auto 0",
+            margin: "18px auto 0",
           }}
         />
         <div
@@ -226,24 +273,24 @@ export function CertificateTemplate({
             fontSize: 19,
             fontStyle: "italic",
             color: muted,
-            marginTop: 16,
+            marginTop: 18,
           }}
         >
-          for successfully completing the course
+          has successfully completed the course
         </div>
         <div
           style={{
-            fontSize: 32,
+            fontSize: 30,
             fontWeight: 600,
-            color: accent,
+            color: ink,
             marginTop: 8,
             overflowWrap: "break-word",
           }}
         >
           {cert.courseTitle}
         </div>
-        <div style={{ fontSize: 16, color: muted, marginTop: 22 }}>
-          Awarded on {formatDate(cert.issuedAt)}
+        <div style={{ fontSize: 15, color: muted, marginTop: 24 }}>
+          Awarded {formatDate(cert.issuedAt)}
         </div>
       </div>
 
@@ -251,9 +298,9 @@ export function CertificateTemplate({
       <div
         style={{
           position: "absolute",
-          bottom: 96,
-          left: 140,
-          right: 140,
+          bottom: 88,
+          left: 130,
+          right: 130,
           display: "flex",
           alignItems: "flex-end",
           justifyContent: "space-between",
@@ -261,27 +308,28 @@ export function CertificateTemplate({
         }}
       >
         {/* Signature */}
-        <div style={{ textAlign: "center", width: 300 }}>
+        <div style={{ textAlign: "center", width: 330 }}>
           {branding.signatureUrl ? (
             <img
               src={branding.signatureUrl}
               alt=""
               style={{
-                height: 62,
+                height: 58,
                 objectFit: "contain",
-                maxWidth: 300,
+                maxWidth: 330,
                 marginBottom: 4,
               }}
             />
           ) : (
-            <div style={{ height: 66 }} />
+            <div style={{ height: 62 }} />
           )}
           <div
             style={{
-              borderTop: "1.5px solid rgba(23,26,30,0.5)",
+              borderTop: "1px solid rgba(255,255,255,0.28)",
               paddingTop: 8,
               fontWeight: 700,
-              fontSize: 19,
+              fontSize: 18,
+              color: ink,
             }}
           >
             {branding.signatoryName || "Signature"}
@@ -291,10 +339,35 @@ export function CertificateTemplate({
               fontSize: 13,
               color: muted,
               marginTop: 3,
-              letterSpacing: "0.5px",
+              letterSpacing: "1px",
             }}
           >
             {branding.signatoryTitle}
+          </div>
+        </div>
+
+        {/* Certificate ID */}
+        <div style={{ textAlign: "center", width: 330 }}>
+          <div
+            style={{
+              fontSize: 11,
+              fontWeight: 600,
+              textTransform: "uppercase",
+              letterSpacing: "2.5px",
+              color: muted,
+            }}
+          >
+            Certificate ID
+          </div>
+          <div
+            style={{
+              marginTop: 6,
+              fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace",
+              fontSize: 16,
+              color: limeSoft,
+            }}
+          >
+            {cert.certificateId}
           </div>
         </div>
 
@@ -303,57 +376,15 @@ export function CertificateTemplate({
           <div
             style={{
               background: "#ffffff",
-              border: "1px solid rgba(23,26,30,0.25)",
-              borderRadius: 10,
+              borderRadius: 12,
               padding: 10,
               display: "inline-block",
+              border: `1px solid ${rgba(accent, 0.4)}`,
             }}
           >
-            <QRCodeSVG value={verifyUrl} size={108} fgColor={ink} bgColor="#ffffff" />
-          </div>
-          <div style={{ fontSize: 12, color: muted, marginTop: 6, maxWidth: 200 }}>
-            Scan to verify this credential online
+            <QRCodeSVG value={verifyUrl} size={112} fgColor="#0a0a0a" bgColor="#ffffff" />
           </div>
         </div>
-
-        {/* Verify URL + ID */}
-        <div style={{ textAlign: "right", width: 300, fontSize: 13, color: muted, lineHeight: 1.6 }}>
-          <div style={{ fontWeight: 700, color: ink, letterSpacing: "0.5px" }}>
-            Verify at
-          </div>
-          <div style={{ wordBreak: "break-all" }}>{verifyUrl}</div>
-          <div
-            style={{
-              marginTop: 10,
-              borderTop: "1px solid rgba(23,26,30,0.2)",
-              paddingTop: 8,
-            }}
-          >
-            <span style={{ fontWeight: 700, color: ink, letterSpacing: "0.5px" }}>
-              Certificate ID
-            </span>
-            <br />
-            <span style={{ fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace" }}>
-              {cert.certificateId}
-            </span>
-          </div>
-        </div>
-      </div>
-
-      {/* Watermark */}
-      <div
-        style={{
-          position: "absolute",
-          bottom: 30,
-          left: 0,
-          right: 0,
-          textAlign: "center",
-          fontSize: 12,
-          letterSpacing: "3px",
-          color: "rgba(23,26,30,0.45)",
-        }}
-      >
-        {branding.institutionName.toUpperCase()} · OFFICIAL CREDENTIAL
       </div>
     </div>
   );
