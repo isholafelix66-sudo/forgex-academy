@@ -1,22 +1,56 @@
+import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router";
 import { useQuery } from "convex/react";
 import { QRCodeSVG } from "qrcode.react";
+import { toast } from "sonner";
 import { api } from "@/convex/_generated/api";
-import { Award, ExternalLink, ShieldCheck } from "lucide-react";
+import { Award, Download, ExternalLink, Loader2, ShieldCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { PageHeader } from "@/components/dash/PageHeader";
 import { EmptyState } from "@/components/site/EmptyState";
+import {
+  CertificateView,
+  type CertificateData,
+} from "@/components/site/CertificateTemplate";
+import { downloadCertificatePdf } from "@/lib/certificate-pdf";
 import { formatDate } from "@/lib/format";
+
+type DownloadTarget = CertificateData & { label: string };
 
 export default function Certificates() {
   const certs = useQuery(api.certificates.myCertificates);
+  const branding = useQuery(api.public.certificateBranding);
   const origin = typeof window !== "undefined" ? window.location.origin : "";
+
+  const [downloading, setDownloading] = useState<DownloadTarget | null>(null);
+  const captureRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!downloading || !captureRef.current) return;
+    let cancelled = false;
+    downloadCertificatePdf(
+      captureRef.current,
+      `ForgeX-Certificate-${downloading.certificateId}.pdf`,
+    )
+      .then(() => {
+        if (!cancelled) toast.success("Certificate downloaded");
+      })
+      .catch(() => {
+        if (!cancelled) toast.error("Couldn't generate the PDF. Please try again.");
+      })
+      .finally(() => {
+        if (!cancelled) setDownloading(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [downloading]);
 
   return (
     <div className="space-y-8">
       <PageHeader
         title="Certificates"
-        description="Verified credentials with QR codes — shareable anywhere."
+        description="Verified credentials with QR codes — download as PDF or share anywhere."
       />
 
       {certs === undefined ? (
@@ -50,7 +84,7 @@ export default function Certificates() {
                 <div className="bg-grid border-b border-white/10 bg-gradient-to-br from-lime-400/15 to-transparent p-6 text-center">
                   <Award className="mx-auto size-9 text-lime-400" />
                   <p className="mt-3 text-[10px] font-semibold uppercase tracking-[0.25em] text-lime-400/80">
-                    ForgeX Academy
+                    {branding?.institutionName ?? "ForgeX Academy"}
                   </p>
                   <h3 className="font-display mt-2 text-xl font-bold text-gradient">
                     {c.courseTitle}
@@ -68,8 +102,29 @@ export default function Certificates() {
                       {c.certificateId}
                     </p>
                     <div className="mt-3 flex flex-wrap gap-2">
+                      <Button
+                        size="sm"
+                        disabled={!!downloading}
+                        onClick={() =>
+                          setDownloading({
+                            certificateId: c.certificateId,
+                            studentName: c.studentName,
+                            courseTitle: c.courseTitle,
+                            issuedAt: c.issuedAt,
+                            label: c.courseTitle,
+                          })
+                        }
+                        className="gap-1.5 bg-lime-400 font-semibold text-black hover:bg-lime-300"
+                      >
+                        {downloading?.certificateId === c.certificateId ? (
+                          <Loader2 className="size-3.5 animate-spin" />
+                        ) : (
+                          <Download className="size-3.5" />
+                        )}
+                        Download PDF
+                      </Button>
                       <Link to={`/verify/${c.certificateId}`}>
-                        <Button size="sm" className="gap-1.5 bg-lime-400 font-semibold text-black hover:bg-lime-300">
+                        <Button size="sm" variant="outline" className="gap-1.5 border-white/15">
                           <ShieldCheck className="size-3.5" /> View & verify
                         </Button>
                       </Link>
@@ -90,6 +145,22 @@ export default function Certificates() {
               </div>
             );
           })}
+        </div>
+      )}
+
+      {/* Offscreen full-size template used for PDF capture */}
+      {downloading && (
+        <div
+          aria-hidden
+          style={{ position: "fixed", left: -10000, top: 0, zIndex: -1 }}
+        >
+          <div ref={captureRef} style={{ width: 1280, height: 905 }}>
+            <CertificateView
+              cert={downloading}
+              branding={branding}
+              verifyUrl={`${origin}/verify/${downloading.certificateId}`}
+            />
+          </div>
         </div>
       )}
     </div>

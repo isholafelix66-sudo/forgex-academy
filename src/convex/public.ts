@@ -375,6 +375,46 @@ export const stats = query({
   },
 });
 
+/**
+ * Admin-customizable certificate branding (logo, institution, signature,
+ * accent color). Stored in `siteContent` under the `certificateBranding`
+ * key; falls back to the platform defaults when not configured yet.
+ */
+export const certificateBranding = query({
+  args: {},
+  handler: async (ctx) => {
+    const doc = await ctx.db
+      .query("siteContent")
+      .withIndex("by_key", (q) => q.eq("key", "certificateBranding"))
+      .first();
+    const b = doc?.value;
+    return {
+      institutionName:
+        typeof b?.institutionName === "string" && b.institutionName
+          ? b.institutionName
+          : "ForgeX Academy",
+      motto:
+        typeof b?.motto === "string" && b.motto
+          ? b.motto
+          : "Learn. Build. Succeed.",
+      signatoryName:
+        typeof b?.signatoryName === "string" ? b.signatoryName : "",
+      signatoryTitle:
+        typeof b?.signatoryTitle === "string" ? b.signatoryTitle : "",
+      logoUrl:
+        typeof b?.logoUrl === "string" && b.logoUrl ? b.logoUrl : null,
+      signatureUrl:
+        typeof b?.signatureUrl === "string" && b.signatureUrl
+          ? b.signatureUrl
+          : null,
+      accentColor:
+        typeof b?.accentColor === "string" && b.accentColor
+          ? b.accentColor
+          : "#a3e635",
+    };
+  },
+});
+
 export const verifyCertificate = query({
   args: { certificateId: v.string() },
   handler: async (ctx, { certificateId }) => {

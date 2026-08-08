@@ -1,24 +1,45 @@
+import { useRef, useState } from "react";
 import { Link, useParams } from "react-router";
 import { useQuery } from "convex/react";
-import { QRCodeSVG } from "qrcode.react";
 import { api } from "@/convex/_generated/api";
-import { Award, BadgeCheck, ShieldCheck } from "lucide-react";
+import { toast } from "sonner";
+import { Award, Download, Loader2, ShieldCheck } from "lucide-react";
 import { PageShell } from "@/components/site/PageShell";
 import { Reveal } from "@/components/site/Reveal";
 import { EmptyState } from "@/components/site/EmptyState";
+import { CertificateView } from "@/components/site/CertificateTemplate";
 import { Button } from "@/components/ui/button";
-import { formatDate } from "@/lib/format";
+import { downloadCertificatePdf } from "@/lib/certificate-pdf";
 
 export default function VerifyCertificate() {
   const { certificateId } = useParams();
   const cert = useQuery(api.public.verifyCertificate, {
     certificateId: certificateId ?? "",
   });
+  const branding = useQuery(api.public.certificateBranding);
+  const captureRef = useRef<HTMLDivElement>(null);
+  const [downloading, setDownloading] = useState(false);
 
   const verifyUrl =
     typeof window !== "undefined"
       ? `${window.location.origin}/verify/${certificateId}`
       : "";
+
+  const handleDownload = async () => {
+    if (!captureRef.current || !cert) return;
+    setDownloading(true);
+    try {
+      await downloadCertificatePdf(
+        captureRef.current,
+        `ForgeX-Certificate-${cert.certificateId}.pdf`,
+      );
+      toast.success("Certificate downloaded");
+    } catch {
+      toast.error("Couldn't generate the PDF. Please try again.");
+    } finally {
+      setDownloading(false);
+    }
+  };
 
   if (cert === undefined) {
     return (
@@ -51,7 +72,7 @@ export default function VerifyCertificate() {
 
   return (
     <PageShell>
-      <section className="mx-auto max-w-3xl px-4 pb-24 pt-14 sm:px-6">
+      <section className="mx-auto max-w-5xl px-4 pb-24 pt-14 sm:px-6">
         <Reveal className="text-center">
           <span className="inline-flex items-center gap-2 rounded-full border border-lime-400/30 bg-lime-400/10 px-4 py-1.5 text-xs font-semibold text-lime-300">
             <ShieldCheck className="size-3.5" /> Official verification
@@ -60,58 +81,39 @@ export default function VerifyCertificate() {
             This certificate is <span className="text-gradient">genuine</span>
           </h1>
           <p className="mt-3 text-muted-foreground">
-            Issued by ForgeX Academy · ForgeX Network
+            Issued by {branding?.institutionName ?? "ForgeX Academy"} · ForgeX Network
           </p>
         </Reveal>
 
         <Reveal delay={0.08} className="mt-10">
-          <div className="overflow-hidden rounded-3xl border border-lime-400/25 bg-card">
-            <div className="bg-grid border-b border-white/10 bg-gradient-to-br from-lime-400/15 to-transparent p-10 text-center">
-              <BadgeCheck className="mx-auto size-12 text-lime-400" />
-              <p className="mt-4 text-xs font-semibold uppercase tracking-[0.3em] text-lime-400/80">
-                ForgeX Academy
-              </p>
-              <h2 className="font-display mt-3 text-3xl font-bold sm:text-4xl">
-                Certificate of Completion
-              </h2>
-              <p className="mt-6 text-sm text-muted-foreground">This certifies that</p>
-              <p className="font-display mt-2 text-3xl font-bold text-gradient">
-                {cert.studentName}
-              </p>
-              <p className="mt-6 text-sm text-muted-foreground">
-                has successfully completed the course
-              </p>
-              <p className="font-display mt-2 text-2xl font-semibold">
-                {cert.courseTitle}
-              </p>
-              <p className="mt-8 text-xs text-muted-foreground">
-                Awarded {formatDate(cert.issuedAt)}
-              </p>
-            </div>
-
-            <div className="flex flex-col items-center justify-between gap-6 border-t border-white/10 p-8 sm:flex-row">
-              <div className="text-center sm:text-left">
-                <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                  Certificate ID
-                </p>
-                <p className="mt-1 font-mono text-sm text-lime-300">
-                  {cert.certificateId}
-                </p>
-                <div className="mt-4 flex items-center justify-center gap-2 sm:justify-start">
-                  <span className="inline-flex items-center gap-1.5 rounded-full bg-lime-400/15 px-3 py-1 text-xs font-semibold text-lime-300">
-                    <BadgeCheck className="size-3.5" /> Verified online
-                  </span>
-                </div>
-              </div>
-              <div className="rounded-2xl border border-white/15 bg-white p-4">
-                <QRCodeSVG value={verifyUrl} size={128} fgColor="#0a0a0a" bgColor="#ffffff" />
-              </div>
-            </div>
-          </div>
+          <CertificateView
+            cert={{
+              certificateId: cert.certificateId,
+              studentName: cert.studentName,
+              courseTitle: cert.courseTitle,
+              issuedAt: cert.issuedAt,
+            }}
+            branding={branding}
+            verifyUrl={verifyUrl}
+            captureRef={captureRef}
+            className="overflow-hidden rounded-3xl border border-lime-400/25 shadow-2xl shadow-lime-400/5"
+          />
         </Reveal>
 
         <Reveal delay={0.12} className="mt-8 text-center">
-          <p className="text-sm text-muted-foreground">
+          <Button
+            onClick={() => void handleDownload()}
+            disabled={downloading}
+            className="gap-2 bg-lime-400 font-semibold text-black hover:bg-lime-300"
+          >
+            {downloading ? (
+              <Loader2 className="size-4 animate-spin" />
+            ) : (
+              <Download className="size-4" />
+            )}
+            Download as PDF
+          </Button>
+          <p className="mt-4 text-sm text-muted-foreground">
             Recruiters can scan the QR code or visit the verification URL to
             confirm this credential at any time.
           </p>
