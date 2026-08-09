@@ -49,39 +49,58 @@ function apiTemplateKey(): string {
 
 /**
  * Render the certificate HTML into a PDF through APITemplate
- * (POST /v2/create-pdf-from-html — the design is sent each time). Tries an
- * exact pixel paper size first, falling back to millimetres if the API
- * rejects that value.
+ * (POST /v2/create-pdf-from-html — the design is sent each time).
+ *
+ * APITemplate only accepts standard paper sizes — custom "W x H" values are
+ * rejected with HTTP 400 ("Internal error unable to generate PDF"). The
+ * certificate is designed at 1280x905, so it is rendered on an A4 landscape
+ * page and fitted to it with a CSS transform: the outer wrapper is sized to
+ * the printable area (standard CSS every renderer honors — A4 landscape is
+ * 297x210mm ≈ 841.9x595.3 px at the renderer's 72 dpi) and the certificate is
+ * visually scaled inside it, clipped by overflow:hidden. The aspect ratios
+ * match, so the certificate fills the page with no dead space.
  */
-async function generatePdfFromHtml(html: string, css: string): Promise<string> {
-  const makeSettings = (paperSize: string) => ({
-    paper_size: paperSize,
+const PDF_PAGE_W = 840; // A4 landscape printable area @72dpi (page = 841.9x595.3)
+const PDF_PAGE_H = 594;
+const PDF_FIT_SCALE = PDF_PAGE_W / DESIGN_W; // 0.65625 — 1280x905 -> 840x594
+
+async function generatePdfFromHtml(html: string): Promise<string> {
+  const css = [
+    "@page { size: A4 landscape; margin: 0; }",
+    "html, body { margin: 0; padding: 0; }",
+  ].join("\n");
+
+  const settings = {
+    paper_size: "A4",
     orientation: "2", // landscape
     margin_top: "0",
     margin_right: "0",
     margin_bottom: "0",
     margin_left: "0",
     print_background: "1",
-  });
+  };
 
-  const attempts: Array<{ settings: ReturnType<typeof makeSettings> }> = [
-    { settings: makeSettings(`${DESIGN_W}px x ${DESIGN_H}px`) },
-    {
-      settings: makeSettings(
-        `${Math.round((DESIGN_W / 96) * 25.4 * 10) / 10}mm x ${Math.round((DESIGN_H / 96) * 25.4 * 10) / 10}mm`,
-      ),
-    },
-  ];
+  // A few scales as insurance: if the renderer rounds the scaled box a hair
+  // larger than the page, the API reports total_pages > 1 — retry smaller
+  // until the certificate fits a single page.
+  const attempts = [PDF_FIT_SCALE, PDF_FIT_SCALE * 0.99, PDF_FIT_SCALE * 0.975];
 
   let lastError: unknown = null;
-  for (const attempt of attempts) {
+  for (const scale of attempts) {
+    const body = [
+      `<div style="width:${PDF_PAGE_W}px;height:${PDF_PAGE_H}px;overflow:hidden;background:#0b0f0e;">`,
+      `<div style="transform:scale(${scale});transform-origin:0 0;width:${DESIGN_W}px;height:${DESIGN_H}px;">`,
+      html,
+      "</div></div>",
+    ].join("");
+
     const res = await fetch(`${APITEMPLATE_API}/create-pdf-from-html`, {
       method: "POST",
       headers: {
         "X-API-KEY": apiTemplateKey(),
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({ body: html, css, settings: attempt.settings }),
+      body: JSON.stringify({ body, css, settings }),
     });
     const text = await res.text();
     if (res.ok) {
@@ -92,20 +111,32 @@ async function generatePdfFromHtml(html: string, css: string): Promise<string> {
         throw new Error("APITemplate returned an unreadable response. Please try again.");
       }
       if (json?.status === "success" && typeof json?.download_url === "string") {
+        if (typeof json.total_pages === "number" && json.total_pages > 1) {
+          lastError = new Error(
+            `Rendered ${json.total_pages} pages instead of 1 — retrying at a smaller scale.`,
+          );
+          continue;
+        }
         return json.download_url as string;
       }
-      console.error("[apitemplate] generation failed:", JSON.stringify(json).slice(0, 400));
-      throw new Error("APITemplate could not generate the certificate PDF. Please try again.");
+      // The API accepted the request but rejected the job (e.g. account
+      // limits). Surface its message so the real cause stays visible.
+      lastError = new Error(
+        `APITemplate rejected the request: ${JSON.stringify(json).slice(0, 300)}`,
+      );
+      break;
     }
-    // 4xx (e.g. an unsupported paper size) -> try the next attempt;
-    // 5xx -> surface the server error directly.
     lastError = new Error(
       `APITemplate request failed (HTTP ${res.status}): ${text.slice(0, 200)}`,
     );
     if (res.status >= 500) break;
   }
   console.error("[apitemplate] all attempts failed:", lastError);
-  throw new Error("APITemplate could not generate the certificate PDF. Please try again.");
+  throw new Error(
+    `APITemplate could not generate the certificate PDF. ${
+      lastError instanceof Error ? lastError.message.slice(0, 300) : "Please try again."
+    }`,
+  );
 }
 
 async function fetchBytes(url: string, label: string): Promise<Buffer> {
@@ -158,13 +189,7 @@ async function runGenerate(
     qrDataUrl,
   });
 
-  const css = [
-    `@page { size: ${DESIGN_W}px ${DESIGN_H}px; margin: 0; }`,
-    "html, body { margin: 0; padding: 0; }",
-    "body { background: #0b0f0e; }",
-  ].join("\n");
-
-  const downloadUrl = await generatePdfFromHtml(html, css);
+  const downloadUrl = await generatePdfFromHtml(html);
   const pdf = await fetchBytes(downloadUrl, "certificate PDF");
 
   const baseName = `ForgeX-Certificate-${sanitizeFileNamePart(studentName)}-${cert.certificateId}`;
