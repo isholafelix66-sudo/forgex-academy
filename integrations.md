@@ -145,24 +145,24 @@ if (!hasIntegration) {
 
 # Certificate Downloads (ForgeX Academy)
 
-Certificate files are generated **server-side** by a Convex action
-(`src/convex/apitemplate.ts`) — never by screenshots of the website. The
-frontend calls `api.apitemplate.generateCertificate` and the action returns
-ready-to-download bytes with a sanitized filename.
+The certificate is rendered once, in the browser, by
+`src/components/site/CertificateTemplate.tsx` (electric-black + lime, 1280×905
+inline styles). Downloads reuse that exact design — nothing about the
+certificate's visual design is recreated or changed.
 
-| Format | Service | Project keys needed |
-| ------ | ------- | ------------------- |
-| PDF    | [APITemplate.io](https://apitemplate.io) — `POST /v2/create-pdf-from-html` | `APITEMPLATE_API_KEY` |
-| JPG    | [HTMLCSSToImage](https://htmlcsstoimage.com) — `POST https://hcti.io/v1/image` (headless Chrome at 2x) | `HTMLCSSTOIMAGE_USER_ID` + `HTMLCSSTOIMAGE_API_KEY` |
+| Format | How it's generated | Service / project keys |
+| ------ | ------------------ | ---------------------- |
+| PDF    | **Server-side** — a Convex action (`src/convex/apitemplate.ts`) rebuilds the same design as HTML (with a freshly generated QR data URL) and renders it via `POST /v2/create-pdf-from-html`; bytes return as base64. | [APITemplate.io](https://apitemplate.io) — `APITEMPLATE_API_KEY` |
+| JPG/PNG | **Client-side** — `src/lib/certificate-export.ts` uses `html-to-image` (SVG `<foreignObject>` capture, pixel ratio 2×) on the certificate element already on screen. QR `<canvas>` nodes are swapped for data-URL `<img>` so they rasterize. JPG is the primary output; PNG is the automatic fallback. No external service, no paid API. | none |
 
 ## Setup
 
 1. **APITemplate.io** (PDF): create an account, copy your API key, and add it
-   as `APITEMPLATE_API_KEY` in the project keys.
-2. **HTMLCSSToImage** (JPG): create a free account (50 images/month), open the
-   dashboard, and add your **User ID** and **API key** as
-   `HTMLCSSTOIMAGE_USER_ID` and `HTMLCSSTOIMAGE_API_KEY` in the project keys.
+   as `APITEMPLATE_API_KEY` in the project keys. Without it, the PDF button
+   shows an actionable message telling you exactly which key to add.
+2. **Image downloads need nothing** — they capture the on-screen certificate
+   locally at 2× resolution and save via the OS share sheet (mobile) or an
+   anchor download (desktop).
 
-All keys stay server-side (`process.env` inside a `"use node"` action) and are
-never exposed to the browser. If a key is missing, the download button shows a
-actionable message telling you exactly which key to add.
+The APITemplate key stays server-side (`process.env` inside a `"use node"`
+action) and is never exposed to the browser.

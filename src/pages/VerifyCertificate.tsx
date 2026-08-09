@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { Link, useParams } from "react-router";
 import { useAction, useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
@@ -10,6 +10,7 @@ import { EmptyState } from "@/components/site/EmptyState";
 import { CertificateView } from "@/components/site/CertificateTemplate";
 import { Button } from "@/components/ui/button";
 import { saveCertificateFile } from "@/lib/certificate-download";
+import { exportCertificateImage, saveExportedImage } from "@/lib/certificate-export";
 
 type ExportKind = "pdf" | "jpg";
 
@@ -20,6 +21,9 @@ export default function VerifyCertificate() {
   });
   const branding = useQuery(api.public.certificateBranding);
   const generateCertificate = useAction(api.apitemplate.generateCertificate);
+
+  // Points at the unscaled 1280×905 certificate design node used for capture.
+  const captureRef = useRef<HTMLDivElement>(null);
 
   const [exporting, setExporting] = useState<ExportKind | null>(null);
   const [exportError, setExportError] = useState<string | null>(null);
@@ -34,14 +38,32 @@ export default function VerifyCertificate() {
     setExporting(kind);
     setExportError(null);
     try {
-      const file = await generateCertificate({
-        certificateId: cert.certificateId,
-        format: kind,
-        verifyUrl: `${window.location.origin}/verify/${cert.certificateId}`,
-      });
-      await saveCertificateFile(file.fileName, file.mime, file.base64);
+      if (kind === "pdf") {
+        // Server-side PDF via APITemplate — no page chrome, exact design.
+        const file = await generateCertificate({
+          certificateId: cert.certificateId,
+          verifyUrl: `${window.location.origin}/verify/${cert.certificateId}`,
+        });
+        await saveCertificateFile(file.fileName, file.mime, file.base64);
+      } else {
+        // Client-side JPG (PNG fallback) captured from the certificate on
+        // screen — no external service, only the certificate itself.
+        const node = captureRef.current;
+        if (!node) {
+          throw new Error("The certificate isn't ready yet. Please try again.");
+        }
+        const image = await exportCertificateImage(node);
+        await saveExportedImage(
+          image.dataUrl,
+          image.ext,
+          cert.studentName,
+          cert.certificateId,
+        );
+      }
       toast.success(
-        kind === "pdf" ? "Certificate PDF downloaded" : "Certificate image downloaded",
+        kind === "pdf"
+          ? "Certificate PDF downloaded"
+          : "Certificate image downloaded",
       );
     } catch (e) {
       const message =
@@ -110,6 +132,7 @@ export default function VerifyCertificate() {
             }}
             branding={branding}
             verifyUrl={verifyUrl}
+            captureRef={captureRef}
             className="overflow-hidden rounded-3xl border border-white/15 shadow-2xl shadow-black/40"
           />
         </Reveal>
@@ -128,7 +151,8 @@ export default function VerifyCertificate() {
               )}
               Download as PDF
             </Button>
-            {/* the image download is a real JPG generated server-side — no page chrome */}
+            {/* the image download is a real JPG captured from the certificate
+                itself — no page chrome, no external image service */}
             <Button
               onClick={() => handleDownload("jpg")}
               disabled={exporting !== null}
@@ -147,7 +171,9 @@ export default function VerifyCertificate() {
           {exporting !== null && (
             <p className="mt-4 flex items-center justify-center gap-2 text-sm text-lime-300">
               <Loader2 className="size-3.5 animate-spin" />
-              Generating certificate&hellip;
+              {exporting === "pdf"
+                ? "Generating certificate…"
+                : "Capturing certificate…"}
             </p>
           )}
           {exportError && (

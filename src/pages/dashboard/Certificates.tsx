@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { Link } from "react-router";
 import { useAction, useQuery } from "convex/react";
 import { QRCodeSVG } from "qrcode.react";
@@ -16,7 +16,9 @@ import { Button } from "@/components/ui/button";
 import { PageHeader } from "@/components/dash/PageHeader";
 import { EmptyState } from "@/components/site/EmptyState";
 import type { CertificateData } from "@/components/site/CertificateTemplate";
+import { CertificateView } from "@/components/site/CertificateTemplate";
 import { saveCertificateFile } from "@/lib/certificate-download";
+import { exportCertificateImage, saveExportedImage } from "@/lib/certificate-export";
 import { formatDate } from "@/lib/format";
 
 type ExportJob = { certificateId: string; mode: "pdf" | "jpg" };
@@ -27,27 +29,60 @@ export default function Certificates() {
   const generateCertificate = useAction(api.apitemplate.generateCertificate);
   const origin = typeof window !== "undefined" ? window.location.origin : "";
 
+  // Hidden full-size certificate nodes (one per cert) used for client-side
+  // image capture. They live off-screen so the page layout is untouched.
+  const captureRefs = useRef(new Map<string, HTMLDivElement | null>());
+
   const [exporting, setExporting] = useState<ExportJob | null>(null);
   const [exportError, setExportError] = useState<string | null>(null);
 
-  async function handleDownload(target: CertificateData, mode: "pdf" | "jpg") {
+  async function handlePdfDownload(target: CertificateData) {
     if (exporting !== null) return; // prevent duplicate generation
-    setExporting({ certificateId: target.certificateId, mode });
+    setExporting({ certificateId: target.certificateId, mode: "pdf" });
     setExportError(null);
     try {
       const file = await generateCertificate({
         certificateId: target.certificateId,
-        format: mode,
         verifyUrl: `${origin}/verify/${target.certificateId}`,
       });
       await saveCertificateFile(file.fileName, file.mime, file.base64);
-      toast.success(mode === "pdf" ? "Certificate PDF downloaded" : "Certificate image downloaded");
+      toast.success("Certificate PDF downloaded");
     } catch (e) {
       const message =
         e instanceof Error && e.message
           ? e.message
           : "Couldn't generate the file. Please try again.";
-      console.error("[certificate] generation failed:", e);
+      console.error("[certificate] PDF generation failed:", e);
+      setExportError(message);
+      toast.error(message);
+    } finally {
+      setExporting(null);
+    }
+  }
+
+  async function handleImageDownload(target: CertificateData) {
+    if (exporting !== null) return; // prevent duplicate generation
+    setExporting({ certificateId: target.certificateId, mode: "jpg" });
+    setExportError(null);
+    try {
+      const node = captureRefs.current.get(target.certificateId);
+      if (!node) {
+        throw new Error("The certificate isn't ready yet. Please try again.");
+      }
+      const image = await exportCertificateImage(node);
+      await saveExportedImage(
+        image.dataUrl,
+        image.ext,
+        target.studentName,
+        target.certificateId,
+      );
+      toast.success("Certificate image downloaded");
+    } catch (e) {
+      const message =
+        e instanceof Error && e.message
+          ? e.message
+          : "Couldn't generate the file. Please try again.";
+      console.error("[certificate] image export failed:", e);
       setExportError(message);
       toast.error(message);
     } finally {
@@ -82,107 +117,128 @@ export default function Certificates() {
           }
         />
       ) : (
-        <div className="grid gap-6 sm:grid-cols-2">
-          {certs.map((c) => {
-            const verifyUrl = `${origin}/verify/${c.certificateId}`;
-            const busy = exporting?.certificateId === c.certificateId;
-            return (
-              <div
-                key={c._id}
-                className="overflow-hidden rounded-3xl border border-lime-400/25 bg-card"
-              >
-                <div className="bg-grid border-b border-white/10 bg-gradient-to-br from-lime-400/15 to-transparent p-6 text-center">
-                  <Award className="mx-auto size-9 text-lime-400" />
-                  <p className="mt-3 text-[10px] font-semibold uppercase tracking-[0.25em] text-lime-400/80">
-                    {branding?.institutionName ?? "ForgeX Academy"}
-                  </p>
-                  <h3 className="font-display mt-2 text-xl font-bold text-gradient">
-                    {c.courseTitle}
-                  </h3>
-                  <p className="mt-1 text-xs text-muted-foreground">
-                    {c.studentName} · {formatDate(c.issuedAt)}
-                  </p>
-                </div>
-                <div className="flex items-center justify-between gap-4 p-5">
-                  <div className="min-w-0">
-                    <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-                      Certificate ID
+        <>
+          {/* Off-screen full-size certificates — invisible, only used to
+              capture high-res images (the QR canvas is swapped for an <img>
+              inside the exporter so it rasterizes correctly). */}
+          <div aria-hidden className="pointer-events-none fixed -left-[100000px] top-0 h-0 w-0 overflow-hidden">
+            {certs.map((c) => {
+              const verifyUrl = `${origin}/verify/${c.certificateId}`;
+              return (
+                <CertificateView
+                  key={c._id}
+                  cert={{
+                    certificateId: c.certificateId,
+                    studentName: c.studentName,
+                    courseTitle: c.courseTitle,
+                    issuedAt: c.issuedAt,
+                  }}
+                  branding={branding}
+                  verifyUrl={verifyUrl}
+                  captureRef={(el) => {
+                    captureRefs.current.set(c.certificateId, el);
+                  }}
+                />
+              );
+            })}
+          </div>
+
+          <div className="grid gap-6 sm:grid-cols-2">
+            {certs.map((c) => {
+              const verifyUrl = `${origin}/verify/${c.certificateId}`;
+              const busy = exporting?.certificateId === c.certificateId;
+              return (
+                <div
+                  key={c._id}
+                  className="overflow-hidden rounded-3xl border border-lime-400/25 bg-card"
+                >
+                  <div className="bg-grid border-b border-white/10 bg-gradient-to-br from-lime-400/15 to-transparent p-6 text-center">
+                    <Award className="mx-auto size-9 text-lime-400" />
+                    <p className="mt-3 text-[10px] font-semibold uppercase tracking-[0.25em] text-lime-400/80">
+                      {branding?.institutionName ?? "ForgeX Academy"}
                     </p>
-                    <p className="mt-0.5 truncate font-mono text-xs text-lime-300">
-                      {c.certificateId}
+                    <h3 className="font-display mt-2 text-xl font-bold text-gradient">
+                      {c.courseTitle}
+                    </h3>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      {c.studentName} · {formatDate(c.issuedAt)}
                     </p>
-                    <div className="mt-3 flex flex-wrap gap-2">
-                      <Button
-                        size="sm"
-                        disabled={exporting !== null}
-                        onClick={() =>
-                          handleDownload(
-                            {
+                  </div>
+                  <div className="flex items-center justify-between gap-4 p-5">
+                    <div className="min-w-0">
+                      <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                        Certificate ID
+                      </p>
+                      <p className="mt-0.5 truncate font-mono text-xs text-lime-300">
+                        {c.certificateId}
+                      </p>
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        <Button
+                          size="sm"
+                          disabled={exporting !== null}
+                          onClick={() =>
+                            handlePdfDownload({
                               certificateId: c.certificateId,
                               studentName: c.studentName,
                               courseTitle: c.courseTitle,
                               issuedAt: c.issuedAt,
-                            },
-                            "pdf",
-                          )
-                        }
-                        className="gap-1.5 bg-lime-400 font-semibold text-black hover:bg-lime-300"
-                      >
-                        {busy && exporting?.mode === "pdf" ? (
-                          <Loader2 className="size-3.5 animate-spin" />
-                        ) : (
-                          <Download className="size-3.5" />
-                        )}
-                        Download PDF
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        disabled={exporting !== null}
-                        onClick={() =>
-                          handleDownload(
-                            {
-                              certificateId: c.certificateId,
-                              studentName: c.studentName,
-                              courseTitle: c.courseTitle,
-                              issuedAt: c.issuedAt,
-                            },
-                            "jpg",
-                          )
-                        }
-                        className="gap-1.5 border-white/15"
-                        title="Save the certificate as a JPG image"
-                      >
-                        {busy && exporting?.mode === "jpg" ? (
-                          <Loader2 className="size-3.5 animate-spin" />
-                        ) : (
-                          <ImageDown className="size-3.5" />
-                        )}
-                        Image
-                      </Button>
-                      <Link to={`/verify/${c.certificateId}`}>
-                        <Button size="sm" variant="outline" className="gap-1.5 border-white/15">
-                          <ShieldCheck className="size-3.5" /> View & verify
+                            })
+                          }
+                          className="gap-1.5 bg-lime-400 font-semibold text-black hover:bg-lime-300"
+                        >
+                          {busy && exporting?.mode === "pdf" ? (
+                            <Loader2 className="size-3.5 animate-spin" />
+                          ) : (
+                            <Download className="size-3.5" />
+                          )}
+                          Download PDF
                         </Button>
-                      </Link>
-                      <a
-                        href={verifyUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-lime-300"
-                      >
-                        Public link <ExternalLink className="size-3" />
-                      </a>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          disabled={exporting !== null}
+                          onClick={() =>
+                            handleImageDownload({
+                              certificateId: c.certificateId,
+                              studentName: c.studentName,
+                              courseTitle: c.courseTitle,
+                              issuedAt: c.issuedAt,
+                            })
+                          }
+                          className="gap-1.5 border-white/15"
+                          title="Save the certificate as a JPG image"
+                        >
+                          {busy && exporting?.mode === "jpg" ? (
+                            <Loader2 className="size-3.5 animate-spin" />
+                          ) : (
+                            <ImageDown className="size-3.5" />
+                          )}
+                          Image
+                        </Button>
+                        <Link to={`/verify/${c.certificateId}`}>
+                          <Button size="sm" variant="outline" className="gap-1.5 border-white/15">
+                            <ShieldCheck className="size-3.5" /> View & verify
+                          </Button>
+                        </Link>
+                        <a
+                          href={verifyUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-lime-300"
+                        >
+                          Public link <ExternalLink className="size-3" />
+                        </a>
+                      </div>
+                    </div>
+                    <div className="shrink-0 rounded-xl border border-white/15 bg-white p-2">
+                      <QRCodeSVG value={verifyUrl} size={84} fgColor="#0a0a0a" bgColor="#ffffff" />
                     </div>
                   </div>
-                  <div className="shrink-0 rounded-xl border border-white/15 bg-white p-2">
-                    <QRCodeSVG value={verifyUrl} size={84} fgColor="#0a0a0a" bgColor="#ffffff" />
-                  </div>
                 </div>
-              </div>
-            );
-          })}
-        </div>
+              );
+            })}
+          </div>
+        </>
       )}
 
       {exportError && (
