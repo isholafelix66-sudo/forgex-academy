@@ -1,1 +1,0 @@
-import{j as n,m as a}from"./framer-motion-okk24nmv.js";function s({children:i,delay:t=0,y:o=26,className:e}){return n.jsx(a.div,{initial:{opacity:0,y:o},whileInView:{opacity:1,y:0},viewport:{once:!0,margin:"-70px"},transition:{duration:.6,delay:t,ease:[.22,1,.36,1]},className:e,children:i})}export{s as R};
