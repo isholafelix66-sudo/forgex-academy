@@ -14,37 +14,42 @@ import {
 } from "./certificateExportHtml";
 
 /**
- * Server-side certificate file generation via APITemplate.io.
+ * Server-side certificate file generation.
  *
- * Flow (no browser rendering, no screenshots):
+ * Flow (no browser rendering, no screenshots of the webpage):
  *   1. The signed-in client calls generateCertificate with a certificate id,
  *      a format ("pdf" | "jpg") and the public verification URL.
  *   2. This action loads the certificate + branding (the exact data shown on
  *      the verification page) and rebuilds the EXISTING certificate design
  *      (1280x905, electric black + lime) as HTML, embedding a freshly
  *      generated QR code as a data URL so it stays scannable.
- *   3. It asks APITemplate to render that HTML into a PDF
- *      (POST /v2/create-pdf-from-html — no saved template required).
- *   4. For "jpg" it takes the PNG raster APITemplate also returns and
- *      re-encodes it as a real JPEG server-side (pngjs + jpeg-js).
+ *   3. PDF -> APITemplate.io renders that HTML into a PDF
+ *             (POST /v2/create-pdf-from-html — no saved template required).
+ *   4. JPG -> HTMLCSSToImage (hcti.io) renders the SAME HTML with a real
+ *             headless Chrome at 2x resolution and returns a high-quality
+ *             JPEG (POST https://hcti.io/v1/image).
  *   5. The file bytes are returned as base64 (well under Convex's 1 MB
  *      action result limit) with a sanitized download filename.
  *
- * The APITemplate API key is read ONLY here, server-side
- * (APITEMPLATE_API_KEY in the project keys) — it never reaches the browser.
+ * Secrets are read ONLY here, server-side, from the project keys — none of
+ * them ever reach the browser:
+ *   - APITEMPLATE_API_KEY        (PDF generation)
+ *   - HTMLCSSTOIMAGE_USER_ID     (JPG generation)
+ *   - HTMLCSSTOIMAGE_API_KEY     (JPG generation)
  */
 
 const APITEMPLATE_API = "https://rest.apitemplate.io/v2";
+const HCTI_API = "https://hcti.io/v1/image";
 
 // ---------------------------------------------------------------------------
-// APITemplate.io REST calls
+// APITemplate.io — PDF generation
 // ---------------------------------------------------------------------------
 
-function apiKey(): string {
+function apiTemplateKey(): string {
   const key = process.env.APITEMPLATE_API_KEY;
   if (!key) {
     throw new Error(
-      "APITemplate is not configured yet. Add the APITEMPLATE_API_KEY in the project keys, then try again.",
+      "PDF generation isn't configured yet. Add the APITEMPLATE_API_KEY in the project keys, then try again.",
     );
   }
   return key;
@@ -56,7 +61,7 @@ function apiKey(): string {
  * exact pixel paper size first, falling back to millimetres if the API
  * rejects that value.
  */
-async function generatePdfFromHtml(html: string, css: string) {
+async function generatePdfFromHtml(html: string, css: string): Promise<string> {
   const makeSettings = (paperSize: string) => ({
     paper_size: paperSize,
     orientation: "2", // landscape
@@ -81,7 +86,7 @@ async function generatePdfFromHtml(html: string, css: string) {
     const res = await fetch(`${APITEMPLATE_API}/create-pdf-from-html`, {
       method: "POST",
       headers: {
-        "X-API-KEY": apiKey(),
+        "X-API-KEY": apiTemplateKey(),
         "Content-Type": "application/json",
       },
       body: JSON.stringify({ body: html, css, settings: attempt.settings }),
@@ -95,16 +100,10 @@ async function generatePdfFromHtml(html: string, css: string) {
         throw new Error("APITemplate returned an unreadable response. Please try again.");
       }
       if (json?.status === "success" && typeof json?.download_url === "string") {
-        return {
-          downloadUrl: json.download_url as string,
-          downloadUrlPng:
-            typeof json.download_url_png === "string"
-              ? (json.download_url_png as string)
-              : null,
-        };
+        return json.download_url as string;
       }
       console.error("[apitemplate] generation failed:", JSON.stringify(json).slice(0, 400));
-      throw new Error("APITemplate could not generate the certificate. Please try again.");
+      throw new Error("APITemplate could not generate the certificate PDF. Please try again.");
     }
     // 4xx (e.g. an unsupported paper size) -> try the next attempt;
     // 5xx -> surface the server error directly.
@@ -114,7 +113,86 @@ async function generatePdfFromHtml(html: string, css: string) {
     if (res.status >= 500) break;
   }
   console.error("[apitemplate] all attempts failed:", lastError);
-  throw new Error("APITemplate could not generate the certificate. Please try again.");
+  throw new Error("APITemplate could not generate the certificate PDF. Please try again.");
+}
+
+// ---------------------------------------------------------------------------
+// HTMLCSSToImage — JPG generation
+// ---------------------------------------------------------------------------
+
+function hctiCredentials(): { userId: string; apiKey: string } {
+  const userId = process.env.HTMLCSSTOIMAGE_USER_ID;
+  const apiKey = process.env.HTMLCSSTOIMAGE_API_KEY;
+  if (!userId || !apiKey) {
+    throw new Error(
+      "Image generation isn't configured yet. Add HTMLCSSTOIMAGE_USER_ID and HTMLCSSTOIMAGE_API_KEY in the project keys, then try again.",
+    );
+  }
+  return { userId, apiKey };
+}
+
+/**
+ * Render the certificate HTML into a high-quality JPG via HTMLCSSToImage
+ * (https://docs.htmlcsstoimage.com). The API renders with a real headless
+ * Chrome at the exact viewport, so the output is ONLY the certificate —
+ * pixel-perfect and with the QR code intact. If the account ever returns a
+ * PNG instead of a JPEG, the buffer is re-encoded as a real JPEG.
+ */
+async function generateJpgViaHtmlCssToImage(html: string, css: string): Promise<Buffer> {
+  const { userId, apiKey } = hctiCredentials();
+  const auth = "Basic " + Buffer.from(`${userId}:${apiKey}`).toString("base64");
+
+  const createRes = await fetch(HCTI_API, {
+    method: "POST",
+    headers: {
+      Authorization: auth,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      html,
+      css,
+      viewport_width: DESIGN_W,
+      viewport_height: DESIGN_H,
+      device_scale: 2, // 2x resolution -> crisp 2560x1810 output
+      format: "jpg",
+    }),
+  });
+  const createText = await createRes.text();
+  if (!createRes.ok) {
+    console.error("[hcti] create failed:", createText.slice(0, 400));
+    throw new Error(
+      `HTMLCSSToImage could not generate the certificate image (HTTP ${createRes.status}). Please try again.`,
+    );
+  }
+
+  let created: any;
+  try {
+    created = JSON.parse(createText);
+  } catch {
+    throw new Error("HTMLCSSToImage returned an unreadable response. Please try again.");
+  }
+  const url = typeof created?.url === "string" ? created.url : null;
+  if (!url) {
+    console.error("[hcti] unexpected response:", createText.slice(0, 400));
+    throw new Error("HTMLCSSToImage did not return a generated image. Please try again.");
+  }
+
+  // The image URL is public; sending the auth header is harmless and also
+  // covers accounts that keep generated images private.
+  const imgRes = await fetch(url, { headers: { Authorization: auth } });
+  if (!imgRes.ok) {
+    throw new Error(
+      `Could not fetch the generated certificate image (HTTP ${imgRes.status}). Please try again.`,
+    );
+  }
+  const bytes = Buffer.from(await imgRes.arrayBuffer());
+
+  // JPEG starts with FF D8 FF — use it as-is. Anything else (e.g. PNG) gets
+  // re-encoded as a real JPEG so the download is always image/jpeg.
+  if (bytes.length > 3 && bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff) {
+    return bytes;
+  }
+  return pngToJpeg(bytes);
 }
 
 async function fetchBytes(url: string, label: string): Promise<Buffer> {
@@ -175,14 +253,13 @@ async function runGenerate(
   const css = [
     `@page { size: ${DESIGN_W}px ${DESIGN_H}px; margin: 0; }`,
     "html, body { margin: 0; padding: 0; }",
-    `body { background: #0b0f0e; }`,
+    "body { background: #0b0f0e; }",
   ].join("\n");
-
-  const { downloadUrl, downloadUrlPng } = await generatePdfFromHtml(html, css);
 
   const baseName = `ForgeX-Certificate-${sanitizeFileNamePart(studentName)}-${cert.certificateId}`;
 
   if (format === "pdf") {
+    const downloadUrl = await generatePdfFromHtml(html, css);
     const pdf = await fetchBytes(downloadUrl, "certificate PDF");
     return {
       fileName: `${baseName}.pdf`,
@@ -191,15 +268,9 @@ async function runGenerate(
     };
   }
 
-  // JPG: reuse the PNG raster APITemplate returns for the rendered page
-  // and re-encode it as a real JPEG.
-  if (!downloadUrlPng) {
-    throw new Error(
-      "APITemplate did not return an image preview. Please try the PDF download or try again.",
-    );
-  }
-  const png = await fetchBytes(downloadUrlPng, "certificate image");
-  const jpg = pngToJpeg(png);
+  // JPG: rendered server-side by HTMLCSSToImage (a real headless Chrome) —
+  // never a screenshot of the website.
+  const jpg = await generateJpgViaHtmlCssToImage(html, css);
   return {
     fileName: `${baseName}.jpg`,
     mime: "image/jpeg",
