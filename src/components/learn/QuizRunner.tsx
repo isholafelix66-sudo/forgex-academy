@@ -144,23 +144,32 @@ export function QuizRunner({
 
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
+  // Keep the latest `finish` (and its state closures) available to the
+  // timeout effect below without re-creating the interval. The ref is
+  // assigned right after `finish` is declared (below) to avoid the temporal
+  // dead zone.
+  const finishRef = useRef<((manual: boolean) => Promise<void>) | null>(null);
+
   useEffect(() => {
     if (phase !== "running") return;
     timerRef.current = setInterval(() => {
-      setSecondsLeft((s) => {
-        if (s <= 1) {
-          if (timerRef.current) clearInterval(timerRef.current);
-          void finish(false);
-          return 0;
-        }
-        return s - 1;
-      });
+      setSecondsLeft((s) => Math.max(0, s - 1));
     }, 1000);
     return () => {
       if (timerRef.current) clearInterval(timerRef.current);
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [phase]);
+
+  // Auto-submit exactly once when the timer reaches zero. Using a separate
+  // effect (not a side effect inside the setState updater) avoids StrictMode's
+  // double-invocation of updaters, which could submit the quiz twice, and
+  // always reads the latest answers via finishRef.
+  useEffect(() => {
+    if (phase === "running" && secondsLeft <= 0 && !submitting) {
+      void finishRef.current?.(false);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [secondsLeft, phase, submitting]);
 
   const mins = Math.floor(secondsLeft / 60);
   const secs = secondsLeft % 60;
@@ -211,6 +220,9 @@ export function QuizRunner({
     }
     setSubmitting(false);
   };
+
+  // Point the timeout ref at the freshest closure (with current answers).
+  finishRef.current = finish;
 
   const unanswered = useMemo(
     () => quiz.questions.filter((q) => !answers[quiz.questions.indexOf(q)]).length,
