@@ -92,9 +92,10 @@ export default defineConfig({
     // Bind to all interfaces so WebContainer's server-ready event fires.
     host: true,
     port: 5173,
-    // Keep HMR on, but disable full-screen error overlay
-    hmr: {
-      overlay: false,
-    },
+    // HMR must stay fully disabled in the managed preview environment: the
+    // proxy cannot carry HMR websockets, and a broken HMR socket makes the
+    // browser fall back to full-page reloads (pages appear to "keep
+    // reloading").
+    hmr: false,
   },
 });
