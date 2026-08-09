@@ -8,6 +8,7 @@ import {
   ClipboardList,
   GraduationCap,
   ImageIcon,
+  Inbox,
   KeyRound,
   LayoutDashboard,
   ListChecks,
@@ -125,6 +126,7 @@ export default function AdminShell() {
       items: [
         { to: "/admin", label: "Overview", icon: <LayoutDashboard className="size-4" />, end: true },
         { to: "/admin/users", label: "Users & roles", icon: <Users className="size-4" /> },
+        { to: "/admin/inbox", label: "Inbox", icon: <Inbox className="size-4" /> },
         { to: "/admin/chat", label: "Chat logs", icon: <MessageSquare className="size-4" /> },
         {
           to: "/admin/applications",

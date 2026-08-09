@@ -105,15 +105,44 @@ export async function downloadCertificatePdf(node: HTMLElement, fileName: string
   await saveOrOpen(file);
 }
 
-/** Rasterize the certificate as a PNG image and save/download it. */
+/**
+ * Rasterize the certificate as a PNG image and save/download it. The capture
+ * node contains ONLY the certificate template (never the page chrome), so the
+ * saved picture is exactly the certificate — clean edges, no website content.
+ */
 export async function downloadCertificatePng(node: HTMLElement, fileName: string) {
   const canvas = await buildCanvas(node);
-  const dataUrl = canvas.toDataURL("image/png");
-  const blob = await (await fetch(dataUrl)).blob();
+  const blob = await canvasToBlob(canvas);
   const file = new File([blob], fileName.replace(/\.pdf$/i, ".png"), {
     type: "image/png",
   });
   await saveOrOpen(file);
+}
+
+/** canvas → PNG blob (toBlob is memory-friendly and avoids a data-URL round trip). */
+function canvasToBlob(canvas: HTMLCanvasElement): Promise<Blob> {
+  return new Promise((resolve, reject) => {
+    canvas.toBlob(
+      (blob) => {
+        if (blob) {
+          resolve(blob);
+          return;
+        }
+        // Extremely rare: some browsers return null on empty canvases — fall
+        // back to the data-URL path rather than failing the whole download.
+        try {
+          const dataUrl = canvas.toDataURL("image/png");
+          const bin = atob(dataUrl.split(",")[1]);
+          const bytes = new Uint8Array(bin.length);
+          for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+          resolve(new Blob([bytes], { type: "image/png" }));
+        } catch {
+          reject(new Error("Could not export the certificate image."));
+        }
+      },
+      "image/png",
+    );
+  });
 }
 
 function triggerDownload(url: string, fileName: string) {

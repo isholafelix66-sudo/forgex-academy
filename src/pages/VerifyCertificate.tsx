@@ -135,6 +135,7 @@ export default function VerifyCertificate() {
               )}
               Download as PDF
             </Button>
+            {/* (the image download includes ONLY the certificate — no page chrome) */}
             <Button
               onClick={() => setExporting("png")}
               disabled={exporting !== null}
@@ -146,7 +147,7 @@ export default function VerifyCertificate() {
               ) : (
                 <ImageDown className="size-4" />
               )}
-              Save as image
+              Download image
             </Button>
           </div>
           <p className="mt-4 text-sm text-muted-foreground">

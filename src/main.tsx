@@ -72,6 +72,7 @@ const AdminFormBuilder = lazy(() => import("./pages/admin/AdminFormBuilder.tsx")
 const AdminAudit = lazy(() => import("./pages/admin/AdminAudit.tsx"));
 const AdminProfile = lazy(() => import("./pages/admin/AdminProfile.tsx"));
 const AdminChat = lazy(() => import("./pages/admin/AdminChat.tsx"));
+const AdminInbox = lazy(() => import("./pages/admin/AdminInbox.tsx"));
 
 // Simple loading fallback for route transitions
 function RouteLoading() {
@@ -130,6 +131,12 @@ class RootErrorBoundary extends React.Component<
                 {this.state.stack}
               </pre>
             )}
+            <button
+              onClick={() => this.setState({ hasError: false, message: "", stack: "" })}
+              className="mt-5 inline-flex items-center gap-2 rounded-xl bg-lime-400 px-5 py-2.5 text-sm font-semibold text-black transition-colors hover:bg-lime-300"
+            >
+              Retry preview
+            </button>
           </div>
         </div>
       );
@@ -256,6 +263,7 @@ createRoot(document.getElementById("root")!).render(
                 <Route path="form-builder" element={<AdminFormBuilder />} />
                 <Route path="audit" element={<AdminAudit />} />
                 <Route path="profile" element={<AdminProfile />} />
+                <Route path="inbox" element={<AdminInbox />} />
                 <Route path="chat" element={<AdminChat />} />
               </Route>
 

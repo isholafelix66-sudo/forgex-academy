@@ -468,6 +468,25 @@ const schema = defineSchema(
       .index("by_thread", ["threadId", "createdAt"])
       .index("by_receiver", ["receiverId", "readAt"]),
 
+    /** Public contact form submissions — the admin “Inbox”. Signed-in users'
+     *  contact messages go straight into the chat system instead (see
+     *  contact.submitContact), so this holds visitor reports that admins
+     *  answer by email. */
+    contactSubmissions: defineTable({
+      name: v.string(),
+      email: v.string(),
+      subject: v.string(),
+      body: v.string(),
+      status: v.union(
+        v.literal("new"),
+        v.literal("replied"),
+        v.literal("resolved"),
+      ),
+      reply: v.optional(v.string()),
+      repliedAt: v.optional(v.number()),
+      createdAt: v.number(),
+    }).index("by_created", ["createdAt"]),
+
     notifications: defineTable({
       userId: v.id("users"),
       title: v.string(),

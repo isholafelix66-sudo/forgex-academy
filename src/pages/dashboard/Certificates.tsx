@@ -169,7 +169,7 @@ export default function Certificates() {
                         ) : (
                           <ImageDown className="size-3.5" />
                         )}
-                        PNG
+                        Image
                       </Button>
                       <Link to={`/verify/${c.certificateId}`}>
                         <Button size="sm" variant="outline" className="gap-1.5 border-white/15">
