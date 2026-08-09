@@ -104,18 +104,30 @@ class ToolbarErrorBoundary extends React.Component<
 /** Hard guard so runtime errors never leave the preview as a blank page. */
 class RootErrorBoundary extends React.Component<
   { children: React.ReactNode },
-  { hasError: boolean; message: string; stack: string }
+  {
+    hasError: boolean;
+    message: string;
+    stack: string;
+    componentStack: string;
+  }
 > {
-  state = { hasError: false, message: "", stack: "" };
+  state = { hasError: false, message: "", stack: "", componentStack: "" };
   static getDerivedStateFromError(error: Error) {
     return {
       hasError: true,
       message: error.message || "Unknown runtime error",
       stack: error.stack || "",
+      componentStack: "",
     };
   }
-  componentDidCatch(err: Error) {
+  componentDidCatch(err: Error, info: React.ErrorInfo) {
+    // The full picture flows to the platform build log so it can be pasted
+    // back for diagnosis: message + JS stack + React component stack.
     console.error("[WebContainer preview] Root crash:", err);
+    console.error("[WebContainer preview] Component stack:", info?.componentStack);
+    if (info?.componentStack) {
+      this.setState({ componentStack: info.componentStack });
+    }
   }
   render() {
     if (this.state.hasError) {
@@ -131,8 +143,20 @@ class RootErrorBoundary extends React.Component<
                 {this.state.stack}
               </pre>
             )}
+            {this.state.componentStack && (
+              <pre className="mt-1 text-left text-[10px] leading-4 text-rose-300/80 max-h-32 overflow-auto rounded border border-border/60 p-2">
+                {this.state.componentStack}
+              </pre>
+            )}
             <button
-              onClick={() => this.setState({ hasError: false, message: "", stack: "" })}
+              onClick={() =>
+                this.setState({
+                  hasError: false,
+                  message: "",
+                  stack: "",
+                  componentStack: "",
+                })
+              }
               className="mt-5 inline-flex items-center gap-2 rounded-xl bg-lime-400 px-5 py-2.5 text-sm font-semibold text-black transition-colors hover:bg-lime-300"
             >
               Retry preview
