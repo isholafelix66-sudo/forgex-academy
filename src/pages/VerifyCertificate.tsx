@@ -1,22 +1,17 @@
-import { useEffect, useRef, useState } from "react";
+import { useState } from "react";
 import { Link, useParams } from "react-router";
-import { useQuery } from "convex/react";
+import { useAction, useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import { toast } from "sonner";
 import { Award, CheckCircle2, Download, ImageDown, Loader2 } from "lucide-react";
 import { PageShell } from "@/components/site/PageShell";
 import { Reveal } from "@/components/site/Reveal";
 import { EmptyState } from "@/components/site/EmptyState";
-import {
-  CertificateTemplate,
-  CertificateView,
-  DEFAULT_CERTIFICATE_BRANDING,
-} from "@/components/site/CertificateTemplate";
+import { CertificateView } from "@/components/site/CertificateTemplate";
 import { Button } from "@/components/ui/button";
-import {
-  downloadCertificatePdf,
-  downloadCertificatePng,
-} from "@/lib/certificate-pdf";
+import { saveCertificateFile } from "@/lib/certificate-download";
+
+type ExportKind = "pdf" | "jpg";
 
 export default function VerifyCertificate() {
   const { certificateId } = useParams();
@@ -24,44 +19,42 @@ export default function VerifyCertificate() {
     certificateId: certificateId ?? "",
   });
   const branding = useQuery(api.public.certificateBranding);
-  const captureRef = useRef<HTMLDivElement>(null);
-  const [exporting, setExporting] = useState<"pdf" | "png" | null>(null);
+  const generateCertificate = useAction(api.apitemplate.generateCertificate);
+
+  const [exporting, setExporting] = useState<ExportKind | null>(null);
+  const [exportError, setExportError] = useState<string | null>(null);
 
   const verifyUrl =
     typeof window !== "undefined"
       ? `${window.location.origin}/verify/${certificateId}`
       : "";
 
-  // The offscreen capture node renders on the same commit that sets
-  // `exporting`, so trigger the export once it's in the DOM.
-  useEffect(() => {
-    if (!exporting || !cert || !captureRef.current) return;
-    let cancelled = false;
-    const base = `ForgeX-Certificate-${cert.certificateId}`;
-    const job =
-      exporting === "pdf"
-        ? downloadCertificatePdf(captureRef.current, `${base}.pdf`)
-        : downloadCertificatePng(captureRef.current, `${base}.png`);
-    job
-      .then(() => {
-        if (!cancelled)
-          toast.success(
-            exporting === "pdf"
-              ? "Certificate PDF saved"
-              : "Certificate image saved",
-          );
-      })
-      .catch(() => {
-        if (!cancelled)
-          toast.error("Couldn't generate the file. Please try again.");
-      })
-      .finally(() => {
-        if (!cancelled) setExporting(null);
+  async function handleDownload(kind: ExportKind) {
+    if (!cert || exporting !== null) return; // prevent duplicate generation
+    setExporting(kind);
+    setExportError(null);
+    try {
+      const file = await generateCertificate({
+        certificateId: cert.certificateId,
+        format: kind,
+        verifyUrl: `${window.location.origin}/verify/${cert.certificateId}`,
       });
-    return () => {
-      cancelled = true;
-    };
-  }, [exporting, cert]);
+      await saveCertificateFile(file.fileName, file.mime, file.base64);
+      toast.success(
+        kind === "pdf" ? "Certificate PDF downloaded" : "Certificate image downloaded",
+      );
+    } catch (e) {
+      const message =
+        e instanceof Error && e.message
+          ? e.message
+          : "Couldn't generate the file. Please try again.";
+      console.error("[certificate] generation failed:", e);
+      setExportError(message);
+      toast.error(message);
+    } finally {
+      setExporting(null);
+    }
+  }
 
   if (cert === undefined) {
     return (
@@ -124,7 +117,7 @@ export default function VerifyCertificate() {
         <Reveal delay={0.12} className="mt-8 text-center">
           <div className="flex flex-wrap items-center justify-center gap-3">
             <Button
-              onClick={() => setExporting("pdf")}
+              onClick={() => handleDownload("pdf")}
               disabled={exporting !== null}
               className="gap-2 bg-lime-400 font-semibold text-black hover:bg-lime-300"
             >
@@ -135,14 +128,14 @@ export default function VerifyCertificate() {
               )}
               Download as PDF
             </Button>
-            {/* (the image download includes ONLY the certificate — no page chrome) */}
+            {/* the image download is a real JPG generated server-side — no page chrome */}
             <Button
-              onClick={() => setExporting("png")}
+              onClick={() => handleDownload("jpg")}
               disabled={exporting !== null}
               variant="outline"
               className="gap-2 border-white/15 hover:border-lime-400/40 hover:text-lime-300"
             >
-              {exporting === "png" ? (
+              {exporting === "jpg" ? (
                 <Loader2 className="size-4 animate-spin" />
               ) : (
                 <ImageDown className="size-4" />
@@ -150,6 +143,17 @@ export default function VerifyCertificate() {
               Download image
             </Button>
           </div>
+
+          {exporting !== null && (
+            <p className="mt-4 flex items-center justify-center gap-2 text-sm text-lime-300">
+              <Loader2 className="size-3.5 animate-spin" />
+              Generating certificate&hellip;
+            </p>
+          )}
+          {exportError && (
+            <p className="mt-4 text-sm text-rose-400">{exportError}</p>
+          )}
+
           <p className="mt-4 text-sm text-muted-foreground">
             Recruiters can scan the QR code or visit the verification URL to
             confirm this credential at any time.
@@ -161,25 +165,6 @@ export default function VerifyCertificate() {
           </Link>
         </Reveal>
       </section>
-
-      {/* Offscreen full-size template used for export (no scaling, no
-          Tailwind classes — rasterizes cleanly with html2canvas) */}
-      {exporting && cert && (
-        <div aria-hidden style={{ position: "fixed", left: -10000, top: 0, zIndex: -1 }}>
-          <div ref={captureRef} style={{ width: 1280, height: 905 }}>
-            <CertificateTemplate
-              cert={{
-                certificateId: cert.certificateId,
-                studentName: cert.studentName,
-                courseTitle: cert.courseTitle,
-                issuedAt: cert.issuedAt,
-              }}
-              branding={branding ?? DEFAULT_CERTIFICATE_BRANDING}
-              verifyUrl={verifyUrl}
-            />
-          </div>
-        </div>
-      )}
     </PageShell>
   );
 }
