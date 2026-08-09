@@ -28,17 +28,21 @@ export function useMessageSound() {
   }, []);
 
   useEffect(() => {
-    if (!user?._id || !conversations) return;
-    const nowMap: Record<string, number> = {};
-    for (const c of conversations) {
-      nowMap[c.threadId] = c.lastAt;
-      const was = prevLastAt.current[c.threadId];
-      // A message arrived if lastAt moved forward, and it's not mine.
-      if (was !== undefined && c.lastAt > was && c.lastSenderId !== user._id) {
-        playMessageSound();
-        break;
+    try {
+      if (!user?._id || !conversations) return;
+      const nowMap: Record<string, number> = {};
+      for (const c of conversations) {
+        nowMap[c.threadId] = c.lastAt;
+        const was = prevLastAt.current[c.threadId];
+        // A message arrived if lastAt moved forward, and it's not mine.
+        if (was !== undefined && c.lastAt > was && c.lastSenderId !== user._id) {
+          playMessageSound();
+          break;
+        }
       }
+      prevLastAt.current = nowMap;
+    } catch {
+      // Sound/audio failures must never take down a page.
     }
-    prevLastAt.current = nowMap;
   }, [conversations, user?._id]);
 }

@@ -34,7 +34,10 @@ const SOCIAL_LINKS: Array<{
 export default function TutorDetail() {
   const { id } = useParams();
   const { isAuthenticated } = useAuth();
-  const tutor = useQuery(api.public.tutorDetail, { id: id as never });
+  const tutor = useQuery(
+    api.public.tutorDetail,
+    id ? { id: id as never } : "skip",
+  );
 
   if (!tutor) {
     return (

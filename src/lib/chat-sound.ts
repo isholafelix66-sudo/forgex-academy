@@ -26,14 +26,20 @@ let audioCtx: AudioContext | null = null;
 
 function ensureCtx(): AudioContext | null {
   if (typeof window === "undefined") return null;
-  const AC =
-    window.AudioContext ??
-    (window as unknown as { webkitAudioContext?: typeof AudioContext })
-      .webkitAudioContext;
-  if (!AC) return null;
-  if (!audioCtx) audioCtx = new AC();
-  if (audioCtx.state === "suspended") void audioCtx.resume();
-  return audioCtx;
+  try {
+    const AC =
+      window.AudioContext ??
+      (window as unknown as { webkitAudioContext?: typeof AudioContext })
+        .webkitAudioContext;
+    if (!AC) return null;
+    if (!audioCtx) audioCtx = new AC();
+    if (audioCtx.state === "suspended") void audioCtx.resume();
+    return audioCtx;
+  } catch {
+    // Audio unavailable in this environment (e.g. restricted iframe) — the
+    // app must never crash because a notification sound couldn't be created.
+    return null;
+  }
 }
 
 /** Resume the audio context on the first user gesture (required by iOS). */
@@ -43,10 +49,10 @@ export function unlockAudio() {
 
 /** Bright two-tone “pop” (A5 → E6), similar to WhatsApp's new-message ping. */
 export function playMessageSound() {
-  if (!getChatSoundEnabled()) return;
-  const c = ensureCtx();
-  if (!c) return;
   try {
+    if (!getChatSoundEnabled()) return;
+    const c = ensureCtx();
+    if (!c) return;
     const now = c.currentTime;
     const notes = [880, 1318.51]; // A5, E6
     for (let i = 0; i < notes.length; i++) {
@@ -64,6 +70,6 @@ export function playMessageSound() {
       osc.stop(t0 + 0.32);
     }
   } catch {
-    /* audio unavailable — ignore */
+    /* audio unavailable — never crash the app */
   }
 }

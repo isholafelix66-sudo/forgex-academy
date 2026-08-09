@@ -142,11 +142,11 @@ export const courseSubmissions = query({
     }
     const submissions = await ctx.db
       .query("submissions")
-      .withIndex("by_course", (q) => q.eq("courseId", courseId))
+      .withIndex("by_course", (q) => q.eq("courseId", courseId as never))
       .collect();
     const assignments = await ctx.db
       .query("assignments")
-      .withIndex("by_course", (q) => q.eq("courseId", courseId))
+      .withIndex("by_course", (q) => q.eq("courseId", courseId as never))
       .collect();
     const hydrated = await Promise.all(
       submissions.map(async (s) => {
@@ -384,13 +384,13 @@ export const deleteLesson = mutation({
 // ---------------------------------------------------------------------------
 
 export const courseQuizzesFull = query({
-  args: { courseId: v.id("courses") },
+  args: { courseId: v.string() },
   handler: async (ctx, { courseId }) => {
     const tutor = await requireTutorPreview(ctx);
     if (!tutor) return [];
     const quizzes = await ctx.db
       .query("quizzes")
-      .withIndex("by_course", (q) => q.eq("courseId", courseId))
+      .withIndex("by_course", (q) => q.eq("courseId", courseId as never))
       .collect();
     return quizzes.sort((a, b) => a.createdAt - b.createdAt);
   },
@@ -450,13 +450,13 @@ export const deleteQuiz = mutation({
 // ---------------------------------------------------------------------------
 
 export const courseAssignmentsFull = query({
-  args: { courseId: v.id("courses") },
+  args: { courseId: v.string() },
   handler: async (ctx, { courseId }) => {
     const tutor = await requireTutorPreview(ctx);
     if (!tutor) return [];
     const docs = await ctx.db
       .query("assignments")
-      .withIndex("by_course", (q) => q.eq("courseId", courseId))
+      .withIndex("by_course", (q) => q.eq("courseId", courseId as never))
       .collect();
     return docs.sort((a, b) => (a.deadline ?? Infinity) - (b.deadline ?? Infinity));
   },

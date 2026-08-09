@@ -1,4 +1,5 @@
 import { query } from "./_generated/server";
+import type { Doc, Id } from "./_generated/dataModel";
 import { v } from "convex/values";
 import { difficultyValidator, ROLES } from "./schema";
 import { hydrateCourse, hydrateCourses, publicUser } from "./lib";
@@ -104,9 +105,16 @@ export const tutorsList = query({
 });
 
 export const tutorDetail = query({
-  args: { id: v.id("users") },
+  args: { id: v.string() },
   handler: async (ctx, { id }) => {
-    const tutor = await ctx.db.get(id);
+    // A hand-typed or malformed URL id must never crash this public page —
+    // it just resolves to the “not found” state.
+    let tutor: Doc<"users"> | null = null;
+    try {
+      tutor = await ctx.db.get(id as Id<"users">);
+    } catch {
+      return null;
+    }
     if (!tutor || tutor.role !== ROLES.TUTOR) return null;
     const allCourses = await ctx.db.query("courses").collect();
     const courses = await hydrateCourses(
@@ -261,13 +269,17 @@ export const courseBySlug = query({
 });
 
 export const lessonsByCourse = query({
-  args: { courseId: v.id("courses") },
+  args: { courseId: v.string() },
   handler: async (ctx, { courseId }) => {
-    const lessons = await ctx.db
-      .query("lessons")
-      .withIndex("by_course", (q) => q.eq("courseId", courseId))
-      .collect();
-    return lessons.sort((a, b) => a.order - b.order);
+    try {
+      const lessons = await ctx.db
+        .query("lessons")
+        .withIndex("by_course", (q) => q.eq("courseId", courseId as never))
+        .collect();
+      return lessons.sort((a, b) => a.order - b.order);
+    } catch {
+      return []; // malformed course id — never crash the page
+    }
   },
 });
 
