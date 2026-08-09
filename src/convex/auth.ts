@@ -3,6 +3,7 @@
 import { convexAuth } from "@convex-dev/auth/server";
 import { Password } from "@convex-dev/auth/providers/Password";
 import { Value } from "convex/values";
+import { type MutationCtx } from "./_generated/server";
 import { emailOtp } from "./auth/emailOtp";
 
 export const { auth, signIn, signOut, store, isAuthenticated } = convexAuth({
@@ -20,4 +21,38 @@ export const { auth, signIn, signOut, store, isAuthenticated } = convexAuth({
       },
     }),
   ],
+  // One account per person. This project can sign a person in through more
+  // than one path (email OTP here + the federated Freebuff JWT configured in
+  // auth.config.ts), and the library's default linking only kicks in when a
+  // provider proves the email is verified — the federated path doesn't, so it
+  // would otherwise create a second users row for the same email. This
+  // callback links any new account whose email already belongs to a user to
+  // that SAME user, so a returning student always lands on their existing
+  // dashboard (enrollments, certificates, profile) instead of a fresh empty
+  // account. Seeded demo accounts are never matched, so a real sign-up can't
+  // take over a demo identity.
+  callbacks: {
+    async createOrUpdateUser(ctx, { existingUserId, profile }) {
+      if (existingUserId !== null) return existingUserId;
+      // The library types ctx as a generic AnyDataModel; at runtime it IS the
+      // project's mutation ctx, so cast to the typed ctx to query our tables.
+      const db = (ctx as unknown as MutationCtx).db;
+      const email = (profile.email ?? "").trim().toLowerCase();
+      if (email) {
+        const existing = await db
+          .query("users")
+          .withIndex("email", (q) => q.eq("email", email))
+          .first();
+        if (existing && !existing.isSeed) return existing._id;
+      }
+      return await db.insert("users", {
+        name: typeof profile.name === "string" ? profile.name : undefined,
+        email: typeof profile.email === "string" ? profile.email : undefined,
+        image: typeof profile.image === "string" ? profile.image : undefined,
+        emailVerificationTime: profile.emailVerified ? Date.now() : undefined,
+        isAnonymous:
+          typeof profile.isAnonymous === "boolean" ? profile.isAnonymous : undefined,
+      });
+    },
+  },
 });
