@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Link } from "react-router";
 import { useMutation, useQuery } from "convex/react";
 import type { FunctionReturnType } from "convex/server";
 import { api } from "@/convex/_generated/api";
@@ -9,6 +10,7 @@ import {
   CheckCircle2,
   Clock,
   ExternalLink,
+  Eye,
   Loader2,
   Pencil,
   Plus,
@@ -254,25 +256,36 @@ export default function AdminCourses() {
         ) : (
           <div className="space-y-2 p-4">
             {(pending ?? []).map((c) => (
-              <button
+              <div
                 key={c._id}
-                onClick={() => {
-                  setReviewing(c);
-                  setReviewNote("");
-                }}
                 className="flex w-full items-center gap-3 rounded-xl border border-white/8 bg-black/20 px-4 py-3 text-left transition-colors hover:border-lime-400/40"
               >
-                <span className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-amber-400/12 text-amber-300">
-                  <BookOpen className="size-5" />
-                </span>
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm font-medium">{c.title}</p>
-                  <p className="truncate text-xs text-muted-foreground">
-                    by {c.tutor?.name ?? "Unknown"} · {c.durationHours}h · {c.difficulty} · submitted {timeAgo(c.createdAt)}
-                  </p>
-                </div>
+                <button
+                  onClick={() => {
+                    setReviewing(c);
+                    setReviewNote("");
+                  }}
+                  className="flex min-w-0 flex-1 items-center gap-3 text-left"
+                >
+                  <span className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-amber-400/12 text-amber-300">
+                    <BookOpen className="size-5" />
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm font-medium">{c.title}</p>
+                    <p className="truncate text-xs text-muted-foreground">
+                      by {c.tutor?.name ?? "Unknown"} · {c.durationHours}h · {c.difficulty} · submitted {timeAgo(c.createdAt)}
+                    </p>
+                  </div>
+                </button>
                 <StatusChip status={c.status} published={c.published} />
-              </button>
+                <Link
+                  to={`/admin/courses/preview/${c._id}`}
+                  className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-white/10 px-3 py-1.5 text-xs font-medium text-lime-300 transition-colors hover:border-lime-400/40 hover:bg-lime-400/10"
+                  title="Preview exactly as students will see it"
+                >
+                  <Eye className="size-3.5" /> Preview & verify
+                </Link>
+              </div>
             ))}
           </div>
         )}
@@ -307,6 +320,13 @@ export default function AdminCourses() {
                     <ExternalLink className="size-4" />
                   </a>
                 )}
+                <Link
+                  to={`/admin/courses/preview/${c._id}`}
+                  className="inline-flex items-center gap-1 rounded-lg p-2 text-muted-foreground transition-colors hover:bg-white/10 hover:text-lime-300"
+                  title="Preview & verify course"
+                >
+                  <Eye className="size-4" />
+                </Link>
                 <Button variant="ghost" size="icon" className="text-muted-foreground hover:text-foreground" title="Edit course" onClick={() => openEdit(c)}>
                   <Pencil className="size-4" />
                 </Button>
@@ -346,6 +366,12 @@ export default function AdminCourses() {
                   <p>Tutor: <span className="text-foreground">{reviewing.tutor?.name}</span></p>
                   <p>Category: <span className="text-foreground">{reviewing.category?.name}</span></p>
                 </div>
+                <Link
+                  to={`/admin/courses/preview/${reviewing._id}`}
+                  className="inline-flex w-full items-center justify-center gap-1.5 rounded-xl border border-lime-400/25 bg-lime-400/8 px-4 py-2.5 text-sm font-medium text-lime-300 transition-colors hover:bg-lime-400/15"
+                >
+                  <Eye className="size-4" /> Preview full course — see lessons, quizzes & answers
+                </Link>
               </div>
               <div className="space-y-2">
                 <label className="text-sm font-medium">Note to tutor (optional)</label>

@@ -73,6 +73,7 @@ const AdminAudit = lazy(() => import("./pages/admin/AdminAudit.tsx"));
 const AdminProfile = lazy(() => import("./pages/admin/AdminProfile.tsx"));
 const AdminChat = lazy(() => import("./pages/admin/AdminChat.tsx"));
 const AdminInbox = lazy(() => import("./pages/admin/AdminInbox.tsx"));
+const AdminCoursePreview = lazy(() => import("./pages/admin/AdminCoursePreview.tsx"));
 
 // Simple loading fallback for route transitions
 function RouteLoading() {
@@ -279,6 +280,7 @@ createRoot(document.getElementById("root")!).render(
                 <Route path="users" element={<AdminUsers />} />
                 <Route path="applications" element={<AdminApplications />} />
                 <Route path="courses" element={<AdminCourses />} />
+                <Route path="courses/preview/:id" element={<AdminCoursePreview />} />
                 <Route path="catalog" element={<AdminCatalog />} />
                 <Route path="updates" element={<AdminUpdates />} />
                 <Route path="certificates" element={<AdminCertificates />} />

@@ -2,7 +2,7 @@ import { internal } from "./_generated/api";
 import { mutation, query, MutationCtx } from "./_generated/server";
 import { Doc, Id } from "./_generated/dataModel";
 import { v } from "convex/values";
-import { hydrateCourses, makeAdminToken, notify, publicUser, requireAdminSession, slugify } from "./lib";
+import { hydrateCourse, hydrateCourses, makeAdminToken, notify, publicUser, requireAdminSession, slugify } from "./lib";
 import { difficultyValidator, ROLES, roleValidator } from "./schema";
 
 // ---------------------------------------------------------------------------
@@ -657,6 +657,59 @@ export const reviewCourse = mutation({
       link: "/tutor/courses",
     });
     return true;
+  },
+});
+
+/**
+ * Full course preview for the admin review flow — the exact content a student
+ * would see once the course goes live, PLUS the complete lesson / quiz /
+ * assignment details so admins can verify quality before approving. Works for
+ * unpublished, pending or archived courses (public pages hide those, so the
+ * admin needs this dedicated view). A malformed or unknown id resolves to
+ * `null` instead of crashing the page.
+ */
+export const coursePreview = query({
+  args: { courseId: v.string(), token: v.string() },
+  handler: async (ctx, { courseId, token }) => {
+    await requireAdminSession(ctx, token);
+    let course: Doc<"courses"> | null = null;
+    try {
+      course = await ctx.db.get(courseId as Id<"courses">);
+    } catch {
+      return null;
+    }
+    if (!course) return null;
+    const hydrated = await hydrateCourse(ctx, course);
+    const tutor = await ctx.db.get(course.tutorId);
+    const [lessons, quizzes, assignments] = await Promise.all([
+      ctx.db
+        .query("lessons")
+        .withIndex("by_courseId", (q) => q.eq("courseId", course._id))
+        .collect(),
+      ctx.db
+        .query("quizzes")
+        .withIndex("by_course", (q) => q.eq("courseId", course._id))
+        .collect(),
+      ctx.db
+        .query("assignments")
+        .withIndex("by_course", (q) => q.eq("courseId", course._id))
+        .collect(),
+    ]);
+    return {
+      ...hydrated,
+      tutorProfile: tutor
+        ? {
+            ...publicUser(tutor),
+            bio: tutor.bio ?? "",
+            skills: tutor.skills ?? [],
+          }
+        : null,
+      lessons: lessons.sort((a, b) => a.order - b.order),
+      quizzes: quizzes.sort((a, b) => a.createdAt - b.createdAt),
+      assignments: assignments.sort(
+        (a, b) => (a.deadline ?? Infinity) - (b.deadline ?? Infinity),
+      ),
+    };
   },
 });
 
