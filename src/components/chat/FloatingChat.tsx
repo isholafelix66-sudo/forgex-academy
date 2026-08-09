@@ -86,19 +86,23 @@ export function FloatingChat() {
     return () => window.removeEventListener(OPEN_CHAT_EVENT, onOpen);
   }, []);
 
-  // Presence heartbeat — keep us “online” while the app is open.
+  // Presence heartbeat — keep us “online” while the app is open. Only runs
+  // for signed-in users (the component stays mounted for everyone, so this
+  // guard is what stops signed-out visitors / admin sessions from calling it).
   useEffect(() => {
-    void heartbeat();
-    const iv = setInterval(() => void heartbeat(), 25_000);
+    if (!user?._id) return;
+    const beat = () => void heartbeat();
+    beat();
+    const iv = setInterval(beat, 25_000);
     const onVis = () => {
-      if (document.visibilityState === "visible") void heartbeat();
+      if (document.visibilityState === "visible") beat();
     };
     document.addEventListener("visibilitychange", onVis);
     return () => {
       clearInterval(iv);
       document.removeEventListener("visibilitychange", onVis);
     };
-  }, [heartbeat]);
+  }, [heartbeat, user?._id]);
 
   const thread = useQuery(
     api.messages.threadMessages,

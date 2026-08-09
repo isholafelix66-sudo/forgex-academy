@@ -51,7 +51,9 @@ export const internalAdminSessionValid = internalQuery({
 export const touchActivity = mutation({
   args: {},
   handler: async (ctx) => {
-    const userId = await requireUser(ctx);
+    const userId = await getAuthUserId(ctx);
+    // Not signed in (visitors / password-gated admin sessions) — nothing to record.
+    if (userId === null) return false;
     const now = Date.now();
     const user = await ctx.db.get(userId);
     if (user && (!user.lastActivity || now - user.lastActivity > 5 * 60 * 1000)) {
@@ -65,11 +67,15 @@ export const touchActivity = mutation({
  * Presence heartbeat — called while the app is open so other users can see
  * “online / offline”. Writes `lastActivity` every ~25s; a user is considered
  * online when their last activity is within the last 60 seconds.
+ *
+ * Note: this deliberately NO-OPS for signed-out callers instead of throwing,
+ * so the globally-mounted chat widget can never spam server errors.
  */
 export const presenceHeartbeat = mutation({
   args: {},
   handler: async (ctx) => {
-    const userId = await requireUser(ctx);
+    const userId = await getAuthUserId(ctx);
+    if (userId === null) return false;
     await ctx.db.patch(userId, { lastActivity: Date.now() });
     return true;
   },
