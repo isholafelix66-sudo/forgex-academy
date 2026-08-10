@@ -38,19 +38,27 @@ export const ensureSeedData = mutation({
       .withIndex("by_key", (q) => q.eq("key", "tutorialVideo"))
       .first();
     if (!tv) {
-      // Default to a reliable MP4 that plays everywhere. Admins can switch
-      // to the built-in motion film or their own video via Admin → Branding.
+      // No demo video by default — the owner adds their own via
+      // Admin → Website & branding → Homepage tutorial video. The built-in
+      // motion film keeps the section alive until then.
       await ctx.db.insert("siteContent", {
         key: "tutorialVideo",
-        value: {
-          mode: "url",
-          url: "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/Sintel.mp4",
-          title: "ForgeX in two minutes",
-        },
+        value: { mode: "motion", title: "ForgeX in two minutes" },
       });
     } else if (typeof tv.value === "string") {
       await ctx.db.patch(tv._id, {
         value: { mode: "url", url: tv.value },
+      });
+    } else if (
+      typeof tv.value === "object" &&
+      tv.value !== null &&
+      (tv.value as { url?: unknown }).url ===
+        "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/Sintel.mp4"
+    ) {
+      // Remove the old seeded demo video on databases that already have it,
+      // so only videos the admin deliberately added stay.
+      await ctx.db.patch(tv._id, {
+        value: { mode: "motion", title: "ForgeX in two minutes" },
       });
     }
 

@@ -1,7 +1,6 @@
-import { useEffect, useRef, useState } from "react";
-import { useAction, useMutation, useQuery } from "convex/react";
+import { useEffect, useState } from "react";
+import { useMutation, useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
-import MuxUploader from "@mux/mux-uploader-react";
 import {
   Check,
   Clapperboard,
@@ -18,7 +17,6 @@ import {
   Save,
   Trash2,
   Video,
-  X,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -26,6 +24,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { PageHeader } from "@/components/dash/PageHeader";
 import { ImageUploader, type UploadedImage } from "@/components/admin/ImageUploader";
+import { VideoUploader } from "@/components/admin/VideoUploader";
 import type { TutorialVideoConfig } from "@/lib/tutorial-video";
 import { getAdminToken } from "@/lib/admin-session";
 
@@ -118,22 +117,13 @@ export default function AdminContent() {
   // ------------------------------------------------------------------
   // Homepage tutorial video manager
   // ------------------------------------------------------------------
-  const createAdminUpload = useAction(api.mux.createAdminUpload);
-  const getAdminPlaybackId = useAction(api.mux.getAdminPlaybackId);
-  const recordAdminVideo = useMutation(api.media.recordAdminVideo);
-
   const [tvMode, setTvMode] = useState<"motion" | "url" | "mux">("motion");
   const [tvUrl, setTvUrl] = useState("");
   const [tvTitle, setTvTitle] = useState("");
-  const [tvPlaybackId, setTvPlaybackId] = useState<string | null>(null);
-  const [tvUploadUrl, setTvUploadUrl] = useState<string | null>(null);
-  const [tvUploadId, setTvUploadId] = useState<string | null>(null);
-  const [tvUploading, setTvUploading] = useState(false);
-  const [tvProcessing, setTvProcessing] = useState(false);
+  const [tvVideoUrl, setTvVideoUrl] = useState<string | null>(null);
   const [tvUploadError, setTvUploadError] = useState<string | null>(null);
   const [savingTv, setSavingTv] = useState(false);
   const [savedTv, setSavedTv] = useState(false);
-  const tvUploaderRef = useRef<HTMLElement | null>(null);
 
   // Load the current tutorial-video config once site content arrives.
   useEffect(() => {
@@ -149,7 +139,7 @@ export default function AdminContent() {
       setTvMode(r.mode === "mux" ? "mux" : r.mode === "url" ? "url" : "motion");
       setTvUrl(typeof r.url === "string" ? r.url : "");
       setTvTitle(typeof r.title === "string" ? r.title : "");
-      setTvPlaybackId(typeof r.playbackId === "string" ? r.playbackId : null);
+      setTvVideoUrl(typeof r.url === "string" ? r.url : null);
     }
   }, [content]);
 
@@ -161,8 +151,8 @@ export default function AdminContent() {
           ? { mode: "motion", title: tvTitle.trim() || undefined }
           : tvMode === "url"
             ? { mode: "url", url: tvUrl.trim(), title: tvTitle.trim() || undefined }
-            : tvPlaybackId
-              ? { mode: "mux", playbackId: tvPlaybackId, title: tvTitle.trim() || undefined }
+            : tvVideoUrl
+              ? { mode: "url", url: tvVideoUrl, title: tvTitle.trim() || undefined }
               : { mode: "motion" };
       await contentSet({ key: "tutorialVideo", value, token });
       setSavedTv(true);
@@ -172,63 +162,7 @@ export default function AdminContent() {
     }
   };
 
-  const startTvUpload = async () => {
-    setTvUploadError(null);
-    setTvProcessing(false);
-    setTvUploading(true);
-    try {
-      const res = await createAdminUpload({
-        token,
-        title: tvTitle.trim() || "Homepage tutorial video",
-        corsOrigin: window.location.origin,
-      });
-      setTvUploadUrl(res.uploadUrl);
-      setTvUploadId(res.uploadId);
-    } catch (err) {
-      setTvUploadError(
-        err instanceof Error ? err.message : "Could not start the upload.",
-      );
-    } finally {
-      setTvUploading(false);
-    }
-  };
 
-  // Once the upload completes, poll Mux until it's playable, then attach the
-  // playback id and track the video in the media library.
-  const onTvUploadSuccess = async (e: Event) => {
-    const detail = (e as CustomEvent).detail as { uploadId?: string } | undefined;
-    const id = detail?.uploadId ?? tvUploadId;
-    if (!id) return;
-    setTvUploading(false);
-    setTvProcessing(true);
-    const deadline = Date.now() + 10 * 60 * 1000; // give up after 10 min
-    while (Date.now() < deadline) {
-      try {
-        const info = await getAdminPlaybackId({ token, uploadId: id });
-        if (info?.playbackId) {
-          setTvPlaybackId(info.playbackId);
-          setTvProcessing(false);
-          setTvUploadUrl(null);
-          void recordAdminVideo({
-            token,
-            uploadId: id,
-            title: tvTitle.trim() || "Homepage tutorial video",
-            status: "ready",
-            assetId: info.assetId,
-            playbackId: info.playbackId,
-          });
-          return;
-        }
-      } catch {
-        // transient — keep polling
-      }
-      await new Promise((r) => setTimeout(r, 5000));
-    }
-    setTvProcessing(false);
-    setTvUploadError(
-      "Mux is still processing the video. Save what you have and check the media library later, or re-open to retry.",
-    );
-  };
 
   const save = async (key: string, value: string) => {
     await contentSet({ key, value, token });
@@ -339,7 +273,7 @@ export default function AdminContent() {
             <p className="mt-1 text-sm leading-relaxed text-muted-foreground">
               Controls the “ForgeX in two minutes” section on the homepage. The built-in
               motion graphic needs nothing; you can also link a YouTube / Vimeo / Loom /
-              MP4 video, or upload your own through Mux — streamed with adaptive bitrate.
+              MP4 video, or upload your own video from your device.
             </p>
 
             <div className="mt-5 grid h-10 max-w-md grid-cols-3 overflow-hidden rounded-xl border border-white/10 bg-black/20 text-xs font-medium">
@@ -381,7 +315,7 @@ export default function AdminContent() {
                     ) : tvMode === "url" ? (
                       <><Link2 className="size-3.5" /> Video link</>
                     ) : (
-                      <><CloudUpload className="size-3.5" /> Mux upload</>
+                      <><CloudUpload className="size-3.5" /> Device upload</>
                     )}
                   </div>
                 </div>
@@ -409,52 +343,24 @@ export default function AdminContent() {
               {tvMode === "mux" && (
                 <div className="rounded-xl border border-lime-400/20 bg-lime-400/5 p-4">
                   <p className="text-xs leading-relaxed text-muted-foreground">
-                    Upload an MP4/MOV straight from this browser. Mux transcodes and
-                    streams it with adaptive bitrate — no storage hosting needed.
+                    Upload an MP4, MOV or WebM video straight from your device. It is
+                    stored on Cloudinary and delivered as a fast, transcoded MP4 — no
+                    extra hosting needed.
                   </p>
-
-                  {tvPlaybackId ? (
-                    <div className="mt-3 flex items-center gap-2 text-xs text-lime-300/90">
-                      <span className="truncate font-mono">playback: {tvPlaybackId}</span>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="ml-auto h-7 gap-1 text-muted-foreground hover:text-rose-300"
-                        onClick={() => setTvPlaybackId(null)}
-                      >
-                        <X className="size-3.5" /> Remove
-                      </Button>
-                    </div>
-                  ) : tvUploadUrl ? (
-                    <div className="mt-3">
-                      <MuxUploader
-                        ref={tvUploaderRef as never}
-                        endpoint={tvUploadUrl}
-                        onSuccess={onTvUploadSuccess}
-                        className="w-full"
-                      />
-                      {tvProcessing && (
-                        <p className="mt-2 flex items-center gap-2 text-xs text-lime-300">
-                          <Loader2 className="size-3.5 animate-spin" /> Upload complete — Mux is
-                          processing the video…
-                        </p>
-                      )}
-                    </div>
-                  ) : (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="mt-3 gap-1.5 border-lime-400/30 text-lime-300"
-                      onClick={() => void startTvUpload()}
-                      disabled={tvUploading}
-                    >
-                      {tvUploading ? (
-                        <Loader2 className="size-3.5 animate-spin" />
-                      ) : (
-                        <CloudUpload className="size-3.5" />
-                      )}
-                      {tvUploading ? "Preparing upload…" : "Upload video with Mux"}
-                    </Button>
+                  <div className="mt-3">
+                    <VideoUploader
+                      value={tvVideoUrl}
+                      onUploaded={(v) => {
+                        setTvVideoUrl(v.url);
+                        setTvUploadError(null);
+                      }}
+                      onClear={() => setTvVideoUrl(null)}
+                    />
+                  </div>
+                  {tvVideoUrl && (
+                    <p className="mt-2 flex items-center gap-2 text-xs text-lime-300">
+                      <Check className="size-3.5" /> Uploaded — press Save to publish it on the homepage.
+                    </p>
                   )}
                   {tvUploadError && (
                     <p className="mt-2 rounded-lg border border-rose-400/25 bg-rose-400/8 p-2.5 text-xs text-rose-300">
