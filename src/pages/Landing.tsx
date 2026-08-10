@@ -25,6 +25,7 @@ import { SectionHeading } from "@/components/site/SectionHeading";
 import { Stat } from "@/components/site/Stat";
 import { CourseCard } from "@/components/site/CourseCard";
 import { TutorCard } from "@/components/site/TutorCard";
+import { HowToVideo } from "@/components/site/HowToVideo";
 import { Avatar } from "@/components/site/Avatar";
 import { timeAgo } from "@/lib/format";
 
@@ -76,6 +77,10 @@ export default function Landing() {
     description: string;
     eta: string;
   }>;
+  const tutorialVideo =
+    typeof content?.tutorialVideo === "string" && content.tutorialVideo.trim()
+      ? content.tutorialVideo
+      : null;
 
   const featuredRoadmap = roadmaps?.find((r) => r.featured) ?? roadmaps?.[0];
 
@@ -192,6 +197,20 @@ export default function Landing() {
               ))}
             </div>
           </div>
+        </section>
+      )}
+
+      {/* ------------------------------------------------ How-it-works video */}
+      {tutorialVideo && (
+        <section className="mx-auto max-w-7xl px-4 py-24 sm:px-6">
+          <SectionHeading
+            eyebrow="Watch the tour"
+            title="ForgeX in two minutes"
+            description="See how students learn, earn certificates and grow — and how tutors build courses, grade work and stay connected with their class."
+          />
+          <Reveal className="mt-12">
+            <HowToVideo url={tutorialVideo} title="How ForgeX Academy works" />
+          </Reveal>
         </section>
       )}
 

@@ -1,6 +1,6 @@
 import { mutation, query } from "./_generated/server";
 import { v } from "convex/values";
-import { notify, requireUser, requireUserDoc } from "./lib";
+import { checkRateLimit, notify, requireUser, requireUserDoc } from "./lib";
 
 export const assignmentsByCourse = query({
   args: { courseId: v.id("courses") },
@@ -35,6 +35,14 @@ export const submitAssignment = mutation({
   },
   handler: async (ctx, { assignmentId, text, links, files }) => {
     const user = await requireUserDoc(ctx);
+    // Spam guard: max 20 assignment submissions per user per hour.
+    await checkRateLimit(
+      ctx,
+      `submission:${user._id}`,
+      20,
+      60 * 60 * 1000,
+      "You're submitting assignments very quickly — please slow down.",
+    );
     const assignment = await ctx.db.get(assignmentId);
     if (!assignment) throw new Error("Assignment not found.");
     const existing = await ctx.db

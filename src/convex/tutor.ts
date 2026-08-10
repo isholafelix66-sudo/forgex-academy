@@ -1,6 +1,6 @@
 import { mutation, query } from "./_generated/server";
 import { v } from "convex/values";
-import { hydrateCourse, publicUser, requireTutor, requireTutorPreview, slugify } from "./lib";
+import { checkRateLimit, hydrateCourse, publicUser, requireTutor, requireTutorPreview, slugify } from "./lib";
 import { difficultyValidator, questionValidator, resourceValidator } from "./schema";
 
 // ---------------------------------------------------------------------------
@@ -190,6 +190,8 @@ export const upsertCourse = mutation({
   },
   handler: async (ctx, args) => {
     const tutor = await requireTutor(ctx);
+    // Abuse guard: max 20 course create/update writes per tutor per hour.
+    await checkRateLimit(ctx, `tutor:${tutor._id}`, 20, 60 * 60 * 1000);
     if (args.tutorId !== tutor._id && tutor.role !== "admin") {
       throw new Error("You can only create courses for yourself.");
     }
@@ -321,7 +323,8 @@ export const upsertLesson = mutation({
     resources: v.array(resourceValidator),
   },
   handler: async (ctx, args) => {
-    await requireTutor(ctx);
+    const tutor = await requireTutor(ctx);
+    await checkRateLimit(ctx, `tutor:${tutor._id}`, 20, 60 * 60 * 1000);
     if (args.id) {
       await ctx.db.patch(args.id, {
         courseId: args.courseId,
@@ -407,6 +410,7 @@ export const upsertQuiz = mutation({
   },
   handler: async (ctx, args) => {
     const tutor = await requireTutor(ctx);
+    await checkRateLimit(ctx, `tutor:${tutor._id}`, 20, 60 * 60 * 1000);
     const course = await ctx.db.get(args.courseId);
     if (!course || (course.tutorId !== tutor._id && tutor.role !== "admin")) {
       throw new Error("Not your course.");
@@ -475,6 +479,7 @@ export const upsertAssignment = mutation({
   },
   handler: async (ctx, args) => {
     const tutor = await requireTutor(ctx);
+    await checkRateLimit(ctx, `tutor:${tutor._id}`, 20, 60 * 60 * 1000);
     const course = await ctx.db.get(args.courseId);
     if (!course || (course.tutorId !== tutor._id && tutor.role !== "admin")) {
       throw new Error("Not your course.");

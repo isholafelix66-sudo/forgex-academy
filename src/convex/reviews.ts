@@ -2,7 +2,7 @@ import { v } from "convex/values";
 import { getAuthUserId } from "@convex-dev/auth/server";
 import { MutationCtx, mutation, query } from "./_generated/server";
 import { Doc } from "./_generated/dataModel";
-import { requireUser } from "./lib";
+import { checkRateLimit, requireUser } from "./lib";
 
 /**
  * Recompute the aggregate `rating` / `ratingCount` stored on the course from
@@ -90,6 +90,14 @@ export const upsert = mutation({
   },
   handler: async (ctx, { courseId, rating, comment }) => {
     const userId = await requireUser(ctx);
+    // Spam guard: max 10 review writes per user per hour.
+    await checkRateLimit(
+      ctx,
+      `review:${userId}`,
+      10,
+      60 * 60 * 1000,
+      "You've reviewed a lot of courses recently — please slow down.",
+    );
     if (!Number.isInteger(rating) || rating < 1 || rating > 5) {
       throw new Error("Rating must be a whole number between 1 and 5 stars.");
     }

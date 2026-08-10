@@ -1,6 +1,6 @@
 import { mutation, query } from "./_generated/server";
 import { v } from "convex/values";
-import { notify, requireUser, requireUserDoc } from "./lib";
+import { checkRateLimit, notify, requireUser, requireUserDoc } from "./lib";
 
 const normalize = (s: string) => s.trim().toLowerCase().replace(/\s+/g, " ");
 
@@ -41,6 +41,14 @@ export const submitQuiz = mutation({
   },
   handler: async (ctx, { quizId, answers, timeTakenSeconds }) => {
     const user = await requireUserDoc(ctx);
+    // Spam guard: max 30 quiz submissions per user per hour.
+    await checkRateLimit(
+      ctx,
+      `quiz:${user._id}`,
+      30,
+      60 * 60 * 1000,
+      "You're taking quizzes very quickly — please slow down.",
+    );
     const quiz = await ctx.db.get(quizId);
     if (!quiz) throw new Error("Quiz not found.");
 

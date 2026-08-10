@@ -3,7 +3,7 @@ import { internal } from "./_generated/api";
 import { mutation, query, type MutationCtx } from "./_generated/server";
 import type { Doc } from "./_generated/dataModel";
 import { v } from "convex/values";
-import { notify, requireAdminSession } from "./lib";
+import { checkRateLimit, notify, requireAdminSession } from "./lib";
 
 const threadKey = (a: string, b: string) => [a, b].sort().join("|");
 
@@ -62,21 +62,22 @@ export const submitContact = mutation({
       throw new Error("Please enter a valid email address.");
     }
 
-    // Spam guard: max 5 submissions per email per hour (visitor path).
-    const recentSubs = await ctx.db
-      .query("contactSubmissions")
-      .withIndex("by_created")
-      .collect();
-    const subsFromThisEmail = recentSubs.filter(
-      (s) =>
-        s.email.toLowerCase() === trimmedEmail &&
-        Date.now() - s.createdAt < 60 * 60 * 1000,
-    ).length;
-    if (subsFromThisEmail >= 5) {
-      throw new Error(
-        "You've sent several messages recently — please wait a while before sending more.",
-      );
-    }
+    // Spam guards (DB-backed rate limiter): max 5 submissions per email per
+    // hour, plus a global ceiling so a single script can't flood the inbox.
+    await checkRateLimit(
+      ctx,
+      `contact:${trimmedEmail}`,
+      5,
+      60 * 60 * 1000,
+      "You've sent several messages recently — please wait a while before sending more.",
+    );
+    await checkRateLimit(
+      ctx,
+      "contact:global",
+      40,
+      60 * 1000,
+      "Too many messages are being sent right now — please try again in a minute.",
+    );
 
     const userId = await getAuthUserId(ctx);
 

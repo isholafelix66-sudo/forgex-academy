@@ -408,6 +408,16 @@ const schema = defineSchema(
       createdAt: v.number(),
     }).index("by_token", ["token"]),
 
+    /** Fixed-window rate-limit counters. One doc per bucket key (e.g.
+     *  `contact:<email>`, `msg:<userId>`, `quiz:<userId>`, `upload:<userId>`).
+     *  Convex serializes writes to the same document, so concurrent calls are
+     *  safe. Windows reset lazily on the next hit, keeping the table tiny. */
+    rateLimits: defineTable({
+      key: v.string(),
+      windowStart: v.number(),
+      count: v.number(),
+    }).index("by_key", ["key"]),
+
     /** Media library — IMAGES ONLY. Uploaded images tracked for admin
      *  management. Stored on Cloudinary (public_id + optimized URL, never the
      *  binary data). Videos live in `mediaVideos`, private docs in `documents`.

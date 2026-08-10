@@ -3,7 +3,7 @@ import { internal } from "./_generated/api";
 import { internalQuery, mutation, query, QueryCtx } from "./_generated/server";
 import { v } from "convex/values";
 import { ROLES, socialsValidator } from "./schema";
-import { notify, publicUser, requireUser, requireUserDoc } from "./lib";
+import { checkRateLimit, notify, publicUser, requireUser, requireUserDoc } from "./lib";
 
 /**
  * Get the current signed in user. Returns null if the user is not signed in.
@@ -125,6 +125,7 @@ export const initializeUser = mutation({
   args: { name: v.optional(v.string()) },
   handler: async (ctx, { name }) => {
     const user = await requireUserDoc(ctx);
+    await checkRateLimit(ctx, `profile:${user._id}`, 60, 60 * 60 * 1000);
     const patch: Record<string, unknown> = {};
     if (!user.role) patch.role = ROLES.STUDENT;
     if (!user.onboarded) patch.onboarded = true;
@@ -148,7 +149,30 @@ export const updateProfile = mutation({
   },
   handler: async (ctx, args) => {
     const user = await requireUserDoc(ctx);
-    await ctx.db.patch(user._id, args);
+    await checkRateLimit(ctx, `profile:${user._id}`, 60, 60 * 60 * 1000);
+    // Hard security: never trust client payloads wholesale — normalize lengths
+    // and shapes so oversized / malformed profiles can't be stored.
+    const patch: Record<string, unknown> = {};
+    if (args.name !== undefined) {
+      patch.name = args.name.trim().slice(0, 80);
+    }
+    if (args.image !== undefined) {
+      patch.image = args.image.trim().slice(0, 500);
+    }
+    if (args.headline !== undefined) {
+      patch.headline = args.headline.trim().slice(0, 120);
+    }
+    if (args.bio !== undefined) {
+      patch.bio = args.bio.trim().slice(0, 2000);
+    }
+    if (args.skills !== undefined) {
+      patch.skills = args.skills
+        .map((s) => s.trim().slice(0, 60))
+        .filter(Boolean)
+        .slice(0, 20);
+    }
+    if (args.socials !== undefined) patch.socials = args.socials;
+    await ctx.db.patch(user._id, patch);
     return await ctx.db.get(user._id);
   },
 });
@@ -205,6 +229,8 @@ export const saveTutorApplication = mutation({
   },
   handler: async (ctx, args) => {
     const user = await requireUserDoc(ctx);
+    // Abuse guard: max 30 application saves per user per hour.
+    await checkRateLimit(ctx, `profile:${user._id}`, 30, 60 * 60 * 1000);
     const { submit, ...fields } = args;
     const existing = await ctx.db
       .query("tutorApplications")

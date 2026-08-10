@@ -27,6 +27,7 @@ const TEXT_FIELDS: Array<{ key: string; label: string; hint: string; rows: numbe
   { key: "heroTitle", label: "Homepage hero title", hint: "Big headline on the landing page.", rows: 2 },
   { key: "heroSubtitle", label: "Homepage hero subtitle", hint: "Supporting line under the hero.", rows: 3 },
   { key: "ctaTitle", label: "CTA section title", hint: "Bottom call-to-action heading.", rows: 2 },
+  { key: "tutorialVideo", label: "Tutorial video URL", hint: "Homepage 'How it works' video — paste a YouTube, Vimeo, Loom or direct MP4 link.", rows: 2 },
   { key: "mission", label: "Mission statement", hint: "Shown on the About page.", rows: 4 },
   { key: "vision", label: "Vision statement", hint: "Shown on the About page.", rows: 4 },
   { key: "about", label: "About us (story)", hint: "Long-form About page copy.", rows: 8 },

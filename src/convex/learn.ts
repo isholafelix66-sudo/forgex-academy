@@ -1,6 +1,6 @@
 import { mutation, query } from "./_generated/server";
 import { v } from "convex/values";
-import { requireUser, requireUserDoc, hydrateCourses, hydrateCourse, notify, yyyymmdd, makeCertificateId } from "./lib";
+import { checkRateLimit, requireUser, requireUserDoc, hydrateCourses, hydrateCourse, notify, yyyymmdd, makeCertificateId } from "./lib";
 
 // ---------------------------------------------------------------------------
 // Enrollment
@@ -22,6 +22,8 @@ export const enroll = mutation({
   args: { courseId: v.id("courses") },
   handler: async (ctx, { courseId }) => {
     const user = await requireUserDoc(ctx);
+    // Abuse guard: max 60 learn actions (enroll / complete) per user per hour.
+    await checkRateLimit(ctx, `learn:${user._id}`, 60, 60 * 60 * 1000);
     const course = await ctx.db.get(courseId);
     if (!course || !course.published) throw new Error("Course not found.");
     const existing = await ctx.db
@@ -83,6 +85,7 @@ export const completeLesson = mutation({
   args: { lessonId: v.id("lessons") },
   handler: async (ctx, { lessonId }) => {
     const user = await requireUserDoc(ctx);
+    await checkRateLimit(ctx, `learn:${user._id}`, 60, 60 * 60 * 1000);
     const lesson = await ctx.db.get(lessonId);
     if (!lesson) throw new Error("Lesson not found.");
     const enrollment = await ctx.db

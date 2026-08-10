@@ -19,7 +19,51 @@ export async function requireUserDoc(ctx: QueryCtx | MutationCtx) {
   const userId = await requireUser(ctx);
   const user = await ctx.db.get(userId);
   if (!user) throw new Error("Account not found.");
+  // Hard security: suspended accounts are blocked from every protected
+  // mutation server-side (admins gate separately via the access password).
+  if (user.suspended) {
+    throw new Error(
+      "Your account has been suspended. Contact support@forgex.academy if you believe this is a mistake.",
+    );
+  }
   return user;
+}
+
+/**
+ * Fixed-window rate limiter backed by the `rateLimits` table. Counts calls
+ * under `key` inside `windowMs`; once `limit` is reached it throws a friendly
+ * error (or returns `false` when `soft` is set). Safe under concurrency:
+ * Convex serializes reads/writes to the same document, so two simultaneous
+ * calls can't both pass the last allowed slot.
+ */
+export async function checkRateLimit(
+  ctx: MutationCtx,
+  key: string,
+  limit: number,
+  windowMs: number,
+  message = "You're moving a little fast — please slow down and try again shortly.",
+  soft = false,
+): Promise<boolean> {
+  const now = Date.now();
+  const existing = await ctx.db
+    .query("rateLimits")
+    .withIndex("by_key", (q) => q.eq("key", key))
+    .first();
+  if (!existing) {
+    await ctx.db.insert("rateLimits", { key, windowStart: now, count: 1 });
+    return true;
+  }
+  if (now - existing.windowStart >= windowMs) {
+    // Window rolled over — start a fresh bucket in place.
+    await ctx.db.patch(existing._id, { windowStart: now, count: 1 });
+    return true;
+  }
+  if (existing.count >= limit) {
+    if (soft) return false;
+    throw new Error(message);
+  }
+  await ctx.db.patch(existing._id, { count: existing.count + 1 });
+  return true;
 }
 
 /** Require the caller to be an admin. */

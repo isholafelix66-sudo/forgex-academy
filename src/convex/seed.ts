@@ -1,5 +1,6 @@
 import { mutation } from "./_generated/server";
 import { v } from "convex/values";
+import { checkRateLimit } from "./lib";
 import { ROLES, type Question, type Resource } from "./schema";
 
 const VIDS = [
@@ -27,7 +28,34 @@ export const ensureSeedData = mutation({
   args: { force: v.optional(v.boolean()) },
   handler: async (ctx, { force }) => {
     const existing = await ctx.db.query("categories").first();
+
+    // Homepage “How it works” tour video (added after the first seed, so it's
+    // guaranteed on both fresh and already-seeded databases). Demo placeholder
+    // that plays everywhere — admins replace it via Admin → Website & branding.
+    const tv = await ctx.db
+      .query("siteContent")
+      .withIndex("by_key", (q) => q.eq("key", "tutorialVideo"))
+      .first();
+    if (!tv) {
+      await ctx.db.insert("siteContent", {
+        key: "tutorialVideo",
+        value:
+          "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/Sintel.mp4",
+      });
+    }
+
     if (existing && !force) return { seeded: false };
+    // Hard security: a forced reseed replaces catalog data — cap destructive
+    // reseeds at 2 per 10 minutes.
+    if (force) {
+      await checkRateLimit(
+        ctx,
+        "seed:force",
+        2,
+        10 * 60 * 1000,
+        "Reseeding is rate-limited — try again in a few minutes.",
+      );
+    }
 
     // ------------------------------------------------------------------
     // Categories

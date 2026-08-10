@@ -2,7 +2,7 @@ import { getAuthUserId } from "@convex-dev/auth/server";
 import { internal } from "./_generated/api";
 import { mutation, query } from "./_generated/server";
 import { v } from "convex/values";
-import { notify, requireUser, requireUserDoc } from "./lib";
+import { checkRateLimit, notify, requireUser, requireUserDoc } from "./lib";
 
 const threadKey = (a: string, b: string) => [a, b].sort().join("|");
 
@@ -124,17 +124,15 @@ export const sendMessage = mutation({
       throw new Error("Messages are limited to 4,000 characters.");
     }
 
-    // Simple spam guard: max 20 outbound messages per minute per user.
-    const recentSent = await ctx.db
-      .query("messages")
-      .withIndex("by_sender", (q) => q.eq("senderId", user._id))
-      .collect();
-    const sentLastMinute = recentSent.filter(
-      (m) => Date.now() - m.createdAt < 60_000,
-    ).length;
-    if (sentLastMinute >= 20) {
-      throw new Error("You're sending messages too fast — please slow down.");
-    }
+    // Simple spam guard: max 20 outbound messages per minute per user
+    // (DB-backed rate limiter — constant-time, no message-table scan).
+    await checkRateLimit(
+      ctx,
+      `msg:${user._id}`,
+      20,
+      60_000,
+      "You're sending messages too fast — please slow down.",
+    );
 
     // Throttle emails: at most one per receiver every 5 minutes so rapid
     // chats don't flood someone's inbox (the in-app notification always fires).

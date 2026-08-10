@@ -1,6 +1,6 @@
 import { mutation, query } from "./_generated/server";
 import { v } from "convex/values";
-import { requireAdminSession, requireUser } from "./lib";
+import { checkRateLimit, requireAdminSession, requireUser } from "./lib";
 
 /**
  * Generate a URL the client can PUT a file to (works from any device /
@@ -10,7 +10,8 @@ import { requireAdminSession, requireUser } from "./lib";
 export const generateUploadUrl = mutation({
   args: {},
   handler: async (ctx) => {
-    await requireUser(ctx);
+    const userId = await requireUser(ctx);
+    await checkRateLimit(ctx, `upload:${userId}`, 40, 60 * 60 * 1000);
     return await ctx.storage.generateUploadUrl();
   },
 });
@@ -27,7 +28,8 @@ export const getStorageUrl = query({
 export const deleteFile = mutation({
   args: { storageId: v.id("_storage") },
   handler: async (ctx, { storageId }) => {
-    await requireUser(ctx);
+    const userId = await requireUser(ctx);
+    await checkRateLimit(ctx, `upload:${userId}`, 40, 60 * 60 * 1000);
     await ctx.storage.delete(storageId);
     return true;
   },
@@ -49,6 +51,7 @@ export const recordDocument = mutation({
   },
   handler: async (ctx, args) => {
     const userId = await requireUser(ctx);
+    await checkRateLimit(ctx, `upload:${userId}`, 40, 60 * 60 * 1000);
     return await ctx.db.insert("documents", {
       ...args,
       uploadedBy: userId,
