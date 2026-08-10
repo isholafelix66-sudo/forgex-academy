@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { AnimatePresence, motion } from "framer-motion";
+import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import {
   Award,
   BarChart3,
@@ -473,38 +473,56 @@ function fmt(ms: number) {
 }
 
 export function ForgeXMotionVideo({ title = "ForgeX in two minutes" }: { title?: string }) {
-  const [playing, setPlaying] = useState(true);
-  const [elapsed, setElapsed] = useState(0);
+  const reduceMotion = useReducedMotion() === true;
+  const [playing, setPlaying] = useState(!reduceMotion);
+  const [sceneIndex, setSceneIndex] = useState(0);
+  const [progress, setProgress] = useState(0);
+  const [ended, setEnded] = useState(false);
   const [muted, setMuted] = useState(false);
   const rafRef = useRef<number | null>(null);
   const lastRef = useRef(0);
+  const uiRef = useRef(0);
+  const elapsedRef = useRef(0);
+  const sceneRef = useRef(0);
   const barRef = useRef<HTMLDivElement | null>(null);
   const musicRef = useRef<MotionMusic | null>(null);
 
-  const sceneIndex = Math.min(SCENES.length - 1, Math.floor(elapsed / SCENE_MS));
-  const ended = elapsed >= TOTAL_MS;
-  const ratio = Math.min(1, elapsed / TOTAL_MS);
+  const ratio = Math.min(1, progress / TOTAL_MS);
 
-  // Master clock
+  // Master clock — time lives in a ref; React state is only updated when the
+  // scene changes or ~5×/sec for the progress bar, so the player (and its
+  // many motion elements) never re-renders 60× per second on mobile.
   useEffect(() => {
-    if (!playing) return;
+    if (!playing || ended) return;
     lastRef.current = performance.now();
     const tick = (now: number) => {
-      const dt = now - lastRef.current;
+      // Clamp large frame gaps (e.g. tab switches) so the film never jumps.
+      const dt = Math.min(100, now - lastRef.current);
       lastRef.current = now;
-      setElapsed((e) => Math.min(TOTAL_MS, e + dt));
+      const next = Math.min(TOTAL_MS, elapsedRef.current + dt);
+      elapsedRef.current = next;
+
+      const nextScene = Math.min(SCENES.length - 1, Math.floor(next / SCENE_MS));
+      if (nextScene !== sceneRef.current) {
+        sceneRef.current = nextScene;
+        setSceneIndex(nextScene);
+      }
+      if (next >= TOTAL_MS) {
+        uiRef.current = now;
+        setProgress(TOTAL_MS);
+        setEnded(true);
+        setPlaying(false);
+      } else if (now - uiRef.current >= 200) {
+        uiRef.current = now;
+        setProgress(next);
+      }
       rafRef.current = requestAnimationFrame(tick);
     };
     rafRef.current = requestAnimationFrame(tick);
     return () => {
       if (rafRef.current !== null) cancelAnimationFrame(rafRef.current);
     };
-  }, [playing]);
-
-  // Stop at the end
-  useEffect(() => {
-    if (elapsed >= TOTAL_MS && playing) setPlaying(false);
-  }, [elapsed, playing]);
+  }, [playing, ended]);
 
   // Background music: starts on the first user gesture (poster click) and
   // follows the film's play/pause state. Wrapped in try/catch so a browser
@@ -554,18 +572,35 @@ export function ForgeXMotionVideo({ title = "ForgeX in two minutes" }: { title?:
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  /** Rewind the film to the start and play it again. */
+  const reset = () => {
+    elapsedRef.current = 0;
+    sceneRef.current = 0;
+    setSceneIndex(0);
+    setProgress(0);
+    setEnded(false);
+    setPlaying(true);
+  };
+
   const toggle = () => {
-    if (ended) {
-      setElapsed(0);
-      setPlaying(true);
+    if (elapsedRef.current >= TOTAL_MS) {
+      reset();
     } else {
       setPlaying((p) => !p);
     }
   };
 
-  const restart = () => {
-    setElapsed(0);
-    setPlaying(true);
+  const restart = reset;
+
+  /** Jump the clock by delta ms (used by the keyboard arrows). */
+  const nudge = (delta: number) => {
+    const next = Math.min(TOTAL_MS, Math.max(0, elapsedRef.current + delta));
+    elapsedRef.current = next;
+    sceneRef.current = Math.min(SCENES.length - 1, Math.floor(next / SCENE_MS));
+    setSceneIndex(sceneRef.current);
+    setProgress(next);
+    setEnded(next >= TOTAL_MS);
+    if (next >= TOTAL_MS) setPlaying(false);
   };
 
   const seek = (clientX: number) => {
@@ -573,7 +608,12 @@ export function ForgeXMotionVideo({ title = "ForgeX in two minutes" }: { title?:
     if (!bar) return;
     const rect = bar.getBoundingClientRect();
     const r = Math.min(1, Math.max(0, (clientX - rect.left) / rect.width));
-    setElapsed(r * TOTAL_MS);
+    const next = r * TOTAL_MS;
+    elapsedRef.current = next;
+    sceneRef.current = Math.min(SCENES.length - 1, Math.floor(next / SCENE_MS));
+    setSceneIndex(sceneRef.current);
+    setProgress(next);
+    setEnded(next >= TOTAL_MS);
     setPlaying(r < 1);
   };
 
@@ -626,11 +666,11 @@ export function ForgeXMotionVideo({ title = "ForgeX in two minutes" }: { title?:
           aria-label="Tour progress"
           aria-valuemin={0}
           aria-valuemax={TOTAL_MS}
-          aria-valuenow={Math.round(elapsed)}
+          aria-valuenow={Math.round(progress)}
           tabIndex={0}
           onKeyDown={(e) => {
-            if (e.key === "ArrowRight") setElapsed((x) => Math.min(TOTAL_MS, x + SCENE_MS));
-            if (e.key === "ArrowLeft") setElapsed((x) => Math.max(0, x - SCENE_MS));
+            if (e.key === "ArrowRight") nudge(SCENE_MS);
+            if (e.key === "ArrowLeft") nudge(-SCENE_MS);
           }}
         >
           <div
@@ -685,7 +725,12 @@ export function ForgeXMotionVideo({ title = "ForgeX in two minutes" }: { title?:
                 key={s.label}
                 type="button"
                 onClick={() => {
-                  setElapsed(i * SCENE_MS);
+                  const t = i * SCENE_MS;
+                  elapsedRef.current = t;
+                  sceneRef.current = i;
+                  setSceneIndex(i);
+                  setProgress(t);
+                  setEnded(false);
                   setPlaying(true);
                 }}
                 className={`h-1.5 rounded-full transition-all ${i === sceneIndex ? "w-5 bg-lime-400" : "w-1.5 bg-white/25 hover:bg-white/40"}`}
@@ -695,7 +740,7 @@ export function ForgeXMotionVideo({ title = "ForgeX in two minutes" }: { title?:
           </div>
 
           <span className="ml-auto font-mono text-[11px] tabular-nums text-muted-foreground">
-            {fmt(elapsed)} / {fmt(TOTAL_MS)}
+            {fmt(progress)} / {fmt(TOTAL_MS)}
           </span>
         </div>
       </div>

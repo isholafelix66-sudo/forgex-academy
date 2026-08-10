@@ -43,6 +43,8 @@ export function CoverArt({
         <img
           src={image}
           alt=""
+          loading="lazy"
+          decoding="async"
           className="relative size-full object-cover"
         />
       ) : (

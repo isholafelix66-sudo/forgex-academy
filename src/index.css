@@ -257,6 +257,15 @@
   animation: pulse-glow 4s ease-in-out infinite;
 }
 
+/* Mobile performance: the pulsing/float FX animate large blurred layers,
+   which is GPU-expensive on small screens — render them as static there. */
+@media (max-width: 767px) {
+  .animate-pulse-glow,
+  .animate-float-slow {
+    animation: none;
+  }
+}
+
 @keyframes ticker-shine {
   0% {
     background-position: -200% center;

@@ -29,6 +29,8 @@ export function Avatar({
       <img
         src={image}
         alt={name}
+        loading="lazy"
+        decoding="async"
         className={cn(
           "size-10 rounded-full object-cover ring-1 ring-white/15",
           className,

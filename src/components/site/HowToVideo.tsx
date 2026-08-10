@@ -131,9 +131,9 @@ export function HowToVideo({
   return (
     <div ref={ref} className="group relative mx-auto max-w-5xl">
       <div className="relative aspect-video w-full overflow-hidden rounded-3xl border border-white/10 bg-black shadow-2xl shadow-black/60">
-        {/* ambient lime glow */}
+        {/* ambient lime glow — hidden on mobile: full-width blur is GPU-heavy */}
         <div
-          className="pointer-events-none absolute -inset-10 bg-lime-400/10 blur-3xl"
+          className="pointer-events-none absolute -inset-10 hidden bg-lime-400/10 blur-3xl md:block"
           aria-hidden
         />
 
