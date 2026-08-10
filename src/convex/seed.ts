@@ -811,7 +811,7 @@ export const ensureSeedData = mutation({
       name: "ForgeX Team", email: "team@forgex.academy",
       role: ROLES.ADMIN, verified: true, headline: "Academy Operations",
       bio: "The team behind ForgeX Academy.", streak: 0, streakLastDay: 0, badges: [], isSeed: true,
-    });
+    }));
     const now = Date.now();
     await ctx.db.insert("announcements", {
       authorId: adminUser, title: "Welcome to ForgeX Academy 🎉",
