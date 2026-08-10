@@ -99,7 +99,32 @@ export function HowToVideo({
     rootMargin: "400px 0px",
   });
 
-  if (!config) return null;
+  if (!config) {
+    // Even when unconfigured, show a visible placeholder so the section is
+    // never blank — admins see a hint, visitors see nothing interactive.
+    return (
+      <div ref={ref} className="mx-auto max-w-5xl">
+        <div className="relative flex aspect-video w-full items-center justify-center gap-3 overflow-hidden rounded-3xl border border-dashed border-white/10 bg-black/20 text-center">
+          <div
+            className="absolute inset-0 opacity-[0.04]"
+            style={{
+              backgroundImage:
+                "linear-gradient(rgba(255,255,255,.5) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,.5) 1px, transparent 1px)",
+              backgroundSize: "44px 44px",
+            }}
+            aria-hidden
+          />
+          <Clapperboard className="size-8 text-muted-foreground/40" />
+          <p className="text-sm font-medium text-muted-foreground/60">
+            Tutorial video not configured
+          </p>
+          <p className="text-xs text-muted-foreground/40">
+            Set it up in Admin → Website &amp; branding
+          </p>
+        </div>
+      </div>
+    );
+  }
   const effectiveTitle = config.title ?? title;
   const showPlayer = playing && inView;
 

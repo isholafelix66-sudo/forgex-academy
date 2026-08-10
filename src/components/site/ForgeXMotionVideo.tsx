@@ -507,32 +507,52 @@ export function ForgeXMotionVideo({ title = "ForgeX in two minutes" }: { title?:
   }, [elapsed, playing]);
 
   // Background music: starts on the first user gesture (poster click) and
-  // follows the film's play/pause state.
+  // follows the film's play/pause state. Wrapped in try/catch so a browser
+  // that blocks AudioContext never breaks the visual player.
   useEffect(() => {
-    if (playing && !ended) {
-      if (!musicRef.current) musicRef.current = createMotionMusic();
-      musicRef.current?.resume();
-    } else {
-      musicRef.current?.suspend();
+    try {
+      if (playing && !ended) {
+        if (!musicRef.current) musicRef.current = createMotionMusic();
+        musicRef.current?.resume();
+      } else {
+        musicRef.current?.suspend();
+      }
+    } catch {
+      // Audio not available — the player still works.
     }
   }, [playing, ended]);
 
   useEffect(() => {
-    musicRef.current?.setMuted(muted);
+    try {
+      musicRef.current?.setMuted(muted);
+    } catch {
+      // ignore
+    }
   }, [muted]);
 
   // Pause the soundtrack when the tab is hidden.
   useEffect(() => {
     const onVisibility = () => {
-      if (document.hidden) musicRef.current?.suspend();
-      else if (playing && !ended) musicRef.current?.resume();
+      try {
+        if (document.hidden) musicRef.current?.suspend();
+        else if (playing && !ended) musicRef.current?.resume();
+      } catch {
+        // ignore
+      }
     };
     document.addEventListener("visibilitychange", onVisibility);
     return () => document.removeEventListener("visibilitychange", onVisibility);
   }, [playing, ended]);
 
   // Free the audio graph on unmount.
-  useEffect(() => () => musicRef.current?.dispose(), []);
+  useEffect(() => {
+    try {
+      musicRef.current?.dispose();
+    } catch {
+      // ignore
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const toggle = () => {
     if (ended) {
@@ -559,7 +579,7 @@ export function ForgeXMotionVideo({ title = "ForgeX in two minutes" }: { title?:
 
   return (
     <div className="relative h-full w-full select-none bg-[#0d0f0c]">
-      <AnimatePresence mode="wait">
+      <AnimatePresence>
         <motion.div
           key={sceneIndex}
           initial={{ opacity: 0 }}

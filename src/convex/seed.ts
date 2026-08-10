@@ -38,9 +38,15 @@ export const ensureSeedData = mutation({
       .withIndex("by_key", (q) => q.eq("key", "tutorialVideo"))
       .first();
     if (!tv) {
+      // Default to a reliable MP4 that plays everywhere. Admins can switch
+      // to the built-in motion film or their own video via Admin → Branding.
       await ctx.db.insert("siteContent", {
         key: "tutorialVideo",
-        value: { mode: "motion" },
+        value: {
+          mode: "url",
+          url: "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/Sintel.mp4",
+          title: "ForgeX in two minutes",
+        },
       });
     } else if (typeof tv.value === "string") {
       await ctx.db.patch(tv._id, {
