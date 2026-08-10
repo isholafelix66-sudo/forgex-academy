@@ -1,4 +1,7 @@
 import '@vly-ai/integrations';
+import "./lib/sentry"; // Sentry init — must load before anything else can throw
+import { useAuth } from "@/hooks/use-auth";
+import { captureException, setSentryUser } from "@/lib/sentry";
 import { Toaster } from "@/components/ui/sonner";
 import { RequireAuth } from "@/components/RequireAuth";
 import { RequireTutor } from "@/components/RequireRole";
@@ -157,6 +160,13 @@ class RootErrorBoundary extends React.Component<
   componentDidCatch(err: Error, info: React.ErrorInfo) {
     console.error("[ForgeX] Recovered runtime error (auto-retrying):", err);
     console.error("[ForgeX] Component stack:", info?.componentStack);
+    // Report to Sentry so the error shows up in the dashboard alongside the
+    // session context, while the UI still auto-recovers.
+    try {
+      captureException(err, { componentStack: info?.componentStack });
+    } catch (reportErr) {
+      console.warn("[ForgeX] Could not report error to Sentry:", reportErr);
+    }
   }
 
   componentDidUpdate(
@@ -272,6 +282,23 @@ function ensureBootFallback() {
 window.addEventListener("error", ensureBootFallback);
 window.addEventListener("unhandledrejection", ensureBootFallback);
 
+/** Keep Sentry's user context in sync with the signed-in Convex user. */
+function SentryUserSync() {
+  const { isAuthenticated, user } = useAuth();
+  useEffect(() => {
+    if (!isAuthenticated || !user) {
+      setSentryUser(null);
+      return;
+    }
+    setSentryUser({
+      id: user._id,
+      name: (user as { name?: string }).name,
+      email: (user as { email?: string }).email,
+    });
+  }, [isAuthenticated, user]);
+  return null;
+}
+
 function RouteSyncer() {
   const location = useLocation();
   useEffect(() => {
@@ -304,6 +331,7 @@ createRoot(document.getElementById("root")!).render(
             <VlyToolbar />
           </ToolbarErrorBoundary>
           <ConvexAuthProvider client={convex}>
+        <SentryUserSync />
         {/* WhatsApp-style floating chat — global, signed-in users only.
             Lazy-loaded so it (and its data queries) never block first paint
             or initial bundle for visitors. */}
