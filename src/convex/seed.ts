@@ -27,7 +27,17 @@ function q(
 export const ensureSeedData = mutation({
   args: { force: v.optional(v.boolean()) },
   handler: async (ctx, { force }) => {
-    const existing = await ctx.db.query("categories").first();
+    // Self-healing seed: check the WHOLE catalog, not just categories. If a
+    // first seed ever fails partway (e.g. a deploy-time timeout) it leaves
+    // categories behind while courses/roadmaps are still missing — the old
+    // "categories exist → skip everything" check would then never repair it,
+    // and public pages would stay empty for visitors. Re-running repairs it.
+    // ---
+    const [existing, anyCourse, anyRoadmap] = await Promise.all([
+      ctx.db.query("categories").first(),
+      ctx.db.query("courses").first(),
+      ctx.db.query("roadmaps").first(),
+    ]);
 
     // Homepage “How it works” video (added after the first seed, so it's
     // guaranteed on both fresh and already-seeded databases). Defaults to the
@@ -62,7 +72,7 @@ export const ensureSeedData = mutation({
       });
     }
 
-    if (existing && !force) return { seeded: false };
+    if (existing && anyCourse && anyRoadmap && !force) return { seeded: false };
     // Hard security: a forced reseed replaces catalog data — cap destructive
     // reseeds at 2 per 10 minutes.
     if (force) {
@@ -78,26 +88,42 @@ export const ensureSeedData = mutation({
     // ------------------------------------------------------------------
     // Categories
     // ------------------------------------------------------------------
-    const catDesign = await ctx.db.insert("categories", {
-      name: "Design", slug: "design", icon: "Palette", color: "violet",
-      description: "Visual thinking, branding and product design skills.", order: 1,
-    });
-    const catDev = await ctx.db.insert("categories", {
-      name: "Development", slug: "development", icon: "Code2", color: "lime",
-      description: "Build software, websites and APIs from scratch.", order: 2,
-    });
-    const catData = await ctx.db.insert("categories", {
-      name: "Data & AI", slug: "data-ai", icon: "BrainCircuit", color: "cyan",
-      description: "Analyze data and train intelligent systems.", order: 3,
-    });
-    const catBiz = await ctx.db.insert("categories", {
-      name: "Business", slug: "business", icon: "Briefcase", color: "amber",
-      description: "Launch ventures, manage teams and think strategically.", order: 4,
-    });
-    const catMkt = await ctx.db.insert("categories", {
-      name: "Marketing", slug: "marketing", icon: "Megaphone", color: "rose",
-      description: "Reach audiences, grow brands and drive demand.", order: 5,
-    });
+    // Categories are only inserted when none exist; on a partial seed they're
+    // looked up by slug so re-running the seed never duplicates them.
+    if (!existing) {
+      await ctx.db.insert("categories", {
+        name: "Design", slug: "design", icon: "Palette", color: "violet",
+        description: "Visual thinking, branding and product design skills.", order: 1,
+      });
+      await ctx.db.insert("categories", {
+        name: "Development", slug: "development", icon: "Code2", color: "lime",
+        description: "Build software, websites and APIs from scratch.", order: 2,
+      });
+      await ctx.db.insert("categories", {
+        name: "Data & AI", slug: "data-ai", icon: "BrainCircuit", color: "cyan",
+        description: "Analyze data and train intelligent systems.", order: 3,
+      });
+      await ctx.db.insert("categories", {
+        name: "Business", slug: "business", icon: "Briefcase", color: "amber",
+        description: "Launch ventures, manage teams and think strategically.", order: 4,
+      });
+      await ctx.db.insert("categories", {
+        name: "Marketing", slug: "marketing", icon: "Megaphone", color: "rose",
+        description: "Reach audiences, grow brands and drive demand.", order: 5,
+      });
+    }
+    const catBySlug = async (slug: string) => {
+      const c = await ctx.db
+        .query("categories")
+        .withIndex("by_slug", (q) => q.eq("slug", slug))
+        .first();
+      return c!._id;
+    };
+    const catDesign = await catBySlug("design");
+    const catDev = await catBySlug("development");
+    const catData = await catBySlug("data-ai");
+    const catBiz = await catBySlug("business");
+    const catMkt = await catBySlug("marketing");
 
     // ------------------------------------------------------------------
     // Roadmaps
@@ -107,6 +133,18 @@ export const ensureSeedData = mutation({
       icon: string, color: string, featured: boolean,
       levels: Array<[string, string]>,
     ) => {
+      const existingRm = await ctx.db
+        .query("roadmaps")
+        .withIndex("by_slug", (q) => q.eq("slug", slug))
+        .first();
+      if (existingRm) {
+        // Reuse the existing roadmap and its levels (partial-seed repair).
+        const lvlDocs = await ctx.db
+          .query("roadmapLevels")
+          .withIndex("by_roadmap", (q) => q.eq("roadmapId", existingRm._id))
+          .collect();
+        return { id: existingRm._id, levelIds: lvlDocs.map((l) => l._id) };
+      }
       const id = await ctx.db.insert("roadmaps", {
         name, slug, tagline, description, icon, color, featured,
       });
@@ -180,11 +218,17 @@ export const ensureSeedData = mutation({
     const mkTutor = async (
       name: string, email: string, headline: string, bio: string,
       skills: string[], socials: Record<string, string>,
-    ) =>
-      await ctx.db.insert("users", {
+    ) => {
+      const existingTutor = await ctx.db
+        .query("users")
+        .withIndex("email", (q) => q.eq("email", email))
+        .first();
+      if (existingTutor) return existingTutor._id;
+      return await ctx.db.insert("users", {
         name, email, role: ROLES.TUTOR, verified: true, headline, bio, skills,
         socials, streak: 0, streakLastDay: 0, badges: [], isSeed: true,
       });
+    };
 
     const tAmara = await mkTutor(
       "Amara Okafor", "amara@forgex.academy",
@@ -243,6 +287,11 @@ export const ensureSeedData = mutation({
       assignment?: { t: string; d: string; i: string; days: number };
     }) => {
       const slug = c.title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
+      const existingCourse = await ctx.db
+        .query("courses")
+        .withIndex("by_slug", (q) => q.eq("slug", slug))
+        .first();
+      if (existingCourse) return existingCourse._id;
       const courseId = await ctx.db.insert("courses", {
         title: c.title, slug, subtitle: c.subtitle,
         description: c.description, longDescription: c.long,
@@ -752,7 +801,13 @@ export const ensureSeedData = mutation({
     // ------------------------------------------------------------------
     // Announcements
     // ------------------------------------------------------------------
-    const adminUser = await ctx.db.insert("users", {
+    const existingAdmin = await ctx.db
+      .query("users")
+      .withIndex("email", (q) => q.eq("email", "team@forgex.academy"))
+      .first();
+    const adminUser =
+      existingAdmin?._id ??
+      (await ctx.db.insert("users", {
       name: "ForgeX Team", email: "team@forgex.academy",
       role: ROLES.ADMIN, verified: true, headline: "Academy Operations",
       bio: "The team behind ForgeX Academy.", streak: 0, streakLastDay: 0, badges: [], isSeed: true,
