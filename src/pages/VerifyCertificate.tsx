@@ -11,6 +11,7 @@ import { CertificateView } from "@/components/site/CertificateTemplate";
 import { Button } from "@/components/ui/button";
 import { saveCertificateFile } from "@/lib/certificate-download";
 import { exportCertificateImage, saveExportedImage } from "@/lib/certificate-export";
+import { buildCertificatePdf } from "@/lib/certificate-pdf";
 
 type ExportKind = "pdf" | "jpg";
 
@@ -39,12 +40,34 @@ export default function VerifyCertificate() {
     setExportError(null);
     try {
       if (kind === "pdf") {
-        // Server-side PDF via APITemplate — no page chrome, exact design.
-        const file = await generateCertificate({
-          certificateId: cert.certificateId,
-          verifyUrl: `${window.location.origin}/verify/${cert.certificateId}`,
-        });
-        await saveCertificateFile(file.fileName, file.mime, file.base64);
+        // 1) Primary: server-side vector PDF via APITemplate — no page
+        //    chrome, exact design. Needs a signed-in session + API key.
+        try {
+          const file = await generateCertificate({
+            certificateId: cert.certificateId,
+            verifyUrl: `${window.location.origin}/verify/${cert.certificateId}`,
+          });
+          await saveCertificateFile(file.fileName, file.mime, file.base64);
+        } catch (serverErr) {
+          // 2) Fallback that ALWAYS works, even signed-out or with a
+          //    missing/broken key: capture the certificate on screen and
+          //    embed that JPG into a single A4-landscape PDF page.
+          console.warn(
+            "[certificate] Server-side PDF failed — using client-side fallback:",
+            serverErr,
+          );
+          const node = captureRef.current;
+          if (!node) {
+            throw new Error("The certificate isn't ready yet. Please try again.");
+          }
+          const image = await exportCertificateImage(node);
+          const pdf = await buildCertificatePdf(
+            image.dataUrl,
+            cert.studentName,
+            cert.certificateId,
+          );
+          await saveCertificateFile(pdf.fileName, pdf.mime, pdf.base64);
+        }
       } else {
         // Client-side JPG (PNG fallback) captured from the certificate on
         // screen — no external service, only the certificate itself.

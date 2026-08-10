@@ -35,17 +35,7 @@ import {
  * — no image-generation service or paid API is involved.
  */
 
-const APITEMPLATE_API = "https://rest.apitemplate.io/v2";
 
-function apiTemplateKey(): string {
-  const key = process.env.APITEMPLATE_API_KEY;
-  if (!key) {
-    throw new Error(
-      "PDF generation isn't configured yet. Add the APITEMPLATE_API_KEY in the project keys, then try again.",
-    );
-  }
-  return key;
-}
 
 /**
  * Render the certificate HTML into a PDF through APITemplate
@@ -60,6 +50,30 @@ function apiTemplateKey(): string {
  * visually scaled inside it, clipped by overflow:hidden. The aspect ratios
  * match, so the certificate fills the page with no dead space.
  */
+const APITEMPLATE_API = "https://rest.apitemplate.io/v2";
+
+/**
+ * Resolve the APITemplate API key from the server-side secret, accepting
+ * both the raw form (`id:user:key`) and a base64-encoded form — the format
+ * shared through the project's Keys UI. The key is read ONLY here on the
+ * server; it never reaches the browser. Each candidate is tried until one
+ * authenticates (HTTP 401 is the only failure that justifies trying the next
+ * candidate).
+ */
+function apiTemplateKeys(): string[] {
+  const raw = process.env.APITEMPLATE_API_KEY ?? "";
+  const candidates: string[] = [];
+  const trimmed = raw.trim();
+  if (trimmed) candidates.push(trimmed);
+  try {
+    const decoded = Buffer.from(trimmed, "base64").toString("utf8").trim();
+    if (decoded && decoded !== trimmed) candidates.push(decoded);
+  } catch {
+    /* not valid base64 — only the raw form will be tried */
+  }
+  return candidates;
+}
+
 const PDF_PAGE_W = 840; // A4 landscape printable area @72dpi (page = 841.9x595.3)
 const PDF_PAGE_H = 594;
 const PDF_FIT_SCALE = PDF_PAGE_W / DESIGN_W; // 0.65625 — 1280x905 -> 840x594
@@ -83,53 +97,77 @@ async function generatePdfFromHtml(html: string): Promise<string> {
   // A few scales as insurance: if the renderer rounds the scaled box a hair
   // larger than the page, the API reports total_pages > 1 — retry smaller
   // until the certificate fits a single page.
-  const attempts = [PDF_FIT_SCALE, PDF_FIT_SCALE * 0.99, PDF_FIT_SCALE * 0.975];
+  const scales = [PDF_FIT_SCALE, PDF_FIT_SCALE * 0.99, PDF_FIT_SCALE * 0.975];
 
   let lastError: unknown = null;
-  for (const scale of attempts) {
-    const body = [
-      `<div style="width:${PDF_PAGE_W}px;height:${PDF_PAGE_H}px;overflow:hidden;background:#0b0f0e;">`,
-      `<div style="transform:scale(${scale});transform-origin:0 0;width:${DESIGN_W}px;height:${DESIGN_H}px;">`,
-      html,
-      "</div></div>",
-    ].join("");
+  // Try each key candidate (raw + decoded form) until one authenticates.
+  for (const key of apiTemplateKeys()) {
+    let keyTried = false;
+    for (const scale of scales) {
+      keyTried = true;
+      const body = [
+        `<div style="width:${PDF_PAGE_W}px;height:${PDF_PAGE_H}px;overflow:hidden;background:#0b0f0e;">`,
+        `<div style="transform:scale(${scale});transform-origin:0 0;width:${DESIGN_W}px;height:${DESIGN_H}px;">`,
+        html,
+        "</div></div>",
+      ].join("");
 
-    const res = await fetch(`${APITEMPLATE_API}/create-pdf-from-html`, {
-      method: "POST",
-      headers: {
-        "X-API-KEY": apiTemplateKey(),
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({ body, css, settings }),
-    });
-    const text = await res.text();
-    if (res.ok) {
-      let json: any;
+      let res: Response;
       try {
-        json = JSON.parse(text);
-      } catch {
-        throw new Error("APITemplate returned an unreadable response. Please try again.");
+        res = await fetch(`${APITEMPLATE_API}/create-pdf-from-html`, {
+          method: "POST",
+          headers: {
+            "X-API-KEY": key,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ body, css, settings }),
+        });
+      } catch (netErr) {
+        // Network failure — a different key form won't help.
+        lastError = netErr;
+        break;
       }
-      if (json?.status === "success" && typeof json?.download_url === "string") {
-        if (typeof json.total_pages === "number" && json.total_pages > 1) {
+      const text = await res.text();
+      if (res.ok) {
+        let json: any;
+        try {
+          json = JSON.parse(text);
+        } catch {
           lastError = new Error(
-            `Rendered ${json.total_pages} pages instead of 1 — retrying at a smaller scale.`,
+            "APITemplate returned an unreadable response. Please try again.",
           );
-          continue;
+          break;
         }
-        return json.download_url as string;
+        if (json?.status === "success" && typeof json?.download_url === "string") {
+          if (typeof json.total_pages === "number" && json.total_pages > 1) {
+            lastError = new Error(
+              `Rendered ${json.total_pages} pages instead of 1 — retrying at a smaller scale.`,
+            );
+            continue;
+          }
+          return json.download_url as string;
+        }
+        // The API accepted the request but rejected the job (e.g. account
+        // limits). Surface its message so the real cause stays visible.
+        lastError = new Error(
+          `APITemplate rejected the request: ${JSON.stringify(json).slice(0, 300)}`,
+        );
+        break;
       }
-      // The API accepted the request but rejected the job (e.g. account
-      // limits). Surface its message so the real cause stays visible.
       lastError = new Error(
-        `APITemplate rejected the request: ${JSON.stringify(json).slice(0, 300)}`,
+        `APITemplate request failed (HTTP ${res.status}): ${text.slice(0, 200)}`,
       );
+      if (res.status === 401) break; // wrong key form — try the next candidate
+      break; // 4xx (request format) / 5xx (service) — another key won't fix it
+    }
+    // Only continue to the next key candidate when the failure was a 401.
+    if (
+      !keyTried ||
+      !(lastError instanceof Error) ||
+      !/HTTP 401/.test(lastError.message)
+    ) {
       break;
     }
-    lastError = new Error(
-      `APITemplate request failed (HTTP ${res.status}): ${text.slice(0, 200)}`,
-    );
-    if (res.status >= 500) break;
   }
   console.error("[apitemplate] all attempts failed:", lastError);
   throw new Error(
