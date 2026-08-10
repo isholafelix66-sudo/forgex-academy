@@ -41,9 +41,9 @@ const SCENES = [
   { label: "Welcome" },
   { label: "Sign in" },
   { label: "Take a course" },
-  { label: "Learn" },
+  { label: "Discover" },
+  { label: "Express" },
   { label: "Build" },
-  { label: "Succeed" },
   { label: "Grow" },
 ] as const;
 const TOTAL_MS = SCENES.length * SCENE_MS;
@@ -102,7 +102,7 @@ function SceneIntro() {
         transition={{ duration: 0.6, delay: 0.7 }}
         className="relative mt-3 text-base font-semibold tracking-[0.3em] text-lime-300"
       >
-        LEARN · BUILD · SUCCEED
+        DISCOVER · EXPRESS · BUILD
       </motion.p>
       <motion.p
         initial={{ opacity: 0 }}
@@ -256,7 +256,7 @@ function SceneTakeCourse() {
   );
 }
 
-function SceneLearn() {
+function SceneDiscover() {
   const levels = ["Design Fundamentals", "UI Design Mastery", "Portfolio & Career"];
   const steps = ["Structured roadmaps", "Level-locked progress", "Expert tutors"];
   return (
@@ -265,10 +265,10 @@ function SceneLearn() {
       <motion.div variants={container} initial="hidden" animate="show" className="relative w-full max-w-lg">
         <motion.div variants={item} className="flex items-center justify-center gap-2 text-lime-300">
           <Map className="size-5" />
-          <span className="text-xs font-bold uppercase tracking-[0.25em]">Step 01 — Learn</span>
+          <span className="text-xs font-bold uppercase tracking-[0.25em]">Step 01 — Discover</span>
         </motion.div>
         <motion.h3 variants={item} className="font-display mt-3 text-center text-2xl font-bold sm:text-3xl">
-          Follow a path, not a playlist
+          Discover a path, not a playlist
         </motion.h3>
         <div className="mt-6 space-y-2.5">
           {steps.map((s, i) => (
@@ -316,7 +316,7 @@ function SceneBuild() {
       <motion.div variants={container} initial="hidden" animate="show" className="relative w-full max-w-lg">
         <motion.div variants={item} className="flex items-center justify-center gap-2 text-lime-300">
           <Rocket className="size-5" />
-          <span className="text-xs font-bold uppercase tracking-[0.25em]">Step 02 — Build</span>
+          <span className="text-xs font-bold uppercase tracking-[0.25em]">Step 03 — Build</span>
         </motion.div>
         <motion.h3 variants={item} className="font-display mt-3 text-center text-2xl font-bold sm:text-3xl">
           Skills you prove, not just watch
@@ -352,17 +352,17 @@ function SceneBuild() {
   );
 }
 
-function SceneSucceed() {
+function SceneExpress() {
   return (
     <div className="absolute inset-0 flex flex-col items-center justify-center px-6">
       {bg}
       <motion.div variants={container} initial="hidden" animate="show" className="relative w-full max-w-lg">
         <motion.div variants={item} className="flex items-center justify-center gap-2 text-lime-300">
           <Award className="size-5" />
-          <span className="text-xs font-bold uppercase tracking-[0.25em]">Step 03 — Succeed</span>
+          <span className="text-xs font-bold uppercase tracking-[0.25em]">Step 02 — Express</span>
         </motion.div>
         <motion.h3 variants={item} className="font-display mt-3 text-center text-2xl font-bold sm:text-3xl">
-          Earn proof that opens doors
+          Express your skills with proof
         </motion.h3>
 
         <motion.div
@@ -441,7 +441,7 @@ function SceneGrow() {
           </span>
         </motion.div>
         <motion.p variants={item} className="mt-5 text-xs tracking-[0.3em] text-lime-300/80">
-          FORGEX ACADEMY · LEARN. BUILD. SUCCEED.
+          FORGEX ACADEMY · DISCOVER. EXPRESS. BUILD.
         </motion.p>
       </motion.div>
     </div>
@@ -457,11 +457,11 @@ function Scene({ index }: { index: number }) {
     case 2:
       return <SceneTakeCourse />;
     case 3:
-      return <SceneLearn />;
+      return <SceneDiscover />;
     case 4:
-      return <SceneBuild />;
+      return <SceneExpress />;
     case 5:
-      return <SceneSucceed />;
+      return <SceneBuild />;
     default:
       return <SceneGrow />;
   }
