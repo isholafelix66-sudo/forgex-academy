@@ -321,17 +321,17 @@ function SceneBuild() {
         <motion.h3 variants={item} className="font-display mt-3 text-center text-2xl font-bold sm:text-3xl">
           Skills you prove, not just watch
         </motion.h3>
-        <div className="mt-6 grid gap-3 sm:grid-cols-3">
+        <div className="mt-4 grid gap-2 sm:mt-6 sm:grid-cols-3 sm:gap-3">
           {cards.map((c) => (
             <motion.div
               key={c.title}
               variants={item}
-              className="relative rounded-2xl border border-white/10 bg-white/5 p-4 text-center backdrop-blur"
+              className="relative rounded-2xl border border-white/10 bg-white/5 p-3 text-center backdrop-blur sm:p-4"
             >
-              <span className="mx-auto flex size-10 items-center justify-center rounded-xl bg-lime-400/15 text-lime-300">
-                <c.icon className="size-5" />
+              <span className="mx-auto flex size-9 items-center justify-center rounded-xl bg-lime-400/15 text-lime-300 sm:size-10">
+                <c.icon className="size-4 sm:size-5" />
               </span>
-              <p className="mt-3 text-sm font-semibold">{c.title}</p>
+              <p className="mt-2 text-[13px] font-semibold sm:mt-3 sm:text-sm">{c.title}</p>
               <p className="mt-1 text-xs text-muted-foreground">{c.desc}</p>
               <motion.span
                 initial={{ opacity: 0, scale: 0 }}
@@ -344,7 +344,7 @@ function SceneBuild() {
             </motion.div>
           ))}
         </div>
-        <motion.p variants={item} className="mt-5 text-center text-xs text-muted-foreground">
+        <motion.p variants={item} className="mt-4 text-center text-xs text-muted-foreground sm:mt-5">
           Every lesson ends in something you ship to your portfolio.
         </motion.p>
       </motion.div>

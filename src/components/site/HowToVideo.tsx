@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useInView } from "react-intersection-observer";
 import { Clapperboard, Play } from "lucide-react";
 import MuxPlayer from "@mux/mux-player-react";
+import { cn } from "@/lib/utils";
 import { loomId, vimeoId, youtubeId } from "@/components/learn/VideoPlayer";
 import { ForgeXMotionVideo } from "@/components/site/ForgeXMotionVideo";
 import type { TutorialVideoConfig } from "@/lib/tutorial-video";
@@ -126,11 +127,20 @@ export function HowToVideo({
     );
   }
   const effectiveTitle = config.title ?? title;
+  const isMotion = config.mode === "motion";
   const showPlayer = playing && inView;
 
   return (
     <div ref={ref} className="group relative mx-auto max-w-5xl">
-      <div className="relative aspect-video w-full overflow-hidden rounded-3xl border border-white/10 bg-black shadow-2xl shadow-black/60">
+      {/* The motion film's scenes are taller than 16:9 allows on phones — a
+          portrait-ish frame on small screens keeps every scene fully visible;
+          real videos stay 16:9. */}
+      <div
+        className={cn(
+          "relative w-full overflow-hidden rounded-3xl border border-white/10 bg-black shadow-2xl shadow-black/60",
+          isMotion ? "aspect-[3/4] sm:aspect-video" : "aspect-video",
+        )}
+      >
         {/* ambient lime glow — hidden on mobile: full-width blur is GPU-heavy */}
         <div
           className="pointer-events-none absolute -inset-10 hidden bg-lime-400/10 blur-3xl md:block"
