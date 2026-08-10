@@ -5,11 +5,18 @@ import {
   BarChart3,
   BookOpen,
   Briefcase,
+  Check,
   CheckCircle2,
   Code2,
   GraduationCap,
+  LayoutDashboard,
+  LogIn,
+  Mail,
   Map,
+  MonitorPlay,
   Palette,
+  Volume2,
+  VolumeX,
   Pause,
   Play,
   Rocket,
@@ -17,18 +24,23 @@ import {
   Sparkles,
   Trophy,
 } from "lucide-react";
+import { createMotionMusic, type MotionMusic } from "@/lib/motion-music";
 
 // ---------------------------------------------------------------------------
 // The built-in "ForgeX in two minutes" motion film.
 //
 // A self-contained, on-brand motion graphic (no video file needed) driven by a
-// requestAnimationFrame clock: five scenes animate in sequence with a real
-// player UI — play/pause, restart, scene dots and a clickable progress bar.
+// requestAnimationFrame clock: scenes animate in sequence with a real player
+// UI — play/pause, restart, scene dots, a clickable progress bar — and a
+// synthesized background music loop (see src/lib/motion-music.ts) that plays
+// along with the film and can be muted from the player controls.
 // ---------------------------------------------------------------------------
 
 const SCENE_MS = 7000;
 const SCENES = [
   { label: "Welcome" },
+  { label: "Sign in" },
+  { label: "Take a course" },
   { label: "Learn" },
   { label: "Build" },
   { label: "Succeed" },
@@ -105,12 +117,147 @@ function SceneIntro() {
   );
 }
 
+function SceneSignIn() {
+  const otp = ["1", "4", "2", "7", "9", "3"];
+  return (
+    <div className="absolute inset-0 flex flex-col items-center justify-center px-6">
+      {bg}
+      <motion.div variants={container} initial="hidden" animate="show" className="relative w-full max-w-md">
+        <motion.div variants={item} className="flex items-center justify-center gap-2 text-lime-300">
+          <LogIn className="size-5" />
+          <span className="text-xs font-bold uppercase tracking-[0.25em]">Sign in in seconds</span>
+        </motion.div>
+        <motion.h3 variants={item} className="font-display mt-3 text-center text-2xl font-bold sm:text-3xl">
+          No password. Just your email.
+        </motion.h3>
+
+        <motion.div variants={item} className="mt-6 overflow-hidden rounded-2xl border border-white/10 bg-white/5 backdrop-blur">
+          {/* email step */}
+          <div className="flex items-center gap-2.5 border-b border-white/8 px-4 py-3">
+            <Mail className="size-4 shrink-0 text-lime-300" />
+            <span className="flex-1 truncate text-sm text-muted-foreground">you@email.com</span>
+            <motion.span
+              initial={{ opacity: 0, scale: 0.8 }}
+              animate={{ opacity: 1, scale: 1 }}
+              transition={{ delay: 0.8 }}
+              className="shrink-0 rounded-full bg-lime-400/15 px-2 py-0.5 text-[10px] font-bold text-lime-300"
+            >
+              ✓ Code sent
+            </motion.span>
+          </div>
+          {/* OTP step */}
+          <div className="flex items-center gap-2.5 px-4 py-3.5">
+            <span className="shrink-0 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Code</span>
+            <div className="flex gap-1.5">
+              {otp.map((d, i) => (
+                <motion.span
+                  key={i}
+                  initial={{ opacity: 0, scale: 0.4, y: 6 }}
+                  animate={{ opacity: 1, scale: 1, y: 0 }}
+                  transition={{ delay: 1.05 + i * 0.16, type: "spring", stiffness: 420, damping: 20 }}
+                  className="flex size-7 items-center justify-center rounded-md border border-white/15 bg-black/40 text-xs font-bold text-lime-300"
+                >
+                  {d}
+                </motion.span>
+              ))}
+            </div>
+            <motion.span
+              initial={{ opacity: 0, scale: 0 }}
+              animate={{ opacity: 1, scale: 1 }}
+              transition={{ delay: 2.2, type: "spring", stiffness: 320, damping: 15 }}
+              className="ml-auto flex size-6 shrink-0 items-center justify-center rounded-full bg-lime-400 text-black"
+            >
+              <Check className="size-4" strokeWidth={3} />
+            </motion.span>
+          </div>
+        </motion.div>
+
+        <motion.div variants={item} className="mt-5 flex justify-center">
+          <span className="inline-flex items-center gap-1.5 rounded-full border border-lime-400/25 bg-lime-400/10 px-3 py-1 text-xs font-medium text-lime-200">
+            <LayoutDashboard className="size-3.5" /> Dashboard unlocked
+          </span>
+        </motion.div>
+        <motion.p variants={item} className="mt-4 text-center text-xs text-muted-foreground">
+          A secure 6-digit code lands in your inbox — that's it.
+        </motion.p>
+      </motion.div>
+    </div>
+  );
+}
+
+function SceneTakeCourse() {
+  const lessons = ["Introduction", "Core concepts", "Hands-on project"];
+  return (
+    <div className="absolute inset-0 flex flex-col items-center justify-center px-6">
+      {bg}
+      <motion.div variants={container} initial="hidden" animate="show" className="relative w-full max-w-lg">
+        <motion.div variants={item} className="flex items-center justify-center gap-2 text-lime-300">
+          <MonitorPlay className="size-5" />
+          <span className="text-xs font-bold uppercase tracking-[0.25em]">Take a course</span>
+        </motion.div>
+        <motion.h3 variants={item} className="font-display mt-3 text-center text-2xl font-bold sm:text-3xl">
+          Enroll, learn, mark complete
+        </motion.h3>
+
+        <motion.div variants={item} className="mt-6 overflow-hidden rounded-2xl border border-white/10 bg-white/5 backdrop-blur">
+          <div className="flex items-center gap-3 border-b border-white/8 px-4 py-3">
+            <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-lime-400/15 text-lime-300">
+              <BookOpen className="size-4" />
+            </span>
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-sm font-semibold">UI Design Mastery</p>
+              <p className="text-[11px] text-muted-foreground">6 lessons · 14 hours</p>
+            </div>
+            <span className="shrink-0 rounded-full bg-lime-400 px-2.5 py-1 text-[10px] font-bold text-black">
+              Enrolled
+            </span>
+          </div>
+          <div className="px-4">
+            {lessons.map((l, i) => (
+              <motion.div
+                key={l}
+                variants={item}
+                className="flex items-center gap-2.5 border-b border-white/5 py-2.5 last:border-0"
+              >
+                <motion.span
+                  initial={{ opacity: 0, scale: 0.5 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  transition={{ delay: 0.55 + i * 0.5, type: "spring", stiffness: 340, damping: 18 }}
+                  className={`flex size-5 shrink-0 items-center justify-center rounded-full ${
+                    i < 2 ? "bg-lime-400 text-black" : "border border-white/20 text-white/40"
+                  }`}
+                >
+                  <Check className="size-3" strokeWidth={3} />
+                </motion.span>
+                <span className="text-sm">{l}</span>
+                <span className="ml-auto text-[11px] text-muted-foreground">
+                  {i < 2 ? "Done" : "Up next"}
+                </span>
+              </motion.div>
+            ))}
+          </div>
+          <div className="px-4 pb-4 pt-1.5">
+            <div className="h-1.5 overflow-hidden rounded-full bg-white/10">
+              <motion.div
+                initial={{ width: "0%" }}
+                animate={{ width: "66%" }}
+                transition={{ duration: SCENE_MS / 1000 - 1, ease: "linear" }}
+                className="h-full rounded-full bg-gradient-to-r from-lime-400 to-lime-300"
+              />
+            </div>
+          </div>
+        </motion.div>
+
+        <motion.p variants={item} className="mt-4 text-center text-xs text-muted-foreground">
+          Complete every lesson to unlock your certificate.
+        </motion.p>
+      </motion.div>
+    </div>
+  );
+}
+
 function SceneLearn() {
-  const levels = [
-    "Design Fundamentals",
-    "UI Design Mastery",
-    "Portfolio & Career",
-  ];
+  const levels = ["Design Fundamentals", "UI Design Mastery", "Portfolio & Career"];
   const steps = ["Structured roadmaps", "Level-locked progress", "Expert tutors"];
   return (
     <div className="absolute inset-0 flex flex-col items-center justify-center px-6">
@@ -306,10 +453,14 @@ function Scene({ index }: { index: number }) {
     case 0:
       return <SceneIntro />;
     case 1:
-      return <SceneLearn />;
+      return <SceneSignIn />;
     case 2:
-      return <SceneBuild />;
+      return <SceneTakeCourse />;
     case 3:
+      return <SceneLearn />;
+    case 4:
+      return <SceneBuild />;
+    case 5:
       return <SceneSucceed />;
     default:
       return <SceneGrow />;
@@ -324,9 +475,11 @@ function fmt(ms: number) {
 export function ForgeXMotionVideo({ title = "ForgeX in two minutes" }: { title?: string }) {
   const [playing, setPlaying] = useState(true);
   const [elapsed, setElapsed] = useState(0);
+  const [muted, setMuted] = useState(false);
   const rafRef = useRef<number | null>(null);
   const lastRef = useRef(0);
   const barRef = useRef<HTMLDivElement | null>(null);
+  const musicRef = useRef<MotionMusic | null>(null);
 
   const sceneIndex = Math.min(SCENES.length - 1, Math.floor(elapsed / SCENE_MS));
   const ended = elapsed >= TOTAL_MS;
@@ -352,6 +505,34 @@ export function ForgeXMotionVideo({ title = "ForgeX in two minutes" }: { title?:
   useEffect(() => {
     if (elapsed >= TOTAL_MS && playing) setPlaying(false);
   }, [elapsed, playing]);
+
+  // Background music: starts on the first user gesture (poster click) and
+  // follows the film's play/pause state.
+  useEffect(() => {
+    if (playing && !ended) {
+      if (!musicRef.current) musicRef.current = createMotionMusic();
+      musicRef.current?.resume();
+    } else {
+      musicRef.current?.suspend();
+    }
+  }, [playing, ended]);
+
+  useEffect(() => {
+    musicRef.current?.setMuted(muted);
+  }, [muted]);
+
+  // Pause the soundtrack when the tab is hidden.
+  useEffect(() => {
+    const onVisibility = () => {
+      if (document.hidden) musicRef.current?.suspend();
+      else if (playing && !ended) musicRef.current?.resume();
+    };
+    document.addEventListener("visibilitychange", onVisibility);
+    return () => document.removeEventListener("visibilitychange", onVisibility);
+  }, [playing, ended]);
+
+  // Free the audio graph on unmount.
+  useEffect(() => () => musicRef.current?.dispose(), []);
 
   const toggle = () => {
     if (ended) {
@@ -462,6 +643,19 @@ export function ForgeXMotionVideo({ title = "ForgeX in two minutes" }: { title?:
             aria-label="Restart"
           >
             <RotateCcw className="size-3.5" />
+          </button>
+          <button
+            type="button"
+            onClick={() => setMuted((m) => !m)}
+            className={`flex size-8 items-center justify-center rounded-full border transition-colors ${
+              muted
+                ? "border-white/15 text-muted-foreground hover:text-lime-300"
+                : "border-lime-400/40 bg-lime-400/10 text-lime-300"
+            }`}
+            aria-label={muted ? "Unmute music" : "Mute music"}
+            title={muted ? "Unmute music" : "Mute music"}
+          >
+            {muted ? <VolumeX className="size-3.5" /> : <Volume2 className="size-3.5" />}
           </button>
 
           {/* scene dots */}
