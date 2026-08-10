@@ -26,6 +26,7 @@ import { Stat } from "@/components/site/Stat";
 import { CourseCard } from "@/components/site/CourseCard";
 import { TutorCard } from "@/components/site/TutorCard";
 import { HowToVideo } from "@/components/site/HowToVideo";
+import { parseTutorialVideo } from "@/lib/tutorial-video";
 import { Avatar } from "@/components/site/Avatar";
 import { timeAgo } from "@/lib/format";
 
@@ -77,10 +78,7 @@ export default function Landing() {
     description: string;
     eta: string;
   }>;
-  const tutorialVideo =
-    typeof content?.tutorialVideo === "string" && content.tutorialVideo.trim()
-      ? content.tutorialVideo
-      : null;
+  const tutorialVideo = parseTutorialVideo(content?.tutorialVideo);
 
   const featuredRoadmap = roadmaps?.find((r) => r.featured) ?? roadmaps?.[0];
 
@@ -209,7 +207,7 @@ export default function Landing() {
             description="See how students learn, earn certificates and grow — and how tutors build courses, grade work and stay connected with their class."
           />
           <Reveal className="mt-12">
-            <HowToVideo url={tutorialVideo} title="How ForgeX Academy works" />
+            <HowToVideo config={tutorialVideo} title="How ForgeX Academy works" />
           </Reveal>
         </section>
       )}

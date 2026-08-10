@@ -1,8 +1,11 @@
-import { useState } from "react";
-import { useMutation, useQuery } from "convex/react";
+import { useEffect, useRef, useState } from "react";
+import { useAction, useMutation, useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
+import MuxUploader from "@mux/mux-uploader-react";
 import {
   Check,
+  Clapperboard,
+  CloudUpload,
   ImageIcon,
   Link2,
   Loader2,
@@ -14,6 +17,8 @@ import {
   Plus,
   Save,
   Trash2,
+  Video,
+  X,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -21,13 +26,13 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { PageHeader } from "@/components/dash/PageHeader";
 import { ImageUploader, type UploadedImage } from "@/components/admin/ImageUploader";
+import type { TutorialVideoConfig } from "@/lib/tutorial-video";
 import { getAdminToken } from "@/lib/admin-session";
 
 const TEXT_FIELDS: Array<{ key: string; label: string; hint: string; rows: number }> = [
   { key: "heroTitle", label: "Homepage hero title", hint: "Big headline on the landing page.", rows: 2 },
   { key: "heroSubtitle", label: "Homepage hero subtitle", hint: "Supporting line under the hero.", rows: 3 },
   { key: "ctaTitle", label: "CTA section title", hint: "Bottom call-to-action heading.", rows: 2 },
-  { key: "tutorialVideo", label: "Tutorial video URL", hint: "Homepage 'How it works' video — paste a YouTube, Vimeo, Loom or direct MP4 link.", rows: 2 },
   { key: "mission", label: "Mission statement", hint: "Shown on the About page.", rows: 4 },
   { key: "vision", label: "Vision statement", hint: "Shown on the About page.", rows: 4 },
   { key: "about", label: "About us (story)", hint: "Long-form About page copy.", rows: 8 },
@@ -109,6 +114,121 @@ export default function AdminContent() {
   const [socialDraft, setSocialDraft] = useState<Social | null>(null);
   const [savingSocials, setSavingSocials] = useState(false);
   const [savedSocials, setSavedSocials] = useState(false);
+
+  // ------------------------------------------------------------------
+  // Homepage tutorial video manager
+  // ------------------------------------------------------------------
+  const createAdminUpload = useAction(api.mux.createAdminUpload);
+  const getAdminPlaybackId = useAction(api.mux.getAdminPlaybackId);
+  const recordAdminVideo = useMutation(api.media.recordAdminVideo);
+
+  const [tvMode, setTvMode] = useState<"motion" | "url" | "mux">("motion");
+  const [tvUrl, setTvUrl] = useState("");
+  const [tvTitle, setTvTitle] = useState("");
+  const [tvPlaybackId, setTvPlaybackId] = useState<string | null>(null);
+  const [tvUploadUrl, setTvUploadUrl] = useState<string | null>(null);
+  const [tvUploadId, setTvUploadId] = useState<string | null>(null);
+  const [tvUploading, setTvUploading] = useState(false);
+  const [tvProcessing, setTvProcessing] = useState(false);
+  const [tvUploadError, setTvUploadError] = useState<string | null>(null);
+  const [savingTv, setSavingTv] = useState(false);
+  const [savedTv, setSavedTv] = useState(false);
+  const tvUploaderRef = useRef<HTMLElement | null>(null);
+
+  // Load the current tutorial-video config once site content arrives.
+  useEffect(() => {
+    const raw = content?.tutorialVideo;
+    if (raw === undefined) return;
+    if (typeof raw === "string") {
+      setTvMode("url");
+      setTvUrl(raw);
+      return;
+    }
+    if (raw && typeof raw === "object") {
+      const r = raw as Record<string, unknown>;
+      setTvMode(r.mode === "mux" ? "mux" : r.mode === "url" ? "url" : "motion");
+      setTvUrl(typeof r.url === "string" ? r.url : "");
+      setTvTitle(typeof r.title === "string" ? r.title : "");
+      setTvPlaybackId(typeof r.playbackId === "string" ? r.playbackId : null);
+    }
+  }, [content]);
+
+  const saveTutorialVideo = async () => {
+    setSavingTv(true);
+    try {
+      const value: TutorialVideoConfig =
+        tvMode === "motion"
+          ? { mode: "motion", title: tvTitle.trim() || undefined }
+          : tvMode === "url"
+            ? { mode: "url", url: tvUrl.trim(), title: tvTitle.trim() || undefined }
+            : tvPlaybackId
+              ? { mode: "mux", playbackId: tvPlaybackId, title: tvTitle.trim() || undefined }
+              : { mode: "motion" };
+      await contentSet({ key: "tutorialVideo", value, token });
+      setSavedTv(true);
+      setTimeout(() => setSavedTv(false), 2000);
+    } finally {
+      setSavingTv(false);
+    }
+  };
+
+  const startTvUpload = async () => {
+    setTvUploadError(null);
+    setTvProcessing(false);
+    setTvUploading(true);
+    try {
+      const res = await createAdminUpload({
+        token,
+        title: tvTitle.trim() || "Homepage tutorial video",
+        corsOrigin: window.location.origin,
+      });
+      setTvUploadUrl(res.uploadUrl);
+      setTvUploadId(res.uploadId);
+    } catch (err) {
+      setTvUploadError(
+        err instanceof Error ? err.message : "Could not start the upload.",
+      );
+    } finally {
+      setTvUploading(false);
+    }
+  };
+
+  // Once the upload completes, poll Mux until it's playable, then attach the
+  // playback id and track the video in the media library.
+  const onTvUploadSuccess = async (e: Event) => {
+    const detail = (e as CustomEvent).detail as { uploadId?: string } | undefined;
+    const id = detail?.uploadId ?? tvUploadId;
+    if (!id) return;
+    setTvUploading(false);
+    setTvProcessing(true);
+    const deadline = Date.now() + 10 * 60 * 1000; // give up after 10 min
+    while (Date.now() < deadline) {
+      try {
+        const info = await getAdminPlaybackId({ token, uploadId: id });
+        if (info?.playbackId) {
+          setTvPlaybackId(info.playbackId);
+          setTvProcessing(false);
+          setTvUploadUrl(null);
+          void recordAdminVideo({
+            token,
+            uploadId: id,
+            title: tvTitle.trim() || "Homepage tutorial video",
+            status: "ready",
+            assetId: info.assetId,
+            playbackId: info.playbackId,
+          });
+          return;
+        }
+      } catch {
+        // transient — keep polling
+      }
+      await new Promise((r) => setTimeout(r, 5000));
+    }
+    setTvProcessing(false);
+    setTvUploadError(
+      "Mux is still processing the video. Save what you have and check the media library later, or re-open to retry.",
+    );
+  };
 
   const save = async (key: string, value: string) => {
     await contentSet({ key, value, token });
@@ -208,6 +328,154 @@ export default function AdminContent() {
                 const initial = typeof v === "string" ? v : undefined;
                 return <TextEditor key={f.key} field={f} initial={initial} onSave={save} />;
               })}
+            </div>
+          </section>
+
+          {/* Homepage tutorial video */}
+          <section className="rounded-2xl border border-white/10 bg-card p-6">
+            <h2 className="font-display flex items-center gap-2 text-base font-semibold">
+              <Video className="size-4 text-lime-300" /> Homepage tutorial video
+            </h2>
+            <p className="mt-1 text-sm leading-relaxed text-muted-foreground">
+              Controls the “ForgeX in two minutes” section on the homepage. The built-in
+              motion graphic needs nothing; you can also link a YouTube / Vimeo / Loom /
+              MP4 video, or upload your own through Mux — streamed with adaptive bitrate.
+            </p>
+
+            <div className="mt-5 grid h-10 max-w-md grid-cols-3 overflow-hidden rounded-xl border border-white/10 bg-black/20 text-xs font-medium">
+              {(["motion", "url", "mux"] as const).map((m) => (
+                <button
+                  key={m}
+                  type="button"
+                  onClick={() => {
+                    setTvMode(m);
+                    setTvUploadError(null);
+                  }}
+                  className={
+                    tvMode === m
+                      ? "bg-lime-400/15 text-lime-300"
+                      : "text-muted-foreground hover:text-foreground"
+                  }
+                >
+                  {m === "motion" ? "Motion film" : m === "url" ? "Video link" : "Upload video"}
+                </button>
+              ))}
+            </div>
+
+            <div className="mt-4 max-w-xl space-y-3">
+              <div className="grid gap-3 sm:grid-cols-[1fr_240px]">
+                <div className="space-y-2">
+                  <Label>Title (shown on the player)</Label>
+                  <Input
+                    value={tvTitle}
+                    onChange={(e) => setTvTitle(e.target.value)}
+                    placeholder="ForgeX in two minutes"
+                    className="border-white/10 bg-black/20"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>Current mode</Label>
+                  <div className="flex h-10 items-center gap-2 rounded-xl border border-lime-400/25 bg-lime-400/10 px-3 text-xs font-semibold text-lime-300">
+                    {tvMode === "motion" ? (
+                      <><Clapperboard className="size-3.5" /> Built-in motion film</>
+                    ) : tvMode === "url" ? (
+                      <><Link2 className="size-3.5" /> Video link</>
+                    ) : (
+                      <><CloudUpload className="size-3.5" /> Mux upload</>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {tvMode === "motion" && (
+                <p className="rounded-xl border border-dashed border-lime-400/25 bg-lime-400/5 p-3.5 text-xs leading-relaxed text-muted-foreground">
+                  The animated “Learn · Build · Succeed” tour plays instantly with no
+                  upload or hosting needed. Save to publish it on the homepage.
+                </p>
+              )}
+
+              {tvMode === "url" && (
+                <div className="space-y-2">
+                  <Label>Video URL</Label>
+                  <Input
+                    value={tvUrl}
+                    onChange={(e) => setTvUrl(e.target.value)}
+                    placeholder="https://youtube.com/watch?v=… or https://…/tour.mp4"
+                    className="border-white/10 bg-black/20"
+                  />
+                </div>
+              )}
+
+              {tvMode === "mux" && (
+                <div className="rounded-xl border border-lime-400/20 bg-lime-400/5 p-4">
+                  <p className="text-xs leading-relaxed text-muted-foreground">
+                    Upload an MP4/MOV straight from this browser. Mux transcodes and
+                    streams it with adaptive bitrate — no storage hosting needed.
+                  </p>
+
+                  {tvPlaybackId ? (
+                    <div className="mt-3 flex items-center gap-2 text-xs text-lime-300/90">
+                      <span className="truncate font-mono">playback: {tvPlaybackId}</span>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="ml-auto h-7 gap-1 text-muted-foreground hover:text-rose-300"
+                        onClick={() => setTvPlaybackId(null)}
+                      >
+                        <X className="size-3.5" /> Remove
+                      </Button>
+                    </div>
+                  ) : tvUploadUrl ? (
+                    <div className="mt-3">
+                      <MuxUploader
+                        ref={tvUploaderRef as never}
+                        endpoint={tvUploadUrl}
+                        onSuccess={onTvUploadSuccess}
+                        className="w-full"
+                      />
+                      {tvProcessing && (
+                        <p className="mt-2 flex items-center gap-2 text-xs text-lime-300">
+                          <Loader2 className="size-3.5 animate-spin" /> Upload complete — Mux is
+                          processing the video…
+                        </p>
+                      )}
+                    </div>
+                  ) : (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="mt-3 gap-1.5 border-lime-400/30 text-lime-300"
+                      onClick={() => void startTvUpload()}
+                      disabled={tvUploading}
+                    >
+                      {tvUploading ? (
+                        <Loader2 className="size-3.5 animate-spin" />
+                      ) : (
+                        <CloudUpload className="size-3.5" />
+                      )}
+                      {tvUploading ? "Preparing upload…" : "Upload video with Mux"}
+                    </Button>
+                  )}
+                  {tvUploadError && (
+                    <p className="mt-2 rounded-lg border border-rose-400/25 bg-rose-400/8 p-2.5 text-xs text-rose-300">
+                      {tvUploadError}
+                    </p>
+                  )}
+                </div>
+              )}
+
+              <Button
+                onClick={() => void saveTutorialVideo()}
+                disabled={savingTv || (tvMode === "url" && !tvUrl.trim())}
+                className={
+                  savedTv
+                    ? "gap-1.5 border border-lime-400/40 bg-lime-400/10 text-lime-300 hover:bg-lime-400/15"
+                    : "gap-1.5 bg-lime-400 font-semibold text-black hover:bg-lime-300"
+                }
+              >
+                {savingTv ? <Loader2 className="size-4 animate-spin" /> : savedTv ? <Check className="size-4" /> : <Save className="size-4" />}
+                {savedTv ? "Saved" : "Save tutorial video"}
+              </Button>
             </div>
           </section>
 

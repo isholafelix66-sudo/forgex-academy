@@ -29,9 +29,10 @@ export const ensureSeedData = mutation({
   handler: async (ctx, { force }) => {
     const existing = await ctx.db.query("categories").first();
 
-    // Homepage “How it works” tour video (added after the first seed, so it's
-    // guaranteed on both fresh and already-seeded databases). Demo placeholder
-    // that plays everywhere — admins replace it via Admin → Website & branding.
+    // Homepage “How it works” video (added after the first seed, so it's
+    // guaranteed on both fresh and already-seeded databases). Defaults to the
+    // built-in motion film; legacy string URLs are migrated to the object
+    // config so an admin-set link is never lost.
     const tv = await ctx.db
       .query("siteContent")
       .withIndex("by_key", (q) => q.eq("key", "tutorialVideo"))
@@ -39,8 +40,11 @@ export const ensureSeedData = mutation({
     if (!tv) {
       await ctx.db.insert("siteContent", {
         key: "tutorialVideo",
-        value:
-          "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/Sintel.mp4",
+        value: { mode: "motion" },
+      });
+    } else if (typeof tv.value === "string") {
+      await ctx.db.patch(tv._id, {
+        value: { mode: "url", url: tv.value },
       });
     }
 

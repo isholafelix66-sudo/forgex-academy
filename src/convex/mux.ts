@@ -94,6 +94,60 @@ export const getPlaybackId = action({
 });
 
 /**
+ * Admin-portal variant of `createUpload` — gated by the password-issued admin
+ * session token instead of a signed-in tutor account, so the password-gated
+ * Admin portal can upload the homepage tutorial video.
+ */
+export const createAdminUpload = action({
+  args: {
+    token: v.string(),
+    title: v.optional(v.string()),
+    corsOrigin: v.optional(v.string()),
+  },
+  handler: async (ctx, { token, title, corsOrigin }) => {
+    const valid = await ctx.runQuery(
+      internal.users.internalAdminSessionValid,
+      { token },
+    );
+    if (!valid) throw new Error("Admin access required.");
+    const body = {
+      new_asset_settings: {
+        playback_policy: ["public"],
+        mp4_support: "standard",
+        ...(title ? { passthrough: title } : {}),
+      },
+      cors_origin: corsOrigin || "*",
+    };
+    const json = await muxFetch("/uploads", {
+      method: "POST",
+      body: JSON.stringify(body),
+    });
+    return {
+      uploadId: json.data?.id as string,
+      uploadUrl: json.data?.url as string,
+    };
+  },
+});
+
+/** Admin-portal variant of `getPlaybackId` (token-gated). */
+export const getAdminPlaybackId = action({
+  args: { token: v.string(), uploadId: v.string() },
+  handler: async (ctx, { token, uploadId }) => {
+    const valid = await ctx.runQuery(
+      internal.users.internalAdminSessionValid,
+      { token },
+    );
+    if (!valid) throw new Error("Admin access required.");
+    const upload = await muxFetch(`/uploads/${uploadId}`);
+    const assetId: string | undefined = upload.data?.asset_id;
+    if (!assetId) return null; // still uploading / processing
+    const asset = await muxFetch(`/assets/${assetId}`);
+    const playbackId: string | undefined = asset.data?.playback_ids?.[0]?.id;
+    return playbackId ? { assetId, playbackId } : null;
+  },
+});
+
+/**
  * Mux video records for the media library live in `src/convex/media.ts`
  * (`recordVideo` / `videosList`) — they are mutations/queries that cannot run
  * in this Node-runtime action file.

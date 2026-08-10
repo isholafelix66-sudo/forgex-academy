@@ -447,7 +447,8 @@ const schema = defineSchema(
         v.literal("processing"),
         v.literal("ready"),
       ),
-      uploadedBy: v.id("users"),
+      // Optional: password-gated admin portal uploads have no user account.
+      uploadedBy: v.optional(v.id("users")),
       courseId: v.optional(v.id("courses")),
       lessonId: v.optional(v.id("lessons")),
       createdAt: v.number(),

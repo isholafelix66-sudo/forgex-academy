@@ -1,9 +1,33 @@
 import { useState } from "react";
 import { useInView } from "react-intersection-observer";
-import { Play } from "lucide-react";
+import { Clapperboard, Play } from "lucide-react";
+import MuxPlayer from "@mux/mux-player-react";
 import { loomId, vimeoId, youtubeId } from "@/components/learn/VideoPlayer";
+import { ForgeXMotionVideo } from "@/components/site/ForgeXMotionVideo";
+import type { TutorialVideoConfig } from "@/lib/tutorial-video";
 
-function Player({ url, title }: { url: string; title: string }) {
+/** Embedded player for the url / mux modes (autoplay after the click-through). */
+function Player({
+  config,
+  title,
+}: {
+  config: Extract<TutorialVideoConfig, { mode: "url" } | { mode: "mux" }>;
+  title: string;
+}) {
+  if (config.mode === "mux") {
+    return (
+      <MuxPlayer
+        playbackId={config.playbackId}
+        streamType="on-demand"
+        accentColor="#a3e635"
+        autoPlay
+        metadata={{ video_title: title, player_name: "ForgeX Academy" }}
+        className="size-full"
+      />
+    );
+  }
+
+  const url = config.url;
   const yt = youtubeId(url);
   if (yt) {
     return (
@@ -44,14 +68,7 @@ function Player({ url, title }: { url: string; title: string }) {
     );
   }
   return (
-    <video
-      src={url}
-      controls
-      autoPlay
-      playsInline
-      preload="none"
-      className="size-full"
-    >
+    <video src={url} controls autoPlay playsInline preload="none" className="size-full">
       Your browser doesn't support video playback.
     </video>
   );
@@ -60,15 +77,20 @@ function Player({ url, title }: { url: string; title: string }) {
 /**
  * “How ForgeX Academy works” tour player for the landing page.
  *
- * Performance-first: the real player (iframe / <video>) is only mounted when
- * the section scrolls near the viewport AND the visitor clicks play — so the
- * landing page pays zero loading cost for a video that may never be watched.
+ * Three modes (configured by admins in Admin → Website & branding):
+ *   • motion — built-in animated motion film (no upload needed)
+ *   • url    — YouTube / Vimeo / Loom / MP4 link
+ *   • mux    — a video uploaded via Mux
+ *
+ * Performance-first: the real player is only mounted when the section scrolls
+ * near the viewport AND the visitor clicks play — the landing page pays zero
+ * loading cost for a video that may never be watched.
  */
 export function HowToVideo({
-  url,
+  config,
   title = "How ForgeX Academy works",
 }: {
-  url?: string | null;
+  config: TutorialVideoConfig | null;
   title?: string;
 }) {
   const [playing, setPlaying] = useState(false);
@@ -77,7 +99,8 @@ export function HowToVideo({
     rootMargin: "400px 0px",
   });
 
-  if (!url) return null;
+  if (!config) return null;
+  const effectiveTitle = config.title ?? title;
   const showPlayer = playing && inView;
 
   return (
@@ -90,13 +113,17 @@ export function HowToVideo({
         />
 
         {showPlayer ? (
-          <Player url={url} title={title} />
+          config.mode === "motion" ? (
+            <ForgeXMotionVideo title={effectiveTitle} />
+          ) : (
+            <Player config={config} title={effectiveTitle} />
+          )
         ) : (
           <button
             type="button"
             onClick={() => setPlaying(true)}
             className="absolute inset-0 flex flex-col items-center justify-center gap-5 bg-[radial-gradient(ellipse_at_center,rgba(163,230,53,0.14),transparent_62%)] outline-none transition-colors duration-300 hover:bg-lime-400/[0.04] focus-visible:ring-2 focus-visible:ring-lime-400/60"
-            aria-label={`Play ${title}`}
+            aria-label={`Play ${effectiveTitle}`}
           >
             {/* subtle blueprint grid */}
             <div
@@ -112,8 +139,12 @@ export function HowToVideo({
               <Play className="ml-1 size-9 fill-black sm:size-10" />
             </span>
             <span className="relative inline-flex items-center gap-2 rounded-full border border-lime-400/30 bg-black/60 px-4 py-1.5 text-sm font-semibold text-lime-200 backdrop-blur">
-              <Play className="size-3.5 fill-lime-300" />
-              {title}
+              {config.mode === "motion" ? (
+                <Clapperboard className="size-3.5 fill-lime-300 text-lime-300" />
+              ) : (
+                <Play className="size-3.5 fill-lime-300" />
+              )}
+              {effectiveTitle}
             </span>
           </button>
         )}
