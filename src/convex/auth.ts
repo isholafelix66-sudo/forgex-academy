@@ -39,11 +39,28 @@ export const { auth, signIn, signOut, store, isAuthenticated } = convexAuth({
       const db = (ctx as unknown as MutationCtx).db;
       const email = (profile.email ?? "").trim().toLowerCase();
       if (email) {
-        const existing = await db
+        // One email may already belong to several rows (legacy duplicates,
+        // e.g. a student account created before a tutor application). Always
+        // link to the BEST account for that email — never create a second
+        // one, and never land a tutor on a stale student portal. Preference:
+        // admin > verified tutor > tutor > student, then most recently active.
+        const matches = await db
           .query("users")
           .withIndex("email", (q) => q.eq("email", email))
-          .first();
-        if (existing && !existing.isSeed) return existing._id;
+          .collect();
+        const real = matches
+          .filter((u) => !u.isSeed)
+          .sort((a, b) => {
+            const prio = (u: (typeof matches)[number]) => {
+              if (u.role === "admin") return 4;
+              if (u.role === "tutor" && u.verified) return 3;
+              if (u.role === "tutor") return 2;
+              return 1; // student / unknown — lowest
+            };
+            return prio(b) - prio(a) || (b.lastActivity ?? 0) - (a.lastActivity ?? 0);
+          });
+        const best = real[0];
+        if (best) return best._id;
       }
       return await db.insert("users", {
         name: typeof profile.name === "string" ? profile.name : undefined,

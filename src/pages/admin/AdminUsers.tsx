@@ -74,6 +74,26 @@ export default function AdminUsers() {
   const reactivateUser = useMutation(api.admin.reactivateUser);
   const deleteUser = useMutation(api.admin.deleteUser);
 
+  const duplicates = useQuery(
+    api.admin.duplicateAccounts,
+    token ? { token } : "skip",
+  );
+  const mergeAccounts = useMutation(api.admin.mergeDuplicateAccounts);
+  const [merging, setMerging] = useState<string | null>(null);
+
+  const mergeGroup = async (email: string, keeperId: string, dupId: string) => {
+    setMerging(email);
+    try {
+      await mergeAccounts({
+        keeperId: keeperId as never,
+        duplicateId: dupId as never,
+        token,
+      });
+    } finally {
+      setMerging(null);
+    }
+  };
+
   return (
     <div className="space-y-8">
       <PageHeader
@@ -232,6 +252,80 @@ export default function AdminUsers() {
               </div>
             </div>
           ))}
+        </div>
+      )}
+
+      {/* Duplicate accounts — one email should map to one account */}
+      {duplicates !== undefined && duplicates.length > 0 && (
+        <div className="rounded-2xl border border-amber-400/25 bg-amber-400/5 p-5">
+          <h2 className="font-display flex items-center gap-2 text-base font-semibold text-amber-200">
+            <Users className="size-4 text-amber-300" />
+            Duplicate accounts ({duplicates.length})
+          </h2>
+          <p className="mt-1 text-sm text-muted-foreground">
+            These emails belong to more than one account (e.g. a student account
+            created before a tutor application). Merging keeps the best account
+            — all enrollments, certificates, messages and courses move to it,
+            and the duplicate is deleted. A tutor will never have a separate
+            student portal again.
+          </p>
+          <div className="mt-4 space-y-3">
+            {duplicates.map((g) => (
+              <div
+                key={g.email}
+                className="rounded-xl border border-white/10 bg-black/20 p-4"
+              >
+                <p className="text-sm font-semibold">{g.email}</p>
+                <div className="mt-2 space-y-1.5">
+                  {g.accounts.map((a, i) => (
+                    <div
+                      key={a._id}
+                      className="flex items-center gap-3 rounded-lg border border-white/8 bg-black/30 px-3 py-2"
+                    >
+                      <span className="flex size-6 shrink-0 items-center justify-center rounded-full bg-white/8 text-[10px] font-bold text-muted-foreground">
+                        {i + 1}
+                      </span>
+                      <Avatar name={a.name} image={null} className="size-7" />
+                      <p className="min-w-0 flex-1 truncate text-sm">
+                        {a.name}{" "}
+                        <span className="capitalize text-muted-foreground">
+                          · {a.role}
+                          {a.verified ? " ✓" : ""}
+                        </span>
+                        {i === 0 && (
+                          <span className="ml-1.5 rounded-full bg-lime-400/12 px-2 py-0.5 text-[10px] font-semibold text-lime-300">
+                            Primary
+                          </span>
+                        )}
+                      </p>
+                      {i > 0 && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          disabled={merging === g.email}
+                          onClick={() =>
+                            void mergeGroup(g.email, g.accounts[0]._id, a._id)
+                          }
+                          className="shrink-0 gap-1.5 border-amber-400/30 text-amber-300 hover:bg-amber-400/10"
+                        >
+                          <RotateCcw
+                            className={
+                              merging === g.email
+                                ? "size-3.5 animate-spin"
+                                : "size-3.5"
+                            }
+                          />
+                          {merging === g.email
+                            ? "Merging…"
+                            : "Merge into primary"}
+                        </Button>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
       )}
 

@@ -1,6 +1,5 @@
 import '@vly-ai/integrations';
 import { Toaster } from "@/components/ui/sonner";
-import { FloatingChat } from "@/components/chat/FloatingChat";
 import { RequireAuth } from "@/components/RequireAuth";
 import { RequireTutor } from "@/components/RequireRole";
 import { VlyToolbar } from "../vly-toolbar-readonly.tsx";
@@ -15,6 +14,12 @@ import "./index.css";
 // ---------------------------------------------------------------------------
 // Public pages
 // ---------------------------------------------------------------------------
+const LazyFloatingChat = lazy(() =>
+  import("@/components/chat/FloatingChat").then((m) => ({
+    default: m.FloatingChat,
+  })),
+);
+
 const Landing = lazy(() => import("./pages/Landing.tsx"));
 const About = lazy(() => import("./pages/About.tsx"));
 const Courses = lazy(() => import("./pages/Courses.tsx"));
@@ -299,8 +304,12 @@ createRoot(document.getElementById("root")!).render(
             <VlyToolbar />
           </ToolbarErrorBoundary>
           <ConvexAuthProvider client={convex}>
-        {/* WhatsApp-style floating chat — global, signed-in users only */}
-        <FloatingChat />
+        {/* WhatsApp-style floating chat — global, signed-in users only.
+            Lazy-loaded so it (and its data queries) never block first paint
+            or initial bundle for visitors. */}
+        <Suspense fallback={null}>
+          <LazyFloatingChat />
+        </Suspense>
         <BrowserRouter>
           <RouteSyncer />
           <Suspense fallback={<RouteLoading />}>

@@ -62,6 +62,22 @@ export const submitContact = mutation({
       throw new Error("Please enter a valid email address.");
     }
 
+    // Spam guard: max 5 submissions per email per hour (visitor path).
+    const recentSubs = await ctx.db
+      .query("contactSubmissions")
+      .withIndex("by_created")
+      .collect();
+    const subsFromThisEmail = recentSubs.filter(
+      (s) =>
+        s.email.toLowerCase() === trimmedEmail &&
+        Date.now() - s.createdAt < 60 * 60 * 1000,
+    ).length;
+    if (subsFromThisEmail >= 5) {
+      throw new Error(
+        "You've sent several messages recently — please wait a while before sending more.",
+      );
+    }
+
     const userId = await getAuthUserId(ctx);
 
     // Registered user → deliver into the chat inbox as a real conversation.

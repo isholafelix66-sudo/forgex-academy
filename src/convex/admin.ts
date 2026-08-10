@@ -23,7 +23,28 @@ const matches = (a: string, b: string) =>
 export const verifyAccessPassword = mutation({
   args: { password: v.string() },
   handler: async (ctx, { password }) => {
+    // Brute-force protection: after 8 failed attempts within 15 minutes the
+    // gate locks until the window rolls over. Failures are tracked in the
+    // audit log so the lock is persistent (restarts don't reset it).
+    const windowStart = Date.now() - 15 * 60 * 1000;
+    const recentLogs = await ctx.db
+      .query("auditLogs")
+      .withIndex("by_created", (q) => q.gte("createdAt", windowStart))
+      .collect();
+    const failures = recentLogs.filter(
+      (l) => l.action === "admin-password-failed",
+    ).length;
+    if (failures >= 8) {
+      throw new Error(
+        "Too many attempts. The admin gate is temporarily locked — try again in 15 minutes.",
+      );
+    }
     if (!matches(password, ADMIN_PASSWORD)) {
+      await ctx.db.insert("auditLogs", {
+        action: "admin-password-failed",
+        detail: "Incorrect admin access password attempt",
+        createdAt: Date.now(),
+      });
       throw new Error("Incorrect access password.");
     }
     const token = makeAdminToken();
@@ -270,6 +291,225 @@ export const setUserVerified = mutation({
   handler: async (ctx, { userId, verified, token }) => {
     await requireAdminSession(ctx, token);
     await ctx.db.patch(userId, { verified });
+    return true;
+  },
+});
+
+// ---------------------------------------------------------------------------
+// Duplicate accounts — one email should map to exactly one account
+// ---------------------------------------------------------------------------
+
+/**
+ * Emails that belong to more than one real (non-seed) account. These happen
+ * when a user signed up through two paths (email OTP + federated JWT) before
+ * account-linking existed. The auth callback now prefers the best account per
+ * email automatically, but legacy duplicates can be consolidated here.
+ */
+export const duplicateAccounts = query({
+  args: { token: v.string() },
+  handler: async (ctx, { token }) => {
+    await requireAdminSession(ctx, token);
+    const users = await ctx.db.query("users").collect();
+    const byEmail = new Map<string, Doc<"users">[]>();
+    for (const u of users) {
+      if (u.isSeed) continue;
+      const email = (u.email ?? "").trim().toLowerCase();
+      if (!email) continue;
+      const list = byEmail.get(email) ?? [];
+      list.push(u);
+      byEmail.set(email, list);
+    }
+    const groups: {
+      email: string;
+      accounts: {
+        _id: Id<"users">;
+        name: string;
+        role: string;
+        verified: boolean;
+        lastActivity: number | null;
+      }[];
+    }[] = [];
+    for (const [email, accounts] of byEmail) {
+      if (accounts.length < 2) continue;
+      // Primary = the "best" account (admin > verified tutor > tutor > student,
+      // then most recent) — matches the auth callback's preference.
+      const ranked = [...accounts].sort((a, b) => {
+        const prio = (u: Doc<"users">) => {
+          if (u.role === ROLES.ADMIN) return 4;
+          if (u.role === ROLES.TUTOR && u.verified) return 3;
+          if (u.role === ROLES.TUTOR) return 2;
+          return 1;
+        };
+        return prio(b) - prio(a) || (b.lastActivity ?? 0) - (a.lastActivity ?? 0);
+      });
+      groups.push({
+        email,
+        accounts: ranked.map((u) => ({
+          _id: u._id,
+          name: u.name ?? "Unnamed",
+          role: u.role ?? "student",
+          verified: !!u.verified,
+          lastActivity: u.lastActivity ?? null,
+        })),
+      });
+    }
+    return groups.sort((a, b) => a.email.localeCompare(b.email));
+  },
+});
+
+/**
+ * Merge a duplicate account into the primary account with the same email.
+ * All owned data (enrollments, certificates, quiz attempts, submissions,
+ * notifications, tutor applications, messages, courses taught) is re-pointed
+ * at the primary, then the duplicate is deleted. Admin-only.
+ */
+export const mergeDuplicateAccounts = mutation({
+  args: {
+    keeperId: v.id("users"),
+    duplicateId: v.id("users"),
+    token: v.string(),
+  },
+  handler: async (ctx, { keeperId, duplicateId, token }) => {
+    await requireAdminSession(ctx, token);
+    if (keeperId === duplicateId) {
+      throw new Error("Pick two different accounts to merge.");
+    }
+    const keeper = await ctx.db.get(keeperId);
+    const duplicate = await ctx.db.get(duplicateId);
+    if (!keeper || !duplicate) throw new Error("Account not found.");
+    const kEmail = (keeper.email ?? "").trim().toLowerCase();
+    const dEmail = (duplicate.email ?? "").trim().toLowerCase();
+    if (!kEmail || kEmail !== dEmail) {
+      throw new Error("Both accounts must share the same email.");
+    }
+    if (keeper.isSeed || duplicate.isSeed) {
+      throw new Error("Demo accounts can't be merged.");
+    }
+
+    // Enrollments (skip if keeper is already enrolled in that course).
+    const enrollments = await ctx.db
+      .query("enrollments")
+      .withIndex("by_student", (q) => q.eq("studentId", duplicateId))
+      .collect();
+    const keeperEnrollments = await ctx.db
+      .query("enrollments")
+      .withIndex("by_student", (q) => q.eq("studentId", keeperId))
+      .collect();
+    const keeperCourseIds = new Set(keeperEnrollments.map((k) => k.courseId));
+    for (const e of enrollments) {
+      if (keeperCourseIds.has(e.courseId)) {
+        await ctx.db.delete(e._id);
+      } else {
+        await ctx.db.patch(e._id, { studentId: keeperId });
+      }
+    }
+
+    // Certificates
+    const certs = await ctx.db
+      .query("certificates")
+      .withIndex("by_student", (q) => q.eq("studentId", duplicateId))
+      .collect();
+    for (const c of certs) await ctx.db.patch(c._id, { studentId: keeperId });
+
+    // Quiz attempts
+    const attempts = await ctx.db
+      .query("quizAttempts")
+      .withIndex("by_student", (q) => q.eq("studentId", duplicateId))
+      .collect();
+    for (const a of attempts) await ctx.db.patch(a._id, { studentId: keeperId });
+
+    // Submissions
+    const subs = await ctx.db
+      .query("submissions")
+      .withIndex("by_student", (q) => q.eq("studentId", duplicateId))
+      .collect();
+    for (const s of subs) await ctx.db.patch(s._id, { studentId: keeperId });
+
+    // Reviews (skip if keeper already reviewed that course)
+    const reviews = await ctx.db
+      .query("courseReviews")
+      .withIndex("by_user_course", (q) => q.eq("userId", duplicateId))
+      .collect();
+    for (const r of reviews) {
+      const keeperReviewed = await ctx.db
+        .query("courseReviews")
+        .withIndex("by_user_course", (q) =>
+          q.eq("userId", keeperId).eq("courseId", r.courseId),
+        )
+        .first();
+      if (keeperReviewed) {
+        await ctx.db.delete(r._id);
+      } else {
+        await ctx.db.patch(r._id, { userId: keeperId });
+      }
+    }
+
+    // Notifications
+    const notifs = await ctx.db
+      .query("notifications")
+      .withIndex("by_userId", (q) => q.eq("userId", duplicateId))
+      .collect();
+    for (const n of notifs) await ctx.db.patch(n._id, { userId: keeperId });
+
+    // Tutor applications (should be 0 or 1)
+    const apps = await ctx.db
+      .query("tutorApplications")
+      .withIndex("by_user", (q) => q.eq("userId", duplicateId))
+      .collect();
+    for (const a of apps) await ctx.db.patch(a._id, { userId: keeperId });
+
+    // Messages — re-point sender/receiver and rebuild the thread key so the
+    // conversation keeps working from the keeper's inbox.
+    const threadKey = (a: string, b: string) => [a, b].sort().join("|");
+    const messages = await ctx.db.query("messages").collect();
+    for (const m of messages) {
+      if (m.senderId === duplicateId || m.receiverId === duplicateId) {
+        const senderId = m.senderId === duplicateId ? keeperId : m.senderId;
+        const receiverId =
+          m.receiverId === duplicateId ? keeperId : m.receiverId;
+        await ctx.db.patch(m._id, {
+          senderId,
+          receiverId,
+          threadId: threadKey(senderId, receiverId),
+        });
+      }
+    }
+
+    // Courses the duplicate taught as a tutor
+    const courses = await ctx.db
+      .query("courses")
+      .withIndex("by_tutor", (q) => q.eq("tutorId", duplicateId))
+      .collect();
+    for (const c of courses) await ctx.db.patch(c._id, { tutorId: keeperId });
+
+    // Promote the keeper if the duplicate was the privileged account
+    const keeperRole = keeper.role ?? "student";
+    if (
+      duplicate.role === ROLES.TUTOR &&
+      (keeperRole !== ROLES.TUTOR || (!keeper.verified && duplicate.verified))
+    ) {
+      await ctx.db.patch(keeperId, {
+        role: ROLES.TUTOR,
+        verified: !!keeper.verified || !!duplicate.verified,
+      });
+    }
+
+    // Revoke the duplicate's sign-in access and remove the account
+    const accounts = await ctx.db.query("authAccounts").collect();
+    for (const a of accounts) {
+      if ((a as { userId?: Id<"users"> }).userId === duplicateId) {
+        await ctx.db.delete(a._id);
+      }
+    }
+    await ctx.db.delete(duplicateId);
+
+    await audit(
+      ctx,
+      undefined,
+      undefined,
+      "accounts-merged",
+      `Merged duplicate account ${duplicate.name ?? duplicate.email ?? duplicateId} into ${keeper.name ?? keeper.email ?? keeperId} (${kEmail})`,
+    );
     return true;
   },
 });

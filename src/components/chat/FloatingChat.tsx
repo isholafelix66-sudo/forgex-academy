@@ -34,7 +34,11 @@ import { timeAgo } from "@/lib/format";
  */
 export function FloatingChat() {
   const { user } = useAuth();
-  const conversations = useQuery(api.messages.myConversations);
+  const signedIn = !!user?._id;
+  const conversations = useQuery(
+    api.messages.myConversations,
+    signedIn ? {} : "skip",
+  );
   const heartbeat = useMutation(api.users.presenceHeartbeat);
   const sendMessage = useMutation(api.messages.sendMessage);
   const markRead = useMutation(api.messages.markThreadRead);

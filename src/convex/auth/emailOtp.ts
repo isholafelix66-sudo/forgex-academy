@@ -26,7 +26,12 @@ export const emailOtp = Email({
         },
         {
           headers: {
-            "x-api-key": "fb_email_2crN1hqIArZP2bEfvjp5Qik4",
+            // Freebuff's OTP sender key. Prefer the env var so the key can
+            // be rotated from the Keys tab without a code change; falls back
+            // to the template default so sign-in keeps working out of the box.
+            "x-api-key":
+              process.env.FORGE_OTP_API_KEY ??
+              "fb_email_2crN1hqIArZP2bEfvjp5Qik4",
           },
         },
       );

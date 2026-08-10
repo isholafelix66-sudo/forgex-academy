@@ -17,10 +17,20 @@ export const myConversations = query({
     // Not signed in (e.g. an admin session previewing the tutor dashboard
     // without an account) — there are no conversations to show.
     if (userId === null) return [];
-    const messages = await ctx.db.query("messages").collect();
-    const mine = messages.filter(
-      (m) => m.senderId === userId || m.receiverId === userId,
-    );
+    // Indexed scan: only this user's messages (sent OR received), never a
+    // full-table collect — this query runs on every page for signed-in users.
+    const [sent, received] = await Promise.all([
+      ctx.db
+        .query("messages")
+        .withIndex("by_sender", (q) => q.eq("senderId", userId))
+        .collect(),
+      ctx.db
+        .query("messages")
+        .withIndex("by_receiver", (q) => q.eq("receiverId", userId))
+        .collect(),
+    ]);
+    // Merge + dedupe (a message is either sent or received, never both).
+    const mine = sent.concat(received);
     const byThread = new Map<string, typeof mine>();
     for (const m of mine) {
       const list = byThread.get(m.threadId) ?? [];
@@ -110,6 +120,21 @@ export const sendMessage = mutation({
     if (receiverId === user._id) throw new Error("You can't message yourself.");
     const trimmed = body.trim();
     if (!trimmed) throw new Error("Message can't be empty.");
+    if (trimmed.length > 4000) {
+      throw new Error("Messages are limited to 4,000 characters.");
+    }
+
+    // Simple spam guard: max 20 outbound messages per minute per user.
+    const recentSent = await ctx.db
+      .query("messages")
+      .withIndex("by_sender", (q) => q.eq("senderId", user._id))
+      .collect();
+    const sentLastMinute = recentSent.filter(
+      (m) => Date.now() - m.createdAt < 60_000,
+    ).length;
+    if (sentLastMinute >= 20) {
+      throw new Error("You're sending messages too fast — please slow down.");
+    }
 
     // Throttle emails: at most one per receiver every 5 minutes so rapid
     // chats don't flood someone's inbox (the in-app notification always fires).

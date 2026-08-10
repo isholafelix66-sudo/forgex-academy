@@ -75,10 +75,13 @@ export const isAdminUser = (u: Doc<"users"> | null | undefined) =>
 
 const ADMIN_SESSION_TTL = 12 * 60 * 60 * 1000; // 12 hours
 
-/** Create a fresh admin session token. */
+/** Create a fresh admin session token (cryptographically random). */
 export function makeAdminToken(): string {
-  const rand = () => Math.random().toString(36).slice(2, 10);
-  return `${Date.now().toString(36)}-${rand()}${rand()}${rand()}`;
+  // 24 random bytes → 48 hex chars (~192 bits of entropy). Far stronger than
+  // the previous Math.random() based token, which was predictable.
+  const bytes = new Uint8Array(24);
+  crypto.getRandomValues(bytes);
+  return Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("");
 }
 
 /**

@@ -466,7 +466,8 @@ const schema = defineSchema(
       readAt: v.optional(v.number()),
     })
       .index("by_thread", ["threadId", "createdAt"])
-      .index("by_receiver", ["receiverId", "readAt"]),
+      .index("by_receiver", ["receiverId", "readAt"])
+      .index("by_sender", ["senderId", "createdAt"]),
 
     /** Public contact form submissions — the admin “Inbox”. Signed-in users'
      *  contact messages go straight into the chat system instead (see
