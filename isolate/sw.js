@@ -9,9 +9,17 @@
  *  - Google Fonts: cache-first so typography survives offline too.
  *  - Everything else (Convex API, Mux, uploads, auth): network only.
  *
- * Versioned caches let us atomically drop stale entries on every deploy.
+ * iOS Safari notes (why caching is wrapped defensively):
+ *  Safari can throw when a streamed response is cloned/cached (especially
+ *  navigation responses). A cache write must NEVER change what the page
+ *  receives — the fresh network response is always returned when available;
+ *  the cache is only a fallback for when the network itself fails.
+ *
+ * Versioned caches let us atomically drop stale entries on every deploy —
+ * bump VERSION whenever sw.js behavior changes so old broken caches are
+ * purged instead of being served forever.
  */
-const VERSION = "forgex-shell-v1";
+const VERSION = "forgex-shell-v2";
 const SHELL_CACHE = `${VERSION}-shell`;
 const FONT_CACHE = `${VERSION}-fonts`;
 
@@ -65,31 +73,58 @@ self.addEventListener("fetch", (event) => {
   event.respondWith(staleWhileRevalidate(request, SHELL_CACHE));
 });
 
+/** Cache write that can never throw — Safari throws on streamed responses,
+ *  and a failed cache write must not break the request that triggered it. */
+async function safeCachePut(cache, request, response) {
+  try {
+    if (response && response.ok) {
+      await cache.put(request, response.clone());
+    }
+  } catch {
+    // Cache is best-effort. The caller still has the fresh response.
+  }
+}
+
 async function networkFirstNavigation(request) {
   const cache = await caches.open(SHELL_CACHE);
+  let fresh = null;
   try {
-    const fresh = await fetch(request);
-    if (fresh && fresh.ok) {
-      // Cache under the requested URL *and* a stable /index.html key so the
-      // offline fallback works no matter which page was opened first.
-      cache.put(request, fresh.clone());
-      cache.put("/index.html", fresh.clone());
-    }
-    return fresh;
+    fresh = await fetch(request);
   } catch {
+    fresh = null; // network failed — fall through to cache below
+  }
+
+  if (fresh && fresh.ok) {
+    // Success: return the fresh page. Cache it in the background, but a
+    // cache failure must never downgrade this to the stale shell (which
+    // references old hashed chunks and breaks after a deploy).
+    await safeCachePut(cache, request, fresh);
+    await safeCachePut(cache, "/index.html", fresh);
+    return fresh;
+  }
+
+  // Network genuinely failed (offline / 5xx) — fall back to the last good
+  // shell so the SPA still boots.
+  try {
     const cached = await cache.match(request, { ignoreSearch: true });
     if (cached) return cached;
     const shell = await cache.match("/index.html");
-    return shell || Response.error();
+    if (shell) return shell;
+  } catch {
+    // cache API unavailable — nothing to fall back to
   }
+  return fresh || Response.error();
 }
 
 async function staleWhileRevalidate(request, cacheName) {
   const cache = await caches.open(cacheName);
   const cached = await cache.match(request);
+
+  // Revalidate in the background; the response (cached or fresh) is always
+  // what the page asked for. A revalidation failure never produces an error.
   const network = fetch(request)
-    .then((response) => {
-      if (response && response.ok) cache.put(request, response.clone());
+    .then(async (response) => {
+      await safeCachePut(cache, request, response);
       return response;
     })
     .catch(() => null);
@@ -103,6 +138,6 @@ async function cacheFirst(request, cacheName) {
   const cached = await cache.match(request);
   if (cached) return cached;
   const response = await fetch(request);
-  if (response && response.ok) cache.put(request, response.clone());
+  await safeCachePut(cache, request, response);
   return response;
 }
