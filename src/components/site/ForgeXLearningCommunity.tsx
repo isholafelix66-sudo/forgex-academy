@@ -10,13 +10,15 @@
  *  - no shadows, no post-processing, very few particles
  *  - rendering pauses when the canvas leaves the viewport
  *  - prefers-reduced-motion disables ambient animation
- *  - static SVG fallback when WebGL is unavailable
+ *  - static (but still animated) SVG fallback if WebGL is unavailable
  *
- * Interaction stays restrained: gentle idle sway, subtle mouse parallax on
- * desktop, hover/tap makes a space glow and reveals its name.
+ * Motion is clearly visible: the whole campus rotates gently on its axis,
+ * buildings bob, activity lights pulse and the camera drifts. Every space
+ * carries a small always-on name label above it; hover/tap makes a space
+ * glow and highlights its label.
  */
-import { useEffect, useMemo, useRef, useState } from "react";
-import type { RefObject } from "react";
+import { Component, useEffect, useMemo, useRef, useState } from "react";
+import type { ReactNode, RefObject } from "react";
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import type { ThreeEvent } from "@react-three/fiber";
 import * as THREE from "three";
@@ -55,8 +57,6 @@ const BUILDINGS: BuildingCfg[] = [
 // Tree ring angles — placed between buildings
 const TREE_ANGLES = [30, 92, 152, 212, 272, 330];
 
-type HoverInfo = { name: string; target: THREE.Object3D };
-
 function webglAvailable(): boolean {
   try {
     const canvas = document.createElement("canvas");
@@ -92,11 +92,13 @@ function Building({
   phase,
   reduced,
   onHoverChange,
+  storeRef,
 }: {
   cfg: BuildingCfg;
   phase: number;
   reduced: boolean;
-  onHoverChange: (info: HoverInfo | null) => void;
+  onHoverChange: (info: { name: string; target: THREE.Object3D } | null) => void;
+  storeRef?: (g: THREE.Group | null) => void;
 }) {
   const groupRef = useRef<THREE.Group>(null);
   const hoveredRef = useRef(false);
@@ -172,7 +174,10 @@ function Building({
 
   return (
     <group
-      ref={groupRef}
+      ref={(g) => {
+        groupRef.current = g;
+        storeRef?.(g);
+      }}
       position={[x, 0, z]}
       rotation={[0, a, 0]}
       onPointerOver={(e) => setHover(true, e)}
@@ -368,7 +373,7 @@ function Tree({ angle, scale }: { angle: number; scale: number }) {
 }
 
 /* ------------------------------------------------------------------ */
-/* Camera rig: idle sway + restrained mouse parallax                   */
+/* Camera rig: gentle drift + restrained mouse parallax                */
 /* ------------------------------------------------------------------ */
 
 function CameraRig({ mobile, reduced }: { mobile: boolean; reduced: boolean }) {
@@ -380,9 +385,9 @@ function CameraRig({ mobile, reduced }: { mobile: boolean; reduced: boolean }) {
     const k = Math.min(1, dt * 2.4);
     const px = mobile ? 0 : state.pointer.x;
     const py = mobile ? 0 : state.pointer.y;
-    const idleX = reduced ? 0 : Math.sin(t * 0.11) * 0.12;
-    const idleY = reduced ? 0 : Math.cos(t * 0.09) * 0.06;
-    const tx = px * 0.85 + idleX;
+    const idleX = reduced ? 0 : Math.sin(t * 0.16) * 0.5;
+    const idleY = reduced ? 0 : Math.cos(t * 0.12) * 0.22;
+    const tx = px * 1.4 + idleX;
     const ty = (mobile ? 7.7 : 8.1) + py * 0.5 + idleY;
     const tz = mobile ? 13.4 : 11.8;
     target.set(tx, ty, tz);
@@ -392,36 +397,41 @@ function CameraRig({ mobile, reduced }: { mobile: boolean; reduced: boolean }) {
   return null;
 }
 
-/** Projects the hovered space's position to the DOM label (no re-renders). */
-function HoverProjector({
-  hoverRef,
-  labelRef,
+/**
+ * Projects every space's world position onto its DOM name label.
+ * Writes straight to the DOM (no React re-renders per frame).
+ */
+function LabelProjector({
+  buildingRefs,
+  labelRefs,
+  hoverIdxRef,
 }: {
-  hoverRef: RefObject<HoverInfo | null>;
-  labelRef: RefObject<HTMLDivElement | null>;
+  buildingRefs: RefObject<(THREE.Object3D | null)[]>;
+  labelRefs: RefObject<(HTMLDivElement | null)[]>;
+  hoverIdxRef: RefObject<number>;
 }) {
   const { camera, size } = useThree();
   const v = useMemo(() => new THREE.Vector3(), []);
 
   useFrame(() => {
-    const el = labelRef.current;
-    const info = hoverRef.current;
-    if (!el) return;
-    if (!info || !info.target) {
-      el.style.opacity = "0";
-      return;
+    for (let i = 0; i < BUILDINGS.length; i++) {
+      const el = labelRefs.current?.[i];
+      const g = buildingRefs.current?.[i];
+      if (!el || !g) continue;
+      g.getWorldPosition(v);
+      v.y += BUILDINGS[i].h + 1.15;
+      v.project(camera);
+      if (v.z > 1) {
+        el.style.opacity = "0";
+        continue;
+      }
+      const active = hoverIdxRef.current === i;
+      el.style.opacity = active ? "1" : "0.8";
+      const scale = active ? 1.07 : 1;
+      el.style.transform = `translate3d(${(v.x * 0.5 + 0.5) * size.width}px, ${
+        (-v.y * 0.5 + 0.5) * size.height
+      }px, 0) translate(-50%, -110%) scale(${scale})`;
     }
-    info.target.getWorldPosition(v);
-    v.y += 1.7; // float the label above the space
-    v.project(camera);
-    if (v.z > 1) {
-      el.style.opacity = "0";
-      return;
-    }
-    el.style.opacity = "1";
-    el.style.transform = `translate3d(${(v.x * 0.5 + 0.5) * size.width}px, ${
-      (-v.y * 0.5 + 0.5) * size.height
-    }px, 0) translate(-50%, -130%)`;
   });
   return null;
 }
@@ -433,16 +443,19 @@ function HoverProjector({
 function Campus({
   mobile,
   reduced,
-  hoverRef,
-  labelRef,
+  buildingRefs,
+  labelRefs,
+  hoverIdxRef,
   onHoverName,
 }: {
   mobile: boolean;
   reduced: boolean;
-  hoverRef: RefObject<HoverInfo | null>;
-  labelRef: RefObject<HTMLDivElement | null>;
+  buildingRefs: RefObject<(THREE.Object3D | null)[]>;
+  labelRefs: RefObject<(HTMLDivElement | null)[]>;
+  hoverIdxRef: RefObject<number>;
   onHoverName: (name: string | null) => void;
 }) {
+  const campusRef = useRef<THREE.Group>(null);
 
   const pathMat = useMemo(
     () =>
@@ -471,86 +484,98 @@ function Campus({
     [pathMat, plazaMat],
   );
 
-  const onHoverChange = (info: HoverInfo | null) => {
-    hoverRef.current = info;
+  // The whole campus turns slowly on its axis — clearly visible motion.
+  useFrame((state) => {
+    const g = campusRef.current;
+    if (!g || reduced) return;
+    g.rotation.y = state.clock.elapsedTime * 0.1;
+  });
+
+  const handleHover = (i: number, info: { name: string; target: THREE.Object3D } | null) => {
+    hoverIdxRef.current = info ? i : -1;
     onHoverName(info?.name ?? null);
   };
 
   return (
     <>
-      {/* central plaza */}
-      <mesh position={[0, -0.06, 0]} material={plazaMat}>
-        <cylinderGeometry args={[PLAZA_R, PLAZA_R, 0.12, 48]} />
-      </mesh>
-      {/* plaza rim */}
-      <mesh position={[0, 0.02, 0]} rotation={[Math.PI / 2, 0, 0]}>
-        <torusGeometry args={[PLAZA_R, 0.035, 8, 64]} />
-        <meshStandardMaterial
-          color={LIME}
-          emissive={new THREE.Color(LIME)}
-          emissiveIntensity={0.6}
-        />
-      </mesh>
-      {/* centre obelisk */}
-      <mesh position={[0, 0.12, 0]} material={plazaMat}>
-        <cylinderGeometry args={[0.16, 0.2, 0.2, 12]} />
-      </mesh>
-      <mesh position={[0, 0.92, 0]} material={plazaMat}>
-        <boxGeometry args={[0.2, 1.45, 0.2]} />
-      </mesh>
-      <mesh position={[0, 1.72, 0]}>
-        <boxGeometry args={[0.16, 0.18, 0.16]} />
-        <meshStandardMaterial
-          color={LIME}
-          emissive={new THREE.Color(LIME)}
-          emissiveIntensity={1.4}
-        />
-      </mesh>
-
-      {/* paths from plaza to every space */}
-      {BUILDINGS.map((b) => {
-        const a = (b.angle * Math.PI) / 180;
-        const mid = (PLAZA_R + RADIUS - 0.45) / 2;
-        return (
-          <mesh
-            key={`path-${b.id}`}
-            position={[Math.sin(a) * mid, 0.012, Math.cos(a) * mid]}
-            rotation={[0, a, 0]}
-            material={pathMat}
-          >
-            <boxGeometry args={[RADIUS - PLAZA_R - 0.45, 0.025, 0.4]} />
-          </mesh>
-        );
-      })}
-
-      {/* the six spaces */}
-      {BUILDINGS.map((b, i) => (
-        <Building
-          key={b.id}
-          cfg={b}
-          phase={i * 1.05}
-          reduced={reduced}
-          onHoverChange={onHoverChange}
-        />
-      ))}
-
-      {/* activity lights at each entrance */}
-      {BUILDINGS.map((b, i) => {
-        const a = (b.angle * Math.PI) / 180;
-        return (
-          <ActivityLight
-            key={`light-${b.id}`}
-            position={[Math.sin(a) * (RADIUS - 0.75), 0.42, Math.cos(a) * (RADIUS - 0.75)]}
-            phase={i * 0.9}
-            reduced={reduced}
+      <group ref={campusRef}>
+        {/* central plaza */}
+        <mesh position={[0, -0.06, 0]} material={plazaMat}>
+          <cylinderGeometry args={[PLAZA_R, PLAZA_R, 0.12, 48]} />
+        </mesh>
+        {/* plaza rim */}
+        <mesh position={[0, 0.02, 0]} rotation={[Math.PI / 2, 0, 0]}>
+          <torusGeometry args={[PLAZA_R, 0.035, 8, 64]} />
+          <meshStandardMaterial
+            color={LIME}
+            emissive={new THREE.Color(LIME)}
+            emissiveIntensity={0.6}
           />
-        );
-      })}
+        </mesh>
+        {/* centre obelisk */}
+        <mesh position={[0, 0.12, 0]} material={plazaMat}>
+          <cylinderGeometry args={[0.16, 0.2, 0.2, 12]} />
+        </mesh>
+        <mesh position={[0, 0.92, 0]} material={plazaMat}>
+          <boxGeometry args={[0.2, 1.45, 0.2]} />
+        </mesh>
+        <mesh position={[0, 1.72, 0]}>
+          <boxGeometry args={[0.16, 0.18, 0.16]} />
+          <meshStandardMaterial
+            color={LIME}
+            emissive={new THREE.Color(LIME)}
+            emissiveIntensity={1.4}
+          />
+        </mesh>
 
-      {/* trees between spaces */}
-      {TREE_ANGLES.map((angle, i) => (
-        <Tree key={`tree-${i}`} angle={angle} scale={i % 2 === 0 ? 1 : 0.8} />
-      ))}
+        {/* paths from plaza to every space */}
+        {BUILDINGS.map((b) => {
+          const a = (b.angle * Math.PI) / 180;
+          const mid = (PLAZA_R + RADIUS - 0.45) / 2;
+          return (
+            <mesh
+              key={`path-${b.id}`}
+              position={[Math.sin(a) * mid, 0.012, Math.cos(a) * mid]}
+              rotation={[0, a, 0]}
+              material={pathMat}
+            >
+              <boxGeometry args={[RADIUS - PLAZA_R - 0.45, 0.025, 0.4]} />
+            </mesh>
+          );
+        })}
+
+        {/* the six spaces */}
+        {BUILDINGS.map((b, i) => (
+          <Building
+            key={b.id}
+            cfg={b}
+            phase={i * 1.05}
+            reduced={reduced}
+            onHoverChange={(info) => handleHover(i, info)}
+            storeRef={(g) => {
+              if (buildingRefs.current) buildingRefs.current[i] = g;
+            }}
+          />
+        ))}
+
+        {/* activity lights at each entrance */}
+        {BUILDINGS.map((b, i) => {
+          const a = (b.angle * Math.PI) / 180;
+          return (
+            <ActivityLight
+              key={`light-${b.id}`}
+              position={[Math.sin(a) * (RADIUS - 0.75), 0.42, Math.cos(a) * (RADIUS - 0.75)]}
+              phase={i * 0.9}
+              reduced={reduced}
+            />
+          );
+        })}
+
+        {/* trees between spaces */}
+        {TREE_ANGLES.map((angle, i) => (
+          <Tree key={`tree-${i}`} angle={angle} scale={i % 2 === 0 ? 1 : 0.8} />
+        ))}
+      </group>
 
       {/* invisible tap-away / hover-away zone: clears the label when the
           pointer touches empty space (keeps mobile feel clean) */}
@@ -559,7 +584,7 @@ function Campus({
         rotation={[-Math.PI / 2, 0, 0]}
         onPointerDown={(e) => {
           e.stopPropagation();
-          onHoverChange(null);
+          handleHover(-1, null);
         }}
       >
         <planeGeometry args={[40, 40]} />
@@ -567,13 +592,17 @@ function Campus({
       </mesh>
 
       <CameraRig mobile={mobile} reduced={reduced} />
-      <HoverProjector hoverRef={hoverRef} labelRef={labelRef} />
+      <LabelProjector
+        buildingRefs={buildingRefs}
+        labelRefs={labelRefs}
+        hoverIdxRef={hoverIdxRef}
+      />
     </>
   );
 }
 
 /* ------------------------------------------------------------------ */
-/* Static SVG fallback (no WebGL)                                      */
+/* Static SVG fallback (no WebGL) — still animated, names included     */
 /* ------------------------------------------------------------------ */
 
 function StaticFallback() {
@@ -589,11 +618,26 @@ function StaticFallback() {
           <stop offset="0%" stopColor={LIME} stopOpacity="0.16" />
           <stop offset="100%" stopColor={LIME} stopOpacity="0" />
         </radialGradient>
+        <style>{`
+          @keyframes fx-float { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-4px); } }
+          @keyframes fx-pulse { 0%,100% { opacity: 0.45; } 50% { opacity: 0.95; } }
+          .fx-float { animation: fx-float 5.5s ease-in-out infinite; transform-box: fill-box; transform-origin: center; }
+          .fx-pulse { animation: fx-pulse 3.2s ease-in-out infinite; }
+        `}</style>
       </defs>
       <rect width="400" height="240" fill="#0b0d09" />
-      <circle cx="200" cy="120" r="95" fill="url(#fx-plaza-glow)" />
+      <circle cx="200" cy="120" r="95" fill="url(#fx-plaza-glow)" className="fx-pulse" />
       {/* plaza */}
-      <circle cx="200" cy="120" r="34" fill="none" stroke={LIME} strokeOpacity="0.5" strokeWidth="1.5" />
+      <circle
+        cx="200"
+        cy="120"
+        r="34"
+        fill="none"
+        stroke={LIME}
+        strokeOpacity="0.5"
+        strokeWidth="1.5"
+        className="fx-pulse"
+      />
       <rect x="197" y="96" width="6" height="14" fill={LIME} fillOpacity="0.9" />
       {/* paths */}
       {BUILDINGS.map((b) => {
@@ -615,14 +659,14 @@ function StaticFallback() {
           />
         );
       })}
-      {/* spaces */}
+      {/* spaces + names */}
       {BUILDINGS.map((b, i) => {
         const a = (b.angle * Math.PI) / 180;
         const x = 200 + Math.sin(a) * 92;
         const y = 120 + Math.cos(a) * 92;
         const w = 26 - (i % 3) * 3;
         return (
-          <g key={b.id}>
+          <g key={b.id} className="fx-float" style={{ animationDelay: `${i * 0.55}s` }}>
             <rect
               x={x - w / 2}
               y={y - w / 2}
@@ -635,6 +679,18 @@ function StaticFallback() {
               strokeWidth="1.2"
             />
             <circle cx={x} cy={y} r="2.2" fill={LIME} fillOpacity="0.9" />
+            <text
+              x={x}
+              y={y + w / 2 + 13}
+              textAnchor="middle"
+              fill={LIME}
+              fillOpacity="0.85"
+              fontSize="9"
+              fontFamily="system-ui, sans-serif"
+              fontWeight="600"
+            >
+              {b.name}
+            </text>
           </g>
         );
       })}
@@ -653,6 +709,8 @@ function StaticFallback() {
             stroke={LIME}
             strokeOpacity="0.35"
             strokeWidth="0.8"
+            className="fx-float"
+            style={{ animationDelay: `${i * 0.4}s` }}
           />
         );
       })}
@@ -661,13 +719,38 @@ function StaticFallback() {
 }
 
 /* ------------------------------------------------------------------ */
+/* Error boundary — if WebGL/Three fails at runtime, show the fallback */
+/* ------------------------------------------------------------------ */
+
+class SceneErrorBoundary extends Component<
+  { fallback: ReactNode; children: ReactNode },
+  { failed: boolean }
+> {
+  state = { failed: false };
+
+  static getDerivedStateFromError() {
+    return { failed: true };
+  }
+
+  componentDidCatch(err: unknown) {
+    console.error("[ForgeX 3D] scene failed:", err);
+  }
+
+  render() {
+    if (this.state.failed) return this.props.fallback;
+    return this.props.children;
+  }
+}
+
+/* ------------------------------------------------------------------ */
 /* Public component                                                    */
 /* ------------------------------------------------------------------ */
 
 export function ForgeXLearningCommunity() {
   const containerRef = useRef<HTMLDivElement>(null);
-  const hoverRef = useRef<HoverInfo | null>(null);
-  const labelRef = useRef<HTMLDivElement | null>(null);
+  const buildingRefs = useRef<(THREE.Object3D | null)[]>([]);
+  const labelRefs = useRef<(HTMLDivElement | null)[]>([]);
+  const hoverIdxRef = useRef(-1);
   const [visible, setVisible] = useState(true);
   const [webgl, setWebgl] = useState<boolean | null>(null);
   const [reduced, setReduced] = useState(false);
@@ -735,38 +818,53 @@ export function ForgeXLearningCommunity() {
               <div className="size-8 animate-pulse rounded-full border-2 border-lime-400/30 border-t-lime-400" />
             </div>
           ) : (
-            <Canvas
-              dpr={mobile ? [1, 1.5] : [1, 2]}
-              frameloop={visible ? "always" : "never"}
-              camera={{ position: [0, 8.1, 11.8], fov: 40 }}
-              gl={{
-                antialias: true,
-                alpha: true,
-                powerPreference: "high-performance",
-              }}
-              style={{ touchAction: "pan-y" }}
-            >
-              <ambientLight intensity={0.55} color="#e8f7d4" />
-              <pointLight position={[0, 6, 2]} intensity={1.1} distance={26} color={LIME} />
-              <pointLight position={[0, 5, -6]} intensity={0.55} distance={22} color="#d9f99d" />
-              <Campus
-                mobile={mobile}
-                reduced={reduced}
-                hoverRef={hoverRef}
-                labelRef={labelRef}
-                onHoverName={setHoverName}
-              />
-            </Canvas>
+            <SceneErrorBoundary fallback={<StaticFallback />}>
+              <Canvas
+                dpr={mobile ? [1, 1.5] : [1, 2]}
+                frameloop={visible ? "always" : "never"}
+                camera={{ position: [0, 8.1, 11.8], fov: 40 }}
+                gl={{ antialias: true, alpha: true }}
+                style={{ touchAction: "pan-y" }}
+              >
+                <ambientLight intensity={0.55} color="#e8f7d4" />
+                <pointLight position={[0, 6, 2]} intensity={1.1} distance={26} color={LIME} />
+                <pointLight position={[0, 5, -6]} intensity={0.55} distance={22} color="#d9f99d" />
+                <Campus
+                  mobile={mobile}
+                  reduced={reduced}
+                  buildingRefs={buildingRefs}
+                  labelRefs={labelRefs}
+                  hoverIdxRef={hoverIdxRef}
+                  onHoverName={setHoverName}
+                />
+              </Canvas>
+            </SceneErrorBoundary>
           )}
 
-          {/* hover label — lives OUTSIDE the Canvas (DOM overlay) */}
-          <div
-            ref={labelRef}
-            className="pointer-events-none absolute left-0 top-0 z-10 rounded-full border border-lime-400/40 bg-[#0d0f0c]/90 px-3.5 py-1.5 text-xs font-semibold text-lime-300 shadow-lg shadow-lime-400/10 backdrop-blur transition-opacity duration-150"
-            style={{ opacity: 0, willChange: "transform, opacity" }}
-          >
-            {hoverName ?? ""}
-          </div>
+          {/* name labels — DOM overlays (outside the Canvas), projected each
+              frame onto their buildings, always visible */}
+          {BUILDINGS.map((b, i) => (
+            <div
+              key={b.id}
+              ref={(el) => {
+                labelRefs.current[i] = el;
+              }}
+              className={
+                "pointer-events-none absolute left-0 top-0 z-10 whitespace-nowrap rounded-full border bg-[#0d0f0c]/85 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wider backdrop-blur transition-colors duration-150 " +
+                (hoverName === b.name
+                  ? "border-lime-400/70 text-lime-200"
+                  : "border-lime-400/25 text-lime-300/80")
+              }
+              style={{
+                opacity: 0,
+                transform: "translate(-50%, -110%)",
+                willChange: "transform, opacity",
+              }}
+            >
+              <span className="mr-1.5 inline-block size-1 rounded-full bg-lime-400 align-middle" />
+              {b.name}
+            </div>
+          ))}
         </div>
 
         {/* hint — subtle, desktop only */}
