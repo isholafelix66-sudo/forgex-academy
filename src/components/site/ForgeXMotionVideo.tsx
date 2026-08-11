@@ -581,8 +581,23 @@ export function ForgeXMotionVideo({ title = "ForgeX in two minutes" }: { title?:
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  /** iOS/Safari only starts an AudioContext that was created (or resumed)
+   *  inside a user gesture — warm the soundtrack up right in the tap/click
+   *  handlers so the tour music actually starts on iPhones and iPads. */
+  const warmMusic = () => {
+    try {
+      if (!musicRef.current || musicRef.current.disposed) {
+        musicRef.current = createMotionMusic();
+      }
+      musicRef.current?.resume();
+    } catch {
+      // Audio not available — the player still works.
+    }
+  };
+
   /** Rewind the film to the start and play it again. */
   const reset = () => {
+    warmMusic();
     elapsedRef.current = 0;
     sceneRef.current = 0;
     setSceneIndex(0);
@@ -592,6 +607,7 @@ export function ForgeXMotionVideo({ title = "ForgeX in two minutes" }: { title?:
   };
 
   const toggle = () => {
+    warmMusic();
     if (elapsedRef.current >= TOTAL_MS) {
       reset();
     } else {
@@ -615,6 +631,7 @@ export function ForgeXMotionVideo({ title = "ForgeX in two minutes" }: { title?:
   const seek = (clientX: number) => {
     const bar = barRef.current;
     if (!bar) return;
+    warmMusic();
     const rect = bar.getBoundingClientRect();
     const r = Math.min(1, Math.max(0, (clientX - rect.left) / rect.width));
     const next = r * TOTAL_MS;
@@ -734,6 +751,7 @@ export function ForgeXMotionVideo({ title = "ForgeX in two minutes" }: { title?:
                 key={s.label}
                 type="button"
                 onClick={() => {
+                  warmMusic();
                   const t = i * SCENE_MS;
                   elapsedRef.current = t;
                   sceneRef.current = i;

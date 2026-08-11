@@ -18,21 +18,12 @@ import {
   uploadChatFile,
   type ChatAttachment,
 } from "@/lib/chat-media";
+import {
+  startVoiceRecording,
+  type VoiceRecording,
+} from "@/lib/voice-recorder";
 
 const VOICE_MAX_SECONDS = 60;
-
-/** Best audio mime type this browser can record (Safari → mp4/aac, the rest
- *  → webm/opus). Fallback to the browser default when nothing matches. */
-function pickRecordingMime(): string | undefined {
-  if (typeof MediaRecorder === "undefined") return undefined;
-  const candidates = [
-    "audio/webm;codecs=opus",
-    "audio/webm",
-    "audio/mp4",
-    "audio/ogg;codecs=opus",
-  ];
-  return candidates.find((m) => MediaRecorder.isTypeSupported(m));
-}
 
 /**
  * Shared chat composer: text input with Enter-to-send, photo + file attach
@@ -63,25 +54,16 @@ export function ChatComposer({
 
   const imageRef = useRef<HTMLInputElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
-  const recorderRef = useRef<MediaRecorder | null>(null);
-  const chunksRef = useRef<Blob[]>([]);
-  const streamRef = useRef<MediaStream | null>(null);
+  const voiceHandleRef = useRef<VoiceRecording | null>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const recordSecondsRef = useRef(0);
 
-  const stopTracks = () => {
-    streamRef.current?.getTracks().forEach((t) => t.stop());
-    streamRef.current = null;
-  };
-
-  const cleanupRecorder = () => {
+  const endRecordingSession = () => {
     if (timerRef.current) {
       clearInterval(timerRef.current);
       timerRef.current = null;
     }
-    stopTracks();
-    recorderRef.current = null;
-    chunksRef.current = [];
+    voiceHandleRef.current = null;
     recordSecondsRef.current = 0;
     setRecording(false);
     setRecordSeconds(0);
@@ -91,40 +73,21 @@ export function ChatComposer({
   useEffect(
     () => () => {
       if (timerRef.current) clearInterval(timerRef.current);
-      if (recorderRef.current) {
-        try {
-          recorderRef.current.onstop = null;
-          recorderRef.current.stop();
-        } catch {
-          /* already stopped */
-        }
+      try {
+        voiceHandleRef.current?.cancel();
+      } catch {
+        /* already stopped */
       }
-      stopTracks();
+      voiceHandleRef.current = null;
     },
     [],
   );
 
   const startRecording = async () => {
     if (busy || disabled) return;
-    if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === "undefined") {
-      toast.error("Voice recording isn't supported in this browser.");
-      return;
-    }
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const mime = pickRecordingMime();
-      const recorder = new MediaRecorder(
-        stream,
-        mime ? { mimeType: mime } : undefined,
-      );
-      const chunks: Blob[] = [];
-      recorder.ondataavailable = (e) => {
-        if (e.data.size > 0) chunks.push(e.data);
-      };
-      recorderRef.current = recorder;
-      chunksRef.current = chunks;
-      streamRef.current = stream;
-      recorder.start();
+      const handle = await startVoiceRecording();
+      voiceHandleRef.current = handle;
       recordSecondsRef.current = 0;
       setRecordSeconds(0);
       setRecording(true);
@@ -134,60 +97,38 @@ export function ChatComposer({
         setRecordSeconds(next);
         if (next >= VOICE_MAX_SECONDS) void finishRecording();
       }, 1000);
-    } catch {
+    } catch (err) {
       toast.error(
-        "Microphone access was denied — allow the mic in your browser settings.",
+        err instanceof DOMException && err.name === "NotAllowedError"
+          ? "Microphone access was denied — allow the mic in your browser settings."
+          : "Voice recording isn't available in this browser.",
       );
     }
   };
 
-  const stopRecorder = () =>
-    new Promise<{ blob: Blob; mime: string; seconds: number }>(
-      (resolve, reject) => {
-        const recorder = recorderRef.current;
-        if (!recorder) {
-          reject(new Error("No active recording."));
-          return;
-        }
-        recorder.onstop = () => {
-          const mime = recorder.mimeType || "audio/webm";
-          const blob = new Blob(chunksRef.current, { type: mime });
-          const seconds = recordSecondsRef.current;
-          cleanupRecorder();
-          resolve({ blob, mime, seconds });
-        };
-        try {
-          recorder.stop();
-        } catch (err) {
-          cleanupRecorder();
-          reject(err);
-        }
-      },
-    );
-
   const cancelRecording = () => {
-    const recorder = recorderRef.current;
-    if (recorder) {
-      recorder.onstop = null;
-      try {
-        recorder.stop();
-      } catch {
-        /* already stopped */
-      }
+    try {
+      voiceHandleRef.current?.cancel();
+    } catch {
+      /* already stopped */
     }
-    cleanupRecorder();
+    endRecordingSession();
   };
 
   const finishRecording = async () => {
-    if (!recorderRef.current || busy) return;
+    const handle = voiceHandleRef.current;
+    if (!handle || busy) return;
     setBusy(true);
     try {
-      const { blob, mime, seconds } = await stopRecorder();
-      const ext = mime.includes("mp4")
-        ? "m4a"
-        : mime.includes("ogg")
-          ? "ogg"
-          : "webm";
+      const { blob, mime, seconds } = await handle.stop();
+      endRecordingSession();
+      const ext = mime.includes("wav")
+        ? "wav"
+        : mime.includes("mp4")
+          ? "m4a"
+          : mime.includes("ogg")
+            ? "ogg"
+            : "webm";
       const file = new File([blob], `voice-${Date.now()}.${ext}`, {
         type: mime,
       });

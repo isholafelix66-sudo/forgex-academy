@@ -1,4 +1,4 @@
-import { FileText, Mic, Play } from "lucide-react";
+import { Download, FileText, Mic, Play } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { timeAgo } from "@/lib/format";
 import { formatBytes } from "@/lib/media";
@@ -12,11 +12,28 @@ export type ChatMessageView = {
   url?: string | null;
   fileName?: string | null;
   fileSize?: number | null;
+  mimeType?: string | null;
   duration?: number | null;
   createdAt: number;
   senderId?: string;
   readAt?: number | null;
 };
+
+/** Cached check: can this browser decode webm audio at all? iOS Safari cannot. */
+let webmAudioSupport: boolean | null = null;
+function canPlayWebmAudio(): boolean {
+  if (webmAudioSupport === null) {
+    try {
+      const probe = document.createElement("audio");
+      webmAudioSupport =
+        probe.canPlayType("audio/webm;codecs=opus") !== "" ||
+        probe.canPlayType("audio/webm") !== "";
+    } catch {
+      webmAudioSupport = false;
+    }
+  }
+  return webmAudioSupport;
+}
 
 /**
  * Renders one attachment (image / file / voice) — exported so the admin chat
@@ -53,6 +70,12 @@ export function ChatAttachmentView({
   }
 
   if (attachment.kind === "voice") {
+    // Legacy notes recorded as webm/opus can't be decoded by iOS Safari —
+    // offer a download instead of a broken player. New recordings are WAV
+    // and play on every device.
+    const webmOnly =
+      attachment.mimeType?.includes("webm") ?? false;
+    const playable = !webmOnly || canPlayWebmAudio();
     return (
       <div className="flex items-center gap-2.5 py-0.5">
         <span
@@ -63,12 +86,30 @@ export function ChatAttachmentView({
         >
           <Mic className="size-4" />
         </span>
-        <audio
-          controls
-          preload="metadata"
-          src={url}
-          className="h-9 w-48 max-w-[200px] sm:w-56"
-        />
+        {playable ? (
+          <audio
+            controls
+            preload="metadata"
+            src={url}
+            className="h-9 w-48 max-w-[200px] sm:w-56"
+          />
+        ) : (
+          <a
+            href={url}
+            target="_blank"
+            rel="noopener noreferrer"
+            className={cn(
+              "flex items-center gap-2 rounded-xl border px-3 py-2 text-sm font-medium transition-colors",
+              mine
+                ? "border-black/10 bg-black/10 hover:bg-black/15"
+                : "border-white/10 bg-black/20 hover:border-lime-400/40",
+            )}
+            title="Download voice note"
+          >
+            <Download className="size-4" />
+            <span className="text-xs">Voice note (download)</span>
+          </a>
+        )}
       </div>
     );
   }
