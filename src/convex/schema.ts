@@ -248,6 +248,84 @@ const schema = defineSchema(
       .index("by_student", ["studentId"])
       .index("by_quiz", ["quizId"]),
 
+    /** Per-lesson (video) quizzes. Each lesson may optionally have one.
+     *  Unlocks after the learner watches ≥90% of the video; passing marks the
+     *  lesson complete and unlocks the next one. `published: false` hides it
+     *  from learners while the tutor drafts it. */
+    lessonQuizzes: defineTable({
+      courseId: v.id("courses"),
+      lessonId: v.id("lessons"),
+      tutorId: v.id("users"),
+      title: v.string(),
+      description: v.string(),
+      passPercent: v.number(), // e.g. 70
+      timeLimitMinutes: v.number(),
+      questions: v.array(questionValidator),
+      published: v.boolean(),
+      createdAt: v.number(),
+    })
+      .index("by_lesson", ["lessonId"])
+      .index("by_course", ["courseId"]),
+
+    lessonQuizAttempts: defineTable({
+      quizId: v.id("lessonQuizzes"),
+      lessonId: v.id("lessons"),
+      courseId: v.id("courses"),
+      studentId: v.id("users"),
+      answers: v.array(v.object({ questionIndex: v.number(), answer: v.string() })),
+      score: v.number(),
+      maxScore: v.number(),
+      passed: v.boolean(),
+      submittedAt: v.number(),
+      timeTakenSeconds: v.optional(v.number()),
+    })
+      .index("by_student", ["studentId"])
+      .index("by_quiz", ["quizId"]),
+
+    /** One final exam per course. Published exams sit after all required
+     *  lessons: the learner must complete every lesson first, and passing the
+     *  exam is what completes the course + unlocks the certificate. */
+    finalExams: defineTable({
+      courseId: v.id("courses"),
+      tutorId: v.id("users"),
+      title: v.string(),
+      description: v.string(),
+      questionCount: v.number(),
+      totalMarks: v.number(),
+      passPercent: v.number(),
+      timeLimitMinutes: v.number(),
+      questions: v.array(questionValidator),
+      published: v.boolean(),
+      createdAt: v.number(),
+    }).index("by_course", ["courseId"]),
+
+    finalExamAttempts: defineTable({
+      examId: v.id("finalExams"),
+      courseId: v.id("courses"),
+      studentId: v.id("users"),
+      answers: v.array(v.object({ questionIndex: v.number(), answer: v.string() })),
+      score: v.number(),
+      totalMarks: v.number(),
+      percent: v.number(),
+      passed: v.boolean(),
+      submittedAt: v.number(),
+      timeTakenSeconds: v.optional(v.number()),
+    })
+      .index("by_student", ["studentId"])
+      .index("by_exam", ["examId"]),
+
+    /** Continuous watch progress per (student, lesson). The 90% watch gate
+     *  for lesson quizzes reads this table. */
+    watchProgress: defineTable({
+      studentId: v.id("users"),
+      courseId: v.id("courses"),
+      lessonId: v.id("lessons"),
+      percent: v.number(), // 0-100 of the video watched
+      updatedAt: v.number(),
+    })
+      .index("by_student_course", ["studentId", "courseId"])
+      .index("by_lesson", ["lessonId"]),
+
     enrollments: defineTable({
       studentId: v.id("users"),
       courseId: v.id("courses"),

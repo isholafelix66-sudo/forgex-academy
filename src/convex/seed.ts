@@ -799,6 +799,27 @@ export const ensureSeedData = mutation({
     });
 
     // ------------------------------------------------------------------
+    // Demo video repair — every demo lesson should be playable. Courses that
+    // were seeded before videos existed (or were edited to remove them) get
+    // a public sample video attached on every re-run.
+    // ------------------------------------------------------------------
+    const demoCourses = await ctx.db.query("courses").collect();
+    for (const course of demoCourses) {
+      const courseLessons = await ctx.db
+        .query("lessons")
+        .withIndex("by_courseId", (q) => q.eq("courseId", course._id))
+        .collect();
+      for (const lesson of courseLessons) {
+        if (!lesson.videoUrl && !lesson.muxPlaybackId) {
+          await ctx.db.patch(lesson._id, {
+            videoUrl: VIDS[lesson.order % VIDS.length],
+            videoType: "mp4",
+          });
+        }
+      }
+    }
+
+    // ------------------------------------------------------------------
     // Announcements
     // ------------------------------------------------------------------
     const existingAdmin = await ctx.db

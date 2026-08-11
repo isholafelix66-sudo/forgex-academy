@@ -120,12 +120,51 @@ export type QuizData = {
   questions: Question[];
 };
 
+export type QuizSubmitResult = {
+  score: number;
+  maxScore: number;
+  gradedMax: number;
+  pending: boolean;
+  passed: boolean;
+  timeTaken: number;
+  percent?: number;
+};
+
 export function QuizRunner({
   quiz,
   onExit,
+  passPercent = 70,
+  totalMarks,
+  submit,
+  onResult,
+  allowRetry = true,
 }: {
   quiz: QuizData;
   onExit: () => void;
+  /** Hide the retry button (e.g. after a passed final exam). */
+  allowRetry?: boolean;
+  /** Pass mark, default 70. */
+  passPercent?: number;
+  /** Optional display total (final exams set their own marks). */
+  totalMarks?: number;
+  /** Optional custom submit hook (lesson quizzes + final exams). Defaults to
+   *  the legacy course quiz mutation. */
+  submit?: (
+    answers: { questionIndex: number; answer: string }[],
+    timeTakenSeconds: number,
+  ) => Promise<
+    | {
+        score: number;
+        maxScore?: number;
+        totalMarks?: number;
+        gradedMax?: number;
+        passed: boolean;
+        percent?: number;
+      }
+    | void
+  >;
+  /** Called after submission with the graded result. */
+  onResult?: (result: QuizSubmitResult) => void;
 }) {
   const submitQuiz = useMutation(api.quizzes.submitQuiz);
   const [phase, setPhase] = useState<Phase>("intro");
@@ -133,14 +172,7 @@ export function QuizRunner({
   const [answers, setAnswers] = useState<Record<number, string>>({});
   const [secondsLeft, setSecondsLeft] = useState(quiz.timeLimitMinutes * 60);
   const [submitting, setSubmitting] = useState(false);
-  const [result, setResult] = useState<{
-    score: number;
-    maxScore: number;
-    gradedMax: number;
-    pending: boolean;
-    passed: boolean;
-    timeTaken: number;
-  } | null>(null);
+  const [result, setResult] = useState<QuizSubmitResult | null>(null);
 
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -199,22 +231,41 @@ export function QuizRunner({
         score += q.points ?? 1;
       }
     }
-    const passed = gradedMax > 0 && score / Math.max(1, gradedMax) >= 0.7;
-    setResult({
+    const passed = gradedMax > 0 && score / Math.max(1, gradedMax) >= passPercent / 100;
+    const time = manual ? timeTaken : quiz.timeLimitMinutes * 60;
+    const local: QuizSubmitResult = {
       score,
       maxScore,
       gradedMax,
       pending,
       passed,
-      timeTaken: manual ? timeTaken : quiz.timeLimitMinutes * 60,
-    });
+      timeTaken: time,
+    };
+    setResult(local);
     setPhase("done");
+    onResult?.(local);
     try {
-      await submitQuiz({
-        quizId: quiz._id as never,
-        answers: answerList,
-        timeTakenSeconds: timeTaken,
-      });
+      if (submit) {
+        const server = await submit(answerList, timeTaken);
+        if (server) {
+          // The server is the source of truth for pass/fail + marks.
+          const updated: QuizSubmitResult = {
+            ...local,
+            score: server.score,
+            maxScore: server.totalMarks ?? server.maxScore ?? local.maxScore,
+            passed: server.passed,
+            percent: server.percent,
+          };
+          setResult(updated);
+          onResult?.(updated);
+        }
+      } else {
+        await submitQuiz({
+          quizId: quiz._id as never,
+          answers: answerList,
+          timeTakenSeconds: timeTaken,
+        });
+      }
     } catch {
       // result already shown locally
     }
@@ -249,7 +300,7 @@ export function QuizRunner({
             <p className="text-[11px] text-muted-foreground">Minutes</p>
           </div>
           <div className="rounded-xl border border-white/10 bg-black/20 p-3">
-            <p className="font-display text-xl font-bold">70%</p>
+            <p className="font-display text-xl font-bold">{passPercent}%</p>
             <p className="text-[11px] text-muted-foreground">To pass</p>
           </div>
         </div>
@@ -294,9 +345,9 @@ export function QuizRunner({
         <p className="mt-2 text-muted-foreground">
           You scored{" "}
           <span className="font-display text-2xl font-bold text-lime-300">
-            {result.score}/{result.maxScore}
+            {result.score}/{totalMarks ?? result.maxScore}
           </span>{" "}
-          ({pct}% on auto-graded questions)
+          ({result.percent ?? pct}%)
         </p>
         {result.pending && (
           <p className="mx-auto mt-3 max-w-md rounded-xl border border-amber-400/25 bg-amber-400/8 p-3 text-xs text-amber-200">
@@ -306,7 +357,7 @@ export function QuizRunner({
         )}
         {!result.passed && (
           <p className="mx-auto mt-3 max-w-md text-xs text-muted-foreground">
-            Pass mark is 70%. Review the lessons and try again when you're ready.
+            Pass mark is {passPercent}%. Review the lessons and try again when you're ready.
           </p>
         )}
 
@@ -368,18 +419,20 @@ export function QuizRunner({
           <Button variant="outline" onClick={onExit}>
             Back to course
           </Button>
-          <Button
-            className="bg-lime-400 font-semibold text-black hover:bg-lime-300"
-            onClick={() => {
-              setAnswers({});
-              setResult(null);
-              setCurrent(0);
-              setSecondsLeft(quiz.timeLimitMinutes * 60);
-              setPhase("running");
-            }}
-          >
-            Retry quiz
-          </Button>
+          {allowRetry && (
+            <Button
+              className="bg-lime-400 font-semibold text-black hover:bg-lime-300"
+              onClick={() => {
+                setAnswers({});
+                setResult(null);
+                setCurrent(0);
+                setSecondsLeft(quiz.timeLimitMinutes * 60);
+                setPhase("running");
+              }}
+            >
+              Retry
+            </Button>
+          )}
         </div>
       </div>
     );

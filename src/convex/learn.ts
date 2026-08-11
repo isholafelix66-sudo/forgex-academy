@@ -1,6 +1,171 @@
-import { mutation, query } from "./_generated/server";
+import { mutation, query, MutationCtx, QueryCtx } from "./_generated/server";
 import { v } from "convex/values";
+import { Doc, Id } from "./_generated/dataModel";
 import { checkRateLimit, requireUser, requireUserDoc, hydrateCourses, hydrateCourse, notify, yyyymmdd, makeCertificateId } from "./lib";
+
+// ---------------------------------------------------------------------------
+// Shared learning helpers (imported by lessonquizzes.ts / exams.ts)
+// ---------------------------------------------------------------------------
+
+export async function enrollmentFor(
+  ctx: QueryCtx | MutationCtx,
+  studentId: Id<"users">,
+  courseId: Id<"courses">,
+) {
+  return await ctx.db
+    .query("enrollments")
+    .withIndex("by_student", (q) => q.eq("studentId", studentId))
+    .collect()
+    .then((rows) => rows.find((e) => e.courseId === courseId) ?? null);
+}
+
+/** Sequential gate: the lesson immediately before `lesson` (by order) must be
+ *  completed before this one can be completed. The first lesson has no gate. */
+async function assertPreviousCompleted(
+  ctx: MutationCtx,
+  courseId: Id<"courses">,
+  lesson: Doc<"lessons">,
+  enrollment: Doc<"enrollments">,
+) {
+  const allLessons = await ctx.db
+    .query("lessons")
+    .withIndex("by_course", (q) => q.eq("courseId", courseId))
+    .collect();
+  const sorted = [...allLessons].sort((a, b) => a.order - b.order);
+  const idx = sorted.findIndex((l) => l._id === lesson._id);
+  if (idx > 0) {
+    const prev = sorted[idx - 1];
+    if (!enrollment.completedLessons.includes(prev._id)) {
+      throw new Error(
+        `Complete "${prev.title}" before moving on to this lesson.`,
+      );
+    }
+  }
+}
+
+/** Issue a certificate + badge + notification when a course is truly finished. */
+export async function finishCourseInternal(
+  ctx: MutationCtx,
+  user: Doc<"users">,
+  course: Doc<"courses">,
+  enrollment: Doc<"enrollments">,
+) {
+  await ctx.db.patch(enrollment._id, { status: "completed", progress: 100 });
+  const existing = await ctx.db
+    .query("certificates")
+    .withIndex("by_student", (q) => q.eq("studentId", user._id))
+    .collect()
+    .then((rows) => rows.find((c) => c.courseId === course._id));
+  if (!existing) {
+    const certificateId = makeCertificateId();
+    await ctx.db.insert("certificates", {
+      certificateId,
+      studentId: user._id,
+      courseId: course._id,
+      issuedAt: Date.now(),
+      studentName: user.name || "Student",
+      courseTitle: course.title,
+    });
+    await ctx.db.patch(user._id, {
+      badges: [...(user.badges ?? []).filter((b) => b !== course.title), course.title],
+    });
+    await notify(ctx, {
+      userId: user._id,
+      title: "Course completed! 🎉",
+      body: `You earned a certificate for "${course.title}". Show it off — it's verifiable.`,
+      type: "certificate",
+      link: "/dashboard/certificates",
+    });
+  }
+}
+
+/** Shared lesson-completion path. The manual "Mark complete" button, the
+ *  90%-watch auto-complete, and passing a lesson quiz all land here. */
+export async function completeLessonInternal(
+  ctx: MutationCtx,
+  user: Doc<"users">,
+  lessonId: Id<"lessons">,
+) {
+  const lesson = await ctx.db.get(lessonId);
+  if (!lesson) throw new Error("Lesson not found.");
+  const enrollment = await enrollmentFor(ctx, user._id, lesson.courseId);
+  if (!enrollment) throw new Error("Enroll in this course first.");
+
+  if (!enrollment.completedLessons.includes(lessonId)) {
+    // A published per-lesson quiz must be passed first — passing the quiz is
+    // what marks the lesson complete (see submitLessonQuiz).
+    const quiz = await ctx.db
+      .query("lessonQuizzes")
+      .withIndex("by_lesson", (q) => q.eq("lessonId", lessonId))
+      .first();
+    if (quiz?.published) {
+      const attempts = await ctx.db
+        .query("lessonQuizAttempts")
+        .withIndex("by_quiz", (q) => q.eq("quizId", quiz._id))
+        .collect();
+      const passed = attempts.some((a) => a.studentId === user._id && a.passed);
+      if (!passed) {
+        throw new Error("Take this lesson's quiz to complete it.");
+      }
+    }
+    await assertPreviousCompleted(ctx, lesson.courseId, lesson, enrollment);
+
+    const completedLessons = [...enrollment.completedLessons, lessonId];
+    const allLessons = await ctx.db
+      .query("lessons")
+      .withIndex("by_courseId", (q) => q.eq("courseId", lesson.courseId))
+      .collect();
+    const progress = Math.min(
+      100,
+      Math.round((completedLessons.length / Math.max(1, allLessons.length)) * 100),
+    );
+    const allDone =
+      progress >= 100 && completedLessons.length >= allLessons.length;
+
+    // A published final exam holds the course open until it's passed — the
+    // certificate only unlocks after the exam.
+    const exam = allDone
+      ? await ctx.db
+          .query("finalExams")
+          .withIndex("by_course", (q) => q.eq("courseId", lesson.courseId))
+          .first()
+      : null;
+    const examPending = !!exam?.published;
+    const status =
+      allDone && !examPending ? ("completed" as const) : ("in-progress" as const);
+
+    await ctx.db.patch(enrollment._id, { completedLessons, progress, status });
+
+    // streak
+    const today = yyyymmdd(Date.now());
+    const yesterday = yyyymmdd(Date.now() - 86400000);
+    const lastDay = user.streakLastDay ?? 0;
+    let streak = user.streak ?? 0;
+    if (lastDay !== today) {
+      streak = lastDay === yesterday ? streak + 1 : 1;
+      await ctx.db.patch(user._id, { streak, streakLastDay: today });
+    }
+
+    if (allDone && !examPending) {
+      const course = await ctx.db.get(lesson.courseId);
+      if (course) {
+        await finishCourseInternal(ctx, user, course, {
+          ...enrollment,
+          completedLessons,
+          progress,
+          status: "completed",
+        });
+      }
+    }
+    return { progress, status, allLessonsComplete: allDone, examPending };
+  }
+  return {
+    progress: enrollment.progress,
+    status: enrollment.status,
+    allLessonsComplete: false,
+    examPending: false,
+  };
+}
 
 // ---------------------------------------------------------------------------
 // Enrollment
@@ -10,11 +175,7 @@ export const enrollmentStatus = query({
   args: { courseId: v.id("courses") },
   handler: async (ctx, { courseId }) => {
     const userId = await requireUser(ctx);
-    return await ctx.db
-      .query("enrollments")
-      .withIndex("by_student", (q) => q.eq("studentId", userId))
-      .collect()
-      .then((rows) => rows.find((e) => e.courseId === courseId) ?? null);
+    return await enrollmentFor(ctx, userId, courseId);
   },
 });
 
@@ -26,11 +187,7 @@ export const enroll = mutation({
     await checkRateLimit(ctx, `learn:${user._id}`, 60, 60 * 60 * 1000);
     const course = await ctx.db.get(courseId);
     if (!course || !course.published) throw new Error("Course not found.");
-    const existing = await ctx.db
-      .query("enrollments")
-      .withIndex("by_student", (q) => q.eq("studentId", user._id))
-      .collect()
-      .then((rows) => rows.find((e) => e.courseId === courseId));
+    const existing = await enrollmentFor(ctx, user._id, courseId);
     if (existing) return existing._id;
     const id = await ctx.db.insert("enrollments", {
       studentId: user._id,
@@ -78,81 +235,150 @@ export const myEnrollments = query({
 });
 
 // ---------------------------------------------------------------------------
-// Lesson completion → progress → certificate
+// Watch progress → lesson completion → progress → certificate
 // ---------------------------------------------------------------------------
+
+export const reportWatchProgress = mutation({
+  args: { lessonId: v.id("lessons"), percent: v.number() },
+  handler: async (ctx, { lessonId, percent }) => {
+    const user = await requireUserDoc(ctx);
+    const lesson = await ctx.db.get(lessonId);
+    if (!lesson) return;
+    const enrollment = await enrollmentFor(ctx, user._id, lesson.courseId);
+    if (!enrollment) return;
+    // Cheap throttled writes — never block playback on the limiter.
+    const ok = await checkRateLimit(
+      ctx,
+      `watch:${user._id}`,
+      600,
+      10 * 60 * 1000,
+      "",
+      true,
+    );
+    if (!ok) return;
+    const clamped = Math.max(0, Math.min(100, Math.round(percent)));
+    const rows = await ctx.db
+      .query("watchProgress")
+      .withIndex("by_student_course", (q) =>
+        q.eq("studentId", user._id).eq("courseId", lesson.courseId),
+      )
+      .collect();
+    const existing = rows.find((r) => r.lessonId === lessonId);
+    if (existing) {
+      if (clamped <= existing.percent) return;
+      await ctx.db.patch(existing._id, { percent: clamped, updatedAt: Date.now() });
+    } else {
+      await ctx.db.insert("watchProgress", {
+        studentId: user._id,
+        courseId: lesson.courseId,
+        lessonId,
+        percent: clamped,
+        updatedAt: Date.now(),
+      });
+    }
+    // Lessons without a quiz auto-complete once ≥90% watched (the sequential
+    // gate still applies — the previous lesson must be done first).
+    if (clamped >= 90) {
+      const quiz = await ctx.db
+        .query("lessonQuizzes")
+        .withIndex("by_lesson", (q) => q.eq("lessonId", lessonId))
+        .first();
+      if (!quiz || !quiz.published) {
+        try {
+          await completeLessonInternal(ctx, user, lessonId);
+        } catch {
+          // previous lesson not complete yet — fine, they'll finish in order
+        }
+      }
+    }
+  },
+});
 
 export const completeLesson = mutation({
   args: { lessonId: v.id("lessons") },
   handler: async (ctx, { lessonId }) => {
     const user = await requireUserDoc(ctx);
     await checkRateLimit(ctx, `learn:${user._id}`, 60, 60 * 60 * 1000);
-    const lesson = await ctx.db.get(lessonId);
-    if (!lesson) throw new Error("Lesson not found.");
-    const enrollment = await ctx.db
-      .query("enrollments")
-      .withIndex("by_student", (q) => q.eq("studentId", user._id))
-      .collect()
-      .then((rows) => rows.find((e) => e.courseId === lesson.courseId));
-    if (!enrollment) throw new Error("Enroll in this course first.");
-
-    if (!enrollment.completedLessons.includes(lessonId)) {
-      const completedLessons = [...enrollment.completedLessons, lessonId];
-      const allLessons = await ctx.db
-        .query("lessons")
-        .withIndex("by_courseId", (q) => q.eq("courseId", lesson.courseId))
-        .collect();
-      const progress = Math.min(
-        100,
-        Math.round((completedLessons.length / Math.max(1, allLessons.length)) * 100),
-      );
-      const status =
-        progress >= 100 && completedLessons.length >= allLessons.length
-          ? ("completed" as const)
-          : ("in-progress" as const);
-      await ctx.db.patch(enrollment._id, { completedLessons, progress, status });
-
-      // streak
-      const today = yyyymmdd(Date.now());
-      const yesterday = yyyymmdd(Date.now() - 86400000);
-      const lastDay = user.streakLastDay ?? 0;
-      let streak = user.streak ?? 0;
-      if (lastDay !== today) {
-        streak = lastDay === yesterday ? streak + 1 : 1;
-        await ctx.db.patch(user._id, { streak, streakLastDay: today });
-      }
-
-      // certificate on completion
-      if (status === "completed") {
-        const course = await ctx.db.get(lesson.courseId);
-        const existing = await ctx.db
-          .query("certificates")
-          .withIndex("by_student", (q) => q.eq("studentId", user._id))
-          .collect()
-          .then((rows) => rows.find((c) => c.courseId === lesson.courseId));
-        if (course && !existing) {
-          const certificateId = makeCertificateId();
-          await ctx.db.insert("certificates", {
-            certificateId,
-            studentId: user._id,
-            courseId: course._id,
-            issuedAt: Date.now(),
-            studentName: user.name || "Student",
-            courseTitle: course.title,
-          });
-          await ctx.db.patch(user._id, {
-            badges: [...(user.badges ?? []).filter((b) => b !== course.title), course.title],
-          });
-          await notify(ctx, {
-            userId: user._id,
-            title: "Course completed! 🎉",
-            body: `You earned a certificate for "${course.title}". Show it off — it's verifiable.`,
-            type: "certificate",
-            link: "/dashboard/certificates",
-          });
-        }
-      }
-    }
+    await completeLessonInternal(ctx, user, lessonId);
     return true;
+  },
+});
+
+/**
+ * Everything the Learn page needs per lesson: watch %, optional quiz + pass
+ * state, completion and lock state, plus the final exam + attempts.
+ */
+export const lessonStates = query({
+  args: { courseId: v.id("courses") },
+  handler: async (ctx, { courseId }) => {
+    const user = await requireUser(ctx);
+    const enrollment = await enrollmentFor(ctx, user, courseId);
+    const lessons = await ctx.db
+      .query("lessons")
+      .withIndex("by_course", (q) => q.eq("courseId", courseId))
+      .collect();
+    const sorted = [...lessons].sort((a, b) => a.order - b.order);
+    const watchRows = enrollment
+      ? await ctx.db
+          .query("watchProgress")
+          .withIndex("by_student_course", (q) =>
+            q.eq("studentId", user).eq("courseId", courseId),
+          )
+          .collect()
+      : [];
+    const quizzes = await ctx.db
+      .query("lessonQuizzes")
+      .withIndex("by_course", (q) => q.eq("courseId", courseId))
+      .collect();
+    const attempts = await ctx.db
+      .query("lessonQuizAttempts")
+      .withIndex("by_student", (q) => q.eq("studentId", user))
+      .collect();
+    const exam = await ctx.db
+      .query("finalExams")
+      .withIndex("by_course", (q) => q.eq("courseId", courseId))
+      .first();
+    const examAttempts = await ctx.db
+      .query("finalExamAttempts")
+      .withIndex("by_student", (q) => q.eq("studentId", user))
+      .collect();
+
+    const completedSet = new Set(enrollment?.completedLessons ?? []);
+    return {
+      enrollment: enrollment ?? null,
+      lessons: sorted.map((l, idx) => {
+        const quiz = quizzes.find((qz) => qz.lessonId === l._id);
+        return {
+          lesson: l,
+          watchedPercent: watchRows.find((w) => w.lessonId === l._id)?.percent ?? 0,
+          quiz:
+            quiz?.published
+              ? {
+                  _id: quiz._id,
+                  title: quiz.title,
+                  description: quiz.description,
+                  passPercent: quiz.passPercent,
+                  timeLimitMinutes: quiz.timeLimitMinutes,
+                  questions: quiz.questions,
+                }
+              : null,
+          quizPassed: quiz?.published
+            ? attempts.some((a) => a.quizId === quiz._id && a.passed)
+            : false,
+          completed: completedSet.has(l._id),
+          locked: idx > 0 && !completedSet.has(sorted[idx - 1]._id),
+        };
+      }),
+      exam:
+        exam?.published
+          ? {
+              ...exam,
+              attempts: examAttempts.filter((a) => a.examId === exam._id),
+            }
+          : null,
+      allLessonsComplete:
+        sorted.length > 0 && completedSet.size >= sorted.length,
+    };
   },
 });
 

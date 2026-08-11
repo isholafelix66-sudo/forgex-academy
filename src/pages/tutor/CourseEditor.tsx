@@ -9,17 +9,22 @@ import {
   FileText,
   ListChecks,
   Loader2,
+  Mic,
   PlayCircle,
   Plus,
   Save,
+  Sparkles,
   Trash2,
+  Trophy,
   Video,
   X,
 } from "lucide-react";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import {
   Dialog,
@@ -107,6 +112,50 @@ const emptyAssignment: AssignmentDraft = {
   deadline: "",
   maxScore: 100,
   files: [],
+};
+
+type LessonQuizDraft = {
+  id?: string;
+  lessonId: string;
+  title: string;
+  description: string;
+  passPercent: number;
+  timeLimitMinutes: number;
+  published: boolean;
+  questions: QuestionDraft[];
+};
+
+const emptyLessonQuiz = (lessonId: string): LessonQuizDraft => ({
+  lessonId,
+  title: "Lesson quiz",
+  description: "Quick check after watching the video.",
+  passPercent: 70,
+  timeLimitMinutes: 10,
+  published: false,
+  questions: [],
+});
+
+type ExamDraft = {
+  id?: string;
+  title: string;
+  description: string;
+  questionCount: number;
+  totalMarks: number;
+  passPercent: number;
+  timeLimitMinutes: number;
+  published: boolean;
+  questions: QuestionDraft[];
+};
+
+const emptyExam: ExamDraft = {
+  title: "Final exam",
+  description: "Covers the whole course.",
+  questionCount: 10,
+  totalMarks: 100,
+  passPercent: 60,
+  timeLimitMinutes: 30,
+  published: false,
+  questions: [],
 };
 
 // ---------------------------------------------------------------------------
@@ -328,6 +377,120 @@ function DetailsForm({ courseId, initial }: { courseId?: string; initial?: Cours
 }
 
 // ---------------------------------------------------------------------------
+// Shared question editor (per-lesson quizzes + final exam)
+// ---------------------------------------------------------------------------
+function QuestionEditor({
+  questions,
+  onChange,
+}: {
+  questions: QuestionDraft[];
+  onChange: (q: QuestionDraft[]) => void;
+}) {
+  const patch = (i: number, p: Partial<QuestionDraft>) =>
+    onChange(questions.map((q, j) => (j === i ? { ...q, ...p } : q)));
+  const add = () =>
+    onChange([
+      ...questions,
+      { type: "multiple-choice", question: "", options: ["", "", "", ""], answer: "", points: 1, explanation: "" },
+    ]);
+
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center justify-between">
+        <Label>Questions ({questions.length})</Label>
+        <Button variant="outline" size="sm" className="gap-1 border-white/15" onClick={add}>
+          <Plus className="size-3.5" /> Add question
+        </Button>
+      </div>
+
+      {questions.map((q, i) => (
+        <div key={i} className="rounded-xl border border-white/10 bg-black/20 p-4">
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-xs font-semibold uppercase tracking-wider text-lime-300/80">Q{i + 1}</span>
+            <div className="flex items-center gap-2">
+              <select
+                value={q.type}
+                onChange={(e) => patch(i, { type: e.target.value as QuestionDraft["type"] })}
+                className="h-8 rounded-lg border border-white/10 bg-black/30 px-2 text-xs outline-none"
+              >
+                <option value="multiple-choice">Multiple choice</option>
+                <option value="true-false">True / False</option>
+                <option value="short-answer">Short answer</option>
+              </select>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="size-8 text-muted-foreground hover:text-rose-300"
+                onClick={() => onChange(questions.filter((_, j) => j !== i))}
+              >
+                <Trash2 className="size-3.5" />
+              </Button>
+            </div>
+          </div>
+          <Input
+            value={q.question}
+            onChange={(e) => patch(i, { question: e.target.value })}
+            placeholder="Question text…"
+            className="mt-2 border-white/10 bg-black/30"
+          />
+          {q.type === "multiple-choice" && (
+            <div className="mt-2 space-y-1.5">
+              {q.options.map((opt, oi) => (
+                <div key={oi} className="flex gap-1.5">
+                  <Input
+                    value={opt}
+                    onChange={(e) =>
+                      patch(i, { options: q.options.map((o, j) => (j === oi ? e.target.value : o)) })
+                    }
+                    placeholder={`Option ${String.fromCharCode(65 + oi)}`}
+                    className="border-white/10 bg-black/30"
+                  />
+                  {q.answer === opt ? (
+                    <span className="flex items-center rounded-lg bg-lime-400/15 px-2 text-xs font-bold text-lime-300">✓</span>
+                  ) : (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="text-[11px] text-muted-foreground"
+                      onClick={() => patch(i, { answer: opt })}
+                    >
+                      Set
+                    </Button>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+          {q.type !== "multiple-choice" && (
+            <Input
+              value={q.answer}
+              onChange={(e) => patch(i, { answer: e.target.value })}
+              placeholder={q.type === "true-false" ? "True or False" : "Correct answer (used for reference)"}
+              className="mt-2 border-white/10 bg-black/30"
+            />
+          )}
+          <div className="mt-2 grid grid-cols-[90px_1fr] gap-2">
+            <Input
+              type="number"
+              value={q.points}
+              onChange={(e) => patch(i, { points: Number(e.target.value) })}
+              placeholder="Pts"
+              className="border-white/10 bg-black/30"
+            />
+            <Input
+              value={q.explanation}
+              onChange={(e) => patch(i, { explanation: e.target.value })}
+              placeholder="Explanation shown after grading (optional)"
+              className="border-white/10 bg-black/30"
+            />
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Lessons tab
 // ---------------------------------------------------------------------------
 function LessonsTab({ courseId }: { courseId: string }) {
@@ -337,9 +500,21 @@ function LessonsTab({ courseId }: { courseId: string }) {
   const createUpload = useAction(api.mux.createUpload);
   const getPlaybackId = useAction(api.mux.getPlaybackId);
   const recordVideo = useMutation(api.media.recordVideo);
+  const lessonQuizzes = useQuery(api.lessonquizzes.courseLessonQuizzesFull, {
+    courseId: courseId as never,
+  });
+  const upsertLessonQuiz = useMutation(api.lessonquizzes.upsertLessonQuiz);
+  const deleteLessonQuiz = useMutation(api.lessonquizzes.deleteLessonQuiz);
+  const generateQuizQuestions = useAction(api.quizgen.generateQuizQuestions);
+  const transcribeVideo = useAction(api.quizgen.transcribeVideo);
   const [draft, setDraft] = useState<LessonDraft | null>(null);
   const [saving, setSaving] = useState(false);
   const [mediaMode, setMediaMode] = useState<"image" | "video" | "url">("url");
+  const [quizDraft, setQuizDraft] = useState<LessonQuizDraft | null>(null);
+  const [quizSaving, setQuizSaving] = useState(false);
+  const [quizGenerating, setQuizGenerating] = useState(false);
+  const [genSource, setGenSource] = useState<string | null>(null);
+  const [transcribing, setTranscribing] = useState(false);
 
   // Mux direct-upload flow state
   const [uploadUrl, setUploadUrl] = useState<string | null>(null);
@@ -486,6 +661,145 @@ function LessonsTab({ courseId }: { courseId: string }) {
     });
     setSaving(false);
     setDraft(null);
+  };
+
+  const existingQuizForDraft =
+    draft?.id
+      ? lessonQuizzes?.find((q) => String(q.lessonId) === draft.id) ?? null
+      : null;
+
+  const openQuizEditor = (q?: NonNullable<typeof lessonQuizzes>[number]) => {
+    if (!draft?.id) return;
+    setGenSource(null);
+    setQuizDraft(
+      q
+        ? {
+            id: q._id,
+            lessonId: String(q.lessonId),
+            title: q.title,
+            description: q.description,
+            passPercent: q.passPercent,
+            timeLimitMinutes: q.timeLimitMinutes,
+            published: q.published,
+            questions: q.questions.map((x) => ({
+              type: x.type as QuestionDraft["type"],
+              question: x.question,
+              options: x.options ?? [],
+              answer: x.answer ?? "",
+              points: x.points ?? 1,
+              explanation: x.explanation ?? "",
+            })),
+          }
+        : emptyLessonQuiz(draft.id),
+    );
+  };
+
+  const handleSaveQuiz = async () => {
+    if (!quizDraft || quizDraft.questions.length === 0) {
+      toast.error("Add at least one question before saving the quiz.");
+      return;
+    }
+    setQuizSaving(true);
+    try {
+      await upsertLessonQuiz({
+        id: quizDraft.id ? (quizDraft.id as never) : undefined,
+        courseId: courseId as never,
+        lessonId: quizDraft.lessonId as never,
+        title: quizDraft.title || "Lesson quiz",
+        description: quizDraft.description,
+        passPercent: Number(quizDraft.passPercent) || 70,
+        timeLimitMinutes: Number(quizDraft.timeLimitMinutes) || 10,
+        questions: quizDraft.questions
+          .filter((q) => q.question.trim())
+          .map((q) => ({
+            type: q.type,
+            question: q.question,
+            options: q.type === "multiple-choice" ? q.options.filter(Boolean) : undefined,
+            answer: q.answer || undefined,
+            points: Number(q.points) || 1,
+            explanation: q.explanation || undefined,
+          })),
+        published: quizDraft.published,
+      });
+      toast.success(quizDraft.id ? "Quiz updated" : "Quiz added to the lesson");
+      setQuizDraft(null);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Could not save the quiz.");
+    }
+    setQuizSaving(false);
+  };
+
+  const handleDeleteQuiz = async (id: string) => {
+    try {
+      await deleteLessonQuiz({ id: id as never });
+      toast.success("Quiz removed");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Could not remove the quiz.");
+    }
+  };
+
+  const handleAiGenerate = async () => {
+    if (!quizDraft) return;
+    setQuizGenerating(true);
+    setGenSource(null);
+    try {
+      const res = await generateQuizQuestions({
+        courseId: courseId as never,
+        scope: "lesson",
+        lessonId: quizDraft.lessonId as never,
+        count: 5,
+      });
+      setQuizDraft((d) =>
+        d
+          ? {
+              ...d,
+              questions: res.questions.map((x) => ({
+                type: x.type as QuestionDraft["type"],
+                question: x.question,
+                options: x.options ?? [],
+                answer: x.answer ?? "",
+                points: 1,
+                explanation: x.explanation ?? "",
+              })),
+            }
+          : d,
+      );
+      setGenSource(res.source);
+      toast.success(`Generated ${res.questions.length} suggested questions from the ${res.source}.`);
+    } catch (err) {
+      toast.error(
+        err instanceof Error
+          ? err.message
+          : "Question generation failed — is AI configured?",
+      );
+    }
+    setQuizGenerating(false);
+  };
+
+  const handleTranscribe = async () => {
+    if (!draft) return;
+    const url = draft.muxPlaybackId
+      ? `https://stream.mux.com/${draft.muxPlaybackId}/high.mp4`
+      : draft.videoType === "mp4"
+        ? draft.videoUrl
+        : null;
+    if (!url) {
+      toast.error("Add an MP4 video (or Mux upload) first, then transcribe.");
+      return;
+    }
+    setTranscribing(true);
+    try {
+      const res = await transcribeVideo({
+        courseId: courseId as never,
+        lessonId: (draft.id ?? "") as never,
+        url,
+      });
+      setDraft((d) => (d ? { ...d, transcript: res.text } : d));
+      toast.success("Transcript generated — review it below, then save the lesson.");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Transcription failed.");
+    }
+    setTranscribing(false);
   };
 
   return (
