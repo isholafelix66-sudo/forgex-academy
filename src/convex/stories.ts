@@ -328,6 +328,34 @@ export const deleteStory = mutation({
   },
 });
 
+/** Delete EVERY story (admin-only) — a one-shot way to clear demo/test
+ *  submissions from the moderation queue, homepage and public page. Stored
+ *  photos are removed best-effort alongside the rows. */
+export const deleteAllStories = mutation({
+  args: { token: v.string() },
+  handler: async (ctx, { token }) => {
+    await requireAdminSession(ctx, token);
+    const rows = await ctx.db.query("studentStories").collect();
+    for (const story of rows) {
+      if (story.photoStorageId) {
+        try {
+          await ctx.storage.delete(story.photoStorageId);
+        } catch {
+          // Already gone — nothing to clean up.
+        }
+      }
+      await ctx.db.delete(story._id);
+    }
+    if (rows.length > 0) {
+      await adminLog(
+        ctx,
+        "stories-cleared",
+        `Deleted all ${rows.length} student stories`,      );
+    }
+    return rows.length;
+  },
+});
+
 /** Feature / unfeature a story for the homepage. Only approved stories can
  *  be featured — hard-enforced server-side, so a pending or rejected story
  *  can never leak onto the homepage no matter what the client sends. */

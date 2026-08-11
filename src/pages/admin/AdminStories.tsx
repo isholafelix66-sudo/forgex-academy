@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useMutation, useQuery } from "convex/react";
+import { toast } from "sonner";
 import { api } from "@/convex/_generated/api";
 import {
   CheckCircle2,
@@ -10,7 +11,6 @@ import {
   Save,
   Star,
   Trash2,
-  X,
   XCircle,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -18,6 +18,17 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 import { PageHeader } from "@/components/dash/PageHeader";
 import { Avatar } from "@/components/site/Avatar";
 import { SafeImage } from "@/components/site/SafeImage";
@@ -58,9 +69,9 @@ function StatusBadge({ status }: { status: Status }) {
 function StoriesManager() {
   const token = getAdminToken() ?? "";
   const [filter, setFilter] = useState<Status | "all">("all");
-  const [confirmingDelete, setConfirmingDelete] = useState<string | null>(null);
   const [editing, setEditing] = useState<Story | null>(null);
   const [saving, setSaving] = useState(false);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
 
   const stories = useQuery(
     api.stories.storiesList,
@@ -69,7 +80,34 @@ function StoriesManager() {
   const reviewStory = useMutation(api.stories.reviewStory);
   const setStoryFeatured = useMutation(api.stories.setStoryFeatured);
   const deleteStory = useMutation(api.stories.deleteStory);
+  const deleteAllStories = useMutation(api.stories.deleteAllStories);
   const updateStory = useMutation(api.stories.updateStory);
+
+  const handleDelete = async (id: string) => {
+    setDeletingId(id);
+    try {
+      await deleteStory({ token, id: id as never });
+      toast.success("Story deleted.");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Couldn't delete the story. Try again.");
+    } finally {
+      setDeletingId(null);
+    }
+  };
+
+  const handleDeleteAll = async () => {
+    setDeletingId("all");
+    try {
+      const count = await deleteAllStories({ token });
+      toast.success(
+        count > 0 ? `Deleted ${count} story${count === 1 ? "" : "s"}.` : "No stories to delete.",
+      );
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Couldn't clear stories. Try again.");
+    } finally {
+      setDeletingId(null);
+    }
+  };
 
   const [draftName, setDraftName] = useState("");
   const [draftCourse, setDraftCourse] = useState("");
@@ -127,21 +165,63 @@ function StoriesManager() {
         }
       />
 
-      {/* Status filter */}
-      <div className="mb-5 flex flex-wrap gap-2">
-        {FILTERS.map((f) => (
-          <button
-            key={f.key}
-            onClick={() => setFilter(f.key)}
-            className={`rounded-full border px-4 py-1.5 text-sm font-medium transition-colors ${
-              filter === f.key
-                ? "border-lime-400/40 bg-lime-400/12 text-lime-300"
-                : "border-white/10 text-muted-foreground hover:border-white/20 hover:text-foreground"
-            }`}
-          >
-            {f.label}
-          </button>
-        ))}
+      {/* Status filter + bulk clear */}
+      <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
+        <div className="flex flex-wrap gap-2">
+          {FILTERS.map((f) => (
+            <button
+              key={f.key}
+              onClick={() => setFilter(f.key)}
+              className={`rounded-full border px-4 py-1.5 text-sm font-medium transition-colors ${
+                filter === f.key
+                  ? "border-lime-400/40 bg-lime-400/12 text-lime-300"
+                  : "border-white/10 text-muted-foreground hover:border-white/20 hover:text-foreground"
+              }`}
+            >
+              {f.label}
+            </button>
+          ))}
+        </div>
+
+        {stories !== undefined && stories.length > 0 && (
+          <AlertDialog>
+            <AlertDialogTrigger asChild>
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={deletingId !== null}
+                className="gap-1.5 border-rose-400/30 text-rose-300 hover:bg-rose-400/10 hover:text-rose-200"
+              >
+                {deletingId === "all" ? (
+                  <Loader2 className="size-3.5 animate-spin" />
+                ) : (
+                  <Trash2 className="size-3.5" />
+                )}
+                <span className="hidden sm:inline">Clear all stories</span>
+                <span className="sm:hidden">Clear all</span>
+              </Button>
+            </AlertDialogTrigger>
+            <AlertDialogContent className="border-white/10 bg-card">
+              <AlertDialogHeader>
+                <AlertDialogTitle className="font-display">Delete every story?</AlertDialogTitle>
+                <AlertDialogDescription>
+                  This permanently deletes all {stories.length} student storie(s) — including the ones
+                  shown on the homepage and the public stories page. Their photos are removed too. This
+                  can't be undone.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel className="border-white/15">Cancel</AlertDialogCancel>
+                <AlertDialogAction
+                  className="gap-2 bg-rose-500 font-semibold text-white hover:bg-rose-600"
+                  onClick={() => void handleDeleteAll()}
+                >
+                  <Trash2 className="size-4" /> Delete everything
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
+        )}
       </div>
 
       {stories === undefined ? (
@@ -239,29 +319,47 @@ function StoriesManager() {
                   <Button variant="ghost" size="sm" className="text-muted-foreground hover:text-lime-300" onClick={() => openEdit(s)}>
                     <Pencil className="size-4" /> <span className="hidden sm:inline">Edit</span>
                   </Button>
-                  {confirmingDelete === s._id ? (
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="gap-1.5 bg-rose-500/15 text-rose-300 hover:bg-rose-500/25"
-                      onClick={() => {
-                        void deleteStory({ token, id: s._id as never });
-                        setConfirmingDelete(null);
-                      }}
-                      onBlur={() => setConfirmingDelete(null)}
-                    >
-                      <X className="size-4" /> Confirm?
-                    </Button>
-                  ) : (
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="text-muted-foreground hover:text-rose-300"
-                      onClick={() => setConfirmingDelete(s._id)}
-                    >
-                      <Trash2 className="size-4" />
-                    </Button>
-                  )}
+                  <AlertDialog>
+                    <AlertDialogTrigger asChild>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        disabled={deletingId !== null}
+                        className="text-muted-foreground hover:text-rose-300"
+                        title="Delete story"
+                      >
+                        {deletingId === s._id ? (
+                          <Loader2 className="size-4 animate-spin" />
+                        ) : (
+                          <Trash2 className="size-4" />
+                        )}
+                      </Button>
+                    </AlertDialogTrigger>
+                    <AlertDialogContent className="border-white/10 bg-card">
+                      <AlertDialogHeader>
+                        <AlertDialogTitle className="font-display">Delete this story?</AlertDialogTitle>
+                        <AlertDialogDescription>
+                          This permanently removes {s.name}&rsquo;s story
+                          {s.photoUrl ? " and their photo" : ""} from ForgeX — including from the
+                          homepage and public stories page. This can't be undone.
+                        </AlertDialogDescription>
+                      </AlertDialogHeader>
+                      <AlertDialogFooter>
+                        <AlertDialogCancel className="border-white/15">Cancel</AlertDialogCancel>
+                        <AlertDialogAction
+                          className="gap-2 bg-rose-500 font-semibold text-white hover:bg-rose-600"
+                          onClick={() => void handleDelete(s._id as never)}
+                        >
+                          {deletingId === s._id ? (
+                            <Loader2 className="size-4 animate-spin" />
+                          ) : (
+                            <Trash2 className="size-4" />
+                          )}{" "}
+                          Delete
+                        </AlertDialogAction>
+                      </AlertDialogFooter>
+                    </AlertDialogContent>
+                  </AlertDialog>
                 </div>
               </div>
 
