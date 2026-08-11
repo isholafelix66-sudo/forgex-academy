@@ -32,7 +32,7 @@ export function PublicNav() {
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 12);
     onScroll();
-    window.addEventListener("scroll", onScroll);
+    window.addEventListener("scroll", onScroll, { passive: true });
     return () => window.removeEventListener("scroll", onScroll);
   }, []);
 
@@ -85,11 +85,21 @@ export function PublicNav() {
         <div className="hidden items-center gap-2 md:flex">
           {isAuthenticated ? (
             <>
-              <Button variant="ghost" size="sm" onClick={() => navigate("/dashboard")}>
+              <Button
+                variant="ghost"
+                size="sm"
+                data-prefetch="/dashboard"
+                onClick={() => navigate("/dashboard")}
+              >
                 <LayoutDashboard className="mr-2 size-4" />
                 Dashboard
               </Button>
-              <Button variant="ghost" size="sm" onClick={() => navigate("/dashboard/profile")}>
+              <Button
+                variant="ghost"
+                size="sm"
+                data-prefetch="/dashboard/profile"
+                onClick={() => navigate("/dashboard/profile")}
+              >
                 <User className="mr-2 size-4" />
                 Profile
               </Button>
@@ -102,11 +112,17 @@ export function PublicNav() {
             </>
           ) : (
             <>
-              <Button variant="ghost" size="sm" onClick={() => navigate("/auth?mode=signin")}>
+              <Button
+                variant="ghost"
+                size="sm"
+                data-prefetch="/auth"
+                onClick={() => navigate("/auth?mode=signin")}
+              >
                 Login
               </Button>
               <Button
                 size="sm"
+                data-prefetch="/auth"
                 className="bg-lime-400 font-semibold text-black hover:bg-lime-300 glow-lime-soft"
                 onClick={() => navigate("/auth?mode=signup")}
               >
@@ -138,10 +154,19 @@ export function PublicNav() {
             <div className="mt-2 flex flex-col gap-2 border-t border-white/10 pt-3">
               {isAuthenticated ? (
                 <>
-                  <Button className="w-full" onClick={() => navigate("/dashboard")}>
+                  <Button
+                    className="w-full"
+                    data-prefetch="/dashboard"
+                    onClick={() => navigate("/dashboard")}
+                  >
                     Dashboard
                   </Button>
-                  <Button variant="outline" className="w-full" onClick={() => navigate("/dashboard/profile")}>
+                  <Button
+                    variant="outline"
+                    className="w-full"
+                    data-prefetch="/dashboard/profile"
+                    onClick={() => navigate("/dashboard/profile")}
+                  >
                     Profile
                   </Button>
                   <Button variant="outline" className="w-full text-rose-300" onClick={handleSignOut}>
@@ -150,10 +175,19 @@ export function PublicNav() {
                 </>
               ) : (
                 <>
-                  <Button variant="outline" className="w-full" onClick={() => navigate("/auth?mode=signin")}>
+                  <Button
+                    variant="outline"
+                    className="w-full"
+                    data-prefetch="/auth"
+                    onClick={() => navigate("/auth?mode=signin")}
+                  >
                     Login
                   </Button>
-                  <Button className="w-full" onClick={() => navigate("/auth?mode=signup")}>
+                  <Button
+                    className="w-full"
+                    data-prefetch="/auth"
+                    onClick={() => navigate("/auth?mode=signup")}
+                  >
                     Sign up
                   </Button>
                 </>

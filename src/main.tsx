@@ -8,11 +8,13 @@ import { RequireTutor } from "@/components/RequireRole";
 import { VlyToolbar } from "../vly-toolbar-readonly.tsx";
 import { ConvexAuthProvider } from "@convex-dev/auth/react";
 import { ConvexReactClient } from "convex/react";
-import React, { StrictMode, useEffect, lazy, Suspense } from "react";
+import React, { StrictMode, useEffect, lazy, Suspense, useState } from "react";
 import { RefreshCw } from "lucide-react";
 import { createRoot } from "react-dom/client";
 import { BrowserRouter, Route, Routes, useLocation } from "react-router";
 import "./index.css";
+import { attachRoutePrefetch } from "@/lib/prefetch";
+import { registerServiceWorker } from "@/lib/sw";
 
 // ---------------------------------------------------------------------------
 // Public pages
@@ -84,11 +86,17 @@ const AdminChat = lazy(() => import("./pages/admin/AdminChat.tsx"));
 const AdminInbox = lazy(() => import("./pages/admin/AdminInbox.tsx"));
 const AdminCoursePreview = lazy(() => import("./pages/admin/AdminCoursePreview.tsx"));
 
-// Simple loading fallback for route transitions
+// Compact spinner fallback for lazy route transitions — matches the brand
+// and avoids the layout shift of a full-page text swap.
 function RouteLoading() {
   return (
-    <div className="min-h-screen flex items-center justify-center">
-      <div className="animate-pulse text-muted-foreground">Loading...</div>
+    <div className="flex min-h-screen items-center justify-center bg-background">
+      <div className="flex flex-col items-center gap-3">
+        <div className="size-9 animate-spin rounded-full border-2 border-lime-400/20 border-t-lime-400" />
+        <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">
+          ForgeX
+        </p>
+      </div>
     </div>
   );
 }
@@ -322,6 +330,44 @@ function RouteSyncer() {
   return null;
 }
 
+// ---------------------------------------------------------------------------
+// Offline indicator + boot-time hooks
+// ---------------------------------------------------------------------------
+
+/** Small pill that appears when the connection drops, so a cached/offline
+ *  session (service worker serving the app shell) never feels broken. */
+function OfflineBadge() {
+  const [offline, setOffline] = useState(
+    () => (typeof navigator === "undefined" ? false : !navigator.onLine),
+  );
+
+  useEffect(() => {
+    const goOffline = () => setOffline(true);
+    const goOnline = () => setOffline(false);
+    window.addEventListener("offline", goOffline);
+    window.addEventListener("online", goOnline);
+    return () => {
+      window.removeEventListener("offline", goOffline);
+      window.removeEventListener("online", goOnline);
+    };
+  }, []);
+
+  if (!offline) return null;
+
+  return (
+    <div className="fixed bottom-20 left-1/2 z-[70] -translate-x-1/2 rounded-full border border-lime-400/25 bg-black/90 px-4 py-1.5 text-xs font-medium text-lime-300 shadow-lg shadow-black/40 backdrop-blur">
+      You&rsquo;re offline — showing the saved version
+    </div>
+  );
+}
+
+// Fast navigation: warm up lazy route chunks on hover/focus/touch.
+attachRoutePrefetch();
+
+// Offline support: install the app-shell service worker. Best-effort — it
+// skips silently in sandboxed iframes and older browsers.
+registerServiceWorker();
+
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
     <RootErrorBoundary>
@@ -338,6 +384,7 @@ createRoot(document.getElementById("root")!).render(
         <Suspense fallback={null}>
           <LazyFloatingChat />
         </Suspense>
+        <OfflineBadge />
         <BrowserRouter>
           <RouteSyncer />
           <Suspense fallback={<RouteLoading />}>

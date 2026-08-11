@@ -1,4 +1,6 @@
-@import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Space+Grotesk:wght@500;600;700&display=swap");
+/* Google Fonts are loaded from index.html (preconnect + non-blocking
+   stylesheet) so they fetch in parallel with the app bundle instead of
+   blocking CSS parsing here. */
 @import "tailwindcss";
 @import "tw-animate-css";
 @custom-variant dark (&:is(.dark *));
@@ -121,6 +123,18 @@
   }
   html {
     scroll-behavior: smooth;
+    -webkit-text-size-adjust: 100%;
+  }
+  /* Instant taps: no double-tap-zoom delay on interactive elements, and a
+     fast on-brand lime tap flash instead of the default grey overlay. */
+  a,
+  button,
+  [role="button"],
+  input,
+  select,
+  textarea {
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: oklch(0.868 0.216 129.5 / 0.18);
   }
   body {
     @apply bg-background text-foreground antialiased;
