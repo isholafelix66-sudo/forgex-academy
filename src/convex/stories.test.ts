@@ -1,12 +1,20 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 // Mock Convex Auth's server helper: tests control who (if anyone) is signed
-// in for submitStory / myStories.
-vi.mock("@convex-dev/auth/server", () => ({
-  getAuthUserId: vi.fn(),
-}));
+// in for submitStory / myStories. Keep the module's real exports (e.g.
+// `authTables`, which the imported schema needs) and stub only the function
+// under test.
+vi.mock("@convex-dev/auth/server", async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import("@convex-dev/auth/server")>();
+  return {
+    ...actual,
+    getAuthUserId: vi.fn(),
+  };
+});
 
 import { getAuthUserId } from "@convex-dev/auth/server";
+import type { Id } from "./_generated/dataModel";
 import * as stories from "./stories";
 
 const mockGetAuthUserId = vi.mocked(getAuthUserId);
@@ -170,7 +178,7 @@ describe("submitStory", () => {
   });
 
   it("links the submitter when signed in", async () => {
-    mockGetAuthUserId.mockResolvedValue("user_123");
+    mockGetAuthUserId.mockResolvedValue("user_123" as Id<"users">);
     const db = makeDb();
     const ctx = makeCtx(db);
     const story = (await call(stories.submitStory, ctx, validStory)) as Row;
@@ -188,7 +196,7 @@ describe("submitStory", () => {
   });
 
   it("rate-limits signed-in users (3 per day)", async () => {
-    mockGetAuthUserId.mockResolvedValue("user_123");
+    mockGetAuthUserId.mockResolvedValue("user_123" as Id<"users">);
     const db = makeDb();
     const ctx = makeCtx(db);
     for (let i = 0; i < 3; i++) {
@@ -262,7 +270,7 @@ describe("public story queries", () => {
   });
 
   it("myStories returns only the signed-in user's rows", async () => {
-    mockGetAuthUserId.mockResolvedValue("user_7");
+    mockGetAuthUserId.mockResolvedValue("user_7" as Id<"users">);
     const db = makeDb();
     db.insert("studentStories", {
       ...validStory,

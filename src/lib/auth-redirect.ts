@@ -7,7 +7,7 @@
  * tested in `src/lib/auth-redirect.test.ts`.
  */
 export function resolveRedirectAfterAuth(
-  returnTo: string | null,
+  returnTo: string | null | undefined,
   fallback = "/dashboard",
 ) {
   if (
