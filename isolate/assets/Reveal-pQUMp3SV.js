@@ -1,1 +1,0 @@
-import{u as r,j as t,m as u}from"./framer-motion-DlTpVlmd.js";function p({children:i,delay:o=0,y:n=26,className:e}){return r()?t.jsx("div",{className:e,children:i}):t.jsx(u.div,{initial:{opacity:0,y:n},whileInView:{opacity:1,y:0},viewport:{once:!0,margin:"-70px"},transition:{duration:.6,delay:o,ease:[.22,1,.36,1]},className:e,children:i})}export{p as R};
