@@ -530,7 +530,9 @@ export function ForgeXMotionVideo({ title = "ForgeX in two minutes" }: { title?:
   useEffect(() => {
     try {
       if (playing && !ended) {
-        if (!musicRef.current) musicRef.current = createMotionMusic();
+        if (!musicRef.current || musicRef.current.disposed) {
+          musicRef.current = createMotionMusic();
+        }
         musicRef.current?.resume();
       } else {
         musicRef.current?.suspend();
@@ -562,13 +564,20 @@ export function ForgeXMotionVideo({ title = "ForgeX in two minutes" }: { title?:
     return () => document.removeEventListener("visibilitychange", onVisibility);
   }, [playing, ended]);
 
-  // Free the audio graph on unmount.
+  // Free the audio graph on unmount. Cleanup-only: running this body on
+  // mount would close the context right after the music effect creates it,
+  // and the next resume() on that closed context is exactly the crash we're
+  // guarding against. Nulling the ref also lets a StrictMode remount start
+  // with a fresh context instead of reusing a dead one.
   useEffect(() => {
-    try {
-      musicRef.current?.dispose();
-    } catch {
-      // ignore
-    }
+    return () => {
+      try {
+        musicRef.current?.dispose();
+      } catch {
+        // ignore
+      }
+      musicRef.current = null;
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 

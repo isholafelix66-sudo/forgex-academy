@@ -33,7 +33,9 @@ function ensureCtx(): AudioContext | null {
         .webkitAudioContext;
     if (!AC) return null;
     if (!audioCtx) audioCtx = new AC();
-    if (audioCtx.state === "suspended") void audioCtx.resume();
+    if (audioCtx.state === "suspended") {
+      void audioCtx.resume().catch(() => {});
+    }
     return audioCtx;
   } catch {
     // Audio unavailable in this environment (e.g. restricted iframe) — the

@@ -16,6 +16,8 @@ export type MotionMusic = {
   suspend: () => void;
   setMuted: (muted: boolean) => void;
   dispose: () => void;
+  /** True once dispose() has run — callers should recreate instead of reusing. */
+  readonly disposed: boolean;
 };
 
 export function createMotionMusic(): MotionMusic | null {
@@ -164,19 +166,35 @@ export function createMotionMusic(): MotionMusic | null {
     }
   }, 120);
 
+  // Once closed, every AudioContext call throws or rejects — remember it so
+  // stale handles (StrictMode double-mount, late play/pause taps, tab
+  // visibility toggles) no-op instead of surfacing “Cannot resume/close a
+  // closed AudioContext”. Promise rejections are swallowed explicitly too,
+  // since `resume()`/`close()` on a closed context reject asynchronously and
+  // an unhandled rejection would still crash the app.
+  let disposed = false;
+
   return {
+    get disposed() {
+      return disposed;
+    },
     resume() {
-      if (ctx.state !== "running") void ctx.resume();
+      if (disposed || ctx.state === "closed") return;
+      if (ctx.state !== "running") ctx.resume().catch(() => {});
     },
     suspend() {
-      if (ctx.state === "running") void ctx.suspend();
+      if (disposed || ctx.state !== "running") return;
+      ctx.suspend().catch(() => {});
     },
     setMuted(muted: boolean) {
+      if (disposed || ctx.state === "closed") return;
       muteGain.gain.setTargetAtTime(muted ? 0 : 1, ctx.currentTime, 0.05);
     },
     dispose() {
+      if (disposed) return;
+      disposed = true;
       window.clearInterval(timer);
-      void ctx.close();
+      if (ctx.state !== "closed") ctx.close().catch(() => {});
     },
   };
 }
