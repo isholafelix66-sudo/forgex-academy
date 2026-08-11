@@ -304,6 +304,14 @@ function Building({
       >
         <sphereGeometry args={[0.075, 10, 8]} />
       </mesh>
+
+      {/* invisible tap pad — a generous, forgiving target around the space
+          so thumbs can hit it easily on small screens (events bubble to the
+          group handlers above) */}
+      <mesh position={[0, 0.22, 0]}>
+        <cylinderGeometry args={[1.35, 1.35, 0.5, 20]} />
+        <meshBasicMaterial transparent opacity={0} depthWrite={false} />
+      </mesh>
     </group>
   );
 }
@@ -377,7 +385,7 @@ function Tree({ angle, scale }: { angle: number; scale: number }) {
 /* ------------------------------------------------------------------ */
 
 function CameraRig({ mobile, reduced }: { mobile: boolean; reduced: boolean }) {
-  const { camera } = useThree();
+  const { camera, size } = useThree();
   const target = useMemo(() => new THREE.Vector3(), []);
 
   useFrame((state, dt) => {
@@ -388,8 +396,10 @@ function CameraRig({ mobile, reduced }: { mobile: boolean; reduced: boolean }) {
     const idleX = reduced ? 0 : Math.sin(t * 0.16) * 0.5;
     const idleY = reduced ? 0 : Math.cos(t * 0.12) * 0.22;
     const tx = px * 1.4 + idleX;
-    const ty = (mobile ? 7.7 : 8.1) + py * 0.5 + idleY;
-    const tz = mobile ? 13.4 : 11.8;
+    const ty = (mobile ? 7.6 : 8.1) + py * 0.5 + idleY;
+    // Pull back further on narrow screens so the whole campus fits.
+    const aspect = size.width / Math.max(1, size.height);
+    const tz = mobile ? Math.max(12.4, 12.4 + (1.9 - aspect) * 1.1) : 11.8;
     target.set(tx, ty, tz);
     camera.position.lerp(target, k);
     camera.lookAt(0, 1.1, 0);
@@ -428,9 +438,16 @@ function LabelProjector({
       const active = hoverIdxRef.current === i;
       el.style.opacity = active ? "1" : "0.8";
       const scale = active ? 1.07 : 1;
-      el.style.transform = `translate3d(${(v.x * 0.5 + 0.5) * size.width}px, ${
-        (-v.y * 0.5 + 0.5) * size.height
-      }px, 0) translate(-50%, -110%) scale(${scale})`;
+      // Clamp so pills never spill off the canvas on narrow screens.
+      const lx = Math.min(
+        Math.max((v.x * 0.5 + 0.5) * size.width, 60),
+        Math.max(60, size.width - 60),
+      );
+      const ly = Math.min(
+        Math.max((-v.y * 0.5 + 0.5) * size.height, 34),
+        Math.max(34, size.height - 18),
+      );
+      el.style.transform = `translate3d(${lx}px, ${ly}px, 0) translate(-50%, -110%) scale(${scale})`;
     }
   });
   return null;
@@ -484,12 +501,23 @@ function Campus({
     [pathMat, plazaMat],
   );
 
+  const { size } = useThree();
+
   // The whole campus turns slowly on its axis — clearly visible motion.
+  // (Slightly slower on touch so spaces are easier to tap.)
   useFrame((state) => {
     const g = campusRef.current;
     if (!g || reduced) return;
-    g.rotation.y = state.clock.elapsedTime * 0.1;
+    g.rotation.y = state.clock.elapsedTime * (mobile ? 0.07 : 0.1);
   });
+
+  // Fit the campus to the viewport: on narrow (portrait) screens the ring of
+  // spaces would clip at the edges, so scale it down proportionally.
+  const aspect = size.width / Math.max(1, size.height);
+  const campusScale = Math.min(1, Math.max(0.62, aspect / 1.95));
+  useEffect(() => {
+    if (campusRef.current) campusRef.current.scale.setScalar(campusScale);
+  }, [campusScale]);
 
   const handleHover = (i: number, info: { name: string; target: THREE.Object3D } | null) => {
     hoverIdxRef.current = info ? i : -1;
@@ -785,7 +813,7 @@ export function ForgeXLearningCommunity() {
   }
 
   return (
-    <div ref={containerRef} className="mx-auto mt-14 w-full max-w-4xl">
+    <div ref={containerRef} className="mx-auto mt-10 w-full max-w-4xl sm:mt-14">
       {/* eyebrow — small, outside the 3D scene */}
       <div className="mb-3 flex items-center justify-center gap-2.5">
         <span className="h-px w-8 bg-gradient-to-r from-transparent to-lime-400/60" />
@@ -812,7 +840,7 @@ export function ForgeXLearningCommunity() {
           }}
         />
 
-        <div className="relative h-72 w-full sm:h-[26rem]">
+        <div className="relative h-72 w-full select-none sm:h-[26rem]">
           {webgl === null ? (
             <div className="flex h-full items-center justify-center">
               <div className="size-8 animate-pulse rounded-full border-2 border-lime-400/30 border-t-lime-400" />
@@ -822,7 +850,7 @@ export function ForgeXLearningCommunity() {
               <Canvas
                 dpr={mobile ? [1, 1.5] : [1, 2]}
                 frameloop={visible ? "always" : "never"}
-                camera={{ position: [0, 8.1, 11.8], fov: 40 }}
+                camera={{ position: [0, 8.1, 11.8], fov: mobile ? 44 : 40 }}
                 gl={{ antialias: true, alpha: true }}
                 style={{ touchAction: "pan-y" }}
               >
@@ -867,8 +895,11 @@ export function ForgeXLearningCommunity() {
           ))}
         </div>
 
-        {/* hint — subtle, desktop only */}
-        <p className="pointer-events-none absolute bottom-3 left-1/2 hidden -translate-x-1/2 text-[10px] uppercase tracking-[0.22em] text-muted-foreground/60 sm:block">
+        {/* hints — mobile says tap, desktop says hover */}
+        <p className="pointer-events-none absolute bottom-3 left-1/2 -translate-x-1/2 whitespace-nowrap text-[10px] uppercase tracking-[0.22em] text-muted-foreground/60 sm:hidden">
+          Tap a space to explore
+        </p>
+        <p className="pointer-events-none absolute bottom-3 left-1/2 hidden -translate-x-1/2 whitespace-nowrap text-[10px] uppercase tracking-[0.22em] text-muted-foreground/60 sm:block">
           Hover a space to explore
         </p>
       </div>
