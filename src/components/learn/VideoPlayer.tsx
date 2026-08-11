@@ -1,5 +1,5 @@
-import { useEffect, useRef } from "react";
-import { PlayCircle } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { PlayCircle, RefreshCw, TriangleAlert } from "lucide-react";
 import MuxPlayer from "@mux/mux-player-react";
 
 export function youtubeId(url: string): string | null {
@@ -194,12 +194,64 @@ export function VideoPlayer({
     );
   }
 
+  return <NativeVideo url={url} poster={image ?? undefined} title={title ?? "Lesson video"} emit={emit} />;
+}
+
+/**
+ * Native <video> for direct MP4 links: metadata-only preload (never downloads
+ * the whole file until play), a poster when the lesson has a cover, and a
+ * friendly error state with retry instead of a frozen/broken player.
+ */
+function NativeVideo({
+  url,
+  poster,
+  title,
+  emit,
+}: {
+  url: string;
+  poster?: string;
+  title: string;
+  emit: (pct: number) => void;
+}) {
+  const [failed, setFailed] = useState(false);
+  const [attempt, setAttempt] = useState(0);
+
+  if (failed) {
+    return (
+      <div className="flex aspect-video w-full flex-col items-center justify-center gap-3 rounded-2xl border border-white/10 bg-black/60 text-center">
+        <TriangleAlert className="size-8 text-amber-300/80" />
+        <div>
+          <p className="text-sm font-medium">This video couldn&rsquo;t load</p>
+          <p className="mt-1 text-xs text-muted-foreground">
+            Check your connection and try again.
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={() => {
+            setFailed(false);
+            setAttempt((a) => a + 1);
+          }}
+          className="inline-flex items-center gap-1.5 rounded-xl bg-lime-400 px-4 py-2 text-xs font-semibold text-black transition-colors hover:bg-lime-300"
+        >
+          <RefreshCw className="size-3.5" /> Retry playback
+        </button>
+      </div>
+    );
+  }
+
   return (
     <div className="aspect-video w-full overflow-hidden rounded-2xl border border-white/10 bg-black">
       <video
+        key={attempt}
         controls
         src={url}
+        poster={poster}
+        preload="metadata"
+        playsInline
+        title={title}
         className="size-full"
+        onError={() => setFailed(true)}
         onTimeUpdate={(e) => {
           const v = e.currentTarget;
           if (v.duration > 0) emit((v.currentTime / v.duration) * 100);

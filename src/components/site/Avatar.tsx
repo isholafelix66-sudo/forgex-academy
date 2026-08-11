@@ -1,5 +1,6 @@
 import { cn } from "@/lib/utils";
 import { initials } from "@/lib/format";
+import { SafeImage } from "./SafeImage";
 
 const GRADIENT_AVATARS = [
   "from-lime-400/80 to-emerald-500/80 text-black",
@@ -24,22 +25,9 @@ export function Avatar({
   image?: string | null;
   className?: string;
 }) {
-  if (image) {
-    return (
-      <img
-        src={image}
-        alt={name}
-        loading="lazy"
-        decoding="async"
-        className={cn(
-          "size-10 rounded-full object-cover ring-1 ring-white/15",
-          className,
-        )}
-      />
-    );
-  }
-  const grad = GRADIENT_AVATARS[hashString(name) % GRADIENT_AVATARS.length];
-  return (
+  const grad = GRADIENT_AVATARS[hashString(name || "?") % GRADIENT_AVATARS.length];
+  // Rendered when the photo is missing OR fails to load — never a broken img.
+  const initialsBadge = (
     <span
       className={cn(
         "inline-flex size-10 shrink-0 items-center justify-center rounded-full bg-gradient-to-br text-sm font-bold ring-1 ring-white/15",
@@ -50,4 +38,21 @@ export function Avatar({
       {initials(name || "?")}
     </span>
   );
+
+  if (image) {
+    return (
+      <SafeImage
+        src={image}
+        alt={name}
+        loading="lazy"
+        decoding="async"
+        className={cn(
+          "size-10 rounded-full object-cover ring-1 ring-white/15",
+          className,
+        )}
+        fallback={initialsBadge}
+      />
+    );
+  }
+  return initialsBadge;
 }

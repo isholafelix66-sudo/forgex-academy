@@ -258,6 +258,86 @@ class RootErrorBoundary extends React.Component<
   }
 }
 
+/**
+ * Page-level error boundary: if ONE route crashes, only that page shows a
+ * friendly "retry" card — the rest of the app (nav, footer, chat, other
+ * routes) keeps working. It auto-resets on the next navigation, so a
+ * transient failure never traps the user on an error screen. The error is
+ * logged + reported to Sentry, never shown to the visitor.
+ */
+class RouteErrorBoundary extends React.Component<
+  { locationKey: string; children: React.ReactNode },
+  { failed: boolean }
+> {
+  state = { failed: false };
+
+  static getDerivedStateFromError() {
+    return { failed: true };
+  }
+
+  componentDidCatch(err: Error, info: React.ErrorInfo) {
+    console.error("[ForgeX] Route error (page kept alive):", err);
+    try {
+      captureException(err, { componentStack: info?.componentStack });
+    } catch (reportErr) {
+      console.warn("[ForgeX] Could not report route error:", reportErr);
+    }
+  }
+
+  componentDidUpdate(prevProps: { locationKey: string }) {
+    // Navigated away — clear the failure so the next page renders fresh.
+    if (this.state.failed && this.props.locationKey !== prevProps.locationKey) {
+      this.setState({ failed: false });
+    }
+  }
+
+  render() {
+    if (this.state.failed) {
+      return (
+        <div className="flex min-h-[60vh] items-center justify-center px-4">
+          <div className="w-full max-w-md rounded-3xl border border-white/10 bg-card p-8 text-center">
+            <div className="mx-auto flex size-12 items-center justify-center rounded-2xl border border-amber-400/25 bg-amber-400/10">
+              <RefreshCw className="size-6 text-amber-300" />
+            </div>
+            <h1 className="font-display mt-4 text-xl font-bold">
+              This page hit a snag
+            </h1>
+            <p className="mt-2 text-sm text-muted-foreground">
+              Something went wrong loading this page — a quick retry usually
+              sorts it out.
+            </p>
+            <div className="mt-6 flex justify-center gap-3">
+              <button
+                onClick={() => this.setState({ failed: false })}
+                className="inline-flex items-center gap-2 rounded-xl bg-lime-400 px-5 py-2.5 text-sm font-semibold text-black transition-colors hover:bg-lime-300"
+              >
+                <RefreshCw className="size-4" /> Try again
+              </button>
+              <a
+                href="/"
+                className="inline-flex items-center rounded-xl border border-white/15 px-5 py-2.5 text-sm font-medium text-muted-foreground transition-colors hover:border-lime-400/40 hover:text-lime-300"
+              >
+                Back to home
+              </a>
+            </div>
+          </div>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
+/** Binds the boundary to the current route key so it resets on navigation. */
+function RouteBoundary({ children }: { children: React.ReactNode }) {
+  const location = useLocation();
+  return (
+    <RouteErrorBoundary locationKey={location.key}>
+      {children}
+    </RouteErrorBoundary>
+  );
+}
+
 // Create the Convex client only when a deployment URL is actually available.
 // If it's missing (or the client fails to construct) the app still renders a
 // friendly "warming up" screen instead of crashing to a blank page.
@@ -388,6 +468,7 @@ createRoot(document.getElementById("root")!).render(
         <BrowserRouter>
           <RouteSyncer />
           <Suspense fallback={<RouteLoading />}>
+            <RouteBoundary>
             <Routes>
               {/* Public */}
               <Route path="/" element={<Landing />} />
@@ -476,6 +557,7 @@ createRoot(document.getElementById("root")!).render(
 
               <Route path="*" element={<NotFound />} />
             </Routes>
+            </RouteBoundary>
           </Suspense>
         </BrowserRouter>
             <Toaster />

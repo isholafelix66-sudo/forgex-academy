@@ -1,10 +1,12 @@
+import { useEffect, useState } from "react";
 import { cn } from "@/lib/utils";
 import { coverClass, glowClass } from "@/lib/format";
 
 /**
  * A course cover: layered dark surface with a category-colored glow,
- * subtle grid and a big icon/emoji. Uses no external images, so covers
- * always render.
+ * subtle grid and a big icon/emoji. If an uploaded cover image is missing
+ * or fails to load, the cover gracefully falls back to the gradient + icon
+ * treatment instead of showing a broken image.
  */
 export function CoverArt({
   gradient,
@@ -19,6 +21,13 @@ export function CoverArt({
   className?: string;
   iconClassName?: string;
 }) {
+  const [imgFailed, setImgFailed] = useState(false);
+
+  // Reset when the image changes (e.g. admin re-uploads a course cover).
+  useEffect(() => {
+    setImgFailed(false);
+  }, [image]);
+
   return (
     <div
       className={cn(
@@ -39,12 +48,13 @@ export function CoverArt({
           coverClass(gradient),
         )}
       />
-      {image ? (
+      {image && !imgFailed ? (
         <img
           src={image}
           alt=""
           loading="lazy"
           decoding="async"
+          onError={() => setImgFailed(true)}
           className="relative size-full object-cover"
         />
       ) : (

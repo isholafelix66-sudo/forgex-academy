@@ -125,6 +125,13 @@
     scroll-behavior: smooth;
     -webkit-text-size-adjust: 100%;
   }
+  /* Never allow accidental horizontal scroll (mobile tilt, overflowing
+     transient content) — clip instead of hidden so sticky/fixed elements
+     keep working correctly. */
+  html,
+  body {
+    overflow-x: clip;
+  }
   /* Instant taps: no double-tap-zoom delay on interactive elements, and a
      fast on-brand lime tap flash instead of the default grey overlay. */
   a,

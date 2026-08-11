@@ -1,8 +1,9 @@
-import { Download, FileText, Mic, Play } from "lucide-react";
+import { Download, FileText, ImageOff, Mic, Play } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { timeAgo } from "@/lib/format";
 import { formatBytes } from "@/lib/media";
 import { formatVoiceDuration } from "@/lib/chat-media";
+import { SafeImage } from "@/components/site/SafeImage";
 import { VoicePlayer } from "./VoicePlayer";
 
 /** Shape of a message row as returned by the messages queries. */
@@ -60,12 +61,17 @@ export function ChatAttachmentView({
         className="block"
         title="Open photo"
       >
-        <img
+        <SafeImage
           src={url}
           alt={attachment.fileName ?? "Photo"}
           loading="lazy"
           decoding="async"
           className="max-h-72 w-full max-w-[280px] rounded-xl object-cover"
+          fallback={
+            <span className="flex max-h-72 w-full max-w-[280px] items-center justify-center gap-2 rounded-xl border border-white/10 bg-black/20 px-4 py-8 text-xs text-muted-foreground">
+              <ImageOff className="size-4" /> Photo unavailable
+            </span>
+          }
         />
       </a>
     );
