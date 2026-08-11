@@ -21,12 +21,11 @@ function fmt(sec: number) {
 /**
  * Custom ForgeX voice-message player.
  *
- * Features: play/pause, draggable progress bar, current + total duration,
- * playback speed (1× → 1.5× → 2× → 0.5×), and the recording duration as the
- * fallback total until the file's metadata loads. Handles missing/broken
- * files and playback failures with a graceful “open instead” fallback, and
- * re-resolves the file URL from Convex storage when the stored URL is
- * missing (expired/legacy rows).
+ * Features: play/pause (with retry after a failure), draggable progress bar,
+ * current + total duration, playback speed (1× → 1.5× → 2× → 0.5×), and the
+ * recording duration as the fallback total until the file's metadata loads.
+ * When the stored URL is missing it re-resolves it from Convex storage, and
+ * a genuinely broken file offers an “open the audio instead” link.
  */
 export function VoicePlayer({
   url,
@@ -85,6 +84,7 @@ export function VoicePlayer({
     audio.addEventListener("loadedmetadata", onMeta);
     audio.addEventListener("timeupdate", onTime);
     audio.addEventListener("play", onPlay);
+    audio.addEventListener("playing", onPlay);
     audio.addEventListener("pause", onPause);
     audio.addEventListener("ended", onEnded);
     audio.addEventListener("error", onError);
@@ -98,6 +98,7 @@ export function VoicePlayer({
       audio.removeEventListener("loadedmetadata", onMeta);
       audio.removeEventListener("timeupdate", onTime);
       audio.removeEventListener("play", onPlay);
+      audio.removeEventListener("playing", onPlay);
       audio.removeEventListener("pause", onPause);
       audio.removeEventListener("ended", onEnded);
       audio.removeEventListener("error", onError);
@@ -113,7 +114,7 @@ export function VoicePlayer({
 
   const toggle = async () => {
     const audio = audioRef.current;
-    if (!audio || status === "error") return;
+    if (!audio) return;
     if (status === "playing") {
       audio.pause();
       return;
@@ -121,10 +122,16 @@ export function VoicePlayer({
     setStatus("loading");
     try {
       await audio.play();
-      // The 'play' event flips status to playing; a rejection below means the
-      // format/file isn't playable here.
-    } catch {
-      setStatus("error");
+      setStatus("playing");
+    } catch (err) {
+      // NotAllowedError = the browser wants another user gesture (iOS
+      // autoplay policy) — the next tap retries, don't mark the file broken.
+      const name = err instanceof DOMException ? err.name : "";
+      if (name === "NotAllowedError" || name === "AbortError") {
+        setStatus("idle");
+      } else {
+        setStatus("error");
+      }
     }
   };
 
@@ -169,18 +176,28 @@ export function VoicePlayer({
       </button>
 
       {status === "error" ? (
-        <a
-          href={src}
-          target="_blank"
-          rel="noopener noreferrer"
-          className={cn(
-            "flex items-center gap-1.5 text-xs font-medium underline-offset-2 hover:underline",
-            mine ? "text-black/70" : "text-lime-300",
-          )}
-        >
-          <Download className="size-3.5" />
-          Couldn&rsquo;t play here — open the audio instead
-        </a>
+        <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+          <a
+            href={src}
+            target="_blank"
+            rel="noopener noreferrer"
+            className={cn(
+              "inline-flex w-fit items-center gap-1.5 text-xs font-medium underline-offset-2 hover:underline",
+              mine ? "text-black/70" : "text-lime-300",
+            )}
+          >
+            <Download className="size-3.5" />
+            Can&rsquo;t play here — open the audio instead
+          </a>
+          <span
+            className={cn(
+              "text-[10px]",
+              mine ? "text-black/50" : "text-muted-foreground",
+            )}
+          >
+            Tap play to try again
+          </span>
+        </div>
       ) : (
         <div className="min-w-0 flex-1 space-y-0.5">
           <input
