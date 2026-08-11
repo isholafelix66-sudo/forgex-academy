@@ -473,6 +473,23 @@ const schema = defineSchema(
       senderId: v.id("users"),
       receiverId: v.id("users"),
       body: v.string(),
+      // Optional attachment — a photo, file or voice note sent with the
+      // message. `kind` is absent for plain text messages. Files live in
+      // Convex private file storage; `url` is the unguessable storage URL.
+      kind: v.optional(
+        v.union(
+          v.literal("text"),
+          v.literal("image"),
+          v.literal("file"),
+          v.literal("voice"),
+        ),
+      ),
+      storageId: v.optional(v.id("_storage")),
+      url: v.optional(v.string()),
+      fileName: v.optional(v.string()),
+      fileSize: v.optional(v.number()),
+      mimeType: v.optional(v.string()),
+      duration: v.optional(v.number()), // seconds, for voice notes
       createdAt: v.number(),
       readAt: v.optional(v.number()),
     })

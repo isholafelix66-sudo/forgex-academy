@@ -2,18 +2,14 @@ import { useEffect, useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router";
 import { useMutation, useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
-import { toast } from "sonner";
-import {
-  ArrowLeft,
-  Loader2,
-  MessageSquare,
-  Send,
-} from "lucide-react";
+import { ArrowLeft, MessageSquare } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { PageHeader } from "@/components/dash/PageHeader";
 import { EmptyState } from "@/components/site/EmptyState";
 import { Avatar } from "@/components/site/Avatar";
+import { ChatBubble } from "@/components/chat/ChatBubble";
+import { ChatComposer } from "@/components/chat/ChatComposer";
+import type { ChatAttachment } from "@/lib/chat-media";
 import { useAuth } from "@/hooks/use-auth";
 import { cn } from "@/lib/utils";
 import { timeAgo } from "@/lib/format";
@@ -41,8 +37,6 @@ export default function Messages() {
   const markRead = useMutation(api.messages.markThreadRead);
   const sendMessage = useMutation(api.messages.sendMessage);
 
-  const [body, setBody] = useState("");
-  const [sending, setSending] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
 
   const active = conversations?.find((c) => c.threadId === threadId);
@@ -60,38 +54,28 @@ export default function Messages() {
     if (existingThread && !threadId) setThreadId(existingThread.threadId);
   }, [existingThread, threadId]);
 
-  const handleSend = async () => {
-    if (!active?.other || !body.trim()) return;
-    setSending(true);
-    try {
-      await sendMessage({ receiverId: active.other._id, body });
-      setBody("");
-    } catch (err) {
-      toast.error(
-        err instanceof Error ? err.message : "Could not send the message.",
-      );
-    } finally {
-      setSending(false);
+  const sendTo = async (
+    receiverId: string,
+    payload: { body: string; attachment?: ChatAttachment },
+  ) => {
+    if (receiverId === user?._id) {
+      throw new Error("You can't message yourself.");
     }
-  };
-
-  const startCompose = async () => {
-    if (!validTo || !body.trim()) return;
-    if (validTo === user?._id) {
-      toast.error("You can't message yourself.");
-      return;
-    }
-    setSending(true);
-    try {
-      await sendMessage({ receiverId: validTo as never, body });
-      setBody("");
-    } catch (err) {
-      toast.error(
-        err instanceof Error ? err.message : "Could not send the message.",
-      );
-    } finally {
-      setSending(false);
-    }
+    await sendMessage({
+      receiverId: receiverId as never,
+      body: payload.body,
+      ...(payload.attachment
+        ? {
+            kind: payload.attachment.kind,
+            storageId: payload.attachment.storageId as never,
+            url: payload.attachment.url,
+            fileName: payload.attachment.fileName,
+            fileSize: payload.attachment.fileSize,
+            mimeType: payload.attachment.mimeType,
+            duration: payload.attachment.duration,
+          }
+        : {}),
+    });
   };
 
   return (
@@ -117,21 +101,11 @@ export default function Messages() {
                   </p>
                 </div>
               </div>
-              <div className="mt-3 flex gap-2">
-                <Input
-                  value={body}
-                  onChange={(e) => setBody(e.target.value)}
-                  onKeyDown={(e) => e.key === "Enter" && !e.shiftKey && startCompose()}
+              <div className="mt-3">
+                <ChatComposer
+                  onSend={(payload) => sendTo(validTo, payload)}
                   placeholder="Write a message…"
-                  className="border-white/10 bg-black/20"
                 />
-                <Button
-                  onClick={() => void startCompose()}
-                  disabled={sending || !body.trim()}
-                  className="bg-lime-400 text-black hover:bg-lime-300"
-                >
-                  {sending ? <Loader2 className="size-4 animate-spin" /> : <Send className="size-4" />}
-                </Button>
               </div>
             </div>
           )}
@@ -207,49 +181,21 @@ export default function Messages() {
               </div>
 
               <div className="flex-1 space-y-3 overflow-y-auto p-4">
-                {thread?.map((m) => {
-                  const mine = m.senderId === user?._id;
-                  return (
-                    <div key={m._id} className={cn("flex", mine ? "justify-end" : "justify-start")}>
-                      <div
-                        className={cn(
-                          "max-w-[80%] rounded-2xl px-4 py-2.5 text-sm leading-relaxed",
-                          mine
-                            ? "rounded-br-sm bg-lime-400 text-black"
-                            : "rounded-bl-sm bg-white/8 text-foreground",
-                        )}
-                      >
-                        {m.body}
-                        <div
-                          className={cn(
-                            "mt-1 text-[10px]",
-                            mine ? "text-black/60" : "text-muted-foreground",
-                          )}
-                        >
-                          {timeAgo(m.createdAt)}
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })}
+                {thread?.map((m) => (
+                  <ChatBubble
+                    key={m._id}
+                    message={m}
+                    mine={m.senderId === user?._id}
+                  />
+                ))}
                 <div ref={bottomRef} />
               </div>
 
-              <div className="flex gap-2 border-t border-white/10 p-3">
-                <Input
-                  value={body}
-                  onChange={(e) => setBody(e.target.value)}
-                  onKeyDown={(e) => e.key === "Enter" && !e.shiftKey && handleSend()}
+              <div className="border-t border-white/10 p-3">
+                <ChatComposer
+                  onSend={(payload) => sendTo(active.other!._id, payload)}
                   placeholder="Write a message…"
-                  className="border-white/10 bg-black/20"
                 />
-                <Button
-                  onClick={handleSend}
-                  disabled={sending || !body.trim()}
-                  className="bg-lime-400 text-black hover:bg-lime-300"
-                >
-                  {sending ? <Loader2 className="size-4 animate-spin" /> : <Send className="size-4" />}
-                </Button>
               </div>
             </>
           )}

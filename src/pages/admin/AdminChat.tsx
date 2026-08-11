@@ -17,6 +17,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { PageHeader } from "@/components/dash/PageHeader";
 import { Avatar } from "@/components/site/Avatar";
+import { ChatAttachmentView } from "@/components/chat/ChatBubble";
 import { getAdminToken } from "@/lib/admin-session";
 import { cn } from "@/lib/utils";
 import { timeAgo } from "@/lib/format";
@@ -210,7 +211,22 @@ export default function AdminChat() {
                               · {m.sender?.role}
                             </span>
                           </p>
-                          <p className="mt-1 whitespace-pre-line">{m.body}</p>
+                          {(m.kind === "image" ||
+                            m.kind === "file" ||
+                            m.kind === "voice") &&
+                            m.url && (
+                              <ChatAttachmentView attachment={m} />
+                            )}
+                          {m.body ? (
+                            <p
+                              className={cn(
+                                "whitespace-pre-line",
+                                m.kind ? "mt-1.5" : "mt-1",
+                              )}
+                            >
+                              {m.body}
+                            </p>
+                          ) : null}
                         </div>
                         <p className="mt-0.5 text-[10px] text-muted-foreground">
                           {timeAgo(m.createdAt)}

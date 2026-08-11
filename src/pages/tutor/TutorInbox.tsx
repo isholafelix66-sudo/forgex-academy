@@ -1,13 +1,13 @@
 import { useEffect, useRef, useState } from "react";
 import { useMutation, useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
-import { toast } from "sonner";
-import { Loader2, MessageSquare, Send } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { Textarea } from "@/components/ui/textarea";
+import { MessageSquare } from "lucide-react";
 import { PageHeader } from "@/components/dash/PageHeader";
 import { EmptyState } from "@/components/site/EmptyState";
 import { Avatar } from "@/components/site/Avatar";
+import { ChatBubble } from "@/components/chat/ChatBubble";
+import { ChatComposer } from "@/components/chat/ChatComposer";
+import type { ChatAttachment } from "@/lib/chat-media";
 import { useAuth } from "@/hooks/use-auth";
 import { cn } from "@/lib/utils";
 import { timeAgo } from "@/lib/format";
@@ -16,8 +16,6 @@ export default function TutorInbox() {
   const { user } = useAuth();
   const conversations = useQuery(api.messages.myConversations);
   const [threadId, setThreadId] = useState<string | null>(null);
-  const [body, setBody] = useState("");
-  const [sending, setSending] = useState(false);
   const scrollRef = useRef<HTMLDivElement | null>(null);
 
   const thread = useQuery(
@@ -37,19 +35,26 @@ export default function TutorInbox() {
 
   const active = conversations?.find((c) => c.threadId === threadId) ?? null;
 
-  const send = async () => {
-    if (!active || !body.trim()) return;
-    setSending(true);
-    try {
-      await sendMessage({ receiverId: active.other!._id as never, body });
-      setBody("");
-    } catch (err) {
-      toast.error(
-        err instanceof Error ? err.message : "Could not send the message.",
-      );
-    } finally {
-      setSending(false);
-    }
+  const send = async (payload: {
+    body: string;
+    attachment?: ChatAttachment;
+  }) => {
+    if (!active) return;
+    await sendMessage({
+      receiverId: active.other!._id as never,
+      body: payload.body,
+      ...(payload.attachment
+        ? {
+            kind: payload.attachment.kind,
+            storageId: payload.attachment.storageId as never,
+            url: payload.attachment.url,
+            fileName: payload.attachment.fileName,
+            fileSize: payload.attachment.fileSize,
+            mimeType: payload.attachment.mimeType,
+            duration: payload.attachment.duration,
+          }
+        : {}),
+    });
   };
 
   return (
@@ -109,53 +114,19 @@ export default function TutorInbox() {
                   </div>
                 </div>
                 <div ref={scrollRef} className="flex-1 space-y-3 overflow-y-auto p-5">
-                  {(thread ?? []).map((m) => {
-                    const mine = m.senderId === user?._id;
-                    return (
-                      <div key={m._id} className={cn("flex", mine ? "justify-end" : "justify-start")}>
-                        <div
-                          className={cn(
-                            "max-w-[80%] rounded-2xl px-4 py-2.5 text-sm",
-                            mine
-                              ? "rounded-br-md bg-lime-400 text-black"
-                              : "rounded-bl-md border border-white/10 bg-black/30 text-foreground",
-                          )}
-                        >
-                          <p className="whitespace-pre-line">{m.body}</p>
-                          <p className={cn("mt-1 text-[10px]", mine ? "text-black/60" : "text-muted-foreground")}>
-                            {timeAgo(m.createdAt)}
-                          </p>
-                        </div>
-                      </div>
-                    );
-                  })}
+                  {(thread ?? []).map((m) => (
+                    <ChatBubble
+                      key={m._id}
+                      message={m}
+                      mine={m.senderId === user?._id}
+                    />
+                  ))}
                   {(thread ?? []).length === 0 && (
                     <p className="text-center text-sm text-muted-foreground">Say hello 👋</p>
                   )}
                 </div>
                 <div className="border-t border-white/10 p-4">
-                  <div className="flex gap-2">
-                    <Textarea
-                      value={body}
-                      onChange={(e) => setBody(e.target.value)}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter" && !e.shiftKey) {
-                          e.preventDefault();
-                          void send();
-                        }
-                      }}
-                      rows={2}
-                      placeholder="Type a reply… (Enter to send)"
-                      className="border-white/10 bg-black/20"
-                    />
-                    <Button
-                      onClick={() => void send()}
-                      disabled={sending || !body.trim()}
-                      className="shrink-0 gap-2 bg-lime-400 font-semibold text-black hover:bg-lime-300"
-                    >
-                      {sending ? <Loader2 className="size-4 animate-spin" /> : <Send className="size-4" />}
-                    </Button>
-                  </div>
+                  <ChatComposer onSend={send} placeholder="Type a reply…" />
                 </div>
               </>
             ) : (

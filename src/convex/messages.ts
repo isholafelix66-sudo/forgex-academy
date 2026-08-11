@@ -10,6 +10,20 @@ const threadKey = (a: string, b: string) => [a, b].sort().join("|");
 const isOnline = (lastActivity?: number) =>
   !!lastActivity && Date.now() - lastActivity < 60_000;
 
+/** Human-friendly preview for conversations, notifications and emails. */
+export function messagePreview(m: {
+  body: string;
+  kind?: string;
+  fileName?: string;
+}) {
+  if (m.kind === "voice") return "🎤 Voice message";
+  if (m.kind === "image") return "📷 Photo";
+  if (m.kind === "file") return `📎 ${m.fileName || "File"}`;
+  return m.body;
+}
+
+const MAX_ATTACHMENT_BYTES = 25 * 1024 * 1024; // 25 MB per chat attachment
+
 export const myConversations = query({
   args: {},
   handler: async (ctx) => {
@@ -57,7 +71,7 @@ export const myConversations = query({
                 role: other.role ?? "student",
               }
             : null,
-          lastMessage: last.body,
+          lastMessage: messagePreview(last),
           lastAt: last.createdAt,
           lastSenderId: last.senderId,
           unread,
@@ -111,17 +125,41 @@ export const markThreadRead = mutation({
 export const sendMessage = mutation({
   args: {
     receiverId: v.id("users"),
-    body: v.string(),
+    body: v.optional(v.string()),
+    kind: v.optional(
+      v.union(
+        v.literal("text"),
+        v.literal("image"),
+        v.literal("file"),
+        v.literal("voice"),
+      ),
+    ),
+    storageId: v.optional(v.id("_storage")),
+    url: v.optional(v.string()),
+    fileName: v.optional(v.string()),
+    fileSize: v.optional(v.number()),
+    mimeType: v.optional(v.string()),
+    duration: v.optional(v.number()),
   },
-  handler: async (ctx, { receiverId, body }) => {
+  handler: async (ctx, args) => {
+    const { receiverId } = args;
     const user = await requireUserDoc(ctx);
     const receiver = await ctx.db.get(receiverId);
     if (!receiver) throw new Error("Recipient not found.");
     if (receiverId === user._id) throw new Error("You can't message yourself.");
-    const trimmed = body.trim();
-    if (!trimmed) throw new Error("Message can't be empty.");
+
+    const trimmed = (args.body ?? "").trim();
+    const hasAttachment =
+      args.kind === "image" || args.kind === "file" || args.kind === "voice";
+    if (!trimmed && !hasAttachment) throw new Error("Message can't be empty.");
+    if (hasAttachment && !args.url) {
+      throw new Error("Attachment is missing its file.");
+    }
     if (trimmed.length > 4000) {
       throw new Error("Messages are limited to 4,000 characters.");
+    }
+    if (args.fileSize && args.fileSize > MAX_ATTACHMENT_BYTES) {
+      throw new Error("Attachments are limited to 25 MB.");
     }
 
     // Simple spam guard: max 20 outbound messages per minute per user
@@ -145,17 +183,30 @@ export const sendMessage = mutation({
       0,
     );
 
+    const previewText = messagePreview({
+      body: trimmed,
+      kind: args.kind,
+      fileName: args.fileName,
+    });
+
     const id = await ctx.db.insert("messages", {
       threadId: threadKey(user._id, receiverId),
       senderId: user._id,
       receiverId,
       body: trimmed,
+      kind: hasAttachment ? args.kind : undefined,
+      storageId: args.storageId,
+      url: args.url,
+      fileName: args.fileName,
+      fileSize: args.fileSize,
+      mimeType: args.mimeType,
+      duration: args.duration,
       createdAt: Date.now(),
     });
     await notify(ctx, {
       userId: receiverId,
       title: `New message from ${user.name || "a student"}`,
-      body: trimmed.slice(0, 90),
+      body: previewText.slice(0, 90),
       type: "message",
       link:
         receiver.role === "tutor"
@@ -188,7 +239,7 @@ export const sendMessage = mutation({
               <div style="padding:28px">
                 <p style="margin:0 0 16px;font-size:22px;font-weight:700;color:#a3e635">New message 💬</p>
                 <p style="margin:0 0 12px;font-size:14px;line-height:1.6;color:#d6d3d1">${senderName} sent you a message on ForgeX Academy:</p>
-                <div style="margin:0 0 20px;background:#0d0f0c;border:1px solid #2a2e22;border-radius:12px;padding:14px 16px;font-size:14px;color:#f5f5f4;line-height:1.6">“${trimmed.slice(0, 160)}”</div>
+                <div style="margin:0 0 20px;background:#0d0f0c;border:1px solid #2a2e22;border-radius:12px;padding:14px 16px;font-size:14px;color:#f5f5f4;line-height:1.6">“${previewText.slice(0, 160)}”</div>
                 <div>
                   <a href="${site}${inbox}" style="display:inline-block;background:#a3e635;color:#0d0f0c;text-decoration:none;font-weight:700;font-size:14px;padding:12px 22px;border-radius:10px">Open conversation</a>
                 </div>
@@ -196,7 +247,7 @@ export const sendMessage = mutation({
               <div style="padding:16px 28px;border-top:1px solid #2a2e22;font-size:12px;color:#78716c">You're receiving this because someone messaged you on ForgeX Academy.</div>
             </div>
           </div>`,
-        text: `You have a new message from ${senderName} on ForgeX Academy:\n\n“${trimmed}”\n\nOpen it here: ${site}${inbox}`,
+        text: `You have a new message from ${senderName} on ForgeX Academy:\n\n“${previewText}”\n\nOpen it here: ${site}${inbox}`,
       });
     }
 

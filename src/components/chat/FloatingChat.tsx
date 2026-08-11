@@ -2,13 +2,10 @@ import { useEffect, useRef, useState } from "react";
 import { useMutation, useQuery } from "convex/react";
 import { AnimatePresence, motion } from "framer-motion";
 import { api } from "@/convex/_generated/api";
-import { toast } from "sonner";
 import {
   ArrowLeft,
-  Loader2,
   MessageSquare,
   Search,
-  Send,
   SquarePen,
   Volume2,
   VolumeX,
@@ -17,6 +14,9 @@ import {
 import { Avatar } from "@/components/site/Avatar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { ChatBubble } from "@/components/chat/ChatBubble";
+import { ChatComposer } from "@/components/chat/ChatComposer";
+import type { ChatAttachment } from "@/lib/chat-media";
 import { useAuth } from "@/hooks/use-auth";
 import { useMessageSound } from "@/hooks/use-message-notifications";
 import { getChatSoundEnabled, setChatSoundEnabled } from "@/lib/chat-sound";
@@ -48,8 +48,6 @@ export function FloatingChat() {
   const [draftTo, setDraftTo] = useState<string | null>(null);
   const [composing, setComposing] = useState(false);
   const [search, setSearch] = useState("");
-  const [body, setBody] = useState("");
-  const [sending, setSending] = useState(false);
   const [soundOn, setSoundOn] = useState(() => getChatSoundEnabled());
   const scrollRef = useRef<HTMLDivElement>(null);
 
@@ -135,19 +133,26 @@ export function FloatingChat() {
   const unreadTotal = conversations?.reduce((s, c) => s + c.unread, 0) ?? 0;
   const receiverId = threadId ? active?.other?._id : draftTo;
 
-  const send = async () => {
-    if (!receiverId || !body.trim()) return;
-    setSending(true);
-    try {
-      await sendMessage({ receiverId: receiverId as never, body });
-      setBody("");
-    } catch (err) {
-      toast.error(
-        err instanceof Error ? err.message : "Could not send the message.",
-      );
-    } finally {
-      setSending(false);
-    }
+  const send = async (payload: {
+    body: string;
+    attachment?: ChatAttachment;
+  }) => {
+    if (!receiverId) return;
+    await sendMessage({
+      receiverId: receiverId as never,
+      body: payload.body,
+      ...(payload.attachment
+        ? {
+            kind: payload.attachment.kind,
+            storageId: payload.attachment.storageId as never,
+            url: payload.attachment.url,
+            fileName: payload.attachment.fileName,
+            fileSize: payload.attachment.fileSize,
+            mimeType: payload.attachment.mimeType,
+            duration: payload.attachment.duration,
+          }
+        : {}),
+    });
   };
 
   // Admin sessions have no user account — nothing to chat with.
@@ -352,68 +357,21 @@ export function FloatingChat() {
                   ref={scrollRef}
                   className="bg-grid flex-1 space-y-2.5 overflow-y-auto p-4"
                 >
-                  {(thread ?? []).map((m) => {
-                    const mine = m.senderId === user._id;
-                    return (
-                      <div
-                        key={m._id}
-                        className={cn(
-                          "flex",
-                          mine ? "justify-end" : "justify-start",
-                        )}
-                      >
-                        <div
-                          className={cn(
-                            "max-w-[85%] rounded-2xl px-3.5 py-2 text-sm leading-relaxed",
-                            mine
-                              ? "rounded-br-sm bg-lime-400 text-black"
-                              : "rounded-bl-sm border border-white/10 bg-white/8 text-foreground",
-                          )}
-                        >
-                          <p className="whitespace-pre-line">{m.body}</p>
-                          <p
-                            className={cn(
-                              "mt-0.5 text-[10px]",
-                              mine ? "text-black/60" : "text-muted-foreground",
-                            )}
-                          >
-                            {timeAgo(m.createdAt)}
-                          </p>
-                        </div>
-                      </div>
-                    );
-                  })}
+                  {(thread ?? []).map((m) => (
+                    <ChatBubble
+                      key={m._id}
+                      message={m}
+                      mine={m.senderId === user._id}
+                    />
+                  ))}
                   {(thread ?? []).length === 0 && (
                     <p className="pt-6 text-center text-xs text-muted-foreground">
                       Say hello 👋
                     </p>
                   )}
                 </div>
-                <div className="flex gap-2 border-t border-white/10 p-3">
-                  <Input
-                    value={body}
-                    onChange={(e) => setBody(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter" && !e.shiftKey) {
-                        e.preventDefault();
-                        void send();
-                      }
-                    }}
-                    placeholder="Type a message…"
-                    className="border-white/10 bg-black/20"
-                  />
-                  <Button
-                    onClick={() => void send()}
-                    disabled={sending || !body.trim()}
-                    size="icon"
-                    className="shrink-0 bg-lime-400 text-black hover:bg-lime-300"
-                  >
-                    {sending ? (
-                      <Loader2 className="size-4 animate-spin" />
-                    ) : (
-                      <Send className="size-4" />
-                    )}
-                  </Button>
+                <div className="border-t border-white/10 p-3">
+                  <ChatComposer onSend={send} />
                 </div>
               </>
             ) : inDraft ? (
@@ -436,32 +394,8 @@ export function FloatingChat() {
                     </p>
                   </div>
                 </div>
-                <div className="flex gap-2 border-t border-white/10 p-3">
-                  <Input
-                    value={body}
-                    onChange={(e) => setBody(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter" && !e.shiftKey) {
-                        e.preventDefault();
-                        void send();
-                      }
-                    }}
-                    placeholder="Type a message…"
-                    autoFocus
-                    className="border-white/10 bg-black/20"
-                  />
-                  <Button
-                    onClick={() => void send()}
-                    disabled={sending || !body.trim()}
-                    size="icon"
-                    className="shrink-0 bg-lime-400 text-black hover:bg-lime-300"
-                  >
-                    {sending ? (
-                      <Loader2 className="size-4 animate-spin" />
-                    ) : (
-                      <Send className="size-4" />
-                    )}
-                  </Button>
+                <div className="border-t border-white/10 p-3">
+                  <ChatComposer onSend={send} autoFocus />
                 </div>
               </>
             ) : (

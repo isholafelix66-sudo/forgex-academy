@@ -4,6 +4,7 @@ import { Doc, Id } from "./_generated/dataModel";
 import { v } from "convex/values";
 import { hydrateCourse, hydrateCourses, makeAdminToken, notify, publicUser, requireAdminSession, slugify } from "./lib";
 import { difficultyValidator, ROLES, roleValidator } from "./schema";
+import { messagePreview } from "./messages";
 
 // ---------------------------------------------------------------------------
 // Admin password gate (access is URL-only: /admin + this password)
@@ -1783,7 +1784,7 @@ export const allConversations = query({
         return {
           threadId,
           participants,
-          lastMessage: last.body,
+          lastMessage: messagePreview(last),
           lastAt: last.createdAt,
           messageCount: msgs.length,
           unread: msgs.filter((m) => !m.readAt).length,
@@ -1811,6 +1812,12 @@ export const conversationMessages = query({
           return {
             _id: m._id,
             body: m.body,
+            kind: m.kind ?? null,
+            url: m.url ?? null,
+            fileName: m.fileName ?? null,
+            fileSize: m.fileSize ?? null,
+            mimeType: m.mimeType ?? null,
+            duration: m.duration ?? null,
             createdAt: m.createdAt,
             readAt: m.readAt ?? null,
             sender: sender
