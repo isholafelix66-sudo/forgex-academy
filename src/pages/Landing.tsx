@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { Suspense, lazy, useEffect } from "react";
 import { Link } from "react-router";
 import { motion } from "framer-motion";
 import { useMutation, useQuery } from "convex/react";
@@ -7,7 +7,6 @@ import {
   ArrowRight,
   Award,
   Bell,
-  BookOpen,
   CheckCircle2,
   GraduationCap,
   Map,
@@ -42,6 +41,33 @@ const item = {
     transition: { duration: 0.65, ease: [0.22, 1, 0.36, 1] as const },
   },
 };
+
+// 3D Learning Community — lazy so the hero text paints first and the
+// Three.js chunk only loads once the page is interactive.
+const ForgeXLearningCommunity = lazy(() =>
+  import("@/components/site/ForgeXLearningCommunity").then((m) => ({
+    default: m.ForgeXLearningCommunity,
+  })),
+);
+
+function HeroVisualFallback() {
+  return (
+    <div className="mx-auto mt-14 w-full max-w-4xl">
+      <div className="mb-3 flex items-center justify-center gap-2.5">
+        <span className="h-px w-8 bg-gradient-to-r from-transparent to-lime-400/60" />
+        <p className="text-[11px] font-semibold uppercase tracking-[0.28em] text-lime-300/90">
+          ForgeX Learning Community
+        </p>
+        <span className="h-px w-8 bg-gradient-to-l from-transparent to-lime-400/60" />
+      </div>
+      <div className="h-72 animate-pulse rounded-3xl border border-white/10 bg-black/30 sm:h-[26rem]">
+        <div className="flex h-full items-center justify-center">
+          <div className="size-8 animate-spin rounded-full border-2 border-lime-400/30 border-t-lime-400" />
+        </div>
+      </div>
+    </div>
+  );
+}
 
 export default function Landing() {
   const seed = useMutation(api.seed.ensureSeedData);
@@ -146,35 +172,17 @@ export default function Landing() {
             </motion.div>
           </motion.div>
 
+          {/* ForgeX Learning Community — interactive 3D campus */}
+          <Suspense fallback={<HeroVisualFallback />}>
+            <ForgeXLearningCommunity />
+          </Suspense>
+
           {/* Stats */}
           <div className="mx-auto mt-16 grid max-w-3xl grid-cols-2 gap-8 rounded-3xl border border-white/10 bg-card/60 p-8 backdrop-blur sm:grid-cols-4">
             <Stat value={`${stats?.courses ?? "—"}+`} label="Courses" />
             <Stat value={`${stats?.students ?? "—"}+`} label="Students" delay={0.05} />
             <Stat value={`${stats?.tutors ?? "—"}`} label="Expert tutors" delay={0.1} />
             <Stat value={`${stats?.certificates ?? "—"}`} label="Certificates" delay={0.15} />
-          </div>
-        </div>
-
-        {/* floating hints */}
-        <div className="pointer-events-none absolute left-6 top-1/4 hidden animate-float-slow xl:block">
-          <div className="rounded-2xl border border-white/10 bg-card/80 p-4 backdrop-blur">
-            <div className="flex items-center gap-3">
-              <span className="flex size-10 items-center justify-center rounded-xl bg-lime-400/15 text-lime-300">
-                <BookOpen className="size-5" />
-              </span>
-              <div>
-                <p className="text-xs text-muted-foreground">Course progress</p>
-                <p className="font-display text-sm font-semibold">UI Design Mastery</p>
-              </div>
-            </div>
-            <div className="mt-3 h-1.5 w-40 overflow-hidden rounded-full bg-white/10">
-              <div className="h-full w-3/4 rounded-full bg-lime-400" />
-            </div>
-          </div>
-        </div>
-        <div className="pointer-events-none absolute right-8 top-1/3 hidden animate-float-slow xl:block" style={{ animationDelay: "1.4s" }}>
-          <div className="flex items-center gap-2 rounded-full border border-lime-400/30 bg-lime-400/10 px-4 py-2 text-sm font-medium text-lime-300 backdrop-blur">
-            <Award className="size-4" /> Certificate earned!
           </div>
         </div>
       </section>
