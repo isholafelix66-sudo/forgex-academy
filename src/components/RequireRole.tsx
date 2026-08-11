@@ -34,14 +34,18 @@ function GateScreen({
 
 export function RequireTutor({ children }: { children: ReactNode }) {
   const { isLoading, isAuthenticated, user } = useAuth();
-  const { isAdmin } = useAdminSession();
+  const { token, isAdmin, loading: adminLoading } = useAdminSession();
   const application = useQuery(
     api.users.myTutorApplication,
     isAuthenticated ? {} : "skip",
   );
   const location = useLocation();
 
-  if (isLoading) {
+  // Wait for BOTH the auth state and the admin-session check to settle
+  // before deciding anything. Otherwise the password-gated admin preview
+  // (no user account) is redirected to /auth while isAdminUnlocked is still
+  // loading, making the preview appear to bounce/reload.
+  if (isLoading || adminLoading) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-background">
         <Loader2 className="size-6 animate-spin text-muted-foreground" />
@@ -52,6 +56,12 @@ export function RequireTutor({ children }: { children: ReactNode }) {
   // A valid admin session (password gate, no user account) can preview the
   // tutor dashboard read-only — the admin needs no registration to view it.
   if (isAdmin) return children;
+
+  // A stored admin token that failed validation (expired/locked) belongs at
+  // the admin gate — never at the student sign-in page.
+  if (token) {
+    return <Navigate to="/admin" replace />;
+  }
 
   if (!isAuthenticated) {
     const returnTo = `${location.pathname}${location.search}`;
