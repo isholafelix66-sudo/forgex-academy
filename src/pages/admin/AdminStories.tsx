@@ -8,6 +8,7 @@ import {
   Heart,
   Loader2,
   Pencil,
+  Plus,
   Save,
   Star,
   Trash2,
@@ -70,6 +71,7 @@ function StoriesManager() {
   const token = getAdminToken() ?? "";
   const [filter, setFilter] = useState<Status | "all">("all");
   const [editing, setEditing] = useState<Story | null>(null);
+  const [creating, setCreating] = useState(false);
   const [saving, setSaving] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
 
@@ -82,6 +84,43 @@ function StoriesManager() {
   const deleteStory = useMutation(api.stories.deleteStory);
   const deleteAllStories = useMutation(api.stories.deleteAllStories);
   const updateStory = useMutation(api.stories.updateStory);
+  const createStory = useMutation(api.stories.createStory);
+
+  // Create-story draft state
+  const [newName, setNewName] = useState("");
+  const [newCourse, setNewCourse] = useState("");
+  const [newStory, setNewStory] = useState("");
+  const [newFeatured, setNewFeatured] = useState(false);
+  const [createError, setCreateError] = useState<string | null>(null);
+
+  const openCreate = () => {
+    setNewName("");
+    setNewCourse("");
+    setNewStory("");
+    setNewFeatured(false);
+    setCreateError(null);
+    setCreating(true);
+  };
+
+  const handleCreate = async () => {
+    setSaving(true);
+    setCreateError(null);
+    try {
+      await createStory({
+        token,
+        name: newName,
+        course: newCourse,
+        story: newStory,
+        featured: newFeatured || undefined,
+      });
+      toast.success(newFeatured ? "Story published and featured on the homepage." : "Story published.");
+      setCreating(false);
+    } catch (err) {
+      setCreateError(err instanceof Error ? err.message : "Couldn't add the story. Try again.");
+    } finally {
+      setSaving(false);
+    }
+  };
 
   const handleDelete = async (id: string) => {
     setDeletingId(id);
@@ -163,65 +202,75 @@ function StoriesManager() {
             </span>
           </div>
         }
-      />
-
-      {/* Status filter + bulk clear */}
+      />      {/* Status filter + actions */}
       <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
         <div className="flex flex-wrap gap-2">
           {FILTERS.map((f) => (
             <button
               key={f.key}
               onClick={() => setFilter(f.key)}
-              className={`rounded-full border px-4 py-1.5 text-sm font-medium transition-colors ${
-                filter === f.key
+              className={`rounded-full border px-4 py-1.5 text-sm font-medium transition-colors ${filter === f.key
                   ? "border-lime-400/40 bg-lime-400/12 text-lime-300"
                   : "border-white/10 text-muted-foreground hover:border-white/20 hover:text-foreground"
-              }`}
+                }`}
             >
               {f.label}
             </button>
           ))}
         </div>
 
-        {stories !== undefined && stories.length > 0 && (
-          <AlertDialog>
-            <AlertDialogTrigger asChild>
-              <Button
-                variant="outline"
-                size="sm"
-                disabled={deletingId !== null}
-                className="gap-1.5 border-rose-400/30 text-rose-300 hover:bg-rose-400/10 hover:text-rose-200"
-              >
-                {deletingId === "all" ? (
-                  <Loader2 className="size-3.5 animate-spin" />
-                ) : (
-                  <Trash2 className="size-3.5" />
-                )}
-                <span className="hidden sm:inline">Clear all stories</span>
-                <span className="sm:hidden">Clear all</span>
-              </Button>
-            </AlertDialogTrigger>
-            <AlertDialogContent className="border-white/10 bg-card">
-              <AlertDialogHeader>
-                <AlertDialogTitle className="font-display">Delete every story?</AlertDialogTitle>
-                <AlertDialogDescription>
-                  This permanently deletes all {stories.length} student storie(s) — including the ones
-                  shown on the homepage and the public stories page. Their photos are removed too. This
-                  can't be undone.
-                </AlertDialogDescription>
-              </AlertDialogHeader>
-              <AlertDialogFooter>
-                <AlertDialogCancel className="border-white/15">Cancel</AlertDialogCancel>
-                <AlertDialogAction
-                  className="gap-2 bg-rose-500 font-semibold text-white hover:bg-rose-600"
-                  onClick={() => void handleDeleteAll()}
+        <div className="flex flex-wrap items-center gap-2">
+          <Button
+            size="sm"
+            disabled={saving}
+            onClick={openCreate}
+            className="gap-1.5 bg-lime-400 font-semibold text-black hover:bg-lime-300"
+          >
+            {saving ? <Loader2 className="size-3.5 animate-spin" /> : <Plus className="size-3.5" />}
+            <span className="hidden sm:inline">Add story</span>
+            <span className="sm:hidden">Add</span>
+          </Button>
+
+          {stories !== undefined && stories.length > 0 && (
+            <AlertDialog>
+              <AlertDialogTrigger asChild>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={deletingId !== null}
+                  className="gap-1.5 border-rose-400/30 text-rose-300 hover:bg-rose-400/10 hover:text-rose-200"
                 >
-                  <Trash2 className="size-4" /> Delete everything
-                </AlertDialogAction>
-              </AlertDialogFooter>
-            </AlertDialogContent>
-          </AlertDialog>
-        )}
+                  {deletingId === "all" ? (
+                    <Loader2 className="size-3.5 animate-spin" />
+                  ) : (
+                    <Trash2 className="size-3.5" />
+                  )}
+                  <span className="hidden sm:inline">Clear all stories</span>
+                  <span className="sm:hidden">Clear all</span>
+                </Button>
+              </AlertDialogTrigger>
+              <AlertDialogContent className="border-white/10 bg-card">
+                <AlertDialogHeader>
+                  <AlertDialogTitle className="font-display">Delete every story?</AlertDialogTitle>
+                  <AlertDialogDescription>
+                    This permanently deletes all {stories.length} student storie(s) — including the ones
+                    shown on the homepage and the public stories page. Their photos are removed too. This
+                    can't be undone.
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel className="border-white/15">Cancel</AlertDialogCancel>
+                  <AlertDialogAction
+                    className="gap-2 bg-rose-500 font-semibold text-white hover:bg-rose-600"
+                    onClick={() => void handleDeleteAll()}
+                  >
+                    <Trash2 className="size-4" /> Delete everything
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
+          )}
+        </div>
       </div>
 
       {stories === undefined ? (
@@ -380,6 +429,87 @@ function StoriesManager() {
           ))}
         </div>
       )}
+
+      {/* Add-story dialog */}
+      <Dialog open={creating} onOpenChange={(o) => !o && !saving && setCreating(false)}>
+        <DialogContent className="border-white/10 bg-card sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="font-display">Add a story</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label>Name *</Label>
+              <Input
+                value={newName}
+                onChange={(e) => setNewName(e.target.value)}
+                placeholder="Student's full name"
+                className="border-white/10 bg-black/20"
+                maxLength={120}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Course / Program *</Label>
+              <Input
+                value={newCourse}
+                onChange={(e) => setNewCourse(e.target.value)}
+                placeholder="e.g. Web Development Path"
+                className="border-white/10 bg-black/20"
+                maxLength={120}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Story *</Label>
+              <Textarea
+                value={newStory}
+                onChange={(e) => setNewStory(e.target.value)}
+                placeholder="How has ForgeX helped them?"
+                className="min-h-32 resize-y border-white/10 bg-black/20"
+                maxLength={4000}
+              />
+              <p className="text-[11px] text-muted-foreground/70">
+                Needs at least 30 characters. Published immediately as Approved — use the star button to
+                feature it on the homepage.
+              </p>
+            </div>
+            <label className="flex cursor-pointer items-center gap-2 text-sm text-muted-foreground">
+              <input
+                type="checkbox"
+                checked={newFeatured}
+                onChange={(e) => setNewFeatured(e.target.checked)}
+                className="size-4 accent-lime-400"
+              />
+              Feature on the homepage right away
+            </label>
+            {createError && (
+              <p className="rounded-xl border border-rose-400/25 bg-rose-400/8 p-3 text-sm text-rose-300">
+                {createError}
+              </p>
+            )}
+            <div className="flex justify-end gap-2">
+              <Button
+                variant="outline"
+                className="border-white/15"
+                disabled={saving}
+                onClick={() => setCreating(false)}
+              >
+                Cancel
+              </Button>
+              <Button
+                disabled={
+                  saving ||
+                  !newName.trim() ||
+                  !newCourse.trim() ||
+                  newStory.trim().length < 30
+                }
+                onClick={() => void handleCreate()}
+                className="gap-2 bg-lime-400 font-semibold text-black hover:bg-lime-300"
+              >
+                {saving ? <Loader2 className="size-4 animate-spin" /> : <Plus className="size-4" />} Add story
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* Edit dialog */}
       <Dialog open={!!editing} onOpenChange={(o) => !o && setEditing(null)}>

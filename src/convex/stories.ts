@@ -266,6 +266,34 @@ export const reviewStory = mutation({
   },
 });
 
+/** Admin-created story — published immediately as `approved` so the admin
+ *  can feature it on the homepage right away. Admin-only, so it bypasses the
+ *  moderation queue by design (the admin IS the moderator). */
+export const createStory = mutation({
+  args: {
+    token: v.string(),
+    name: v.string(),
+    course: v.string(),
+    story: v.string(),
+    featured: v.optional(v.boolean()),
+  },
+  handler: async (ctx, { token, name, course, story, featured }) => {
+    await requireAdminSession(ctx, token);
+    const clean = validateContent({ name, course, story });
+    const id = await ctx.db.insert("studentStories", {
+      name: clean.name,
+      course: clean.course,
+      story: clean.story,
+      status: "approved",
+      featured: featured ?? false,
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+    });
+    await adminLog(ctx, "story-created", `Admin added story by ${clean.name}`);
+    return await ctx.db.get(id);
+  },
+});
+
 /** Edit a story's content (name / course / story / note). Photo is set by
  *  the submitter only — admins can clear it if it's inappropriate. */
 export const updateStory = mutation({

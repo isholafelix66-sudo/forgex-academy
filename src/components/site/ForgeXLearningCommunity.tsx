@@ -69,6 +69,23 @@ function webglAvailable(): boolean {
   }
 }
 
+/**
+ * iOS/iPadOS (WebKit — includes Safari AND Chrome on iOS, which is also
+ * WebKit under the hood). WebGL on iOS Safari is a well-known source of GPU
+ * process crashes: when the GPU process dies, Safari reloads the whole tab,
+ * which reads as "the app keeps refreshing". We skip the 3D canvas entirely
+ * on iOS and show the animated SVG campus instead — the page stays rock
+ * solid while desktop/Android keep the full 3D experience.
+ */
+function isIOS(): boolean {
+  if (typeof navigator === "undefined") return false;
+  const ua = navigator.userAgent || "";
+  if (/iPhone|iPad|iPod/i.test(ua)) return true;
+  // iPadOS 13+ reports itself as macOS, so also check for a touch-capable
+  // Mac user agent.
+  return /Macintosh/i.test(ua) && navigator.maxTouchPoints > 1;
+}
+
 function prefersReducedMotion(): boolean {
   return (
     typeof window.matchMedia === "function" &&
@@ -786,7 +803,9 @@ export function ForgeXLearningCommunity() {
   const [hoverName, setHoverName] = useState<string | null>(null);
 
   useEffect(() => {
-    setWebgl(webglAvailable());
+    // Never create a WebGL context on iOS — the animated SVG fallback is
+    // used there so the page can't be taken down by a GPU-process crash.
+    setWebgl(!isIOS() && webglAvailable());
     setReduced(prefersReducedMotion());
     setMobile(isCoarsePointer());
 
