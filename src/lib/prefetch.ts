@@ -15,6 +15,7 @@ const EXACT: Array<[string, Importer]> = [
   ["/tutors", () => import("@/pages/Tutors.tsx")],
   ["/roadmap", () => import("@/pages/RoadmapPage.tsx")],
   ["/updates", () => import("@/pages/Updates.tsx")],
+  ["/stories", () => import("@/pages/Stories.tsx")],
   ["/contact", () => import("@/pages/Contact.tsx")],
   ["/about", () => import("@/pages/About.tsx")],
   ["/become-tutor", () => import("@/pages/BecomeTutor.tsx")],

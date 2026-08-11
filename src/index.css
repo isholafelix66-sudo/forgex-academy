@@ -132,6 +132,20 @@
   body {
     overflow-x: clip;
   }
+  /* iOS Safari / iPadOS: `100vh` includes the browser chrome, which makes
+     full-screen shells (auth gate, route loading, dashboards) overflow and
+     can cause blank/scroll-jump behaviour. Prefer the dynamic viewport unit
+     where supported; older browsers gracefully keep 100vh. */
+  @supports (min-height: 100dvh) {
+    .min-h-screen {
+      min-height: 100dvh;
+    }
+  }
+  /* Keep the page from rubber-banding/refreshing when the keyboard or a
+     scroll gesture overshoots — feels native on iOS Safari. */
+  body {
+    overscroll-behavior-y: none;
+  }
   /* Instant taps: no double-tap-zoom delay on interactive elements, and a
      fast on-brand lime tap flash instead of the default grey overlay. */
   a,
@@ -284,6 +298,37 @@
   .animate-pulse-glow,
   .animate-float-slow {
     animation: none;
+  }
+}
+
+/* Premium CTA sheen — a soft lime highlight that sweeps across primary
+   CTAs on hover. GPU-friendly (transform only) and silent for users who
+   prefer reduced motion. */
+.cta-shimmer {
+  position: relative;
+  isolation: isolate;
+}
+.cta-shimmer::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+  background: linear-gradient(
+    105deg,
+    transparent 25%,
+    oklch(1 0 0 / 0.35) 50%,
+    transparent 75%
+  );
+  transform: translateX(-135%);
+  transition: transform 0.9s cubic-bezier(0.22, 1, 0.36, 1);
+}
+.cta-shimmer:hover::after {
+  transform: translateX(135%);
+}
+@media (prefers-reduced-motion: reduce) {
+  .cta-shimmer::after {
+    display: none;
   }
 }
 

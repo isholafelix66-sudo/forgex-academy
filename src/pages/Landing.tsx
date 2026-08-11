@@ -11,13 +11,13 @@ import {
   GraduationCap,
   Map,
   Megaphone,
+  MessageCircleHeart,
   PlayCircle,
   Rocket,
   Sparkles,
   Star,
   Users,
 } from "lucide-react";
-import { Button } from "@/components/ui/button";
 import { PageShell } from "@/components/site/PageShell";
 import { Reveal } from "@/components/site/Reveal";
 import { SectionHeading } from "@/components/site/SectionHeading";
@@ -27,6 +27,7 @@ import { TutorCard } from "@/components/site/TutorCard";
 import { HowToVideo } from "@/components/site/HowToVideo";
 import { parseTutorialVideo } from "@/lib/tutorial-video";
 import { Avatar } from "@/components/site/Avatar";
+import { AnimatedCta } from "@/components/site/AnimatedCta";
 import { timeAgo } from "@/lib/format";
 
 const container = {
@@ -79,6 +80,7 @@ export default function Landing() {
   const announcements = useQuery(api.public.announcementsList);
   const updates = useQuery(api.public.updatesList);
   const stats = useQuery(api.public.stats);
+  const featuredStories = useQuery(api.stories.featuredStories);
 
   useEffect(() => {
     void seed({ force: false }).catch(() => {});
@@ -142,18 +144,14 @@ export default function Landing() {
             </motion.p>
 
             <motion.div variants={item} className="mt-9 flex flex-wrap items-center justify-center gap-3">
-              <Link to={hero?.primaryCta?.link ?? "/courses"}>
-                <Button size="lg" className="group gap-2 bg-lime-400 font-semibold text-black hover:bg-lime-300 glow-lime-soft">
-                  {hero?.primaryCta?.label ?? "Start learning free"}
-                  <ArrowRight className="size-4 transition-transform group-hover:translate-x-0.5" />
-                </Button>
-              </Link>
-              <Link to={hero?.secondaryCta?.link ?? "/roadmap"}>
-                <Button size="lg" variant="outline" className="gap-2 border-white/15 hover:border-lime-400/40 hover:text-lime-300">
-                  <Map className="size-4" />
-                  {hero?.secondaryCta?.label ?? "Explore roadmaps"}
-                </Button>
-              </Link>
+              <AnimatedCta to={hero?.primaryCta?.link ?? "/courses"}>
+                {hero?.primaryCta?.label ?? "Start learning free"}
+                <ArrowRight className="size-4 transition-transform group-hover:translate-x-0.5" />
+              </AnimatedCta>
+              <AnimatedCta to={hero?.secondaryCta?.link ?? "/roadmap"} variant="outline">
+                <Map className="size-4" />
+                {hero?.secondaryCta?.label ?? "Explore roadmaps"}
+              </AnimatedCta>
             </motion.div>
 
             <motion.div
@@ -235,11 +233,9 @@ export default function Landing() {
           ))}
         </div>
         <Reveal className="mt-10 flex justify-center">
-          <Link to="/courses">
-            <Button variant="outline" size="lg" className="gap-2 border-white/15 hover:border-lime-400/40 hover:text-lime-300">
-              Browse all courses <ArrowRight className="size-4" />
-            </Button>
-          </Link>
+          <AnimatedCta to="/courses" variant="outline">
+            Browse all courses <ArrowRight className="size-4" />
+          </AnimatedCta>
         </Reveal>
       </section>
 
@@ -412,6 +408,46 @@ export default function Landing() {
         </div>
       </section>
 
+      {/* ------------------------------------------------ Community stories */}
+      {featuredStories && featuredStories.length > 0 && (
+        <section className="border-y border-white/8 bg-black/30 py-24">
+          <div className="mx-auto max-w-7xl px-4 sm:px-6">
+            <SectionHeading
+              eyebrow="ForgeX Community"
+              title="Stories from the ForgeX community"
+              description="Real students, real growth — selected by the ForgeX team and shared with permission."
+            />
+            <div className="mt-12 grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+              {featuredStories.slice(0, 6).map((s, i) => (
+                <Reveal key={s._id} delay={(i % 3) * 0.07}>
+                  <figure className="flex h-full flex-col rounded-2xl border border-white/10 bg-card p-6 transition-colors hover:border-lime-400/30">
+                    <div className="flex items-center gap-3">
+                      <Avatar name={s.name} image={s.photoUrl} className="size-11" />
+                      <div className="min-w-0">
+                        <p className="truncate font-display text-sm font-semibold">{s.name}</p>
+                        <p className="truncate text-xs text-muted-foreground">{s.course}</p>
+                      </div>
+                    </div>
+                    <blockquote className="mt-4 line-clamp-4 flex-1 text-sm leading-relaxed text-muted-foreground">
+                      “{s.story}”
+                    </blockquote>
+                  </figure>
+                </Reveal>
+              ))}
+            </div>
+            <div className="mt-10 flex flex-wrap items-center justify-center gap-3">
+              <AnimatedCta to="/stories">
+                Share your story
+                <ArrowRight className="size-4 transition-transform group-hover:translate-x-0.5" />
+              </AnimatedCta>
+              <AnimatedCta to="/stories" variant="outline">
+                <MessageCircleHeart className="size-4" /> Read more stories
+              </AnimatedCta>
+            </div>
+          </div>
+        </section>
+      )}
+
       {/* ------------------------------------------------ Upcoming ForgeX Network */}
       {upcoming.length > 0 && (
         <section className="border-t border-white/8 bg-black/30 py-24">
@@ -458,16 +494,12 @@ export default function Landing() {
               certificate that recruiters can check in seconds.
             </p>
             <div className="relative mt-8 flex flex-wrap items-center justify-center gap-3">
-              <Link to="/auth?mode=signup">
-                <Button size="lg" className="gap-2 bg-lime-400 font-semibold text-black hover:bg-lime-300 glow-lime-soft">
-                  Create your free account <ArrowRight className="size-4" />
-                </Button>
-              </Link>
-              <Link to="/courses">
-                <Button size="lg" variant="outline" className="border-white/15 hover:border-lime-400/40 hover:text-lime-300">
-                  Browse courses
-                </Button>
-              </Link>
+              <AnimatedCta to="/auth?mode=signup">
+                Create your free account <ArrowRight className="size-4" />
+              </AnimatedCta>
+              <AnimatedCta to="/courses" variant="outline">
+                Browse courses
+              </AnimatedCta>
             </div>
           </div>
         </Reveal>

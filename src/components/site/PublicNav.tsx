@@ -15,6 +15,7 @@ const LINKS: Array<{ to: string; label: string; end?: boolean }> = [
   { to: "/tutors", label: "Tutors" },
   { to: "/roadmap", label: "Roadmap" },
   { to: "/updates", label: "Updates" },
+  { to: "/stories", label: "Stories" },
   { to: "/contact", label: "Contact" },
   { to: "/about", label: "About" },
 ];

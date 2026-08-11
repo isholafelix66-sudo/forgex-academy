@@ -403,6 +403,35 @@ const schema = defineSchema(
       value: v.any(),
     }).index("by_key", ["key"]),
 
+    /** Student stories — public "Share Your ForgeX Story" submissions.
+     *  Every submission starts as `pending` and only becomes visible once an
+     *  admin approves it. Only approved stories can be featured (enforced in
+     *  stories.ts). The optional photo lives in Convex file storage; the
+     *  display URL is resolved server-side. */
+    studentStories: defineTable({
+      userId: v.optional(v.id("users")), // submitter, when signed in
+      name: v.string(),
+      course: v.string(), // course / program
+      story: v.string(),
+      photoStorageId: v.optional(v.id("_storage")),
+      photoUrl: v.optional(v.string()),
+      status: v.union(
+        v.literal("pending"),
+        v.literal("approved"),
+        v.literal("rejected"),
+      ),
+      featured: v.boolean(),
+      reviewedAt: v.optional(v.number()),
+      reviewedBy: v.optional(v.id("users")),
+      adminNote: v.optional(v.string()),
+      createdAt: v.number(),
+      updatedAt: v.optional(v.number()),
+    })
+      .index("by_status", ["status"])
+      .index("by_created", ["createdAt"])
+      .index("by_user", ["userId"]),
+
+
     tutorApplications: defineTable({
       userId: v.id("users"),
       status: v.union(

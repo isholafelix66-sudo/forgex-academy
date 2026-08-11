@@ -7,6 +7,7 @@ import {
   BookOpen,
   ClipboardList,
   GraduationCap,
+  Heart,
   ImageIcon,
   Inbox,
   KeyRound,
@@ -148,6 +149,7 @@ export default function AdminShell() {
       label: "Content",
       items: [
         { to: "/admin/updates", label: "Updates & news", icon: <Megaphone className="size-4" /> },
+        { to: "/admin/stories", label: "Student stories", icon: <Heart className="size-4" /> },
         { to: "/admin/content", label: "Website & branding", icon: <PenSquare className="size-4" /> },
         { to: "/admin/media", label: "Media library", icon: <ImageIcon className="size-4" /> },
         { to: "/admin/form-builder", label: "Tutor registration form", icon: <ClipboardList className="size-4" /> },
