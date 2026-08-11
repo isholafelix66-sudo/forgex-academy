@@ -1,18 +1,21 @@
 /**
  * Chat attachments — photos, files and voice notes sent through the chat.
  *
- * Files are uploaded to Convex private file storage (unguessable URL, same
- * mechanism the rest of the app uses for private documents). The upload flow:
+ * Files are uploaded to Convex file storage using the documented browser
+ * flow:
  *   1. ask the backend for a one-time upload URL (storage.generateUploadUrl)
  *   2. PUT the file bytes to that URL
- *   3. derive the stable public URL + storage id from the upload URL
- *   4. send those as part of the message via messages.sendMessage
+ *   3. the storage id is the last path segment of the upload URL
+ *   4. send storageId + metadata with the message — the SERVER resolves the
+ *      authoritative playback URL via ctx.storage.getUrl(storageId), so we
+ *      never rely on a client-derived URL for playback.
  */
 
 export type ChatAttachment = {
   kind: "image" | "file" | "voice";
   storageId: string;
-  url: string;
+  /** Client-derived hint; the server replaces it with the real URL. */
+  url?: string;
   fileName?: string;
   fileSize?: number;
   mimeType?: string;
@@ -33,23 +36,68 @@ export async function uploadChatFile(
     throw new Error("File is too large (max 25 MB).");
   }
 
-  const uploadUrl = await generateUploadUrl();
-  const res = await fetch(uploadUrl, {
-    method: "PUT",
-    headers: { "Content-Type": file.type || "application/octet-stream" },
-    body: file,
-  });
-  if (!res.ok) throw new Error("Upload failed — please try again.");
+  let uploadUrl: string;
+  try {
+    uploadUrl = await generateUploadUrl();
+  } catch {
+    throw new Error(
+      "Couldn't start the upload — check your connection and try again.",
+    );
+  }
+  if (!uploadUrl) {
+    throw new Error("Upload is unavailable right now — please try again.");
+  }
 
-  // The upload URL encodes the storage id in its path: /api/storage/<id>.
-  const u = new URL(uploadUrl);
-  const storageId = u.pathname.split("/").pop() ?? "";
-  const url = `${u.origin}${u.pathname}`;
+  // The storage id is the last path segment of the upload URL
+  // (…/api/storage/<storageId>). Parse defensively — never trust the exact
+  // URL shape blindly.
+  let storageId = "";
+  try {
+    storageId = new URL(uploadUrl).pathname.split("/").pop() ?? "";
+  } catch {
+    storageId = uploadUrl.split("/").pop() ?? "";
+  }
+  if (!storageId) {
+    throw new Error("Upload failed — please try again.");
+  }
+
+  // PUT the bytes, retrying once for transient network failures.
+  let res: Response | null = null;
+  for (let attempt = 0; attempt < 2; attempt++) {
+    try {
+      res = await fetch(uploadUrl, {
+        method: "PUT",
+        headers: {
+          "Content-Type": file.type || "application/octet-stream",
+        },
+        body: file,
+      });
+      if (res.ok) break;
+    } catch {
+      res = null; // network error — one retry below
+    }
+    if (attempt === 0) await new Promise((r) => setTimeout(r, 600));
+  }
+  if (!res || !res.ok) {
+    throw new Error(
+      "Upload failed — check your connection and try again.",
+    );
+  }
+
+  // Best-effort client URL (the server re-resolves it via getUrl, so a
+  // failure here is not fatal).
+  let url = "";
+  try {
+    const u = new URL(uploadUrl);
+    url = `${u.origin}${u.pathname}`;
+  } catch {
+    url = "";
+  }
 
   return {
     kind,
     storageId,
-    url,
+    ...(url ? { url } : {}),
     fileName: file.name,
     fileSize: file.size,
     mimeType: file.type || "application/octet-stream",

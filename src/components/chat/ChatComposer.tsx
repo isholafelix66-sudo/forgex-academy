@@ -20,6 +20,7 @@ import {
 } from "@/lib/chat-media";
 import {
   startVoiceRecording,
+  voiceFileExtension,
   type VoiceRecording,
 } from "@/lib/voice-recorder";
 
@@ -98,9 +99,11 @@ export function ChatComposer({
         if (next >= VOICE_MAX_SECONDS) void finishRecording();
       }, 1000);
     } catch (err) {
+      // The recorder throws friendly, already-translated errors (mic
+      // denied / no mic / busy mic / unsupported browser…).
       toast.error(
-        err instanceof DOMException && err.name === "NotAllowedError"
-          ? "Microphone access was denied — allow the mic in your browser settings."
+        err instanceof Error
+          ? err.message
           : "Voice recording isn't available in this browser.",
       );
     }
@@ -122,13 +125,7 @@ export function ChatComposer({
     try {
       const { blob, mime, seconds } = await handle.stop();
       endRecordingSession();
-      const ext = mime.includes("wav")
-        ? "wav"
-        : mime.includes("mp4")
-          ? "m4a"
-          : mime.includes("ogg")
-            ? "ogg"
-            : "webm";
+      const ext = voiceFileExtension(mime);
       const file = new File([blob], `voice-${Date.now()}.${ext}`, {
         type: mime,
       });

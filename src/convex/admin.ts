@@ -1813,6 +1813,7 @@ export const conversationMessages = query({
             _id: m._id,
             body: m.body,
             kind: m.kind ?? null,
+            storageId: m.storageId ?? null,
             url: m.url ?? null,
             fileName: m.fileName ?? null,
             fileSize: m.fileSize ?? null,

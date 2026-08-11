@@ -152,7 +152,7 @@ export const sendMessage = mutation({
     const hasAttachment =
       args.kind === "image" || args.kind === "file" || args.kind === "voice";
     if (!trimmed && !hasAttachment) throw new Error("Message can't be empty.");
-    if (hasAttachment && !args.url) {
+    if (hasAttachment && !args.storageId && !args.url) {
       throw new Error("Attachment is missing its file.");
     }
     if (trimmed.length > 4000) {
@@ -189,6 +189,24 @@ export const sendMessage = mutation({
       fileName: args.fileName,
     });
 
+    // Resolve the playback URL server-side — the authoritative URL comes
+    // from Convex storage (ctx.storage.getUrl), never from client-side
+    // parsing of the upload URL. This guarantees a valid, stable link that
+    // survives refreshes and works for both participants.
+    let storedUrl = args.url;
+    if (args.storageId) {
+      try {
+        storedUrl = (await ctx.storage.getUrl(args.storageId)) ?? args.url;
+      } catch {
+        storedUrl = args.url;
+      }
+    }
+    if (hasAttachment && !storedUrl) {
+      throw new Error(
+        "The attachment couldn't be stored — please record or send it again.",
+      );
+    }
+
     const id = await ctx.db.insert("messages", {
       threadId: threadKey(user._id, receiverId),
       senderId: user._id,
@@ -196,7 +214,7 @@ export const sendMessage = mutation({
       body: trimmed,
       kind: hasAttachment ? args.kind : undefined,
       storageId: args.storageId,
-      url: args.url,
+      url: storedUrl,
       fileName: args.fileName,
       fileSize: args.fileSize,
       mimeType: args.mimeType,

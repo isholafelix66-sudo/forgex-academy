@@ -3,12 +3,14 @@ import { cn } from "@/lib/utils";
 import { timeAgo } from "@/lib/format";
 import { formatBytes } from "@/lib/media";
 import { formatVoiceDuration } from "@/lib/chat-media";
+import { VoicePlayer } from "./VoicePlayer";
 
 /** Shape of a message row as returned by the messages queries. */
 export type ChatMessageView = {
   _id: string;
   body: string;
   kind?: string | null;
+  storageId?: string | null;
   url?: string | null;
   fileName?: string | null;
   fileSize?: number | null;
@@ -46,10 +48,10 @@ export function ChatAttachmentView({
   attachment: ChatMessageView;
   mine?: boolean;
 }) {
-  const url = attachment.url;
-  if (!url) return null;
+  const url = attachment.url ?? "";
 
   if (attachment.kind === "image") {
+    if (!url) return null;
     return (
       <a
         href={url}
@@ -70,11 +72,11 @@ export function ChatAttachmentView({
   }
 
   if (attachment.kind === "voice") {
-    // Legacy notes recorded as webm/opus can't be decoded by iOS Safari —
-    // offer a download instead of a broken player. New recordings are WAV
-    // and play on every device.
-    const webmOnly =
-      attachment.mimeType?.includes("webm") ?? false;
+    // WebM/Opus notes can't be decoded by iOS Safari — offer a download
+    // instead of a player that would never start. Everything else (including
+    // a missing URL, which the player re-resolves from storage) goes to the
+    // custom VoicePlayer.
+    const webmOnly = attachment.mimeType?.includes("webm") ?? false;
     const playable = !webmOnly || canPlayWebmAudio();
     return (
       <div className="flex items-center gap-2.5 py-0.5">
@@ -87,13 +89,14 @@ export function ChatAttachmentView({
           <Mic className="size-4" />
         </span>
         {playable ? (
-          <audio
-            controls
-            preload="metadata"
-            src={url}
-            className="h-9 w-48 max-w-[200px] sm:w-56"
+          <VoicePlayer
+            url={attachment.url}
+            storageId={attachment.storageId}
+            mimeType={attachment.mimeType}
+            mine={mine}
+            recordedDuration={attachment.duration}
           />
-        ) : (
+        ) : url ? (
           <a
             href={url}
             target="_blank"
@@ -109,12 +112,15 @@ export function ChatAttachmentView({
             <Download className="size-4" />
             <span className="text-xs">Voice note (download)</span>
           </a>
+        ) : (
+          <span className="text-xs text-muted-foreground">Audio unavailable</span>
         )}
       </div>
     );
   }
 
   // File
+  if (!url) return null;
   return (
     <a
       href={url}
