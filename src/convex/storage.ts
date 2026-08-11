@@ -3,15 +3,19 @@ import { v } from "convex/values";
 import { checkRateLimit, requireAdminSession, requireUser } from "./lib";
 
 /**
- * Generate a URL the client can PUT a file to (works from any device /
- * browser / file picker). The client uploads, receives a storageId, and
- * passes it to the relevant save mutation.
+ * Generate a URL the client POSTs a file to (works from any device /
+ * browser / file picker). The client uploads, receives a storageId from the
+ * JSON response, and passes it to the relevant save mutation.
+ *
+ * Rate limit is per-minute (not per-hour): a user chatting with a few
+ * photos/voice notes/free documents can easily cross an hourly cap and get
+ * mysteriously blocked mid-conversation.
  */
 export const generateUploadUrl = mutation({
   args: {},
   handler: async (ctx) => {
     const userId = await requireUser(ctx);
-    await checkRateLimit(ctx, `upload:${userId}`, 40, 60 * 60 * 1000);
+    await checkRateLimit(ctx, `upload:${userId}`, 60, 60 * 1000);
     return await ctx.storage.generateUploadUrl();
   },
 });
@@ -29,7 +33,7 @@ export const deleteFile = mutation({
   args: { storageId: v.id("_storage") },
   handler: async (ctx, { storageId }) => {
     const userId = await requireUser(ctx);
-    await checkRateLimit(ctx, `upload:${userId}`, 40, 60 * 60 * 1000);
+    await checkRateLimit(ctx, `upload:${userId}`, 60, 60 * 1000);
     await ctx.storage.delete(storageId);
     return true;
   },
@@ -39,6 +43,11 @@ export const deleteFile = mutation({
  * Record a private document (CV, verification file) in the `documents` table.
  * Files live in Convex private file storage with an unguessable URL — never
  * in the public Cloudinary media library. Only admins can list them.
+ *
+ * The stored URL is resolved SERVER-side via ctx.storage.getUrl(storageId) —
+ * the authoritative, persistent link — instead of trusting a URL the client
+ * derived from the upload endpoint (which is not a file URL). Returns the
+ * created document so the caller can display the real URL immediately.
  */
 export const recordDocument = mutation({
   args: {
@@ -46,17 +55,36 @@ export const recordDocument = mutation({
     mime: v.string(),
     size: v.optional(v.number()),
     storageId: v.id("_storage"),
-    url: v.string(),
+    url: v.optional(v.string()),
     purpose: v.string(),
   },
   handler: async (ctx, args) => {
     const userId = await requireUser(ctx);
-    await checkRateLimit(ctx, `upload:${userId}`, 40, 60 * 60 * 1000);
-    return await ctx.db.insert("documents", {
-      ...args,
+    await checkRateLimit(ctx, `upload:${userId}`, 60, 60 * 1000);
+    let storedUrl = args.url ?? "";
+    try {
+      storedUrl = (await ctx.storage.getUrl(args.storageId)) ?? storedUrl;
+    } catch {
+      // Fall back to the client-supplied hint; a missing file is caught below.
+    }
+    if (!storedUrl) {
+      throw new Error(
+        "The file couldn't be stored — please upload it again.",
+      );
+    }
+    const id = await ctx.db.insert("documents", {
+      name: args.name,
+      mime: args.mime,
+      size: args.size,
+      storageId: args.storageId,
+      url: storedUrl,
+      purpose: args.purpose,
       uploadedBy: userId,
       createdAt: Date.now(),
     });
+    // Return the stored document (with its authoritative URL) so callers can
+    // display it immediately without a second query.
+    return await ctx.db.get(id);
   },
 });
 

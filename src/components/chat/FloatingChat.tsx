@@ -145,7 +145,6 @@ export function FloatingChat() {
         ? {
             kind: payload.attachment.kind,
             storageId: payload.attachment.storageId as never,
-            url: payload.attachment.url,
             fileName: payload.attachment.fileName,
             fileSize: payload.attachment.fileSize,
             mimeType: payload.attachment.mimeType,

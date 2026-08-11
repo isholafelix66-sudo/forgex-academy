@@ -3,6 +3,7 @@ import { useMutation } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import { toast } from "sonner";
 import {
+  Check,
   ImagePlus,
   Loader2,
   Mic,
@@ -13,6 +14,7 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { cn } from "@/lib/utils";
 import {
   formatVoiceDuration,
   uploadChatFile,
@@ -52,6 +54,13 @@ export function ChatComposer({
   const [busy, setBusy] = useState(false);
   const [recording, setRecording] = useState(false);
   const [recordSeconds, setRecordSeconds] = useState(0);
+  // Visible upload states: "uploading" → "done" (or an error toast on
+  // failure). Makes it obvious the file is being transferred rather than
+  // silently stuck.
+  const [uploadState, setUploadState] = useState<{
+    phase: "uploading" | "done";
+    label: string;
+  } | null>(null);
 
   const imageRef = useRef<HTMLInputElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
@@ -122,6 +131,7 @@ export function ChatComposer({
     const handle = voiceHandleRef.current;
     if (!handle || busy) return;
     setBusy(true);
+    setUploadState({ phase: "uploading", label: "voice message" });
     try {
       const { blob, mime, seconds } = await handle.stop();
       endRecordingSession();
@@ -136,7 +146,10 @@ export function ChatComposer({
         seconds,
       );
       await onSend({ body: "", attachment });
+      setUploadState({ phase: "done", label: "voice message" });
+      window.setTimeout(() => setUploadState(null), 1500);
     } catch (err) {
+      setUploadState(null);
       toast.error(
         err instanceof Error ? err.message : "Could not send the voice message.",
       );
@@ -151,6 +164,7 @@ export function ChatComposer({
   ) => {
     if (busy || disabled) return;
     setBusy(true);
+    setUploadState({ phase: "uploading", label: file.name });
     try {
       const actualKind: "image" | "file" =
         kind === "image" && file.type.startsWith("image/") ? "image" : "file";
@@ -160,7 +174,10 @@ export function ChatComposer({
         () => generateUploadUrl(),
       );
       await onSend({ body: "", attachment });
+      setUploadState({ phase: "done", label: file.name });
+      window.setTimeout(() => setUploadState(null), 1500);
     } catch (err) {
+      setUploadState(null);
       toast.error(
         err instanceof Error ? err.message : "Could not send the attachment.",
       );
@@ -186,7 +203,27 @@ export function ChatComposer({
   };
 
   return (
-    <div className="flex items-center gap-1.5">
+    <div className="space-y-1.5">
+      {uploadState && (
+        <div
+          className={cn(
+            "flex items-center gap-1.5 rounded-lg px-2 py-1 text-[11px] font-medium",
+            uploadState.phase === "done"
+              ? "bg-lime-400/10 text-lime-300"
+              : "bg-white/5 text-muted-foreground",
+          )}
+        >
+          {uploadState.phase === "uploading" ? (
+            <Loader2 className="size-3 animate-spin" />
+          ) : (
+            <Check className="size-3" />
+          )}
+          {uploadState.phase === "uploading"
+            ? `Uploading ${uploadState.label}…`
+            : `Uploaded ${uploadState.label} — sent`}
+        </div>
+      )}
+      <div className="flex items-center gap-1.5">
       <input
         ref={imageRef}
         type="file"
@@ -304,6 +341,7 @@ export function ChatComposer({
           )}
         </>
       )}
+      </div>
     </div>
   );
 }

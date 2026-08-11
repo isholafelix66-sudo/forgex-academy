@@ -4,6 +4,7 @@ import { api } from "@/convex/_generated/api";
 import { FileText, Loader2, Paperclip, Trash2, UploadCloud } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { formatBytes } from "@/lib/media";
+import { uploadFileToConvex } from "@/lib/convex-upload";
 
 export type PrivateDoc = {
   storageId: string;
@@ -22,7 +23,9 @@ const MAX_BYTES = 10 * 1024 * 1024; // 10 MB
  *
  * Files go to Convex private file storage (unguessable URL, never in the
  * public Cloudinary media library) and are recorded in the `documents` table
- * so only admins can list them. Works from any device file picker.
+ * so only admins can list them. Works from any device file picker. The
+ * upload uses the current Convex POST contract and the display URL is
+ * resolved server-side by `recordDocument`.
  */
 export function PrivateDocUploader({
   value,
@@ -47,36 +50,37 @@ export function PrivateDocUploader({
 
   const upload = async (file: File) => {
     if (file.size > MAX_BYTES) {
-      setError(`File is too large (max ${Math.round(MAX_BYTES / 1024 / 1024)} MB).`);
+      setError(
+        `File is too large — the limit is ${Math.round(MAX_BYTES / 1024 / 1024)} MB.`,
+      );
       return;
     }
     setBusy(true);
     setError(null);
     try {
-      const uploadUrl = await generateUploadUrl();
-      const res = await fetch(uploadUrl, {
-        method: "PUT",
-        headers: { "Content-Type": file.type },
-        body: file,
-      });
-      if (!res.ok) throw new Error("Upload failed — please try again.");
+      // POST to Convex storage (the current contract) — returns the real
+      // storage id. The authoritative display URL is resolved server-side by
+      // recordDocument below; never derive it from the upload endpoint.
+      const { storageId } = await uploadFileToConvex(file, () =>
+        generateUploadUrl(),
+      );
 
-      const u = new URL(uploadUrl);
-      const storageId = u.pathname.split("/").pop() ?? "";
-      const publicUrl = `${u.origin}${u.pathname}`;
-
-      await recordDocument({
+      const doc = await recordDocument({
         name: file.name,
         mime: file.type || "application/octet-stream",
         size: file.size,
         storageId: storageId as never,
-        url: publicUrl,
         purpose,
       });
+      if (!doc?.url) {
+        throw new Error(
+          "The upload didn't complete properly — please try again.",
+        );
+      }
 
       onUploaded({
         storageId,
-        url: publicUrl,
+        url: doc.url,
         name: file.name,
         size: file.size,
         mime: file.type,
