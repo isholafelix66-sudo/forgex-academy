@@ -46,25 +46,25 @@ const item = {
   },
 };
 
-// 3D Learning Community — lazy so the hero text paints first and the
-// Three.js chunk only loads once the page is interactive.
-const ForgeXLearningCommunity = lazy(() =>
-  import("@/components/site/ForgeXLearningCommunity").then((m) => ({
-    default: m.ForgeXLearningCommunity,
+// Interactive 3D Learning Device — lazy so the hero text paints first and
+// the Three.js chunk only loads once the page is interactive.
+const ForgeXLearningDevice = lazy(() =>
+  import("@/components/site/ForgeXLearningDevice").then((m) => ({
+    default: m.ForgeXLearningDevice,
   })),
 );
 
 function HeroVisualFallback() {
   return (
-    <div className="mx-auto mt-14 w-full max-w-4xl">
+    <div className="mx-auto mt-14 w-full max-w-5xl">
       <div className="mb-3 flex items-center justify-center gap-2.5">
         <span className="h-px w-8 bg-gradient-to-r from-transparent to-lime-400/60" />
         <p className="text-[11px] font-semibold uppercase tracking-[0.28em] text-lime-300/90">
-          ForgeX Learning Community
+          ForgeX Learning Device
         </p>
         <span className="h-px w-8 bg-gradient-to-l from-transparent to-lime-400/60" />
       </div>
-      <div className="h-72 animate-pulse rounded-3xl border border-white/10 bg-black/30 sm:h-[26rem]">
+      <div className="h-80 animate-pulse rounded-3xl border border-white/10 bg-black/30 sm:h-[30rem]">
         <div className="flex h-full items-center justify-center">
           <div className="size-8 animate-spin rounded-full border-2 border-lime-400/30 border-t-lime-400" />
         </div>
@@ -175,9 +175,9 @@ export default function Landing() {
             </motion.div>
           </motion.div>
 
-          {/* ForgeX Learning Community — interactive 3D campus */}
+          {/* ForgeX Learning Device — interactive 3D centerpiece */}
           <Suspense fallback={<HeroVisualFallback />}>
-            <ForgeXLearningCommunity />
+            <ForgeXLearningDevice />
           </Suspense>
 
           {/* Stats */}
