@@ -37,8 +37,24 @@ describe("resolveRedirectAfterAuth", () => {
     expect(resolveRedirectAfterAuth("/path\u001F")).toBe("/dashboard");
   });
 
+  it("blocks /auth as a target (redirect-loop guard)", () => {
+    expect(resolveRedirectAfterAuth("/auth")).toBe("/dashboard");
+    expect(resolveRedirectAfterAuth("/auth?mode=signup")).toBe("/dashboard");
+    expect(resolveRedirectAfterAuth("/auth?returnTo=/dashboard")).toBe(
+      "/dashboard",
+    );
+    expect(resolveRedirectAfterAuth("/auth#top")).toBe("/dashboard");
+    expect(resolveRedirectAfterAuth("/auth/forgot")).toBe("/dashboard");
+  });
+
+  it("does not block unrelated paths that merely share the /auth prefix", () => {
+    expect(resolveRedirectAfterAuth("/dashboard")).toBe("/dashboard");
+    expect(resolveRedirectAfterAuth("/courses")).toBe("/courses");
+  });
+
   it("honors a custom fallback", () => {
     expect(resolveRedirectAfterAuth(null, "/tutor")).toBe("/tutor");
     expect(resolveRedirectAfterAuth("//evil.com", "/tutor")).toBe("/tutor");
+    expect(resolveRedirectAfterAuth("/auth", "/tutor")).toBe("/tutor");
   });
 });
