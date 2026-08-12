@@ -1,27 +1,27 @@
 /**
- * FORGEX LEARNING DEVICE — the interactive 3D centerpiece of the homepage.
+ * FORGEX QUANTUM POD — the interactive 3D centerpiece of the homepage.
  *
- * A premium matte-black + electric-lime futuristic learning machine. It starts
- * CLOSED, slowly floating and rotating in space. When the visitor scrolls (or
- * hovers / taps it), the machine mechanically opens: the top lid lifts and
- * unfolds on a rear hinge, polished side rails slide apart, a telescoping
- * piston rises and a soft neon-lime light glows from the interior bay.
+ * A premium faceted diamond crystal hovering in space: matte-black facets
+ * with neon-lime edges, a glowing girdle seam and a faint quantum
+ * containment shell. It starts CLOSED, slowly floating and rotating. When
+ * the visitor scrolls (or hovers / taps it) the crown mechanically blooms:
+ * eight crystal petals pivot outward on their girdle edges, revealing a
+ * glowing quantum core with floating holographic icons.
  *
- * Then the transformation happens: real 3D objects physically EMERGE from
- * inside the device — laptop, phone, camera, headphones, tablet, keyboard,
- * a 3D book, an AI holographic panel and floating course cards. Each starts
- * small inside the bay, then rises, unfolds and floats outward along its own
- * trajectory. Once out, the objects stay suspended around the device, gently
- * orbiting and floating with natural depth. The device remains the central
- * "source".
+ * Then the transformation: real 3D objects physically EMERGE from inside the
+ * pod — laptop, phone, camera, headphones, tablet, keyboard, a 3D book, an
+ * AI holographic panel and floating course cards. Each starts small at the
+ * core, then rises, unfolds and floats outward along its own trajectory.
+ * Once out, the objects stay suspended around the pod, gently orbiting and
+ * floating with natural depth. The crystal remains the central "source".
  *
  * The three act narrative maps onto the hero headline:
- *   DISCOVER → the device is closed, floating and rotating
- *   EXPRESS  → the machine opens, the interior glows
+ *   DISCOVER → the crystal floats closed and rotating
+ *   EXPRESS  → the crown blooms open, the quantum core glows
  *   BUILD    → objects emerge and the ForgeX ecosystem forms around it
  *
- * Built from Three.js primitives + RoundedBoxGeometry (no external models,
- * no drei). Performance-minded:
+ * Built from Three.js primitives + hand-built faceted geometry (no external
+ * models, no drei). Performance-minded:
  *  - no shadow maps, no post-processing, tiny particle counts
  *  - device pixel ratio capped (lower on touch devices)
  *  - rendering pauses when the canvas leaves the viewport
@@ -38,7 +38,6 @@ import type { ReactNode, RefObject } from "react";
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import type { ThreeEvent } from "@react-three/fiber";
 import * as THREE from "three";
-import { RoundedBoxGeometry } from "three/examples/jsm/geometries/RoundedBoxGeometry.js";
 import { RoomEnvironment } from "three/examples/jsm/environments/RoomEnvironment.js";
 import { motion } from "framer-motion";
 
@@ -120,35 +119,8 @@ function isCoarsePointer(): boolean {
 }
 
 /* ------------------------------------------------------------------ */
-/* Small 3D helpers                                                    */
+/* Small helpers                                                       */
 /* ------------------------------------------------------------------ */
-
-function RoundedBox({
-  w,
-  h,
-  d,
-  r,
-  material,
-  position,
-  rotation,
-}: {
-  w: number;
-  h: number;
-  d: number;
-  r: number;
-  material: THREE.Material;
-  position?: [number, number, number];
-  rotation?: [number, number, number];
-}) {
-  const geometry = useMemo(
-    () => new RoundedBoxGeometry(w, h, d, 4, r),
-    [w, h, d, r],
-  );
-  useEffect(() => () => geometry.dispose(), [geometry]);
-  return (
-    <mesh geometry={geometry} material={material} position={position} rotation={rotation} />
-  );
-}
 
 /** Radial-gradient canvas texture (soft glow / contact shadow). */
 function radialTexture(stops: Array<[number, string]>): THREE.CanvasTexture {
@@ -163,6 +135,82 @@ function radialTexture(stops: Array<[number, string]>): THREE.CanvasTexture {
   const tex = new THREE.CanvasTexture(c);
   tex.needsUpdate = true;
   return tex;
+}
+
+/* ------------------------------------------------------------------ */
+/* Faceted crystal geometry                                            */
+/* ------------------------------------------------------------------ */
+
+const CRYSTAL_SIDES = 8;
+const CRYSTAL_R = 1.15; // girdle radius
+const CROWN_H = 1.5; // crown (upper) height
+const PAVILION_H = 1.05; // pavilion (lower) depth
+const PETAL_OPEN = 1.9; // radians — crown petal swing at full open
+
+/**
+ * Builds the pod geometry: one pavilion (lower cone) and ONE crown petal in
+ * its own local frame. All petals share the single petal geometry — each
+ * petal group positions it and pivots it open on its girdle edge.
+ *
+ * Petal local frame: origin at the girdle point, +z points radially outward,
+ * +y up. A ridge point mid-way up the girdle edge gives each petal two
+ * facets so the closed crystal reads as a real diamond crown.
+ */
+function createCrystalGeometries(
+  sides: number,
+  r: number,
+  h1: number,
+  h2: number,
+) {
+  const ring: Array<[number, number, number]> = [];
+  for (let i = 0; i < sides; i++) {
+    const a = (i / sides) * Math.PI * 2;
+    ring.push([r * Math.sin(a), 0, r * Math.cos(a)]);
+  }
+  const next = (i: number) => ring[(i + 1) % sides];
+
+  // ---- pavilion: girdle ring → bottom apex (non-indexed → flat facets).
+  // Wound apex-between so outward faces point outward-down (front-side culling).
+  const pav = new THREE.BufferGeometry();
+  const pPos: number[] = [];
+  for (let i = 0; i < sides; i++) {
+    const [x1, y1, z1] = ring[i];
+    const [x2, y2, z2] = next(i);
+    pPos.push(x1, y1, z1, 0, -h2, 0, x2, y2, z2);
+  }
+  pav.setAttribute("position", new THREE.Float32BufferAttribute(pPos, 3));
+  pav.computeVertexNormals();
+
+  // ---- one crown petal (local frame) ----
+  const dA = (Math.PI * 2) / sides;
+  const nx = r * Math.sin(dA); // next girdle point, local
+  const nz = r * (Math.cos(dA) - 1);
+  const mx = nx / 2;
+  const mz = nz / 2;
+  const my = h1 * 0.34;
+  const petal = new THREE.BufferGeometry();
+  petal.setAttribute(
+    "position",
+    new THREE.Float32BufferAttribute(
+      [
+        0, 0, 0,
+        mx, my, mz,
+        0, h1, -r,
+        mx, my, mz,
+        nx, 0, nz,
+        0, h1, -r,
+      ],
+      3,
+    ),
+  );
+  petal.computeVertexNormals();
+
+  return {
+    pavilionGeo: pav,
+    pavilionEdges: new THREE.EdgesGeometry(pav),
+    petalGeo: petal,
+    petalEdges: new THREE.EdgesGeometry(petal),
+  };
 }
 
 /* ------------------------------------------------------------------ */
@@ -184,7 +232,7 @@ type FloatCfg = {
   id: string;
   label: string;
   kind: FloatKind;
-  /** Inside the device (origin point of emergence). */
+  /** Inside the pod (origin point of emergence). */
   from: [number, number, number];
   /** Arc control point. */
   mid: [number, number, number];
@@ -211,9 +259,9 @@ const FLOAT_CFG: FloatCfg[] = [
     id: "laptop",
     label: "LEARN",
     kind: "laptop",
-    from: [0, 0.9, -0.05],
-    mid: [0, 2.0, -0.4],
-    to: [-0.95, 1.6, -1.7],
+    from: [0, 0.15, 0],
+    mid: [0, 1.3, -0.4],
+    to: [-0.95, 0.95, -1.7],
     start: 0.3,
     end: 0.55,
     orbitR: 0.28,
@@ -232,9 +280,9 @@ const FLOAT_CFG: FloatCfg[] = [
     id: "phone",
     label: "CONNECT",
     kind: "phone",
-    from: [-0.2, 0.9, 0.05],
-    mid: [-0.6, 2.2, -0.2],
-    to: [-2.0, 1.95, -0.55],
+    from: [-0.15, 0.15, 0.05],
+    mid: [-0.6, 1.5, -0.2],
+    to: [-2.0, 1.3, -0.55],
     start: 0.34,
     end: 0.6,
     orbitR: 0.22,
@@ -253,9 +301,9 @@ const FLOAT_CFG: FloatCfg[] = [
     id: "camera",
     label: "CREATE",
     kind: "camera",
-    from: [0.2, 0.9, 0.02],
-    mid: [0.7, 1.9, 0.0],
-    to: [2.0, 1.35, 0.35],
+    from: [0.15, 0.15, 0.02],
+    mid: [0.7, 1.2, 0],
+    to: [2.0, 0.7, 0.35],
     start: 0.38,
     end: 0.62,
     orbitR: 0.3,
@@ -274,9 +322,9 @@ const FLOAT_CFG: FloatCfg[] = [
     id: "tablet",
     label: "DESIGN",
     kind: "tablet",
-    from: [0.05, 0.92, 0],
-    mid: [0.1, 2.4, 0.1],
-    to: [0.5, 2.65, -1.15],
+    from: [0.05, 0.18, 0],
+    mid: [0.1, 1.8, 0.1],
+    to: [0.5, 2.0, -1.15],
     start: 0.42,
     end: 0.68,
     orbitR: 0.26,
@@ -295,9 +343,9 @@ const FLOAT_CFG: FloatCfg[] = [
     id: "aiPanel",
     label: "AI",
     kind: "aiPanel",
-    from: [0, 0.95, -0.1],
-    mid: [0, 2.7, 0.3],
-    to: [0, 3.05, 0.85],
+    from: [0, 0.2, -0.05],
+    mid: [0, 2.1, 0.3],
+    to: [0, 2.4, 0.85],
     start: 0.48,
     end: 0.75,
     orbitR: 0.18,
@@ -316,9 +364,9 @@ const FLOAT_CFG: FloatCfg[] = [
     id: "book",
     label: "KNOWLEDGE",
     kind: "book",
-    from: [-0.15, 0.9, 0.08],
-    mid: [-0.5, 1.8, 0.15],
-    to: [-1.55, 2.5, 1.15],
+    from: [-0.1, 0.15, 0.05],
+    mid: [-0.5, 1.15, 0.15],
+    to: [-1.55, 1.85, 1.15],
     start: 0.52,
     end: 0.78,
     orbitR: 0.5,
@@ -337,9 +385,9 @@ const FLOAT_CFG: FloatCfg[] = [
     id: "headphones",
     label: "IMMERSE",
     kind: "headphones",
-    from: [0.15, 0.9, 0.04],
-    mid: [0.6, 1.7, 0.35],
-    to: [1.5, 2.15, 1.3],
+    from: [0.1, 0.15, 0.03],
+    mid: [0.6, 1.05, 0.35],
+    to: [1.5, 1.5, 1.3],
     start: 0.45,
     end: 0.72,
     orbitR: 0.34,
@@ -358,9 +406,9 @@ const FLOAT_CFG: FloatCfg[] = [
     id: "keyboard",
     label: "BUILD",
     kind: "keyboard",
-    from: [0.05, 0.88, 0.12],
-    mid: [0.3, 1.5, 0.7],
-    to: [0.7, 0.8, 1.95],
+    from: [0.05, 0.12, 0.08],
+    mid: [0.3, 0.9, 0.7],
+    to: [0.7, 0.15, 1.95],
     start: 0.56,
     end: 0.82,
     orbitR: 0.2,
@@ -379,9 +427,9 @@ const FLOAT_CFG: FloatCfg[] = [
     id: "cards",
     label: "MODULES",
     kind: "cards",
-    from: [0.02, 0.95, -0.08],
-    mid: [0.1, 1.7, -0.3],
-    to: [-2.2, 1.2, -1.25],
+    from: [0.02, 0.18, -0.04],
+    mid: [0.1, 1.1, -0.3],
+    to: [-2.2, 0.55, -1.25],
     start: 0.6,
     end: 0.88,
     orbitR: 0.6,
@@ -401,6 +449,14 @@ const FLOAT_CFG: FloatCfg[] = [
 /** Mobile renders the first N (essential) objects only. */
 const MOBILE_OBJECT_COUNT = 6;
 
+/** Holographic icons floating above the quantum core inside the pod. */
+const ICONS = [
+  { id: "book", x: -0.42, y: 0.55, z: 0, phase: 0 },
+  { id: "ai", x: 0, y: 0.75, z: -0.35, phase: 1.2 },
+  { id: "spark", x: 0.42, y: 0.55, z: 0, phase: 2.4 },
+  { id: "people", x: 0, y: 0.55, z: 0.4, phase: 3.6 },
+];
+
 /* ------------------------------------------------------------------ */
 /* Materials                                                           */
 /* ------------------------------------------------------------------ */
@@ -409,16 +465,18 @@ type Mats = {
   body: THREE.MeshPhysicalMaterial;
   dark: THREE.MeshStandardMaterial;
   metal: THREE.MeshPhysicalMaterial;
-  gloss: THREE.MeshPhysicalMaterial;
   trim: THREE.MeshStandardMaterial;
   core: THREE.MeshStandardMaterial;
-  screen: THREE.MeshStandardMaterial;
   screenDark: THREE.MeshStandardMaterial;
   panelMat: THREE.MeshBasicMaterial;
+  crystal: THREE.MeshPhysicalMaterial;
+  edge: THREE.LineBasicMaterial;
+  coreMat: THREE.MeshBasicMaterial;
   beam: THREE.MeshBasicMaterial;
-  sweep: THREE.MeshBasicMaterial;
   ringA: THREE.MeshBasicMaterial;
   ringB: THREE.MeshBasicMaterial;
+  shell: THREE.MeshBasicMaterial;
+  field: THREE.MeshBasicMaterial;
 };
 
 function createMaterials(): Mats {
@@ -437,19 +495,12 @@ function createMaterials(): Mats {
       metalness: 0.45,
       roughness: 0.55,
     }),
-    // polished rails / hinges
+    // polished details
     metal: new THREE.MeshPhysicalMaterial({
       color: "#262b33",
       metalness: 0.95,
       roughness: 0.18,
       clearcoat: 0.5,
-    }),
-    // glossy lid strip
-    gloss: new THREE.MeshPhysicalMaterial({
-      color: "#3c434d",
-      metalness: 0.9,
-      roughness: 0.12,
-      clearcoat: 0.85,
     }),
     // lime trims + accents
     trim: new THREE.MeshStandardMaterial({
@@ -467,21 +518,13 @@ function createMaterials(): Mats {
       transparent: true,
       opacity: 0.98,
     }),
-    // display screen (glow animated per frame)
-    screen: new THREE.MeshStandardMaterial({
-      color: "#0a0d08",
-      emissive: new THREE.Color(LIME),
-      emissiveIntensity: 0.3,
-      metalness: 0.2,
-      roughness: 0.5,
-    }),
     // dark glass for device screens
     screenDark: new THREE.MeshStandardMaterial({
       color: "#04060a",
       metalness: 0.55,
       roughness: 0.3,
     }),
-    // holographic AI panel
+    // holographic panels / icons
     panelMat: new THREE.MeshBasicMaterial({
       color: LIME,
       transparent: true,
@@ -490,6 +533,24 @@ function createMaterials(): Mats {
       depthWrite: false,
       side: THREE.DoubleSide,
     }),
+    // faceted crystal body
+    crystal: new THREE.MeshPhysicalMaterial({
+      color: "#0f1318",
+      metalness: 0.85,
+      roughness: 0.2,
+      clearcoat: 0.5,
+      flatShading: true,
+      emissive: new THREE.Color("#0c1014"),
+      emissiveIntensity: 0.55,
+    }),
+    // neon-lime crystal edges
+    edge: new THREE.LineBasicMaterial({
+      color: LIME,
+      transparent: true,
+      opacity: 0.5,
+    }),
+    // quantum core orb
+    coreMat: new THREE.MeshBasicMaterial({ color: LIME_SOFT }),
     // additive light beam
     beam: new THREE.MeshBasicMaterial({
       color: LIME,
@@ -498,14 +559,6 @@ function createMaterials(): Mats {
       blending: THREE.AdditiveBlending,
       depthWrite: false,
       side: THREE.DoubleSide,
-    }),
-    // display sweep line
-    sweep: new THREE.MeshBasicMaterial({
-      color: LIME,
-      transparent: true,
-      opacity: 0,
-      blending: THREE.AdditiveBlending,
-      depthWrite: false,
     }),
     ringA: new THREE.MeshBasicMaterial({
       color: LIME,
@@ -518,6 +571,24 @@ function createMaterials(): Mats {
       color: LIME,
       transparent: true,
       opacity: 0.09,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+    }),
+    // quantum containment shell (dissolves as the pod opens)
+    shell: new THREE.MeshBasicMaterial({
+      color: LIME,
+      wireframe: true,
+      transparent: true,
+      opacity: 0.1,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+    }),
+    // quantum field around the core
+    field: new THREE.MeshBasicMaterial({
+      color: LIME,
+      wireframe: true,
+      transparent: true,
+      opacity: 0.2,
       blending: THREE.AdditiveBlending,
       depthWrite: false,
     }),
@@ -535,8 +606,8 @@ function Rig({ mobile, reduced }: { mobile: boolean; reduced: boolean }) {
     const px = mobile || reduced ? 0 : pointer.x;
     const py = mobile || reduced ? 0 : pointer.y;
     camera.position.x += (px * 0.6 - camera.position.x) * k;
-    camera.position.y += (1.78 + py * 0.3 - camera.position.y) * k;
-    camera.lookAt(0, 1.02, 0);
+    camera.position.y += (1.05 + py * 0.3 - camera.position.y) * k;
+    camera.lookAt(0, 0.55, 0);
   });
   return null;
 }
@@ -922,7 +993,7 @@ function LabelProjector({
 }
 
 /* ------------------------------------------------------------------ */
-/* The device — geometry, spring, ambient motion                       */
+/* The quantum pod — geometry, spring, ambient motion                  */
 /* ------------------------------------------------------------------ */
 
 function DeviceScene({
@@ -948,17 +1019,14 @@ function DeviceScene({
 }) {
   const { size } = useThree();
   const deviceRef = useRef<THREE.Group>(null);
-  const lidRef = useRef<THREE.Group>(null);
-  const interiorRef = useRef<THREE.Group>(null);
+  const petalRefs = useRef<(THREE.Group | null)[]>([]);
+  const coreRef = useRef<THREE.Mesh>(null);
+  const fieldRef = useRef<THREE.Mesh>(null);
   const beamRef = useRef<THREE.Mesh>(null);
-  const sweepRef = useRef<THREE.Mesh>(null);
-  const pistonRef = useRef<THREE.Mesh>(null);
   const interiorLightRef = useRef<THREE.PointLight>(null);
-  const railLRef = useRef<THREE.Mesh>(null);
-  const railRRef = useRef<THREE.Mesh>(null);
+  const iconRefs = useRef<(THREE.Group | null)[]>([]);
   const particlesRef = useRef<THREE.Points>(null);
   const ringsRef = useRef<THREE.Group>(null);
-  const ledRefs = useRef<(THREE.Mesh | null)[]>([]);
   const openRef = useRef(0);
   const lastReport = useRef(-1);
   const pointerRef = useRef({ x: 0, y: 0 });
@@ -973,6 +1041,21 @@ function DeviceScene({
       Object.values(mats).forEach((m) => m.dispose());
     },
     [mats],
+  );
+
+  // crystal geometry + edges
+  const crystal = useMemo(
+    () => createCrystalGeometries(CRYSTAL_SIDES, CRYSTAL_R, CROWN_H, PAVILION_H),
+    [],
+  );
+  useEffect(
+    () => () => {
+      crystal.pavilionGeo.dispose();
+      crystal.pavilionEdges.dispose();
+      crystal.petalGeo.dispose();
+      crystal.petalEdges.dispose();
+    },
+    [crystal],
   );
 
   // contact glow + shadow discs + hover-glow sprite material
@@ -1010,7 +1093,7 @@ function DeviceScene({
     [glowTex, shadowTex, spriteMat],
   );
 
-  // floating particles around the device
+  // floating particles around the pod
   const particlesGeo = useMemo(() => {
     const count = particleCount;
     const positions = new Float32Array(count * 3);
@@ -1027,7 +1110,7 @@ function DeviceScene({
   }, [particleCount]);
   useEffect(() => () => particlesGeo.dispose(), [particlesGeo]);
 
-  // fit the device to the viewport: pull back on narrow (portrait) screens
+  // fit the pod to the viewport: pull back on narrow (portrait) screens
   const aspect = size.width / Math.max(1, size.height);
   const deviceScale = Math.min(1, Math.max(0.6, aspect / 1.55));
   useEffect(() => {
@@ -1047,56 +1130,61 @@ function DeviceScene({
       lastReport.current = open;
       onOpenRef.current(open);
     }
-    const lidP = smoothstep(open, 0, 0.32);
-    const interiorP = smoothstep(open, 0.14, 0.55);
+    const petalP = smoothstep(open, 0, 0.3); // crown fully blooms first
     const glowP = smoothstep(open, 0.25, 0.7);
 
-    // device: float + rotate (+ hover parallax on desktop)
+    // pod: float + rotate (+ hover parallax on desktop); tilts forward
+    // slightly as it opens to present the interior
     const g = deviceRef.current;
     if (g) {
       if (reduced) {
         g.position.y = 0;
         g.rotation.y = 0.42;
-        g.rotation.x = -open * 0.04;
+        g.rotation.x = open * 0.14;
         g.rotation.z = 0;
       } else {
-        g.position.y = Math.sin(t * 0.7) * 0.1 * (1 - open * 0.45);
+        g.position.y = Math.sin(t * 0.7) * 0.1 * (1 - open * 0.4);
         const px = mobile ? 0 : state.pointer.x;
         const py = mobile ? 0 : state.pointer.y;
         g.rotation.y = t * 0.2 + px * 0.16;
-        g.rotation.x = -open * 0.04 + py * 0.06;
+        g.rotation.x = open * 0.14 + py * 0.06;
         g.rotation.z = Math.sin(t * 0.45) * 0.02;
       }
     }
 
-    // lid — lifts and unfolds on the rear hinge (fully open before emerge)
-    if (lidRef.current) {
-      lidRef.current.rotation.x = -(lidP * 1.83 + Math.sin(lidP * Math.PI) * 0.045);
-    }
+    // crown petals — bloom outward on their girdle edges
+    petalRefs.current.forEach((p) => {
+      if (p) p.rotation.x = petalP * PETAL_OPEN + Math.sin(petalP * Math.PI) * 0.04;
+    });
 
-    // interior assembles; side rails slide apart; piston rises
-    if (interiorRef.current) {
-      interiorRef.current.scale.setScalar(0.001 + interiorP);
+    // quantum core pulse + field rotation
+    if (coreRef.current) {
+      coreRef.current.scale.setScalar(1 + Math.sin(t * 2.2) * 0.09 + glowP * 0.4);
+    }
+    if (fieldRef.current) {
+      fieldRef.current.rotation.y = t * 0.5;
+      fieldRef.current.rotation.x = t * 0.3;
     }
     if (interiorLightRef.current) {
       interiorLightRef.current.intensity = glowP * 12;
     }
-    if (railLRef.current) railLRef.current.position.x = -1.52 - interiorP * 0.06;
-    if (railRRef.current) railRRef.current.position.x = 1.52 + interiorP * 0.06;
-    if (pistonRef.current) {
-      pistonRef.current.scale.y = 0.25 + glowP * 0.75;
-    }
 
-    // screen glow + beam + sweep line
-    mats.screen.emissiveIntensity = 0.3 + glowP * 1.45 + Math.sin(t * 1.1) * 0.06;
+    // holographic icons materialize and bob over the core
+    iconRefs.current.forEach((icon, i) => {
+      if (!icon) return;
+      const ic = ICONS[i];
+      const s = 0.001 + glowP;
+      icon.scale.setScalar(s);
+      icon.position.y = ic.y + Math.sin(t * 1.1 + ic.phase) * 0.05 * glowP;
+      icon.rotation.y = t * 0.4 + ic.phase;
+    });
+
+    // beam + containment shell
     mats.beam.opacity = 0.05 + glowP * 0.17;
     if (beamRef.current) {
       beamRef.current.scale.setScalar(0.55 + glowP * 0.55 + Math.sin(t * 1.6) * 0.04);
     }
-    if (sweepRef.current) {
-      sweepRef.current.position.x = -0.5 + ((t * 0.14) % 1.0);
-      mats.sweep.opacity = 0.55 * glowP;
-    }
+    mats.shell.opacity = 0.1 * (1 - petalP);
 
     // particles + light rings drift slowly
     if (particlesRef.current && !reduced) {
@@ -1107,12 +1195,6 @@ function DeviceScene({
       ringsRef.current.rotation.y = t * 0.24;
       ringsRef.current.rotation.x = 0.16 + Math.sin(t * 0.35) * 0.04;
     }
-
-    // status LEDs pulse
-    ledRefs.current.forEach((led, i) => {
-      if (!led) return;
-      led.scale.setScalar(0.75 + Math.sin(t * 2.4 + i * 1.6) * 0.35);
-    });
   });
 
   return (
@@ -1126,12 +1208,12 @@ function DeviceScene({
 
       <group ref={deviceRef}>
         {/* contact shadow + glow */}
-        <mesh position={[0, 0.012, 0]} rotation={[-Math.PI / 2, 0, 0]}>
-          <planeGeometry args={[4.6, 4.0]} />
+        <mesh position={[0, -1.1, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+          <planeGeometry args={[4.4, 3.8]} />
           <meshBasicMaterial map={shadowTex} transparent opacity={0.7} depthWrite={false} />
         </mesh>
-        <mesh position={[0, 0.018, 0]} rotation={[-Math.PI / 2, 0, 0]}>
-          <planeGeometry args={[5.0, 4.4]} />
+        <mesh position={[0, -1.09, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+          <planeGeometry args={[4.8, 4.2]} />
           <meshBasicMaterial
             map={glowTex}
             transparent
@@ -1141,102 +1223,107 @@ function DeviceScene({
           />
         </mesh>
 
-        {/* ---------------- BASE ---------------- */}
-        <RoundedBox w={3.0} h={0.9} d={2.0} r={0.16} material={mats.body} position={[0, 0.45, 0]} />
-        {/* glowing bottom skirt */}
-        <mesh position={[0, 0.06, 0]}>
-          <boxGeometry args={[3.06, 0.07, 2.06]} />
-          <meshBasicMaterial color={LIME} transparent opacity={0.5} blending={THREE.AdditiveBlending} depthWrite={false} />
-        </mesh>
-        {/* lime trim around the top of the body */}
-        <mesh position={[0, 0.88, 0]} material={mats.trim}>
-          <boxGeometry args={[3.02, 0.035, 2.02]} />
-        </mesh>
-        {/* polished side rails — slide apart as the machine opens */}
-        <mesh ref={railLRef} position={[-1.52, 0.45, 0]} rotation={[0, 0, Math.PI / 2]} material={mats.metal}>
-          <boxGeometry args={[0.88, 0.055, 2.0]} />
-        </mesh>
-        <mesh ref={railRRef} position={[1.52, 0.45, 0]} rotation={[0, 0, Math.PI / 2]} material={mats.metal}>
-          <boxGeometry args={[0.88, 0.055, 2.0]} />
-        </mesh>
-        {/* ForgeX mark on the front */}
-        <group position={[0, 0.45, 1.02]}>
-          <mesh material={mats.trim} rotation={[0, 0, Math.PI / 4]}>
-            <boxGeometry args={[0.3, 0.045, 0.03]} />
-          </mesh>
-          <mesh material={mats.trim} rotation={[0, 0, -Math.PI / 4]}>
-            <boxGeometry args={[0.3, 0.045, 0.03]} />
-          </mesh>
-        </group>
-        {/* status LEDs */}
-        {[-0.24, 0, 0.24].map((x, i) => (
-          <mesh
-            key={x}
-            ref={(el) => {
-              ledRefs.current[i] = el;
-            }}
-            position={[x, 0.1, 1.015]}
-          >
-            <sphereGeometry args={[0.035, 8, 8]} />
-            <meshBasicMaterial color={LIME} />
-          </mesh>
-        ))}
+        {/* ---------------- PAVILION (lower crystal half) ---------------- */}
+        <mesh geometry={crystal.pavilionGeo} material={mats.crystal} />
+        <lineSegments geometry={crystal.pavilionEdges} material={mats.edge} />
 
-        {/* ---------------- INTERIOR (deck + bay) ---------------- */}
-        <group ref={interiorRef} position={[0, 0.9, 0]} scale={0.001}>
-          {/* deck plate */}
-          <RoundedBox w={2.86} h={0.1} d={1.86} r={0.08} material={mats.dark} position={[0, 0.02, 0]} />
-          {/* display band at the front of the deck */}
-          <mesh material={mats.screen} position={[0, 0.08, 0.45]}>
-            <boxGeometry args={[2.3, 0.05, 0.5]} />
+        {/* glowing girdle seam */}
+        <mesh position={[0, 0, 0]} rotation={[Math.PI / 2, 0, 0]} material={mats.trim}>
+          <torusGeometry args={[CRYSTAL_R, 0.02, 8, 48]} />
+        </mesh>
+
+        {/* ---------------- CROWN PETALS (bloom open) ---------------- */}
+        {Array.from({ length: CRYSTAL_SIDES }).map((_, i) => {
+          const a = (i / CRYSTAL_SIDES) * Math.PI * 2;
+          return (
+            <group
+              key={i}
+              ref={(el) => {
+                petalRefs.current[i] = el;
+              }}
+              position={[CRYSTAL_R * Math.sin(a), 0, CRYSTAL_R * Math.cos(a)]}
+              rotation={[0, a, 0]}
+            >
+              <mesh geometry={crystal.petalGeo} material={mats.crystal} />
+              <lineSegments geometry={crystal.petalEdges} material={mats.edge} />
+            </group>
+          );
+        })}
+
+        {/* ---------------- INTERIOR: deck + quantum core + icons ---------------- */}
+        <group position={[0, 0, 0]}>
+          {/* octagonal deck */}
+          <mesh position={[0, 0.02, 0]} material={mats.dark}>
+            <cylinderGeometry args={[1.0, 1.08, 0.06, 8]} />
           </mesh>
-          <mesh position={[0, 0.105, 0.45]}>
-            <boxGeometry args={[2.38, 0.016, 0.58]} />
-            <meshBasicMaterial color={LIME} transparent opacity={0.35} blending={THREE.AdditiveBlending} depthWrite={false} />
+          {/* quantum core orb */}
+          <mesh ref={coreRef} material={mats.coreMat} position={[0, 0.18, 0]}>
+            <sphereGeometry args={[0.13, 16, 16]} />
           </mesh>
-          {/* sweep line across the display */}
-          <mesh ref={sweepRef} material={mats.sweep} position={[-0.5, 0.115, 0.45]}>
-            <boxGeometry args={[0.5, 0.012, 0.5]} />
+          {/* quantum field wireframe */}
+          <mesh ref={fieldRef} material={mats.field} position={[0, 0.34, 0]}>
+            <icosahedronGeometry args={[0.34, 0]} />
           </mesh>
-          {/* central bay — objects emerge from here */}
-          <RoundedBox w={1.5} h={0.16} d={1.1} r={0.07} material={mats.dark} position={[0, -0.02, -0.15]} />
-          <mesh material={mats.trim} position={[0, 0.065, -0.15]}>
-            <boxGeometry args={[1.56, 0.02, 1.16]} />
+          {/* holographic icons */}
+          {ICONS.map((ic, i) => (
+            <group
+              key={ic.id}
+              ref={(el) => {
+                iconRefs.current[i] = el;
+              }}
+              position={[ic.x, ic.y, ic.z]}
+              scale={0.001}
+            >
+              {ic.id === "book" && (
+                <>
+                  <mesh material={mats.panelMat} rotation={[0, 0, 0.5]}>
+                    <boxGeometry args={[0.17, 0.07, 0.008]} />
+                  </mesh>
+                  <mesh material={mats.panelMat} rotation={[0, 0, -0.5]}>
+                    <boxGeometry args={[0.17, 0.07, 0.008]} />
+                  </mesh>
+                </>
+              )}
+              {ic.id === "ai" && (
+                <>
+                  <mesh material={mats.core}>
+                    <octahedronGeometry args={[0.07, 0]} />
+                  </mesh>
+                  <mesh material={mats.panelMat} rotation={[Math.PI / 2, 0, 0]}>
+                    <torusGeometry args={[0.11, 0.006, 6, 20]} />
+                  </mesh>
+                </>
+              )}
+              {ic.id === "spark" && (
+                <mesh material={mats.core}>
+                  <tetrahedronGeometry args={[0.08, 0]} />
+                </mesh>
+              )}
+              {ic.id === "people" && (
+                <>
+                  <mesh material={mats.panelMat} position={[-0.05, 0.02, 0]}>
+                    <sphereGeometry args={[0.04, 10, 10]} />
+                  </mesh>
+                  <mesh material={mats.panelMat} position={[0.05, 0.02, 0]}>
+                    <sphereGeometry args={[0.04, 10, 10]} />
+                  </mesh>
+                </>
+              )}
+            </group>
+          ))}
+          {/* light beam rising from the core */}
+          <mesh ref={beamRef} material={mats.beam} position={[0, 0.95, 0]}>
+            <coneGeometry args={[0.5, 1.4, 24, 1, true]} />
           </mesh>
-          {/* core light inside the bay */}
-          <mesh position={[0, 0.03, -0.15]}>
-            <sphereGeometry args={[0.07, 12, 12]} />
-            <meshBasicMaterial color={LIME_SOFT} />
-          </mesh>
-          {/* telescoping piston */}
-          <mesh ref={pistonRef} material={mats.metal} position={[0, 0.12, -0.15]}>
-            <cylinderGeometry args={[0.045, 0.055, 0.4, 10]} />
-          </mesh>
-          <pointLight ref={interiorLightRef} position={[0, 0.35, -0.15]} intensity={0} distance={6} decay={2} color={LIME} />
-          {/* light beam rising from the bay */}
-          <mesh ref={beamRef} material={mats.beam} position={[0, 1.72, -0.15]}>
-            <coneGeometry args={[0.55, 1.5, 24, 1, true]} />
-          </mesh>
+          <pointLight ref={interiorLightRef} position={[0, 0.5, 0]} intensity={0} distance={6} decay={2} color={LIME} />
         </group>
 
-        {/* ---------------- LID (rear hinge, swings up) ---------------- */}
-        <group position={[0, 0.9, -0.86]} ref={lidRef}>
-          {/* polished hinge pin */}
-          <mesh material={mats.metal} rotation={[0, 0, Math.PI / 2]}>
-            <cylinderGeometry args={[0.05, 0.05, 2.8, 12]} />
-          </mesh>
-          <RoundedBox w={2.8} h={0.5} d={1.72} r={0.12} material={mats.body} position={[0, 0.26, 0.86]} />
-          {/* inner lime trim (visible when open) */}
-          <mesh material={mats.trim} position={[0, 0.09, 0.86]}>
-            <boxGeometry args={[2.78, 0.02, 1.7]} />
-          </mesh>
-          {/* glossy outer strip */}
-          <mesh material={mats.gloss} position={[0, 0.47, 0.86]}>
-            <boxGeometry args={[2.76, 0.03, 1.68]} />
-          </mesh>
-        </group>
+        {/* quantum containment shell — dissolves as the crown opens */}
+        <mesh material={mats.shell} position={[0, 0.45, 0]}>
+          <icosahedronGeometry args={[1.8, 0]} />
+        </mesh>
 
-        {/* ---------------- FLOATING OBJECTS (emerge from the bay) ---------------- */}
+        {/* ---------------- FLOATING OBJECTS (emerge from the core) ---------------- */}
         {cfgs.map((c, i) => (
           <FloatObject
             key={c.id}
@@ -1371,17 +1458,17 @@ function StaticFallback({ progress, reduced }: { progress: number; reduced: bool
         viewBox="0 0 420 320"
         className="h-full w-full"
         role="img"
-        aria-label="ForgeX Learning Device — a futuristic matte-black and electric-lime learning machine that opens and releases laptops, phones, cameras, books and AI panels"
+        aria-label="ForgeX Quantum Pod — a faceted matte-black and electric-lime crystal that blooms open and releases laptops, phones, cameras, books and AI panels"
       >
         <defs>
           <radialGradient id="fxd-ambient" cx="50%" cy="42%" r="55%">
             <stop offset="0%" stopColor={LIME} stopOpacity="0.14" />
             <stop offset="100%" stopColor={LIME} stopOpacity="0" />
           </radialGradient>
-          <linearGradient id="fxd-deck" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor={LIME} stopOpacity="0.5" />
-            <stop offset="100%" stopColor={LIME} stopOpacity="0.05" />
-          </linearGradient>
+          <radialGradient id="fxd-core" cx="50%" cy="50%" r="50%">
+            <stop offset="0%" stopColor={LIME} stopOpacity="0.55" />
+            <stop offset="100%" stopColor={LIME} stopOpacity="0" />
+          </radialGradient>
           <linearGradient id="fxd-beam" x1="0" y1="1" x2="0" y2="0">
             <stop offset="0%" stopColor={LIME} stopOpacity="0.45" />
             <stop offset="100%" stopColor={LIME} stopOpacity="0" />
@@ -1405,62 +1492,57 @@ function StaticFallback({ progress, reduced }: { progress: number; reduced: bool
           />
         ))}
 
-        {/* floating machine */}
+        {/* floating pod */}
         <motion.g
           initial={false}
           animate={reduced ? undefined : { y: [0, -7, 0] }}
           transition={{ duration: 6, repeat: Infinity, ease: "easeInOut" }}
         >
           {/* floor shadow + glow */}
-          <ellipse cx="210" cy="252" rx="105" ry="16" fill="#000" opacity="0.55" />
-          <ellipse cx="210" cy="250" rx="118" ry="20" fill={LIME} opacity="0.1" />
+          <ellipse cx="210" cy="268" rx="92" ry="14" fill="#000" opacity="0.55" />
+          <ellipse cx="210" cy="266" rx="104" ry="18" fill={LIME} opacity="0.1" />
 
-          {/* base body */}
-          <rect x="135" y="150" width="150" height="86" rx="14" fill="#101318" stroke="#2a3038" strokeWidth="1.5" />
+          {/* containment shell — dissolves as the pod opens */}
+          <motion.ellipse
+            cx="210"
+            cy="150"
+            rx="88"
+            ry="108"
+            fill="none"
+            stroke={LIME}
+            strokeWidth="1"
+            initial={false}
+            animate={{ opacity: 0.35 - open * 0.3 }}
+            transition={{ duration: 0.6 }}
+          />
 
-          {/* deck glow — revealed when open */}
+          {/* pavilion (lower crystal half) */}
+          <polygon points="150,150 270,150 210,262" fill="#10141a" stroke="#2a3038" strokeWidth="1.5" />
+          <polyline points="150,150 210,262 270,150" fill="none" stroke={LIME} strokeOpacity="0.45" strokeWidth="1.2" />
+
+          {/* girdle seam */}
+          <line x1="150" y1="150" x2="270" y2="150" stroke={LIME} strokeWidth="2" opacity="0.85" />
+
+          {/* interior core — revealed when open */}
           <motion.g initial={false} animate={{ opacity: open }} transition={{ duration: 0.6 }}>
-            <rect x="141" y="134" width="138" height="16" fill="url(#fxd-deck)" />
-            <rect x="141" y="148" width="138" height="2.5" fill={LIME} opacity="0.8" />
+            <circle cx="210" cy="152" r="34" fill="url(#fxd-core)" />
+            <circle cx="210" cy="152" r="7" fill={LIME} opacity="0.95" />
+            <rect x="203" y="100" width="14" height="52" rx="7" fill="url(#fxd-beam)" />
           </motion.g>
 
-          {/* rising light beam */}
-          <motion.g initial={false} animate={{ opacity: open }} transition={{ duration: 0.5 }}>
-            <rect x="206" y="94" width="8" height="42" rx="4" fill="url(#fxd-beam)" />
-          </motion.g>
-
-          {/* base trims, rails, mark, LEDs */}
-          <rect x="135" y="228" width="150" height="5" rx="2.5" fill={LIME} opacity="0.65" />
-          <rect x="135" y="152" width="4" height="70" rx="2" fill="#2e343d" />
-          <rect x="281" y="152" width="4" height="70" rx="2" fill="#2e343d" />
-          <path d="M202 187 L218 203 M218 187 L202 203" stroke={LIME} strokeWidth="4" strokeLinecap="round" />
-          {[-18, 0, 18].map((dx, i) => (
-            <motion.circle
-              key={dx}
-              cx={210 + dx}
-              cy={218}
-              r="2"
-              fill={LIME}
-              initial={false}
-              animate={reduced ? { opacity: 0.8 } : { opacity: [0.4, 1, 0.4] }}
-              transition={{ duration: 2.2, repeat: Infinity, ease: "easeInOut", delay: i * 0.5 }}
-            />
-          ))}
-
-          {/* lid — opens on the rear hinge (bottom-right) */}
+          {/* crown — blooms open on the base-right hinge */}
           <motion.g
             initial={false}
-            animate={{ rotate: open * 105 }}
+            animate={{ rotate: open * 100 }}
             transition={{ duration: 1.3, ease: easing }}
             style={{ originX: 1, originY: 1, transformBox: "fill-box" }}
           >
-            <rect x="135" y="132" width="150" height="18" rx="9" fill="#1a1e24" stroke="#30363f" strokeWidth="1.5" />
-            <rect x="137" y="146" width="146" height="3" rx="1.5" fill={LIME} opacity="0.75" />
-            <rect x="137" y="132" width="146" height="3.5" rx="1.75" fill="#464d58" />
+            <polygon points="150,150 270,150 210,58" fill="#141820" stroke="#333a44" strokeWidth="1.5" />
+            <polyline points="150,150 210,58 270,150" fill="none" stroke={LIME} strokeOpacity="0.5" strokeWidth="1.2" />
           </motion.g>
         </motion.g>
 
-        {/* emerging objects — rise from the machine and float out */}
+        {/* emerging objects — rise from the opened pod and float out */}
         {FALLBACK_OBJS.map((o) => {
           const e = smoothstep(open, o.start, o.end);
           const grow = smoothstep(e, 0, 0.35);
@@ -1535,7 +1617,7 @@ function Eyebrow() {
     <div className="flex items-center justify-center gap-2.5">
       <span className="h-px w-8 bg-gradient-to-r from-transparent to-lime-400/60" />
       <p className="text-[11px] font-semibold uppercase tracking-[0.28em] text-lime-300/90">
-        ForgeX Learning Device
+        ForgeX Quantum Pod
       </p>
       <span className="h-px w-8 bg-gradient-to-l from-transparent to-lime-400/60" />
     </div>
@@ -1545,7 +1627,7 @@ function Eyebrow() {
 function Hint({ mobile }: { mobile: boolean }) {
   return (
     <p className="mb-5 text-center text-[10px] font-semibold uppercase tracking-[0.24em] text-muted-foreground/50">
-      {mobile ? "Scroll or tap to open the device" : "Scroll or hover to open the device"}
+      {mobile ? "Scroll or tap to open the pod" : "Scroll or hover to open the pod"}
     </p>
   );
 }
@@ -1640,7 +1722,7 @@ export function ForgeXLearningDevice() {
     return () => io.disconnect();
   }, []);
 
-  // scroll-reactive opening: the sequence plays as you scroll past the device
+  // scroll-reactive opening: the sequence plays as you scroll past the pod
   useEffect(() => {
     const onScroll = () => {
       setScrollP(clamp01((window.scrollY - 160) / 520));
@@ -1692,9 +1774,9 @@ export function ForgeXLearningDevice() {
         <div
           className="relative overflow-hidden"
           {...interactionHandlers}
-          aria-label="Interactive 3D ForgeX Learning Device"
+          aria-label="Interactive 3D ForgeX Quantum Pod"
         >
-          {/* soft lime ambience behind the device */}
+          {/* soft lime ambience behind the pod */}
           <div
             className="pointer-events-none absolute inset-0"
             style={{
@@ -1711,7 +1793,7 @@ export function ForgeXLearningDevice() {
                 <Canvas
                   dpr={mobile ? [1, 1.5] : [1, 2]}
                   frameloop={visible ? "always" : "never"}
-                  camera={{ position: [0, 1.78, 7.4], fov: 38 }}
+                  camera={{ position: [0, 1.05, 7.3], fov: 38 }}
                   gl={{ antialias: true, alpha: true }}
                   style={{ touchAction: "pan-y" }}
                 >
