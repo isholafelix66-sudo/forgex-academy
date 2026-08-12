@@ -1,11 +1,48 @@
-import { useState } from "react";
+import { lazy, Suspense, useState } from "react";
 import { useInView } from "react-intersection-observer";
-import { Clapperboard, Play } from "lucide-react";
-import MuxPlayer from "@mux/mux-player-react";
+import { Clapperboard, Loader2, Play } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { loomId, vimeoId, youtubeId } from "@/components/learn/VideoPlayer";
 import { ForgeXMotionVideo } from "@/components/site/ForgeXMotionVideo";
 import type { TutorialVideoConfig } from "@/lib/tutorial-video";
+
+/**
+ * Mux player is the heaviest dependency on the landing page (it pulls in
+ * hls.js + media-chrome + the Mux custom elements). It's only ever needed
+ * after the visitor clicks play on a Mux-backed video, so it is loaded
+ * dynamically at that moment — keeping it out of the landing chunk and
+ * shrinking the peak chunk that the production build has to minify.
+ */
+const LazyMuxPlayer = lazy(() =>
+  import("@mux/mux-player-react").then((m) => ({ default: m.default })),
+);
+
+function MuxPlayer({
+  playbackId,
+  title,
+}: {
+  playbackId: string;
+  title: string;
+}) {
+  return (
+    <Suspense
+      fallback={
+        <div className="flex size-full items-center justify-center bg-black">
+          <Loader2 className="size-7 animate-spin text-lime-400" />
+        </div>
+      }
+    >
+      <LazyMuxPlayer
+        playbackId={playbackId}
+        streamType="on-demand"
+        accentColor="#a3e635"
+        autoPlay
+        metadata={{ video_title: title, player_name: "ForgeX Academy" }}
+        className="size-full"
+      />
+    </Suspense>
+  );
+}
 
 /** Embedded player for the url / mux modes (autoplay after the click-through). */
 function Player({
@@ -16,16 +53,7 @@ function Player({
   title: string;
 }) {
   if (config.mode === "mux") {
-    return (
-      <MuxPlayer
-        playbackId={config.playbackId}
-        streamType="on-demand"
-        accentColor="#a3e635"
-        autoPlay
-        metadata={{ video_title: title, player_name: "ForgeX Academy" }}
-        className="size-full"
-      />
-    );
+    return <MuxPlayer playbackId={config.playbackId} title={title} />;
   }
 
   const url = config.url;
