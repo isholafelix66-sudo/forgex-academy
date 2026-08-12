@@ -431,6 +431,36 @@ const schema = defineSchema(
       .index("by_created", ["createdAt"])
       .index("by_user", ["userId"]),
 
+    /** AI Hub — curated AI resources, fully controlled from the admin
+     *  portal. Only `published` rows ever appear publicly; `featured` rows
+     *  surface on the homepage and at the top of the public hub. */
+    aiResources: defineTable({
+      title: v.string(),
+      slug: v.string(),
+      description: v.string(),
+      category: v.string(),
+      resourceType: v.string(),
+      url: v.string(),
+      thumbnailUrl: v.optional(v.string()),
+      thumbnailPublicId: v.optional(v.string()),
+      pricingType: v.union(
+        v.literal("free"),
+        v.literal("freemium"),
+        v.literal("paid"),
+      ),
+      noCreditCard: v.boolean(),
+      instructions: v.optional(v.array(v.string())),
+      featured: v.boolean(),
+      published: v.boolean(),
+      createdAt: v.number(),
+      updatedAt: v.number(),
+      lastVerifiedAt: v.optional(v.number()),
+    })
+      .index("by_published", ["published"])
+      .index("by_category", ["category"])
+      .index("by_slug", ["slug"])
+      .index("by_created", ["createdAt"]),
+
 
     tutorApplications: defineTable({
       userId: v.id("users"),

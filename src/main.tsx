@@ -34,6 +34,7 @@ const TutorDetail = lazy(() => import("./pages/TutorDetail.tsx"));
 const RoadmapPage = lazy(() => import("./pages/RoadmapPage.tsx"));
 const Updates = lazy(() => import("./pages/Updates.tsx"));
 const Stories = lazy(() => import("./pages/Stories.tsx"));
+const AIHub = lazy(() => import("./pages/AIHub.tsx"));
 const Contact = lazy(() => import("./pages/Contact.tsx"));
 const VerifyCertificate = lazy(() => import("./pages/VerifyCertificate.tsx"));
 const BecomeTutor = lazy(() => import("./pages/BecomeTutor.tsx"));
@@ -78,6 +79,7 @@ const AdminCourses = lazy(() => import("./pages/admin/AdminCourses.tsx"));
 const AdminCatalog = lazy(() => import("./pages/admin/AdminCatalog.tsx"));
 const AdminUpdates = lazy(() => import("./pages/admin/AdminUpdates.tsx"));
 const AdminStories = lazy(() => import("./pages/admin/AdminStories.tsx"));
+const AdminAIHub = lazy(() => import("./pages/admin/AdminAIHub.tsx"));
 const AdminCertificates = lazy(() => import("./pages/admin/AdminCertificates.tsx"));
 const AdminContent = lazy(() => import("./pages/admin/AdminContent.tsx"));
 const AdminMedia = lazy(() => import("./pages/admin/AdminMedia.tsx"));
@@ -482,6 +484,7 @@ createRoot(document.getElementById("root")!).render(
               <Route path="/roadmap" element={<RoadmapPage />} />
               <Route path="/updates" element={<Updates />} />
               <Route path="/stories" element={<Stories />} />
+              <Route path="/ai-hub" element={<AIHub />} />
               <Route path="/contact" element={<Contact />} />
               <Route path="/verify/:certificateId" element={<VerifyCertificate />} />
               <Route path="/become-tutor" element={<BecomeTutor />} />
@@ -549,6 +552,7 @@ createRoot(document.getElementById("root")!).render(
                 <Route path="catalog" element={<AdminCatalog />} />
                 <Route path="updates" element={<AdminUpdates />} />
                 <Route path="stories" element={<AdminStories />} />
+                <Route path="ai-hub" element={<AdminAIHub />} />
                 <Route path="certificates" element={<AdminCertificates />} />
                 <Route path="content" element={<AdminContent />} />
                 <Route path="media" element={<AdminMedia />} />

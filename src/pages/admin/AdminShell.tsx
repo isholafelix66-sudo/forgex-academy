@@ -5,6 +5,7 @@ import {
   Award,
   BadgeCheck,
   BookOpen,
+  Bot,
   ClipboardList,
   GraduationCap,
   Heart,
@@ -150,6 +151,7 @@ export default function AdminShell() {
       items: [
         { to: "/admin/updates", label: "Updates & news", icon: <Megaphone className="size-4" /> },
         { to: "/admin/stories", label: "Student stories", icon: <Heart className="size-4" /> },
+        { to: "/admin/ai-hub", label: "AI Hub", icon: <Bot className="size-4" /> },
         { to: "/admin/content", label: "Website & branding", icon: <PenSquare className="size-4" /> },
         { to: "/admin/media", label: "Media library", icon: <ImageIcon className="size-4" /> },
         { to: "/admin/form-builder", label: "Tutor registration form", icon: <ClipboardList className="size-4" /> },

@@ -7,7 +7,9 @@ import {
   ArrowRight,
   Award,
   Bell,
+  Bot,
   CheckCircle2,
+  ExternalLink,
   GraduationCap,
   Map,
   Megaphone,
@@ -81,6 +83,7 @@ export default function Landing() {
   const updates = useQuery(api.public.updatesList);
   const stats = useQuery(api.public.stats);
   const featuredStories = useQuery(api.stories.featuredStories);
+  const featuredAi = useQuery(api.aiResources.listFeatured);
 
   useEffect(() => {
     void seed({ force: false }).catch(() => {});
@@ -407,6 +410,67 @@ export default function Landing() {
           </div>
         </div>
       </section>
+
+      {/* ------------------------------------------------ AI Hub */}
+      {featuredAi && featuredAi.length > 0 && (
+        <section className="border-y border-white/8 bg-black/30 py-24">
+          <div className="mx-auto max-w-7xl px-4 sm:px-6">
+            <SectionHeading
+              eyebrow="ForgeX AI Hub"
+              title="AI resources, verified and curated"
+              description="Free and freemium AI tools, tutorials and setup guides — hand-picked by the ForgeX team so you can learn to build with AI without the guesswork."
+            />
+            <div className="mt-12 grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+              {featuredAi.slice(0, 6).map((r, i) => (
+                <Reveal key={r._id} delay={(i % 3) * 0.07}>
+                  <a
+                    href={r.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="group flex h-full flex-col rounded-2xl border border-white/10 bg-card p-6 transition-colors hover:border-lime-400/30"
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="flex size-12 items-center justify-center overflow-hidden rounded-xl bg-gradient-to-br from-lime-400/25 to-emerald-500/10 ring-1 ring-white/10">
+                        {r.thumbnailUrl ? (
+                          <img src={r.thumbnailUrl} alt="" className="size-full object-cover" loading="lazy" />
+                        ) : (
+                          <Bot className="size-5 text-lime-300" />
+                        )}
+                      </div>
+                      <span className="inline-flex items-center gap-1 rounded-full border border-lime-400/30 bg-lime-400/10 px-2.5 py-0.5 text-[10px] font-bold text-lime-300">
+                        <Star className="size-2.5 fill-lime-400" /> Featured
+                      </span>
+                    </div>
+                    <h3 className="font-display mt-4 text-base font-bold leading-snug group-hover:text-lime-300">
+                      {r.title}
+                    </h3>
+                    <p className="mt-1.5 line-clamp-3 flex-1 text-sm leading-relaxed text-muted-foreground">
+                      {r.description}
+                    </p>
+                    <div className="mt-4 flex items-center justify-between">
+                      <span className="rounded-full border border-white/10 bg-black/20 px-2.5 py-0.5 text-[11px] font-medium text-muted-foreground">
+                        {r.category}
+                      </span>
+                      <span className="inline-flex items-center gap-1 text-xs font-semibold text-lime-300">
+                        Open resource <ExternalLink className="size-3.5" />
+                      </span>
+                    </div>
+                  </a>
+                </Reveal>
+              ))}
+            </div>
+            <div className="mt-10 flex flex-wrap items-center justify-center gap-3">
+              <AnimatedCta to="/ai-hub">
+                Explore the AI Hub
+                <ArrowRight className="size-4 transition-transform group-hover:translate-x-0.5" />
+              </AnimatedCta>
+              <AnimatedCta to="/auth?mode=signup" variant="outline">
+                <Sparkles className="size-4" /> Join ForgeX free
+              </AnimatedCta>
+            </div>
+          </div>
+        </section>
+      )}
 
       {/* ------------------------------------------------ Community stories */}
       {featuredStories && featuredStories.length > 0 && (
