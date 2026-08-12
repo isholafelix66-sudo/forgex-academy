@@ -2,6 +2,7 @@ import { mutation } from "./_generated/server";
 import { v } from "convex/values";
 import { checkRateLimit } from "./lib";
 import { ROLES, type Question, type Resource } from "./schema";
+import { PROMPT_CATEGORIES, PROMPT_SEED } from "./promptSeedData";
 
 const VIDS = [
   "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4",
@@ -70,6 +71,53 @@ export const ensureSeedData = mutation({
       await ctx.db.patch(tv._id, {
         value: { mode: "motion", title: "ForgeX in two minutes" },
       });
+    }
+
+    // ------------------------------------------------------------------
+    // AI Prompt Library — starter categories + Design & Creative prompts.
+    // Seeded only when the tables are empty (idempotent + self-healing), so
+    // re-running the seed never duplicates them and admin edits are respected.
+    // ------------------------------------------------------------------
+    const anyPromptCategory = await ctx.db.query("promptCategories").first();
+    if (!anyPromptCategory) {
+      for (const [i, c] of PROMPT_CATEGORIES.entries()) {
+        await ctx.db.insert("promptCategories", {
+          name: c.name,
+          slug: c.name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, ""),
+          description: c.description,
+          subcategories: c.subcategories,
+          order: i + 1,
+        });
+      }
+    }
+    const anyPrompt = await ctx.db.query("prompts").first();
+    if (!anyPrompt) {
+      const cats = await ctx.db.query("promptCategories").collect();
+      const catByName = new Map(cats.map((c) => [c.name, c._id]));
+      for (const [i, p] of PROMPT_SEED.entries()) {
+        const catId = catByName.get(p.category);
+        if (!catId) continue;
+        const now = Date.now() - (PROMPT_SEED.length - i) * 86400000; // staggered dates
+        await ctx.db.insert("prompts", {
+          title: p.title,
+          slug: p.title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, ""),
+          description: p.description,
+          categoryId: catId,
+          subcategory: p.subcategory ?? undefined,
+          tags: p.tags,
+          difficulty: p.difficulty ?? undefined,
+          usefulFor: p.usefulFor,
+          requiredInputs: p.requiredInputs,
+          template: p.template,
+          fields: p.fields,
+          featured: p.featured === true,
+          published: true,
+          order: i + 1,
+          views: p.views,
+          createdAt: now,
+          updatedAt: now,
+        });
+      }
     }
 
     if (existing && anyCourse && anyRoadmap && !force) return { seeded: false };

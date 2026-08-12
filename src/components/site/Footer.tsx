@@ -71,6 +71,7 @@ export function Footer() {
               <li><Link to="/tutors" className="transition-colors hover:text-lime-300">Tutors</Link></li>
               <li><Link to="/roadmap" className="transition-colors hover:text-lime-300">Roadmap</Link></li>
               <li><Link to="/ai-hub" className="transition-colors hover:text-lime-300">AI Hub</Link></li>
+              <li><Link to="/prompts" className="transition-colors hover:text-lime-300">Prompt Library</Link></li>
               <li><Link to="/stories" className="transition-colors hover:text-lime-300">Stories</Link></li>
               <li><Link to="/contact" className="transition-colors hover:text-lime-300">Contact</Link></li>
             </ul>

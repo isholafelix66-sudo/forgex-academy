@@ -6,6 +6,7 @@ import {
   ArrowRight,
   BadgeCheck,
   Bot,
+  Braces,
   ExternalLink,
   FileText,
   Flame,
@@ -522,6 +523,25 @@ export default function AIHub() {
             ))}
           </div>
         </div>
+
+        {/* ------------------------------------------------ Cross-link: Prompt Library */}
+        <Link
+          to="/prompts"
+          className="group mt-5 flex items-center gap-3 rounded-2xl border border-white/10 bg-card p-4 transition-colors hover:border-lime-400/35 sm:p-5"
+        >
+          <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-lime-400/12 text-lime-300">
+            <Braces className="size-5" />
+          </span>
+          <span className="flex-1">
+            <span className="font-display block text-sm font-semibold group-hover:text-lime-300">
+              Need prompts to go with these tools?
+            </span>
+            <span className="text-xs text-muted-foreground">
+              The ForgeX Prompt Library has copy-ready, customizable AI prompts — separate from the AI Hub.
+            </span>
+          </span>
+          <ArrowRight className="size-4 shrink-0 text-muted-foreground transition-transform group-hover:translate-x-0.5 group-hover:text-lime-300" />
+        </Link>
 
         {/* ------------------------------------------------ Featured */}
         {featured && featured.length > 0 && (

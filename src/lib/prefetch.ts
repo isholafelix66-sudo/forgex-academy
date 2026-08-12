@@ -17,6 +17,7 @@ const EXACT: Array<[string, Importer]> = [
   ["/updates", () => import("@/pages/Updates.tsx")],
   ["/stories", () => import("@/pages/Stories.tsx")],
   ["/ai-hub", () => import("@/pages/AIHub.tsx")],
+  ["/prompts", () => import("@/pages/PromptLibrary.tsx")],
   ["/contact", () => import("@/pages/Contact.tsx")],
   ["/about", () => import("@/pages/About.tsx")],
   ["/become-tutor", () => import("@/pages/BecomeTutor.tsx")],
@@ -30,6 +31,7 @@ const PREFIX: Array<[string, Importer]> = [
   ["/learn/", () => import("@/pages/Learn.tsx")],
   ["/verify/", () => import("@/pages/VerifyCertificate.tsx")],
   ["/courses/", () => import("@/pages/CourseDetail.tsx")],
+  ["/prompts/", () => import("@/pages/PromptDetail.tsx")],
   ["/tutors/", () => import("@/pages/TutorDetail.tsx")],
 ];
 

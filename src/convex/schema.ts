@@ -60,6 +60,22 @@ export const resourceValidator = v.object({
 });
 export type Resource = Infer<typeof resourceValidator>;
 
+/** A single input field in the dynamic prompt builder. `key` is the
+ *  placeholder name used inside the template as `{{key}}`. */
+export const promptFieldValidator = v.object({
+  key: v.string(),
+  label: v.string(),
+  type: v.union(
+    v.literal("text"),
+    v.literal("textarea"),
+    v.literal("select"),
+  ),
+  placeholder: v.optional(v.string()),
+  options: v.optional(v.array(v.string())),
+  required: v.optional(v.boolean()),
+});
+export type PromptField = Infer<typeof promptFieldValidator>;
+
 export const socialsValidator = v.object({
   website: v.optional(v.string()),
   github: v.optional(v.string()),
@@ -462,6 +478,48 @@ const schema = defineSchema(
       .index("by_category", ["category"])
       .index("by_slug", ["slug"])
       .index("by_created", ["createdAt"]),
+
+    /** AI Prompt Library — searchable, curated prompts with a dynamic
+     *  variable builder. Categories and subcategories are admin-defined so
+     *  new topics (Social Media, Coding, Career…) can be added later without
+     *  any code changes. Every prompt stores its template with `{{key}}`
+     *  placeholders plus the matching input-field definitions; the frontend
+     *  builds the final prompt by replacing variables — no AI API required.
+     */
+    promptCategories: defineTable({
+      name: v.string(),
+      slug: v.string(),
+      description: v.string(),
+      subcategories: v.array(v.string()),
+      order: v.number(),
+    })
+      .index("by_slug", ["slug"])
+      .index("by_order", ["order"]),
+
+    prompts: defineTable({
+      title: v.string(),
+      slug: v.string(),
+      description: v.string(),
+      categoryId: v.id("promptCategories"),
+      subcategory: v.optional(v.string()),
+      tags: v.array(v.string()),
+      difficulty: v.optional(difficultyValidator),
+      usefulFor: v.string(), // what the prompt is useful for
+      requiredInputs: v.array(v.string()),
+      template: v.string(), // prompt text with {{field-key}} placeholders
+      fields: v.array(promptFieldValidator), // dynamic builder input fields
+      featured: v.boolean(),
+      published: v.boolean(),
+      order: v.number(),
+      views: v.number(), // popularity counter
+      createdAt: v.number(),
+      updatedAt: v.number(),
+    })
+      .index("by_slug", ["slug"])
+      .index("by_category", ["categoryId"])
+      .index("by_published", ["published"])
+      .index("by_created", ["createdAt"])
+      .index("by_order", ["order"]),
 
 
     tutorApplications: defineTable({
