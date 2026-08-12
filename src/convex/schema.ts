@@ -450,6 +450,8 @@ const schema = defineSchema(
       ),
       noCreditCard: v.boolean(),
       instructions: v.optional(v.array(v.string())),
+      videoUrl: v.optional(v.string()),
+      body: v.optional(v.string()),
       featured: v.boolean(),
       published: v.boolean(),
       createdAt: v.number(),

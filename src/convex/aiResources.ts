@@ -48,6 +48,8 @@ const DESC_MAX = 600;
 const URL_MAX = 2000;
 const STEP_MAX = 400;
 const STEPS_MAX = 12;
+const VIDEO_URL_MAX = 2000;
+const BODY_MAX = 50000; // article / post body
 
 const isCategory = (c: string): c is (typeof AI_CATEGORIES)[number] =>
   (AI_CATEGORIES as readonly string[]).includes(c);
@@ -64,6 +66,8 @@ function validateFields(args: {
   url: string;
   pricingType: string;
   instructions?: string[] | undefined;
+  videoUrl?: string | undefined;
+  body?: string | undefined;
 }) {
   const title = args.title.trim().slice(0, TITLE_MAX);
   const description = args.description.trim().slice(0, DESC_MAX);
@@ -72,6 +76,8 @@ function validateFields(args: {
     .map((s) => s.trim().slice(0, STEP_MAX))
     .filter((s) => s.length > 0)
     .slice(0, STEPS_MAX);
+  const videoUrl = args.videoUrl?.trim().slice(0, VIDEO_URL_MAX) ?? "";
+  const body = args.body?.trim().slice(0, BODY_MAX) ?? "";
 
   if (title.length < 2) {
     throw new Error("Please give the resource a title (at least 2 characters).");
@@ -95,7 +101,17 @@ function validateFields(args: {
   if (!isPricingType(args.pricingType)) {
     throw new Error("Please pick a valid pricing type (Free, Freemium or Paid).");
   }
-  return { title, description, url, instructions };
+  if (videoUrl && !/^https?:\/\//i.test(videoUrl)) {
+    throw new Error("The video URL must start with http:// or https://.");
+  }
+  return {
+    title,
+    description,
+    url,
+    instructions,
+    videoUrl: videoUrl || undefined,
+    body: body || undefined,
+  };
 }
 
 /** Find a free slug for `base` (appends -2, -3, … until unique). */
@@ -203,6 +219,8 @@ const resourceFields = {
   ),
   noCreditCard: v.boolean(),
   instructions: v.optional(v.array(v.string())),
+  videoUrl: v.optional(v.string()),
+  body: v.optional(v.string()),
   lastVerifiedAt: v.optional(v.number()),
 };
 
@@ -229,6 +247,8 @@ export const createResource = mutation({
       pricingType: args.pricingType,
       noCreditCard: args.noCreditCard,
       instructions: clean.instructions,
+      videoUrl: clean.videoUrl,
+      body: clean.body,
       featured: args.featured,
       published: args.published,
       createdAt: now,
@@ -286,6 +306,8 @@ export const updateResource = mutation({
       pricingType: args.pricingType,
       noCreditCard: args.noCreditCard,
       instructions: clean.instructions,
+      videoUrl: clean.videoUrl,
+      body: clean.body,
       featured: args.featured,
       published: args.published,
       updatedAt: now,

@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import { Link } from "react-router";
 import { useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
@@ -7,9 +7,11 @@ import {
   BadgeCheck,
   Bot,
   ExternalLink,
+  FileText,
   Flame,
   ListChecks,
   Loader2,
+  PlayCircle,
   Search,
   Sparkles,
   Star,
@@ -112,6 +114,16 @@ function ResourceCard({
             {r.category}
           </span>
           <PricingBadge pricing={r.pricingType} noCreditCard={r.noCreditCard} />
+          {r.videoUrl && r.resourceType !== "article" && (
+            <span className="inline-flex items-center gap-1 rounded-full border border-white/10 bg-black/20 px-2.5 py-0.5 text-[11px] font-medium text-muted-foreground">
+              <PlayCircle className="size-3 text-lime-300" /> Video
+            </span>
+          )}
+          {r.body && (
+            <span className="inline-flex items-center gap-1 rounded-full border border-white/10 bg-black/20 px-2.5 py-0.5 text-[11px] font-medium text-muted-foreground">
+              <FileText className="size-3 text-lime-300" /> Article
+            </span>
+          )}
         </div>
 
         <div className="mt-5 flex items-center gap-2 pt-1">
@@ -139,6 +151,157 @@ function ResourceCard({
       </article>
     </Reveal>
   );
+}
+
+/** Extract a YouTube video id from watch/shorts/embed/youtu.be links. */
+function getYouTubeId(url: string): string | null {
+  const m = url.match(
+    /(?:youtube\.com\/(?:watch\?(?:.*&)?v=|embed\/|shorts\/|live\/)|youtu\.be\/)([A-Za-z0-9_-]{6,})/,
+  );
+  return m ? m[1] : null;
+}
+
+/** Extract a Vimeo video id. */
+function getVimeoId(url: string): string | null {
+  const m = url.match(/(?:vimeo\.com\/|player\.vimeo\.com\/video\/)(\d{6,})/);
+  return m ? m[1] : null;
+}
+
+function isDirectVideo(url: string): boolean {
+  return /\.(mp4|webm|mov|m4v)(\?|#|$)/i.test(url);
+}
+
+/** Lazy, embeddable video player — YouTube/Vimeo embed lazily, direct files in
+ *  a native player (metadata-only preload), anything else as a safe external
+ *  link. Never autoplays and never downloads the file until the user plays. */
+function VideoEmbed({ url }: { url: string }) {
+  const ytId = getYouTubeId(url);
+  const vimeoId = getVimeoId(url);
+
+  if (ytId) {
+    return (
+      <div className="aspect-video overflow-hidden rounded-2xl border border-white/10 bg-black">
+        <iframe
+          src={`https://www.youtube-nocookie.com/embed/${ytId}`}
+          title="Tutorial video"
+          className="size-full"
+          loading="lazy"
+          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+          allowFullScreen
+        />
+      </div>
+    );
+  }
+  if (vimeoId) {
+    return (
+      <div className="aspect-video overflow-hidden rounded-2xl border border-white/10 bg-black">
+        <iframe
+          src={`https://player.vimeo.com/video/${vimeoId}`}
+          title="Tutorial video"
+          className="size-full"
+          loading="lazy"
+          allow="autoplay; fullscreen; picture-in-picture"
+          allowFullScreen
+        />
+      </div>
+    );
+  }
+  if (isDirectVideo(url)) {
+    return (
+      <div className="overflow-hidden rounded-2xl border border-white/10 bg-black">
+        <video src={url} controls playsInline preload="metadata" className="aspect-video w-full" />
+      </div>
+    );
+  }
+  return (
+    <a
+      href={url}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="flex w-full items-center justify-center gap-2 rounded-2xl border border-white/15 bg-black/20 px-4 py-4 text-sm font-semibold text-lime-300 transition-colors hover:border-lime-400/40"
+    >
+      <PlayCircle className="size-5" /> Watch the video <ExternalLink className="size-4" />
+    </a>
+  );
+}
+
+/** Escape user content so it is always rendered as text, never as HTML. */
+function escapeHtml(s: string): string {
+  return s
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+/** Inline text: support **bold** segments, everything else literal text. */
+function renderInline(text: string): ReactNode {
+  return text.split(/\*\*(.+?)\*\*/g).map((part, i) =>
+    i % 2 === 1 ? (
+      <strong key={i}>{escapeHtml(part)}</strong>
+    ) : (
+      <span key={i}>{escapeHtml(part)}</span>
+    ),
+  );
+}
+
+/** Dependency-free article renderer: paragraphs, `## ` headings, `- ` bullets
+ *  and **bold**. All content is escaped — no raw HTML is ever rendered. */
+function ArticleBody({ body }: { body: string }) {
+  const blocks: ReactNode[] = [];
+  let paragraph: string[] = [];
+  let list: string[] = [];
+  let key = 0;
+
+  const flushParagraph = () => {
+    if (paragraph.length === 0) return;
+    blocks.push(
+      <p key={key++} className="text-[15px] leading-relaxed text-foreground/85">
+        {renderInline(paragraph.join(" "))}
+      </p>,
+    );
+    paragraph = [];
+  };
+  const flushList = () => {
+    if (list.length === 0) return;
+    blocks.push(
+      <ul key={key++} className="space-y-2.5">
+        {list.map((item, i) => (
+          <li key={i} className="flex items-start gap-2.5 text-[15px] leading-relaxed text-foreground/85">
+            <span className="mt-2.5 size-1.5 shrink-0 rounded-full bg-lime-400" />
+            <span>{renderInline(item)}</span>
+          </li>
+        ))}
+      </ul>,
+    );
+    list = [];
+  };
+
+  for (const raw of body.split("\n")) {
+    const line = raw.trimEnd();
+    if (/^##\s+/.test(line)) {
+      flushParagraph();
+      flushList();
+      blocks.push(
+        <h3 key={key++} className="font-display pt-1 text-lg font-bold">
+          {renderInline(line.replace(/^##\s+/, ""))}
+        </h3>,
+      );
+    } else if (/^-\s+/.test(line)) {
+      flushParagraph();
+      list.push(line.replace(/^-\s+/, ""));
+    } else if (line.trim() === "") {
+      flushParagraph();
+      flushList();
+    } else {
+      flushList();
+      paragraph.push(line.trim());
+    }
+  }
+  flushParagraph();
+  flushList();
+  return <div className="space-y-4">{blocks}</div>;
 }
 
 function ResourceDetail({
@@ -186,7 +349,13 @@ function ResourceDetail({
         </DialogHeader>
 
         <div className="space-y-6">
+          {r.videoUrl && r.resourceType !== "article" && (
+            <VideoEmbed url={r.videoUrl} />
+          )}
+
           <p className="text-[15px] leading-relaxed text-foreground/85">{r.description}</p>
+
+          {r.body && <ArticleBody body={r.body} />}
 
           {steps.length > 0 && (
             <div>

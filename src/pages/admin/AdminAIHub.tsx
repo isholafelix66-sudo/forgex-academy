@@ -9,7 +9,9 @@ import {
   ExternalLink,
   Eye,
   EyeOff,
+  FileText,
   Loader2,
+  PlayCircle,
   Pencil,
   Plus,
   Save,
@@ -116,6 +118,8 @@ type FormState = {
   pricingType: string;
   noCreditCard: boolean;
   instructions: string[];
+  videoUrl: string;
+  body: string;
   lastVerified: string; // yyyy-mm-dd, empty = unset
   published: boolean;
   featured: boolean;
@@ -132,6 +136,8 @@ const EMPTY_FORM: FormState = {
   pricingType: "free",
   noCreditCard: false,
   instructions: [],
+  videoUrl: "",
+  body: "",
   lastVerified: "",
   published: false,
   featured: false,
@@ -245,6 +251,45 @@ function ResourceEditor({
           </Select>
         </div>
       </div>
+
+      {initial.resourceType === "article" || initial.resourceType === "learning-resource" ? (
+        <div className="space-y-2">
+          <Label htmlFor="ai-body">Article / post content</Label>
+          <Textarea
+            id="ai-body"
+            value={initial.body}
+            onChange={(e) => set("body", e.target.value)}
+            placeholder={
+              "Write the article here. Formatting:\n\n## A section heading\n\nA paragraph of text. A blank line starts a new paragraph.\n\n- A bullet point\n- Another bullet point\n\n**Bold** text is supported."
+            }
+            className="min-h-64 resize-y border-white/10 bg-black/20 font-mono text-sm leading-relaxed"
+            maxLength={50000}
+          />
+          <div className="flex flex-wrap justify-between gap-2 text-xs text-muted-foreground">
+            <span>
+              Blank line = new paragraph · <code className="text-lime-300">## </code> = heading ·{" "}
+              <code className="text-lime-300">- </code> = bullet · <code className="text-lime-300">**bold**</code>
+            </span>
+            <span>{initial.body.trim().length}/50000</span>
+          </div>
+        </div>
+      ) : (
+        <div className="space-y-2">
+          <Label htmlFor="ai-video">Video URL (tutorials / guides)</Label>
+          <Input
+            id="ai-video"
+            value={initial.videoUrl}
+            onChange={(e) => set("videoUrl", e.target.value)}
+            placeholder="https://www.youtube.com/watch?v=… or direct .mp4 link"
+            inputMode="url"
+            className="h-10 border-white/10 bg-black/20"
+            maxLength={2000}
+          />
+          <p className="text-xs text-muted-foreground">
+            YouTube, Vimeo or a direct video file — shown inside the resource detail on the public hub.
+          </p>
+        </div>
+      )}
 
       <div className="grid gap-4 sm:grid-cols-2">
         <div className="space-y-2">
@@ -440,6 +485,8 @@ function AIHubManager() {
       pricingType: r.pricingType,
       noCreditCard: r.noCreditCard,
       instructions: r.instructions ?? [],
+      videoUrl: r.videoUrl ?? "",
+      body: r.body ?? "",
       lastVerified: r.lastVerifiedAt
         ? new Date(r.lastVerifiedAt).toISOString().slice(0, 10)
         : "",
@@ -470,6 +517,8 @@ function AIHubManager() {
       pricingType: form.pricingType as "free" | "freemium" | "paid",
       noCreditCard: form.noCreditCard,
       instructions: form.instructions.filter((s) => s.trim().length > 0),
+      videoUrl: form.videoUrl.trim() || undefined,
+      body: form.body.trim() || undefined,
       lastVerifiedAt: lastVerifiedTs,
       published: form.published,
       featured: form.featured,
@@ -654,6 +703,22 @@ function AIHubManager() {
                       <span>{r.category}</span>
                       <span>·</span>
                       <span className="capitalize">{TYPE_LABEL[r.resourceType] ?? r.resourceType}</span>
+                      {r.videoUrl && (
+                        <>
+                          <span>·</span>
+                          <span className="inline-flex items-center gap-1 text-lime-300/80">
+                            <PlayCircle className="size-3" /> Video
+                          </span>
+                        </>
+                      )}
+                      {r.body && (
+                        <>
+                          <span>·</span>
+                          <span className="inline-flex items-center gap-1 text-lime-300/80">
+                            <FileText className="size-3" /> Article
+                          </span>
+                        </>
+                      )}
                       <span>·</span>
                       <span>Updated {timeAgo(r.updatedAt)}</span>
                       {r.noCreditCard && <span>· No credit card</span>}
