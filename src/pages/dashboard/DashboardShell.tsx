@@ -5,6 +5,7 @@ import {
   Bell,
   BookOpen,
   FileText,
+  Globe,
   LayoutDashboard,
   Map,
   MessageSquare,
@@ -20,6 +21,18 @@ export default function DashboardShell() {
   const unreadMessages = conversations?.reduce((s, c) => s + c.unread, 0) ?? 0;
 
   const sections = [
+    {
+      // Public ForgeX homepage — no label so it sits at the very top of the
+      // sidebar, above the Learning section.
+      items: [
+        {
+          to: "/",
+          label: "Explore ForgeX",
+          icon: <Globe className="size-4" />,
+          end: true,
+        },
+      ],
+    },
     {
       label: "Learning",
       items: [

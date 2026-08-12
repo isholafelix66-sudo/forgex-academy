@@ -7,10 +7,12 @@ import {
   Bell,
   BookOpen,
   CalendarClock,
+  Compass,
   Flame,
   GraduationCap,
   Percent,
   Sparkles,
+  Wand2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { PageHeader } from "@/components/dash/PageHeader";
@@ -88,6 +90,53 @@ export default function DashboardHome() {
           hint={streak > 0 ? "Complete a lesson daily" : "Start a streak today"}
         />
       </div>
+
+      {/* ForgeX Resources */}
+      <section>
+        <div className="mb-4 flex items-center gap-2">
+          <Compass className="size-5 text-lime-300" />
+          <h2 className="font-display text-xl font-bold">ForgeX Resources</h2>
+        </div>
+        <div className="grid gap-4 sm:grid-cols-2">
+          <Link
+            to="/ai-hub"
+            className="group flex flex-col gap-4 rounded-2xl border border-white/10 bg-card p-6 transition-colors hover:border-lime-400/40"
+          >
+            <span className="flex size-11 items-center justify-center rounded-xl bg-lime-400/12 text-lime-300">
+              <Sparkles className="size-5" />
+            </span>
+            <div>
+              <p className="font-display text-base font-semibold">AI Hub</p>
+              <p className="mt-1 text-sm text-muted-foreground">
+                Discover free AI tools
+              </p>
+            </div>
+            <span className="mt-auto inline-flex items-center gap-1.5 text-sm font-semibold text-lime-300">
+              Explore AI Hub
+              <ArrowRight className="size-4 transition-transform group-hover:translate-x-0.5" />
+            </span>
+          </Link>
+
+          <Link
+            to="/prompts"
+            className="group flex flex-col gap-4 rounded-2xl border border-white/10 bg-card p-6 transition-colors hover:border-lime-400/40"
+          >
+            <span className="flex size-11 items-center justify-center rounded-xl bg-lime-400/12 text-lime-300">
+              <Wand2 className="size-5" />
+            </span>
+            <div>
+              <p className="font-display text-base font-semibold">Prompt Library</p>
+              <p className="mt-1 text-sm text-muted-foreground">
+                Get ready-to-use AI prompts
+              </p>
+            </div>
+            <span className="mt-auto inline-flex items-center gap-1.5 text-sm font-semibold text-lime-300">
+              Explore Prompts
+              <ArrowRight className="size-4 transition-transform group-hover:translate-x-0.5" />
+            </span>
+          </Link>
+        </div>
+      </section>
 
       {/* Courses in progress */}
       <section>
