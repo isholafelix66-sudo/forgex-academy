@@ -1599,7 +1599,7 @@ function DeviceScene({
           <mesh ref={fieldRef} material={mats.field} position={[0, 0.34, 0]}>
             <icosahedronGeometry args={[0.34, 0]} />
           </mesh>
-          {/* holographic icons */}
+          {/* holographic icon pictures — real lucide glyphs on glow discs */}
           {ICONS.map((ic, i) => (
             <group
               key={ic.id}
@@ -1609,41 +1609,8 @@ function DeviceScene({
               position={[ic.x, ic.y, ic.z]}
               scale={0.001}
             >
-              {ic.id === "book" && (
-                <>
-                  <mesh material={mats.panelMat} rotation={[0, 0, 0.5]}>
-                    <boxGeometry args={[0.17, 0.07, 0.008]} />
-                  </mesh>
-                  <mesh material={mats.panelMat} rotation={[0, 0, -0.5]}>
-                    <boxGeometry args={[0.17, 0.07, 0.008]} />
-                  </mesh>
-                </>
-              )}
-              {ic.id === "ai" && (
-                <>
-                  <mesh material={mats.core}>
-                    <octahedronGeometry args={[0.07, 0]} />
-                  </mesh>
-                  <mesh material={mats.panelMat} rotation={[Math.PI / 2, 0, 0]}>
-                    <torusGeometry args={[0.11, 0.006, 6, 20]} />
-                  </mesh>
-                </>
-              )}
-              {ic.id === "spark" && (
-                <mesh material={mats.core}>
-                  <tetrahedronGeometry args={[0.08, 0]} />
-                </mesh>
-              )}
-              {ic.id === "people" && (
-                <>
-                  <mesh material={mats.panelMat} position={[-0.05, 0.02, 0]}>
-                    <sphereGeometry args={[0.04, 10, 10]} />
-                  </mesh>
-                  <mesh material={mats.panelMat} position={[0.05, 0.02, 0]}>
-                    <sphereGeometry args={[0.04, 10, 10]} />
-                  </mesh>
-                </>
-              )}
+              <sprite material={iconMats[i].glow} scale={1.3} />
+              <sprite material={iconMats[i].icon} scale={ic.s} />
             </group>
           ))}
           {/* light beam rising from the core */}
@@ -1775,6 +1742,13 @@ function FallbackShape({ kind }: { kind: string }) {
   }
 }
 
+const FALLBACK_ICONS = [
+  { id: "courses", icon: <GraduationCap />, x: 188, y: 144, s: 14 },
+  { id: "ai", icon: <Bot />, x: 210, y: 126, s: 16 },
+  { id: "create", icon: <Palette />, x: 232, y: 144, s: 14 },
+  { id: "community", icon: <Users />, x: 210, y: 166, s: 14 },
+];
+
 const FALLBACK_OBJS = [
   { id: "laptop", label: "LEARN", kind: "laptop", tx: 128, ty: 112, start: 0.35, end: 0.6 },
   { id: "phone", label: "CONNECT", kind: "phone", tx: 76, ty: 168, start: 0.4, end: 0.65 },
@@ -1863,6 +1837,22 @@ function StaticFallback({ progress, reduced }: { progress: number; reduced: bool
             <circle cx="210" cy="152" r="34" fill="url(#fxd-core)" />
             <circle cx="210" cy="152" r="7" fill={LIME} opacity="0.95" />
             <rect x="203" y="100" width="14" height="52" rx="7" fill="url(#fxd-beam)" />
+            {FALLBACK_ICONS.map((ic) => (
+              <svg
+                key={ic.id}
+                x={ic.x - ic.s}
+                y={ic.y - ic.s}
+                width={ic.s * 2}
+                height={ic.s * 2}
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke={LIME}
+                strokeWidth="1.5"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                dangerouslySetInnerHTML={{ __html: iconInnerSvg(ic.icon) }}
+              />
+            ))}
           </motion.g>
 
           {/* crown — blooms open on the base-right hinge */}
