@@ -39,6 +39,8 @@ import type { ThreeEvent } from "@react-three/fiber";
 import * as THREE from "three";
 import { RoomEnvironment } from "three/examples/jsm/environments/RoomEnvironment.js";
 import { motion } from "framer-motion";
+import { renderToStaticMarkup } from "react-dom/server";
+import { Bot, GraduationCap, Palette, Users } from "lucide-react";
 
 /* ------------------------------------------------------------------ */
 /* Palette & shared math                                               */
@@ -135,6 +137,123 @@ function radialTexture(stops: Array<[number, string]>): THREE.CanvasTexture {
   const tex = new THREE.CanvasTexture(c);
   tex.needsUpdate = true;
   return tex;
+}
+
+/**
+ * Rasterizes a lucide icon (React element) into a crisp canvas texture
+ * synchronously: the rendered SVG markup is parsed, then every stroke path
+ * is redrawn with Path2D so the icon reads as a sharp, premium "picture"
+ * inside the orb. Falls back to an empty texture rather than throwing.
+ */
+function iconCanvasTexture(icon: ReactNode, color: string): THREE.CanvasTexture {
+  const size = 256;
+  const canvas = document.createElement("canvas");
+  canvas.width = canvas.height = size;
+  const tex = new THREE.CanvasTexture(canvas);
+  try {
+    const ctx = canvas.getContext("2d");
+    const markup = renderToStaticMarkup(icon);
+    const doc = new DOMParser().parseFromString(markup, "image/svg+xml");
+    if (!ctx || doc.querySelector("parsererror")) return tex;
+    const pad = 40;
+    const s = (size - pad * 2) / 24;
+    ctx.save();
+    ctx.translate(pad, pad);
+    ctx.scale(s, s);
+    ctx.strokeStyle = color;
+    ctx.fillStyle = color;
+    ctx.lineWidth = 1.7;
+    ctx.lineCap = "round";
+    ctx.lineJoin = "round";
+    const stroke = (p: Path2D, fill?: string | null) => {
+      if (fill && fill !== "none") ctx.fill(p);
+      ctx.stroke(p);
+    };
+    doc.querySelectorAll("path, circle, rect, line, polyline, polygon, ellipse").forEach((el) => {
+      const fill = el.getAttribute("fill");
+      switch (el.tagName) {
+        case "path": {
+          const d = el.getAttribute("d");
+          if (d) stroke(new Path2D(d), fill);
+          break;
+        }
+        case "circle": {
+          const p = new Path2D();
+          p.arc(
+            parseFloat(el.getAttribute("cx") || "0"),
+            parseFloat(el.getAttribute("cy") || "0"),
+            parseFloat(el.getAttribute("r") || "0"),
+            0,
+            Math.PI * 2,
+          );
+          stroke(p, fill);
+          break;
+        }
+        case "rect": {
+          const p = new Path2D();
+          p.rect(
+            parseFloat(el.getAttribute("x") || "0"),
+            parseFloat(el.getAttribute("y") || "0"),
+            parseFloat(el.getAttribute("width") || "0"),
+            parseFloat(el.getAttribute("height") || "0"),
+          );
+          stroke(p, fill);
+          break;
+        }
+        case "line": {
+          const p = new Path2D();
+          p.moveTo(
+            parseFloat(el.getAttribute("x1") || "0"),
+            parseFloat(el.getAttribute("y1") || "0"),
+          );
+          p.lineTo(
+            parseFloat(el.getAttribute("x2") || "0"),
+            parseFloat(el.getAttribute("y2") || "0"),
+          );
+          stroke(p, fill);
+          break;
+        }
+        case "polyline":
+        case "polygon": {
+          const pts = (el.getAttribute("points") || "").trim().split(/[\s,]+/).map(Number);
+          if (pts.length >= 4) {
+            const p = new Path2D();
+            p.moveTo(pts[0], pts[1]);
+            for (let i = 2; i + 1 < pts.length; i += 2) p.lineTo(pts[i], pts[i + 1]);
+            if (el.tagName === "polygon") p.closePath();
+            stroke(p, fill);
+          }
+          break;
+        }
+        case "ellipse": {
+          const p = new Path2D();
+          p.ellipse(
+            parseFloat(el.getAttribute("cx") || "0"),
+            parseFloat(el.getAttribute("cy") || "0"),
+            parseFloat(el.getAttribute("rx") || "0"),
+            parseFloat(el.getAttribute("ry") || "0"),
+            0,
+            0,
+            Math.PI * 2,
+          );
+          stroke(p, fill);
+          break;
+        }
+      }
+    });
+    ctx.restore();
+    tex.needsUpdate = true;
+  } catch {
+    // never let icon rasterization take down the scene
+  }
+  return tex;
+}
+
+/** Inner SVG markup of a lucide icon, for reuse inside the fallback SVG. */
+function iconInnerSvg(icon: ReactNode): string {
+  const markup = renderToStaticMarkup(icon);
+  const m = markup.match(/<svg[^>]*>([\s\S]*)<\/svg>/);
+  return m ? m[1] : "";
 }
 
 /* ------------------------------------------------------------------ */
@@ -604,12 +723,18 @@ const FLOAT_CFG: FloatCfg[] = [
 /** Mobile renders the first N (essential) objects only. */
 const MOBILE_OBJECT_COUNT = 6;
 
-/** Holographic icons floating above the quantum core inside the orb. */
+/**
+ * Holographic icon pictures floating above the quantum core inside the orb.
+ * These are real lucide glyphs (rasterized to crisp canvas textures) on
+ * soft glow discs — representing the ForgeX ecosystem: courses, AI,
+ * creativity and community. "Both (objects + icons)": the icons live in
+ * the interior while the 3D objects emerge outward from the core.
+ */
 const ICONS = [
-  { id: "book", x: -0.42, y: 0.55, z: 0, phase: 0 },
-  { id: "ai", x: 0, y: 0.75, z: -0.35, phase: 1.2 },
-  { id: "spark", x: 0.42, y: 0.55, z: 0, phase: 2.4 },
-  { id: "people", x: 0, y: 0.55, z: 0.4, phase: 3.6 },
+  { id: "courses", icon: <GraduationCap />, x: -0.46, y: 0.62, z: 0.04, phase: 0, s: 0.52 },
+  { id: "ai", icon: <Bot />, x: 0, y: 0.86, z: -0.42, phase: 1.2, s: 0.58 },
+  { id: "create", icon: <Palette />, x: 0.46, y: 0.62, z: 0.04, phase: 2.4, s: 0.52 },
+  { id: "community", icon: <Users />, x: 0, y: 0.62, z: 0.48, phase: 3.6, s: 0.55 },
 ];
 
 /* ------------------------------------------------------------------ */
@@ -1258,6 +1383,38 @@ function DeviceScene({
     [glowTex, shadowTex, spriteMat],
   );
 
+  // real-icon materials for the holographic interior glyphs
+  const iconMats = useMemo(
+    () =>
+      ICONS.map((d) => ({
+        glow: new THREE.SpriteMaterial({
+          map: glowTex,
+          color: LIME,
+          transparent: true,
+          opacity: 0.34,
+          blending: THREE.AdditiveBlending,
+          depthWrite: false,
+        }),
+        icon: new THREE.SpriteMaterial({
+          map: iconCanvasTexture(d.icon, LIME_SOFT),
+          transparent: true,
+          opacity: 0.95,
+          depthWrite: false,
+        }),
+      })),
+    [glowTex],
+  );
+  useEffect(
+    () => () => {
+      iconMats.forEach((m) => {
+        m.glow.dispose();
+        m.icon.dispose();
+        m.icon.map?.dispose();
+      });
+    },
+    [iconMats],
+  );
+
   // floating particles around the orb
   const particlesGeo = useMemo(() => {
     const count = particleCount;
@@ -1334,14 +1491,13 @@ function DeviceScene({
       interiorLightRef.current.intensity = glowP * 12;
     }
 
-    // holographic icons materialize and bob over the core
+    // holographic icon pictures materialize and pulse over the core
     iconRefs.current.forEach((icon, i) => {
       if (!icon) return;
       const ic = ICONS[i];
-      const s = 0.001 + glowP;
+      const s = 0.001 + glowP * (1 + Math.sin(t * 1.4 + ic.phase) * 0.08);
       icon.scale.setScalar(s);
       icon.position.y = ic.y + Math.sin(t * 1.1 + ic.phase) * 0.05 * glowP;
-      icon.rotation.y = t * 0.4 + ic.phase;
     });
 
     // beam + containment shell
