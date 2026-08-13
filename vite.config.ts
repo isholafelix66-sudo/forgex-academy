@@ -8,9 +8,22 @@ import { defineConfig } from "vite";
 export default defineConfig({
   plugins: [react(), vlyPlugin(), tailwindcss()],
   resolve: {
-    alias: {
-      "@": path.resolve(__dirname, "./src"),
-    },
+    alias: [
+      {
+        find: "@",
+        replacement: path.resolve(__dirname, "./src"),
+      },
+      {
+        // Exact-match only (regex, not string prefix): swap the giant
+        // lucide-react barrel (~1,900 icon modules) for a curated module
+        // that re-exports only the icons the app actually uses. Deep
+        // imports like "lucide-react/dist/esm/icons/*" keep resolving to
+        // the real files. This roughly halves the build module graph and
+        // keeps the production build within the platform's memory budget.
+        find: /^lucide-react$/,
+        replacement: path.resolve(__dirname, "./src/lib/lucide.ts"),
+      },
+    ],
     // Force a single copy of React across all packages (including vlyPlugin).
     // Without this, @vly-ai/integrations can resolve its own React copy, which
     // triggers "Invalid hook call" errors at runtime.
