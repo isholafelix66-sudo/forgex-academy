@@ -1,26 +1,25 @@
 /**
- * FORGEX QUANTUM POD — the interactive 3D centerpiece of the homepage.
+ * FORGEX ORB CORE — the interactive 3D centerpiece of the homepage.
  *
- * A premium faceted diamond crystal hovering in space: matte-black facets
- * with neon-lime edges, a glowing girdle seam and a faint quantum
- * containment shell. It starts CLOSED, slowly floating and rotating. When
- * the visitor scrolls (or hovers / taps it) the crown mechanically blooms:
- * eight crystal petals pivot outward on their girdle edges, revealing a
- * glowing quantum core with floating holographic icons.
+ * A premium matte-black sphere with electric-lime meridians, hovering in
+ * space. It starts CLOSED, slowly floating and rotating. When the visitor
+ * scrolls (or hovers / taps it) the orb splits open like a seed pod: six
+ * solid shell petals bloom outward on the rim while the lower bowl stays
+ * fixed, revealing a glowing quantum core with floating holographic icons.
  *
  * Then the transformation: real 3D objects physically EMERGE from inside the
- * pod — laptop, phone, camera, headphones, tablet, keyboard, a 3D book, an
+ * orb — laptop, phone, camera, headphones, tablet, keyboard, a 3D book, an
  * AI holographic panel and floating course cards. Each starts small at the
  * core, then rises, unfolds and floats outward along its own trajectory.
- * Once out, the objects stay suspended around the pod, gently orbiting and
- * floating with natural depth. The crystal remains the central "source".
+ * Once out, the objects stay suspended around the orb, gently orbiting and
+ * floating with natural depth. The orb remains the central "source".
  *
  * The three act narrative maps onto the hero headline:
- *   DISCOVER → the crystal floats closed and rotating
- *   EXPRESS  → the crown blooms open, the quantum core glows
+ *   DISCOVER → the orb floats closed and rotating
+ *   EXPRESS  → the petals bloom open, the quantum core glows
  *   BUILD    → objects emerge and the ForgeX ecosystem forms around it
  *
- * Built from Three.js primitives + hand-built faceted geometry (no external
+ * Built from Three.js primitives + hand-built shell geometry (no external
  * models, no drei). Performance-minded:
  *  - no shadow maps, no post-processing, tiny particle counts
  *  - device pixel ratio capped (lower on touch devices)
@@ -47,6 +46,7 @@ import { motion } from "framer-motion";
 
 const LIME = "#a3e635";
 const LIME_SOFT = "#d9f99d";
+
 
 const clamp01 = (v: number) => Math.min(1, Math.max(0, v));
 
@@ -138,79 +138,234 @@ function radialTexture(stops: Array<[number, string]>): THREE.CanvasTexture {
 }
 
 /* ------------------------------------------------------------------ */
-/* Faceted crystal geometry                                            */
+/* Orb Core geometry — a sphere that splits open like a seed pod       */
 /* ------------------------------------------------------------------ */
 
-const CRYSTAL_SIDES = 8;
-const CRYSTAL_R = 1.15; // girdle radius
-const CROWN_H = 1.5; // crown (upper) height
-const PAVILION_H = 1.05; // pavilion (lower) depth
-const PETAL_OPEN = 1.9; // radians — crown petal swing at full open
+const ORB_R = 1.15; // orb radius
+const ORB_T = 0.09; // petal shell thickness
+const ORB_PETALS = 6; // blooming petals
+const ORB_PHI0 = 0.16; // bowl rim latitude (radians, just above the equator)
+const ORB_PHI_MAX = Math.PI / 2 - 0.05; // petal tip latitude
+const PETAL_BLOOM = 2.35; // radians — petal swing at full open
+
+/** Point on a sphere (th = azimuth around Y, ph = latitude, Y up). */
+function sphPoint(
+  r: number,
+  th: number,
+  ph: number,
+): [number, number, number] {
+  return [
+    r * Math.cos(ph) * Math.sin(th),
+    r * Math.sin(ph),
+    r * Math.cos(ph) * Math.cos(th),
+  ];
+}
+
+/** Unit radial direction for a point on the unit sphere. */
+function sphUnit(th: number, ph: number): [number, number, number] {
+  return [Math.cos(ph) * Math.sin(th), Math.sin(ph), Math.cos(ph) * Math.cos(th)];
+}
+
+const sub3 = (
+  a: [number, number, number],
+  b: [number, number, number],
+): [number, number, number] => [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
 
 /**
- * Builds the pod geometry: one pavilion (lower cone) and ONE crown petal in
- * its own local frame. All petals share the single petal geometry — each
- * petal group positions it and pivots it open on its girdle edge.
+ * Builds all the orb geometry:
  *
- * Petal local frame: origin at the girdle point, +z points radially outward,
- * +y up. A ridge point mid-way up the girdle edge gives each petal two
- * facets so the closed crystal reads as a real diamond crown.
+ *  - `bowlGeo`  — the lower machine body: a matte spherical cap from the
+ *    south pole up to the rim latitude (φ0). Stays fixed.
+ *  - `petalGeo` — ONE solid petal (outer + inner shell, meridian walls,
+ *    bottom cap and pole cap) in its own local frame with its pivot at the
+ *    origin. All six petals share it; each petal group positions the pivot
+ *    on the rim circle and blooms it open by rotating about the local X
+ *    axis (the azimuthal tangent) at that point.
+ *  - `petalEdgeGeo` — the glowing lime meridian lines along both side
+ *    edges of the petal, so the closed orb reads as a black sphere with
+ *    electric-lime meridians.
+ *
+ * Every triangle carries exact outward-pointing normals (analytic per
+ * surface), so the shell renders smooth and glossy under any lighting.
  */
-function createCrystalGeometries(
-  sides: number,
+function buildOrbGeometries(
   r: number,
-  h1: number,
-  h2: number,
+  t: number,
+  petals: number,
+  phi0: number,
+  phiMax: number,
 ) {
-  const ring: Array<[number, number, number]> = [];
-  for (let i = 0; i < sides; i++) {
-    const a = (i / sides) * Math.PI * 2;
-    ring.push([r * Math.sin(a), 0, r * Math.cos(a)]);
-  }
-  const next = (i: number) => ring[(i + 1) % sides];
+  const h = Math.PI / petals - 0.024; // half angular width per petal (tiny gap → meridian glow)
+  const nT = 7;
+  const nP = 9;
+  const piv = sphPoint(r, 0, phi0); // petal pivot (bottom-center on the rim)
 
-  // ---- pavilion: girdle ring → bottom apex (non-indexed → flat facets).
-  // Wound apex-between so outward faces point outward-down (front-side culling).
-  const pav = new THREE.BufferGeometry();
-  const pPos: number[] = [];
-  for (let i = 0; i < sides; i++) {
-    const [x1, y1, z1] = ring[i];
-    const [x2, y2, z2] = next(i);
-    pPos.push(x1, y1, z1, 0, -h2, 0, x2, y2, z2);
-  }
-  pav.setAttribute("position", new THREE.Float32BufferAttribute(pPos, 3));
-  pav.computeVertexNormals();
-
-  // ---- one crown petal (local frame) ----
-  const dA = (Math.PI * 2) / sides;
-  const nx = r * Math.sin(dA); // next girdle point, local
-  const nz = r * (Math.cos(dA) - 1);
-  const mx = nx / 2;
-  const mz = nz / 2;
-  const my = h1 * 0.34;
-  const petal = new THREE.BufferGeometry();
-  petal.setAttribute(
-    "position",
-    new THREE.Float32BufferAttribute(
-      [
-        0, 0, 0,
-        mx, my, mz,
-        0, h1, -r,
-        mx, my, mz,
-        nx, 0, nz,
-        0, h1, -r,
-      ],
-      3,
-    ),
-  );
-  petal.computeVertexNormals();
-
-  return {
-    pavilionGeo: pav,
-    pavilionEdges: new THREE.EdgesGeometry(pav),
-    petalGeo: petal,
-    petalEdges: new THREE.EdgesGeometry(petal),
+  const pos: number[] = [];
+  const nor: number[] = [];
+  const push = (p: [number, number, number], n: [number, number, number]) => {
+    pos.push(p[0], p[1], p[2]);
+    nor.push(n[0], n[1], n[2]);
   };
+  const pushTri = (
+    a: [number, number, number],
+    b: [number, number, number],
+    c: [number, number, number],
+    an: [number, number, number],
+    bn: [number, number, number],
+    cn: [number, number, number],
+  ) => {
+    push(a, an);
+    push(b, bn);
+    push(c, cn);
+  };
+
+  // ---- petal surface grids (relative to the pivot) ----
+  const outerPts: [number, number, number][][] = [];
+  const innerPts: [number, number, number][][] = [];
+  const thAt = (i: number) => -h + (i / nT) * 2 * h;
+  const phAt = (j: number) => phi0 + (j / nP) * (phiMax - phi0);
+  for (let j = 0; j <= nP; j++) {
+    const ph = phAt(j);
+    const oRow: [number, number, number][] = [];
+    const iRow: [number, number, number][] = [];
+    for (let i = 0; i <= nT; i++) {
+      const th = thAt(i);
+      oRow.push(sub3(sphPoint(r, th, ph), piv));
+      iRow.push(sub3(sphPoint(r - t, th, ph), piv));
+    }
+    outerPts.push(oRow);
+    innerPts.push(iRow);
+  }
+  const poleO = sub3([0, r, 0], piv);
+  const poleI = sub3([0, r - t, 0], piv);
+
+  // ---- outer shell (normals point radially outward) ----
+  for (let j = 0; j < nP; j++) {
+    for (let i = 0; i < nT; i++) {
+      const a = outerPts[j][i];
+      const b = outerPts[j][i + 1];
+      const c = outerPts[j + 1][i + 1];
+      const d = outerPts[j + 1][i];
+      const na = sphUnit(thAt(i), phAt(j));
+      const nb = sphUnit(thAt(i + 1), phAt(j));
+      const nc = sphUnit(thAt(i + 1), phAt(j + 1));
+      const nd = sphUnit(thAt(i), phAt(j + 1));
+      pushTri(a, b, c, na, nb, nc);
+      pushTri(a, c, d, na, nc, nd);
+    }
+  }
+
+  // ---- inner shell (normals point radially inward, toward the orb center) ----
+  for (let j = 0; j < nP; j++) {
+    for (let i = 0; i < nT; i++) {
+      const a = innerPts[j][i];
+      const b = innerPts[j][i + 1];
+      const c = innerPts[j + 1][i + 1];
+      const d = innerPts[j + 1][i];
+      const na = sphUnit(thAt(i), phAt(j)).map((v) => -v) as [number, number, number];
+      const nb = sphUnit(thAt(i + 1), phAt(j)).map((v) => -v) as [number, number, number];
+      const nc = sphUnit(thAt(i + 1), phAt(j + 1)).map((v) => -v) as [number, number, number];
+      const nd = sphUnit(thAt(i), phAt(j + 1)).map((v) => -v) as [number, number, number];
+      pushTri(a, c, b, na, nc, nb);
+      pushTri(a, d, c, na, nd, nc);
+    }
+  }
+
+  // ---- meridian side walls (normals point away from the petal center) ----
+  const wallN = (sign: 1 | -1) =>
+    sign === 1
+      ? ([Math.cos(h), 0, -Math.sin(h)] as [number, number, number])
+      : ([-Math.cos(h), 0, -Math.sin(h)] as [number, number, number]);
+  for (const sign of [1, -1] as const) {
+    const i = sign === 1 ? nT : 0;
+    const n = wallN(sign);
+    for (let j = 0; j < nP; j++) {
+      const oa = outerPts[j][i];
+      const ob = outerPts[j + 1][i];
+      const ib = innerPts[j + 1][i];
+      const ia = innerPts[j][i];
+      pushTri(oa, ob, ib, n, n, n);
+      pushTri(oa, ib, ia, n, n, n);
+    }
+  }
+
+  // ---- bottom cap (normals point down, away from the solid) ----
+  for (let i = 0; i < nT; i++) {
+    const th = thAt(i + 0.5);
+    const n = [-Math.sin(phi0) * Math.sin(th), -Math.cos(phi0), -Math.sin(phi0) * Math.cos(th)] as [
+      number,
+      number,
+      number,
+    ];
+    const oa = outerPts[0][i];
+    const ob = outerPts[0][i + 1];
+    const ib = innerPts[0][i + 1];
+    const ia = innerPts[0][i];
+    pushTri(oa, ob, ib, n, n, n);
+    pushTri(oa, ib, ia, n, n, n);
+  }
+
+  // ---- pole caps (fan from the top ring to the tip) ----
+  const up = [0, 1, 0] as [number, number, number];
+  const dn = [0, -1, 0] as [number, number, number];
+  for (let i = 0; i < nT; i++) {
+    const a = outerPts[nP][i];
+    const b = outerPts[nP][i + 1];
+    pushTri(a, b, poleO, up, up, up);
+    const ia = innerPts[nP][i];
+    const ib = innerPts[nP][i + 1];
+    pushTri(ib, ia, poleI, dn, dn, dn);
+  }
+
+  const petalGeo = new THREE.BufferGeometry();
+  petalGeo.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3));
+  petalGeo.setAttribute("normal", new THREE.Float32BufferAttribute(nor, 3));
+
+  // ---- glowing lime meridians along both petal edges ----
+  const linePts: number[] = [];
+  const span = phiMax - phi0 + 0.1;
+  for (const s of [-1, 1] as const) {
+    for (let k = 0; k < 10; k++) {
+      const ph1 = phi0 + 0.02 + (k / 10) * span;
+      const ph2 = phi0 + 0.02 + ((k + 1) / 10) * span;
+      const p1 = sub3(sphPoint(r + 0.02, s * h, ph1), piv);
+      const p2 = sub3(sphPoint(r + 0.02, s * h, ph2), piv);
+      linePts.push(p1[0], p1[1], p1[2], p2[0], p2[1], p2[2]);
+    }
+  }
+  const petalEdgeGeo = new THREE.BufferGeometry();
+  petalEdgeGeo.setAttribute("position", new THREE.Float32BufferAttribute(linePts, 3));
+
+  // ---- lower bowl: spherical cap from the south pole to the rim ----
+  const nTB = 14;
+  const nPB = 7;
+  const bPos: number[] = [];
+  const bNor: number[] = [];
+  const bIdx: number[] = [];
+  for (let j = 0; j <= nPB; j++) {
+    const ph = -Math.PI / 2 + (j / nPB) * (phi0 + Math.PI / 2);
+    for (let i = 0; i <= nTB; i++) {
+      const th = (i / nTB) * Math.PI * 2;
+      bPos.push(...sphPoint(r, th, ph));
+      bNor.push(...sphUnit(th, ph));
+    }
+  }
+  const bi = (j: number, i: number) => j * (nTB + 1) + i;
+  for (let j = 0; j < nPB; j++) {
+    for (let i = 0; i < nTB; i++) {
+      const a = bi(j, i);
+      const b = bi(j, i + 1);
+      const c = bi(j + 1, i + 1);
+      const d = bi(j + 1, i);
+      bIdx.push(a, b, c, a, c, d);
+    }
+  }
+  const bowlGeo = new THREE.BufferGeometry();
+  bowlGeo.setAttribute("position", new THREE.Float32BufferAttribute(bPos, 3));
+  bowlGeo.setAttribute("normal", new THREE.Float32BufferAttribute(bNor, 3));
+  bowlGeo.setIndex(bIdx);
+
+  return { bowlGeo, petalGeo, petalEdgeGeo };
 }
 
 /* ------------------------------------------------------------------ */
@@ -232,7 +387,7 @@ type FloatCfg = {
   id: string;
   label: string;
   kind: FloatKind;
-  /** Inside the pod (origin point of emergence). */
+  /** Inside the orb (origin point of emergence). */
   from: [number, number, number];
   /** Arc control point. */
   mid: [number, number, number];
@@ -449,7 +604,7 @@ const FLOAT_CFG: FloatCfg[] = [
 /** Mobile renders the first N (essential) objects only. */
 const MOBILE_OBJECT_COUNT = 6;
 
-/** Holographic icons floating above the quantum core inside the pod. */
+/** Holographic icons floating above the quantum core inside the orb. */
 const ICONS = [
   { id: "book", x: -0.42, y: 0.55, z: 0, phase: 0 },
   { id: "ai", x: 0, y: 0.75, z: -0.35, phase: 1.2 },
@@ -470,6 +625,7 @@ type Mats = {
   screenDark: THREE.MeshStandardMaterial;
   panelMat: THREE.MeshBasicMaterial;
   crystal: THREE.MeshPhysicalMaterial;
+  bowl: THREE.MeshPhysicalMaterial;
   edge: THREE.LineBasicMaterial;
   coreMat: THREE.MeshBasicMaterial;
   beam: THREE.MeshBasicMaterial;
@@ -533,17 +689,27 @@ function createMaterials(): Mats {
       depthWrite: false,
       side: THREE.DoubleSide,
     }),
-    // faceted crystal body
+    // smooth orb petals — matte black with a glossy clearcoat
     crystal: new THREE.MeshPhysicalMaterial({
       color: "#0f1318",
-      metalness: 0.85,
-      roughness: 0.2,
-      clearcoat: 0.5,
-      flatShading: true,
+      metalness: 0.8,
+      roughness: 0.22,
+      clearcoat: 0.6,
+      clearcoatRoughness: 0.3,
+      side: THREE.DoubleSide,
       emissive: new THREE.Color("#0c1014"),
       emissiveIntensity: 0.55,
     }),
-    // neon-lime crystal edges
+    // lower bowl — the machine body (glossy matte black)
+    bowl: new THREE.MeshPhysicalMaterial({
+      color: "#12161c",
+      metalness: 0.7,
+      roughness: 0.3,
+      clearcoat: 0.55,
+      clearcoatRoughness: 0.35,
+      side: THREE.DoubleSide,
+    }),
+    // neon-lime meridian edges
     edge: new THREE.LineBasicMaterial({
       color: LIME,
       transparent: true,
@@ -574,7 +740,7 @@ function createMaterials(): Mats {
       blending: THREE.AdditiveBlending,
       depthWrite: false,
     }),
-    // quantum containment shell (dissolves as the pod opens)
+    // quantum containment shell (dissolves as the orb opens)
     shell: new THREE.MeshBasicMaterial({
       color: LIME,
       wireframe: true,
@@ -1043,19 +1209,18 @@ function DeviceScene({
     [mats],
   );
 
-  // crystal geometry + edges
-  const crystal = useMemo(
-    () => createCrystalGeometries(CRYSTAL_SIDES, CRYSTAL_R, CROWN_H, PAVILION_H),
+  // orb geometry — lower bowl + shared petal solid + meridian edges
+  const orb = useMemo(
+    () => buildOrbGeometries(ORB_R, ORB_T, ORB_PETALS, ORB_PHI0, ORB_PHI_MAX),
     [],
   );
   useEffect(
     () => () => {
-      crystal.pavilionGeo.dispose();
-      crystal.pavilionEdges.dispose();
-      crystal.petalGeo.dispose();
-      crystal.petalEdges.dispose();
+      orb.bowlGeo.dispose();
+      orb.petalGeo.dispose();
+      orb.petalEdgeGeo.dispose();
     },
-    [crystal],
+    [orb],
   );
 
   // contact glow + shadow discs + hover-glow sprite material
@@ -1093,7 +1258,7 @@ function DeviceScene({
     [glowTex, shadowTex, spriteMat],
   );
 
-  // floating particles around the pod
+  // floating particles around the orb
   const particlesGeo = useMemo(() => {
     const count = particleCount;
     const positions = new Float32Array(count * 3);
@@ -1110,7 +1275,7 @@ function DeviceScene({
   }, [particleCount]);
   useEffect(() => () => particlesGeo.dispose(), [particlesGeo]);
 
-  // fit the pod to the viewport: pull back on narrow (portrait) screens
+  // fit the orb to the viewport: pull back on narrow (portrait) screens
   const aspect = size.width / Math.max(1, size.height);
   const deviceScale = Math.min(1, Math.max(0.6, aspect / 1.55));
   useEffect(() => {
@@ -1130,7 +1295,7 @@ function DeviceScene({
       lastReport.current = open;
       onOpenRef.current(open);
     }
-    const petalP = smoothstep(open, 0, 0.3); // crown fully blooms first
+    const petalP = smoothstep(open, 0, 0.3); // petals fully bloom first
     const glowP = smoothstep(open, 0.25, 0.7);
 
     // pod: float + rotate (+ hover parallax on desktop); tilts forward
@@ -1152,9 +1317,9 @@ function DeviceScene({
       }
     }
 
-    // crown petals — bloom outward on their girdle edges
+    // orb petals — bloom outward on the rim like a seed pod opening
     petalRefs.current.forEach((p) => {
-      if (p) p.rotation.x = petalP * PETAL_OPEN + Math.sin(petalP * Math.PI) * 0.04;
+      if (p) p.rotation.x = petalP * PETAL_BLOOM + Math.sin(petalP * Math.PI) * 0.03;
     });
 
     // quantum core pulse + field rotation
@@ -1223,39 +1388,53 @@ function DeviceScene({
           />
         </mesh>
 
-        {/* ---------------- PAVILION (lower crystal half) ---------------- */}
-        <mesh geometry={crystal.pavilionGeo} material={mats.crystal} />
-        <lineSegments geometry={crystal.pavilionEdges} material={mats.edge} />
+        {/* ---------------- BOWL (lower orb — the fixed machine body) ---------------- */}
+        <mesh geometry={orb.bowlGeo} material={mats.bowl} />
 
-        {/* glowing girdle seam */}
-        <mesh position={[0, 0, 0]} rotation={[Math.PI / 2, 0, 0]} material={mats.trim}>
-          <torusGeometry args={[CRYSTAL_R, 0.02, 8, 48]} />
+        {/* glowing rim ring at the bowl's lip */}
+        <mesh
+          position={[0, ORB_R * Math.sin(ORB_PHI0), 0]}
+          rotation={[Math.PI / 2, 0, 0]}
+          material={mats.trim}
+        >
+          <torusGeometry args={[ORB_R * Math.cos(ORB_PHI0), 0.022, 8, 48]} />
         </mesh>
 
-        {/* ---------------- CROWN PETALS (bloom open) ---------------- */}
-        {Array.from({ length: CRYSTAL_SIDES }).map((_, i) => {
-          const a = (i / CRYSTAL_SIDES) * Math.PI * 2;
+        {/* south-pole status node */}
+        <mesh position={[0, -ORB_R, 0]} material={mats.core}>
+          <sphereGeometry args={[0.042, 12, 12]} />
+        </mesh>
+        <mesh position={[0, -ORB_R, 0]} rotation={[Math.PI / 2, 0, 0]} material={mats.trim}>
+          <torusGeometry args={[0.11, 0.012, 8, 20]} />
+        </mesh>
+
+        {/* ---------------- ORB PETALS (bloom open like a seed pod) ---------------- */}
+        {Array.from({ length: ORB_PETALS }).map((_, i) => {
+          const a = (i / ORB_PETALS) * Math.PI * 2;
           return (
             <group
               key={i}
-              ref={(el) => {
-                petalRefs.current[i] = el;
-              }}
-              position={[CRYSTAL_R * Math.sin(a), 0, CRYSTAL_R * Math.cos(a)]}
+              position={[
+                ORB_R * Math.cos(ORB_PHI0) * Math.sin(a),
+                ORB_R * Math.sin(ORB_PHI0),
+                ORB_R * Math.cos(ORB_PHI0) * Math.cos(a),
+              ]}
               rotation={[0, a, 0]}
             >
-              <mesh geometry={crystal.petalGeo} material={mats.crystal} />
-              <lineSegments geometry={crystal.petalEdges} material={mats.edge} />
+              <group
+                ref={(el) => {
+                  petalRefs.current[i] = el;
+                }}
+              >
+                <mesh geometry={orb.petalGeo} material={mats.crystal} />
+                <lineSegments geometry={orb.petalEdgeGeo} material={mats.edge} />
+              </group>
             </group>
           );
         })}
 
-        {/* ---------------- INTERIOR: deck + quantum core + icons ---------------- */}
+        {/* ---------------- INTERIOR: glowing core + holographic icons ---------------- */}
         <group position={[0, 0, 0]}>
-          {/* octagonal deck */}
-          <mesh position={[0, 0.02, 0]} material={mats.dark}>
-            <cylinderGeometry args={[1.0, 1.08, 0.06, 8]} />
-          </mesh>
           {/* quantum core orb */}
           <mesh ref={coreRef} material={mats.coreMat} position={[0, 0.18, 0]}>
             <sphereGeometry args={[0.13, 16, 16]} />
@@ -1318,7 +1497,7 @@ function DeviceScene({
           <pointLight ref={interiorLightRef} position={[0, 0.5, 0]} intensity={0} distance={6} decay={2} color={LIME} />
         </group>
 
-        {/* quantum containment shell — dissolves as the crown opens */}
+        {/* quantum containment shell — dissolves as the orb opens */}
         <mesh material={mats.shell} position={[0, 0.45, 0]}>
           <icosahedronGeometry args={[1.8, 0]} />
         </mesh>
