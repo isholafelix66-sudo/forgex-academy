@@ -1,6 +1,8 @@
-import { useEffect, useRef, useState } from "react";
+import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import { PlayCircle, RefreshCw, TriangleAlert } from "lucide-react";
-import MuxPlayer from "@mux/mux-player-react";
+
+// @mux/mux-player-react is ~1MB — loaded only when a Mux-backed lesson plays.
+const MuxTracked = lazy(() => import("./MuxTracked").then((m) => ({ default: m.MuxTracked })));
 
 export function youtubeId(url: string): string | null {
   const m =
@@ -137,7 +139,15 @@ export function VideoPlayer({
 
   if (muxPlaybackId) {
     return (
-      <MuxTracked playbackId={muxPlaybackId} title={title ?? "Lesson video"} emit={emit} />
+      <Suspense
+        fallback={
+          <div className="flex aspect-video w-full items-center justify-center rounded-2xl border border-white/10 bg-black/40">
+            <div className="size-8 animate-spin rounded-full border-2 border-lime-400/30 border-t-lime-400" />
+          </div>
+        }
+      >
+        <MuxTracked playbackId={muxPlaybackId} title={title ?? "Lesson video"} emit={emit} />
+      </Suspense>
     );
   }
 
@@ -259,50 +269,6 @@ function NativeVideo({
       >
         Your browser doesn't support video playback.
       </video>
-    </div>
-  );
-}
-
-function MuxTracked({
-  playbackId,
-  title,
-  emit,
-}: {
-  playbackId: string;
-  title: string;
-  emit: (pct: number) => void;
-}) {
-  const ref = useRef<any>(null);
-  const emitRef = useRef(emit);
-  emitRef.current = emit;
-
-  useEffect(() => {
-    const el = ref.current as any;
-    if (!el) return;
-    const onTime = () => {
-      try {
-        if (el.duration > 0) emitRef.current((el.currentTime / el.duration) * 100);
-      } catch {
-        // ignore
-      }
-    };
-    el.addEventListener("timeupdate", onTime);
-    return () => el.removeEventListener("timeupdate", onTime);
-  }, []);
-
-  return (
-    <div className="aspect-video w-full overflow-hidden rounded-2xl border border-white/10 bg-black">
-      <MuxPlayer
-        ref={ref}
-        playbackId={playbackId}
-        streamType="on-demand"
-        accentColor="#a3e635"
-        metadata={{
-          video_title: title,
-          player_name: "ForgeX Academy",
-        }}
-        className="size-full"
-      />
     </div>
   );
 }

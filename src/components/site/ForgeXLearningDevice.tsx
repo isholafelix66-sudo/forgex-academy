@@ -39,8 +39,6 @@ import type { ThreeEvent } from "@react-three/fiber";
 import * as THREE from "three";
 import { RoomEnvironment } from "three/examples/jsm/environments/RoomEnvironment.js";
 import { motion } from "framer-motion";
-import { renderToStaticMarkup } from "react-dom/server";
-import { Bot, GraduationCap, Palette, Users } from "lucide-react";
 
 /* ------------------------------------------------------------------ */
 /* Palette & shared math                                               */
@@ -140,120 +138,80 @@ function radialTexture(stops: Array<[number, string]>): THREE.CanvasTexture {
 }
 
 /**
- * Rasterizes a lucide icon (React element) into a crisp canvas texture
- * synchronously: the rendered SVG markup is parsed, then every stroke path
- * is redrawn with Path2D so the icon reads as a sharp, premium "picture"
- * inside the orb. Falls back to an empty texture rather than throwing.
+ * Static lucide icon geometry for the interior holograms — hand-embedded
+ * path data (no react-dom/server, no DOMParser at runtime) so the glyphs
+ * stay crisp while keeping the device chunk lean.
  */
-function iconCanvasTexture(icon: ReactNode, color: string): THREE.CanvasTexture {
+type IconNode =
+  | { kind: "path"; d: string }
+  | { kind: "circle"; cx: number; cy: number; r: number }
+  | { kind: "rect"; x: number; y: number; w: number; h: number; rx?: number };
+
+const ICON_DATA: Record<string, IconNode[]> = {
+  courses: [
+    { kind: "path", d: "M21.42 10.922a1 1 0 0 0-.019-1.838L12.83 5.18a2 2 0 0 0-1.66 0L2.6 9.08a1 1 0 0 0 0 1.832l8.57 3.908a2 2 0 0 0 1.66 0z" },
+    { kind: "path", d: "M22 10v6" },
+    { kind: "path", d: "M6 12.5V16a6 3 0 0 0 12 0v-3.5" },
+  ],
+  ai: [
+    { kind: "path", d: "M12 8V4H8" },
+    { kind: "rect", x: 4, y: 8, w: 16, h: 12, rx: 2 },
+    { kind: "path", d: "M2 14h2" },
+    { kind: "path", d: "M20 14h2" },
+    { kind: "path", d: "M15 13v2" },
+    { kind: "path", d: "M9 13v2" },
+  ],
+  create: [
+    { kind: "path", d: "M12 22a1 1 0 0 1 0-20 10 9 0 0 1 10 9 5 5 0 0 1-5 5h-2.25a1.75 1.75 0 0 0-1.4 2.8l.3.4a1.75 1.75 0 0 1-1.4 2.8z" },
+    { kind: "circle", cx: 13.5, cy: 6.5, r: 0.5 },
+    { kind: "circle", cx: 17.5, cy: 10.5, r: 0.5 },
+    { kind: "circle", cx: 6.5, cy: 12.5, r: 0.5 },
+    { kind: "circle", cx: 8.5, cy: 7.5, r: 0.5 },
+  ],
+  community: [
+    { kind: "path", d: "M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" },
+    { kind: "path", d: "M16 3.128a4 4 0 0 1 0 7.744" },
+    { kind: "path", d: "M22 21v-2a4 4 0 0 0-3-3.87" },
+    { kind: "circle", cx: 9, cy: 7, r: 4 },
+  ],
+};
+
+/** Rasterizes static lucide icon geometry into a crisp canvas texture. */
+function iconCanvasTexture(nodes: IconNode[], color: string): THREE.CanvasTexture {
   const size = 256;
   const canvas = document.createElement("canvas");
   canvas.width = canvas.height = size;
   const tex = new THREE.CanvasTexture(canvas);
-  try {
-    const ctx = canvas.getContext("2d");
-    const markup = renderToStaticMarkup(icon);
-    const doc = new DOMParser().parseFromString(markup, "image/svg+xml");
-    if (!ctx || doc.querySelector("parsererror")) return tex;
-    const pad = 40;
-    const s = (size - pad * 2) / 24;
-    ctx.save();
-    ctx.translate(pad, pad);
-    ctx.scale(s, s);
-    ctx.strokeStyle = color;
-    ctx.fillStyle = color;
-    ctx.lineWidth = 1.7;
-    ctx.lineCap = "round";
-    ctx.lineJoin = "round";
-    const stroke = (p: Path2D, fill?: string | null) => {
-      if (fill && fill !== "none") ctx.fill(p);
-      ctx.stroke(p);
-    };
-    doc.querySelectorAll("path, circle, rect, line, polyline, polygon, ellipse").forEach((el) => {
-      const fill = el.getAttribute("fill");
-      switch (el.tagName) {
-        case "path": {
-          const d = el.getAttribute("d");
-          if (d) stroke(new Path2D(d), fill);
-          break;
-        }
-        case "circle": {
-          const p = new Path2D();
-          p.arc(
-            parseFloat(el.getAttribute("cx") || "0"),
-            parseFloat(el.getAttribute("cy") || "0"),
-            parseFloat(el.getAttribute("r") || "0"),
-            0,
-            Math.PI * 2,
-          );
-          stroke(p, fill);
-          break;
-        }
-        case "rect": {
-          const p = new Path2D();
-          p.rect(
-            parseFloat(el.getAttribute("x") || "0"),
-            parseFloat(el.getAttribute("y") || "0"),
-            parseFloat(el.getAttribute("width") || "0"),
-            parseFloat(el.getAttribute("height") || "0"),
-          );
-          stroke(p, fill);
-          break;
-        }
-        case "line": {
-          const p = new Path2D();
-          p.moveTo(
-            parseFloat(el.getAttribute("x1") || "0"),
-            parseFloat(el.getAttribute("y1") || "0"),
-          );
-          p.lineTo(
-            parseFloat(el.getAttribute("x2") || "0"),
-            parseFloat(el.getAttribute("y2") || "0"),
-          );
-          stroke(p, fill);
-          break;
-        }
-        case "polyline":
-        case "polygon": {
-          const pts = (el.getAttribute("points") || "").trim().split(/[\s,]+/).map(Number);
-          if (pts.length >= 4) {
-            const p = new Path2D();
-            p.moveTo(pts[0], pts[1]);
-            for (let i = 2; i + 1 < pts.length; i += 2) p.lineTo(pts[i], pts[i + 1]);
-            if (el.tagName === "polygon") p.closePath();
-            stroke(p, fill);
-          }
-          break;
-        }
-        case "ellipse": {
-          const p = new Path2D();
-          p.ellipse(
-            parseFloat(el.getAttribute("cx") || "0"),
-            parseFloat(el.getAttribute("cy") || "0"),
-            parseFloat(el.getAttribute("rx") || "0"),
-            parseFloat(el.getAttribute("ry") || "0"),
-            0,
-            0,
-            Math.PI * 2,
-          );
-          stroke(p, fill);
-          break;
-        }
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return tex;
+  const pad = 40;
+  const s = (size - pad * 2) / 24;
+  ctx.save();
+  ctx.translate(pad, pad);
+  ctx.scale(s, s);
+  ctx.strokeStyle = color;
+  ctx.fillStyle = color;
+  ctx.lineWidth = 1.7;
+  ctx.lineCap = "round";
+  ctx.lineJoin = "round";
+  for (const node of nodes) {
+    if (node.kind === "path") {
+      ctx.stroke(new Path2D(node.d));
+    } else if (node.kind === "circle") {
+      ctx.beginPath();
+      ctx.arc(node.cx, node.cy, node.r, 0, Math.PI * 2);
+      if (node.r <= 0.6) {
+        ctx.fill();
+      } else {
+        ctx.stroke();
       }
-    });
-    ctx.restore();
-    tex.needsUpdate = true;
-  } catch {
-    // never let icon rasterization take down the scene
+    } else {
+      ctx.strokeRect(node.x, node.y, node.w, node.h);
+    }
   }
+  ctx.restore();
+  tex.needsUpdate = true;
   return tex;
-}
-
-/** Inner SVG markup of a lucide icon, for reuse inside the fallback SVG. */
-function iconInnerSvg(icon: ReactNode): string {
-  const markup = renderToStaticMarkup(icon);
-  const m = markup.match(/<svg[^>]*>([\s\S]*)<\/svg>/);
-  return m ? m[1] : "";
 }
 
 /* ------------------------------------------------------------------ */
@@ -731,10 +689,10 @@ const MOBILE_OBJECT_COUNT = 6;
  * the interior while the 3D objects emerge outward from the core.
  */
 const ICONS = [
-  { id: "courses", icon: <GraduationCap />, x: -0.46, y: 0.62, z: 0.04, phase: 0, s: 0.52 },
-  { id: "ai", icon: <Bot />, x: 0, y: 0.86, z: -0.42, phase: 1.2, s: 0.58 },
-  { id: "create", icon: <Palette />, x: 0.46, y: 0.62, z: 0.04, phase: 2.4, s: 0.52 },
-  { id: "community", icon: <Users />, x: 0, y: 0.62, z: 0.48, phase: 3.6, s: 0.55 },
+  { id: "courses", icon: "courses", x: -0.46, y: 0.62, z: 0.04, phase: 0, s: 0.52 },
+  { id: "ai", icon: "ai", x: 0, y: 0.86, z: -0.42, phase: 1.2, s: 0.58 },
+  { id: "create", icon: "create", x: 0.46, y: 0.62, z: 0.04, phase: 2.4, s: 0.52 },
+  { id: "community", icon: "community", x: 0, y: 0.62, z: 0.48, phase: 3.6, s: 0.55 },
 ];
 
 /* ------------------------------------------------------------------ */
@@ -1396,7 +1354,7 @@ function DeviceScene({
           depthWrite: false,
         }),
         icon: new THREE.SpriteMaterial({
-          map: iconCanvasTexture(d.icon, LIME_SOFT),
+          map: iconCanvasTexture(ICON_DATA[d.icon], LIME_SOFT),
           transparent: true,
           opacity: 0.95,
           depthWrite: false,
@@ -1743,10 +1701,10 @@ function FallbackShape({ kind }: { kind: string }) {
 }
 
 const FALLBACK_ICONS = [
-  { id: "courses", icon: <GraduationCap />, x: 188, y: 144, s: 14 },
-  { id: "ai", icon: <Bot />, x: 210, y: 126, s: 16 },
-  { id: "create", icon: <Palette />, x: 232, y: 144, s: 14 },
-  { id: "community", icon: <Users />, x: 210, y: 166, s: 14 },
+  { id: "courses", icon: "courses", x: 188, y: 144, s: 14 },
+  { id: "ai", icon: "ai", x: 210, y: 126, s: 16 },
+  { id: "create", icon: "create", x: 232, y: 144, s: 14 },
+  { id: "community", icon: "community", x: 210, y: 166, s: 14 },
 ];
 
 const FALLBACK_OBJS = [
@@ -1850,8 +1808,17 @@ function StaticFallback({ progress, reduced }: { progress: number; reduced: bool
                 strokeWidth="1.5"
                 strokeLinecap="round"
                 strokeLinejoin="round"
-                dangerouslySetInnerHTML={{ __html: iconInnerSvg(ic.icon) }}
-              />
+              >
+                {ICON_DATA[ic.icon].map((n, i) =>
+                  n.kind === "path" ? (
+                    <path key={i} d={n.d} />
+                  ) : n.kind === "circle" ? (
+                    <circle key={i} cx={n.cx} cy={n.cy} r={n.r} fill={n.r <= 0.6 ? LIME : "none"} />
+                  ) : (
+                    <rect key={i} x={n.x} y={n.y} width={n.w} height={n.h} rx={n.rx ?? 0} />
+                  ),
+                )}
+              </svg>
             ))}
           </motion.g>
 
