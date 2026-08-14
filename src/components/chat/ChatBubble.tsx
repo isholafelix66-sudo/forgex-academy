@@ -45,9 +45,12 @@ function canPlayWebmAudio(): boolean {
 export function ChatAttachmentView({
   attachment,
   mine,
+  onImageClick,
 }: {
   attachment: ChatMessageView;
   mine?: boolean;
+  /** When provided, clicking the image opens a full-screen viewer instead of a new tab. */
+  onImageClick?: () => void;
 }) {
   const url = attachment.url ?? "";
 
@@ -58,6 +61,7 @@ export function ChatAttachmentView({
         href={url}
         target="_blank"
         rel="noopener noreferrer"
+        onClick={onImageClick ? (e) => { e.preventDefault(); e.stopPropagation(); onImageClick(); } : undefined}
         className="block"
         title="Open photo"
       >

@@ -773,6 +773,10 @@ const schema = defineSchema(
       ),
       joinedAt: v.number(),
       lastReadAt: v.optional(v.number()),
+      /** Set on every keystroke while the member is typing (debounced). The
+       *  typing query treats members with a recent `typingAt` as “currently
+       *  typing” — no extra table needed. */
+      typingAt: v.optional(v.number()),
       removedAt: v.optional(v.number()),
       removedReason: v.optional(v.string()),
     })
@@ -807,6 +811,25 @@ const schema = defineSchema(
       mimeType: v.optional(v.string()),
       duration: v.optional(v.number()),
       replyToId: v.optional(v.id("communityMessages")),
+      /** Learning-thread support: when set, this message is a reply inside the
+       *  discussion whose root message has `_id === discussionId`. Replies to
+       *  a discussion never appear in the main feed. */
+      discussionId: v.optional(v.id("communityMessages")),
+      /** This message is the root of a learning discussion. */
+      isDiscussion: v.optional(v.boolean()),
+      /** Official tutor announcement — staff-only, visually distinct. */
+      isAnnouncement: v.optional(v.boolean()),
+      /** Staff-pinned message (announcements, resources, important answers). */
+      pinned: v.optional(v.boolean()),
+      pinnedBy: v.optional(v.id("users")),
+      pinnedAt: v.optional(v.number()),
+      /** Marked as the verified tutor answer to a question/discussion. */
+      tutorAnswer: v.optional(v.boolean()),
+      tutorAnswerBy: v.optional(v.id("users")),
+      /** User ids mentioned via @name (parsed at send time, server-validated). */
+      mentions: v.optional(v.array(v.string())),
+      /** When set, this message carries a poll rendered as an interactive card. */
+      pollId: v.optional(v.id("communityPolls")),
       reactions: v.array(
         v.object({
           emoji: v.string(),
@@ -822,7 +845,12 @@ const schema = defineSchema(
       createdAt: v.number(),
     })
       .index("by_community", ["communityId", "createdAt"])
-      .index("by_sender", ["senderId"]),
+      .index("by_sender", ["senderId"])
+      .index("by_discussion", ["discussionId", "createdAt"])
+      .searchIndex("search_body", {
+        searchField: "body",
+        filterFields: ["communityId"],
+      }),
 
     /** A private student ↔ student DM thread. `key` is the sorted pair of
      *  user ids, matching the existing messages thread convention. */
@@ -907,6 +935,38 @@ const schema = defineSchema(
       .index("by_key", ["key"])
       .index("by_requester", ["requesterId", "status"])
       .index("by_addressee", ["addresseeId", "status"]),
+
+    /** Polls attached to community messages. Votes are stored per-user so
+     *  duplicates are impossible; `anonymous` polls only ever expose counts.
+     */
+    communityPolls: defineTable({
+      communityId: v.id("courseCommunities"),
+      messageId: v.id("communityMessages"),
+      createdBy: v.id("users"),
+      question: v.string(),
+      options: v.array(v.string()),
+      votes: v.array(
+        v.object({ optionIndex: v.number(), userId: v.id("users") }),
+      ),
+      multiple: v.boolean(),
+      anonymous: v.boolean(),
+      closesAt: v.optional(v.number()),
+      closed: v.boolean(),
+      createdAt: v.number(),
+    })
+      .index("by_community", ["communityId", "createdAt"])
+      .index("by_message", ["messageId"]),
+
+    /** Private per-user bookmarks for important community messages. */
+    savedCommunityMessages: defineTable({
+      userId: v.id("users"),
+      communityId: v.id("courseCommunities"),
+      messageId: v.id("communityMessages"),
+      createdAt: v.number(),
+    })
+      .index("by_user", ["userId", "createdAt"])
+      .index("by_user_message", ["userId", "messageId"])
+      .index("by_message", ["messageId"]),
 
     /** Student-submitted reports (messages, users, communities, DMs). */
     communicationReports: defineTable({

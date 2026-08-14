@@ -224,6 +224,78 @@ async function hydrateSender(
 }
 
 /**
+ * Full public shape of a community message, used by every community query
+ * (main feed, search, pins, saved, discussions, jump-to-message context…).
+ * Deleted content stays visible to moderators only — everyone else sees the
+ * deletion placeholder, exactly as before.
+ */
+async function hydrateCommunityMessage(
+  ctx: QueryCtx,
+  m: Doc<"communityMessages">,
+  viewerId: Id<"users">,
+  communityId: Id<"courseCommunities">,
+) {
+  const sender = await hydrateSender(ctx, m);
+  // The sender's role in THIS community (not their platform role) —
+  // drives role-aware delete UI. Backend rules stay authoritative.
+  const senderMembership = m.senderId
+    ? await myMembership(ctx, m.senderId, communityId)
+    : null;
+  if (senderMembership) sender.communityRole = senderMembership.role;
+  let replyTo = null;
+  if (m.replyToId) {
+    const r = await ctx.db.get(m.replyToId);
+    if (r && !r.deleted) {
+      replyTo = {
+        _id: r._id,
+        body: messagePreview(r),
+        senderName:
+          r.senderKind === "admin"
+            ? r.senderLabel || "ForgeX Admin"
+            : r.senderId
+              ? ((await ctx.db.get(r.senderId))?.name ?? "Former member")
+              : "ForgeX",
+      };
+    }
+  }
+  // Deleted content is retained in storage for moderation but never
+  // leaked to students/tutors — they see the deletion placeholder only.
+  const hidden = m.deleted;
+  return {
+    _id: m._id,
+    communityId: m.communityId,
+    senderId: m.senderId ?? null,
+    sender,
+    senderKind: m.senderKind,
+    body: hidden ? "" : m.body,
+    kind: hidden ? null : (m.kind ?? null),
+    storageId: hidden ? null : (m.storageId ?? null),
+    url: hidden ? null : (m.url ?? null),
+    fileName: hidden ? null : (m.fileName ?? null),
+    fileSize: hidden ? null : (m.fileSize ?? null),
+    mimeType: hidden ? null : (m.mimeType ?? null),
+    duration: hidden ? null : (m.duration ?? null),
+    replyToId: m.replyToId ?? null,
+    replyTo,
+    discussionId: hidden ? null : (m.discussionId ?? null),
+    isDiscussion: !hidden && !!m.isDiscussion,
+    isAnnouncement: !hidden && !!m.isAnnouncement,
+    pinned: !hidden && !!m.pinned,
+    tutorAnswer: !hidden && !!m.tutorAnswer,
+    pollId: hidden ? null : (m.pollId ?? null),
+    mentions: hidden ? [] : (m.mentions ?? []),
+    reactions: m.reactions,
+    deleted: m.deleted,
+    deletedBy: m.deletedBy ?? null,
+    deletedById: hidden ? null : (m.deletedById ?? null),
+    deletedAt: m.deletedAt ?? null,
+    editedAt: m.editedAt ?? null,
+    createdAt: m.createdAt,
+    mine: m.senderId === viewerId,
+  };
+}
+
+/**
  * Can this user post in this community? Returns an error message or null.
  *
  * Rules (all enforced server-side — the frontend never decides):
@@ -347,7 +419,8 @@ export const myCommunities = query({
           (msg) =>
             msg.createdAt > (m.lastReadAt ?? 0) &&
             msg.senderId !== userId &&
-            msg.senderKind !== "system",
+            msg.senderKind !== "system" &&
+            !msg.discussionId,
         ).length;
         const last = [...msgs].sort((a, b) => b.createdAt - a.createdAt)[0];
         return {
@@ -438,11 +511,16 @@ export const communityMessages = query({
     if (!membership || membership.status === "removed") {
       return { messages: [], nextCursor: null };
     }
-    let rows = await ctx.db
-      .query("communityMessages")
-      .withIndex("by_community", (q) => q.eq("communityId", communityId))
-      .order("desc")
-      .take(COMMUNITY_PAGE + 1);
+    // The main feed shows every message EXCEPT replies that belong to a
+    // learning discussion — those live in the discussion thread only.
+    let rows = (
+      await ctx.db
+        .query("communityMessages")
+        .withIndex("by_community", (q) => q.eq("communityId", communityId))
+        .collect()
+    )
+      .filter((m) => !m.discussionId)
+      .sort((a, b) => b.createdAt - a.createdAt);
     if (cursor !== undefined) {
       rows = rows.filter((m) => m.createdAt < cursor);
     }
@@ -450,59 +528,9 @@ export const communityMessages = query({
     const page = hasMore ? rows.slice(0, COMMUNITY_PAGE) : rows;
     const oldest = page.length > 0 ? page[page.length - 1].createdAt : null;
     const messages = await Promise.all(
-      [...page].reverse().map(async (m) => {
-        const sender = await hydrateSender(ctx, m);
-        // The sender's role in THIS community (not their platform role) —
-        // drives role-aware delete UI. Backend rules stay authoritative.
-        const senderMembership = m.senderId
-          ? await myMembership(ctx, m.senderId, communityId)
-          : null;
-        if (senderMembership) sender.communityRole = senderMembership.role;
-        let replyTo = null;
-        if (m.replyToId) {
-          const r = await ctx.db.get(m.replyToId);
-          if (r && !r.deleted) {
-            replyTo = {
-              _id: r._id,
-              body: messagePreview(r),
-              senderName:
-                r.senderKind === "admin"
-                  ? r.senderLabel || "ForgeX Admin"
-                  : r.senderId
-                    ? ((await ctx.db.get(r.senderId))?.name ?? "Former member")
-                    : "ForgeX",
-            };
-          }
-        }
-        // Deleted content is retained in storage for moderation but never
-        // leaked to students/tutors — they see the deletion placeholder only.
-        const hidden = m.deleted;
-        return {
-          _id: m._id,
-          communityId: m.communityId,
-          senderId: m.senderId ?? null,
-          sender,
-          senderKind: m.senderKind,
-          body: hidden ? "" : m.body,
-          kind: hidden ? null : (m.kind ?? null),
-          storageId: hidden ? null : (m.storageId ?? null),
-          url: hidden ? null : (m.url ?? null),
-          fileName: hidden ? null : (m.fileName ?? null),
-          fileSize: hidden ? null : (m.fileSize ?? null),
-          mimeType: hidden ? null : (m.mimeType ?? null),
-          duration: hidden ? null : (m.duration ?? null),
-          replyToId: m.replyToId ?? null,
-          replyTo,
-          reactions: m.reactions,
-          deleted: m.deleted,
-          deletedBy: m.deletedBy ?? null,
-          deletedById: hidden ? null : (m.deletedById ?? null),
-          deletedAt: m.deletedAt ?? null,
-          editedAt: m.editedAt ?? null,
-          createdAt: m.createdAt,
-          mine: m.senderId === userId,
-        };
-      }),
+      [...page].reverse().map((m) =>
+        hydrateCommunityMessage(ctx, m, userId, communityId),
+      ),
     );
     return { messages, nextCursor: hasMore ? oldest : null };
   },
@@ -567,10 +595,293 @@ export const communityUnreadCount = query({
         (msg) =>
           msg.createdAt > (m.lastReadAt ?? 0) &&
           msg.senderId !== userId &&
-          msg.senderKind !== "system",
+          msg.senderKind !== "system" &&
+          !msg.discussionId,
       ).length;
     }
     return total;
+  },
+});
+
+// ---------------------------------------------------------------------------
+// Queries — community upgrade (pins, polls, search, saved, resources…)
+// ---------------------------------------------------------------------------
+
+export const communityPinnedMessages = query({
+  args: { communityId: v.id("courseCommunities") },
+  handler: async (ctx, { communityId }) => {
+    const userId = await getAuthUserId(ctx);
+    if (userId === null) return [];
+    const membership = await myMembership(ctx, userId, communityId);
+    if (!membership || membership.status === "removed") return [];
+    const rows = await ctx.db
+      .query("communityMessages")
+      .withIndex("by_community", (q) => q.eq("communityId", communityId))
+      .collect();
+    const pinned = rows
+      .filter((m) => m.pinned && !m.deleted)
+      .sort((a, b) => (b.pinnedAt ?? b.createdAt) - (a.pinnedAt ?? a.createdAt))
+      .slice(0, 30);
+    return Promise.all(
+      pinned.map((m) => hydrateCommunityMessage(ctx, m, userId, communityId)),
+    );
+  },
+});
+
+export const communityPolls = query({
+  args: { communityId: v.id("courseCommunities") },
+  handler: async (ctx, { communityId }) => {
+    const userId = await getAuthUserId(ctx);
+    if (userId === null) return [];
+    const membership = await myMembership(ctx, userId, communityId);
+    if (!membership || membership.status === "removed") return [];
+    const polls = await ctx.db
+      .query("communityPolls")
+      .withIndex("by_community", (q) => q.eq("communityId", communityId))
+      .order("desc")
+      .take(50);
+    return polls.map((p) => ({
+      _id: p._id,
+      messageId: p.messageId,
+      question: p.question,
+      options: p.options,
+      voteCounts: p.options.map(
+        (_, i) => p.votes.filter((v) => v.optionIndex === i).length,
+      ),
+      totalVotes: p.votes.length,
+      closed: p.closed,
+      closesAt: p.closesAt ?? null,
+      multiple: p.multiple,
+      anonymous: p.anonymous,
+      createdBy: p.createdBy,
+      createdAt: p.createdAt,
+      myVotes: p.votes
+        .filter((v) => v.userId === userId)
+        .map((v) => v.optionIndex),
+    }));
+  },
+});
+
+export const communityTyping = query({
+  args: { communityId: v.id("courseCommunities") },
+  handler: async (ctx, { communityId }) => {
+    const userId = await getAuthUserId(ctx);
+    if (userId === null) return [];
+    const membership = await myMembership(ctx, userId, communityId);
+    if (!membership || membership.status === "removed") return [];
+    const rows = await ctx.db
+      .query("communityMembers")
+      .withIndex("by_community", (q) => q.eq("communityId", communityId))
+      .collect();
+    const typing = rows.filter(
+      (m) => m.status === "active" && m.typingAt && m.userId !== userId,
+    );
+    const hydrated = await Promise.all(
+      typing.map(async (m) => {
+        const u = await ctx.db.get(m.userId);
+        return {
+          userId: m.userId,
+          name: u?.name ?? "Someone",
+          image: u?.image ?? null,
+          typingAt: m.typingAt as number,
+        };
+      }),
+    );
+    return hydrated.sort((a, b) => b.typingAt - a.typingAt);
+  },
+});
+
+export const searchCommunityMessages = query({
+  args: {
+    communityId: v.id("courseCommunities"),
+    q: v.string(),
+    senderId: v.optional(v.id("users")),
+    kind: v.optional(v.string()),
+  },
+  handler: async (ctx, { communityId, q, senderId, kind }) => {
+    const userId = await getAuthUserId(ctx);
+    if (userId === null) return [];
+    const membership = await myMembership(ctx, userId, communityId);
+    if (!membership || membership.status === "removed") return [];
+    const term = q.trim();
+    if (!term) return [];
+    const rows = await ctx.db
+      .query("communityMessages")
+      .withSearchIndex("search_body", (s) =>
+        s.search("body", term).eq("communityId", communityId),
+      )
+      .take(60);
+    const matches = rows
+      .filter((m) => !m.deleted && !m.discussionId)
+      .filter((m) => !senderId || m.senderId === senderId)
+      .filter((m) => !kind || m.kind === kind)
+      .sort((a, b) => b.createdAt - a.createdAt)
+      .slice(0, 40);
+    return Promise.all(
+      matches.map((m) => hydrateCommunityMessage(ctx, m, userId, communityId)),
+    );
+  },
+});
+
+/** Load a window of messages around one message (search / notification / save). */
+export const messagesAround = query({
+  args: {
+    communityId: v.id("courseCommunities"),
+    messageId: v.id("communityMessages"),
+  },
+  handler: async (ctx, { communityId, messageId }) => {
+    const userId = await getAuthUserId(ctx);
+    if (userId === null) return { messages: [], targetId: null };
+    const membership = await myMembership(ctx, userId, communityId);
+    if (!membership || membership.status === "removed") {
+      return { messages: [], targetId: null };
+    }
+    const rows = (
+      await ctx.db
+        .query("communityMessages")
+        .withIndex("by_community", (q) => q.eq("communityId", communityId))
+        .collect()
+    )
+      .filter((m) => !m.discussionId)
+      .sort((a, b) => a.createdAt - b.createdAt);
+    const idx = rows.findIndex((m) => m._id === messageId);
+    if (idx === -1) return { messages: [], targetId: null };
+    const start = Math.max(0, idx - 20);
+    const end = Math.min(rows.length, idx + 12);
+    const slice = rows.slice(start, end);
+    return {
+      messages: await Promise.all(
+        slice.map((m) => hydrateCommunityMessage(ctx, m, userId, communityId)),
+      ),
+      targetId: messageId,
+    };
+  },
+});
+
+export const mySavedCommunityMessages = query({
+  args: { communityId: v.id("courseCommunities") },
+  handler: async (ctx, { communityId }) => {
+    const userId = await getAuthUserId(ctx);
+    if (userId === null) return [];
+    const membership = await myMembership(ctx, userId, communityId);
+    if (!membership || membership.status === "removed") return [];
+    const saved = await ctx.db
+      .query("savedCommunityMessages")
+      .withIndex("by_user", (q) => q.eq("userId", userId))
+      .order("desc")
+      .take(100);
+    const inCommunity = saved.filter((s) => s.communityId === communityId);
+    const hydrated = await Promise.all(
+      inCommunity.map(async (s) => {
+        const msg = await ctx.db.get(s.messageId);
+        if (!msg || msg.deleted) return null;
+        return {
+          ...(await hydrateCommunityMessage(ctx, msg, userId, communityId)),
+          savedAt: s.createdAt,
+        };
+      }),
+    );
+    return hydrated.filter((x): x is NonNullable<typeof x> => x !== null);
+  },
+});
+
+export const communityResources = query({
+  args: { communityId: v.id("courseCommunities") },
+  handler: async (ctx, { communityId }) => {
+    const userId = await getAuthUserId(ctx);
+    if (userId === null) return [];
+    const membership = await myMembership(ctx, userId, communityId);
+    if (!membership || membership.status === "removed") return [];
+    const rows = await ctx.db
+      .query("communityMessages")
+      .withIndex("by_community", (q) => q.eq("communityId", communityId))
+      .collect();
+    const attachments = rows
+      .filter(
+        (m) =>
+          !m.deleted &&
+          !m.discussionId &&
+          (m.kind === "image" || m.kind === "file" || m.kind === "voice") &&
+          m.url,
+      )
+      .sort((a, b) => b.createdAt - a.createdAt)
+      .slice(0, 200);
+    return Promise.all(
+      attachments.map(async (m) => {
+        const sender = m.senderId ? await ctx.db.get(m.senderId) : null;
+        return {
+          _id: m._id,
+          kind: m.kind as "image" | "file" | "voice",
+          url: m.url as string,
+          fileName: m.fileName ?? null,
+          fileSize: m.fileSize ?? null,
+          mimeType: m.mimeType ?? null,
+          duration: m.duration ?? null,
+          senderName:
+            sender?.name ??
+            (m.senderKind === "admin" ? "ForgeX Admin" : "Former member"),
+          createdAt: m.createdAt,
+        };
+      }),
+    );
+  },
+});
+
+export const communityDiscussions = query({
+  args: { communityId: v.id("courseCommunities") },
+  handler: async (ctx, { communityId }) => {
+    const userId = await getAuthUserId(ctx);
+    if (userId === null) return [];
+    const membership = await myMembership(ctx, userId, communityId);
+    if (!membership || membership.status === "removed") return [];
+    const rows = await ctx.db
+      .query("communityMessages")
+      .withIndex("by_community", (q) => q.eq("communityId", communityId))
+      .collect();
+    const roots = rows
+      .filter((m) => m.isDiscussion && !m.deleted)
+      .sort((a, b) => b.createdAt - a.createdAt)
+      .slice(0, 50);
+    return Promise.all(
+      roots.map(async (root) => {
+        const replies = rows.filter(
+          (m) => m.discussionId === root._id && !m.deleted,
+        );
+        const hydrated = await hydrateCommunityMessage(ctx, root, userId, communityId);
+        return {
+          ...hydrated,
+          replyCount: replies.length,
+          lastReplyAt: replies.length
+            ? Math.max(...replies.map((r) => r.createdAt))
+            : null,
+        };
+      }),
+    );
+  },
+});
+
+export const discussionMessages = query({
+  args: {
+    communityId: v.id("courseCommunities"),
+    discussionId: v.id("communityMessages"),
+  },
+  handler: async (ctx, { communityId, discussionId }) => {
+    const userId = await getAuthUserId(ctx);
+    if (userId === null) return [];
+    const membership = await myMembership(ctx, userId, communityId);
+    if (!membership || membership.status === "removed") return [];
+    const root = await ctx.db.get(discussionId);
+    if (!root || root.communityId !== communityId || root.deleted) return [];
+    const replies = await ctx.db
+      .query("communityMessages")
+      .withIndex("by_discussion", (q) => q.eq("discussionId", discussionId))
+      .order("asc")
+      .take(200);
+    const hydratedRoot = await hydrateCommunityMessage(ctx, root, userId, communityId);
+    const hydratedReplies = await Promise.all(
+      replies.map((m) => hydrateCommunityMessage(ctx, m, userId, communityId)),
+    );
+    return [hydratedRoot, ...hydratedReplies];
   },
 });
 
@@ -904,6 +1215,14 @@ export const sendCommunityMessage = mutation({
     mimeType: v.optional(v.string()),
     duration: v.optional(v.number()),
     replyToId: v.optional(v.id("communityMessages")),
+    /** User ids mentioned with @name (resolved client-side, validated here). */
+    mentionIds: v.optional(v.array(v.id("users"))),
+    /** @everyone — community tutors and admins only. */
+    mentionEveryone: v.optional(v.boolean()),
+    /** Official announcement (community tutors and admins only). */
+    isAnnouncement: v.optional(v.boolean()),
+    /** Explicit discussion id when posting inside a learning thread. */
+    discussionId: v.optional(v.id("communityMessages")),
   },
   handler: async (ctx, args) => {
     const user = await requireUserDoc(ctx);
@@ -929,6 +1248,48 @@ export const sendCommunityMessage = mutation({
       throw new Error("The attachment couldn't be stored — please send it again.");
     }
 
+    // Official announcements are staff-only.
+    const isAnnouncement = !!args.isAnnouncement;
+    if (isAnnouncement) {
+      await requireStaff(ctx, user, community._id);
+    }
+
+    // Reply → inherit the discussion context when replying to a discussion
+    // message (or its replies), so the reply lands inside the learning thread.
+    let discussionId = args.discussionId;
+    let replied: Doc<"communityMessages"> | null = null;
+    if (args.replyToId) {
+      replied = await ctx.db.get(args.replyToId);
+      if (!replied || replied.communityId !== community._id || replied.deleted) {
+        throw new Error("The message you're replying to no longer exists.");
+      }
+      if (!discussionId && replied.discussionId) discussionId = replied.discussionId;
+      if (!discussionId && replied.isDiscussion) discussionId = replied._id;
+    }
+    if (discussionId) {
+      const root = await ctx.db.get(discussionId);
+      if (!root || root.communityId !== community._id || root.deleted) {
+        throw new Error("The discussion you're replying to no longer exists.");
+      }
+    }
+
+    // Mentions: only active community members can be mentioned, and only
+    // community tutors/admins may use @everyone.
+    const memberRows = await ctx.db
+      .query("communityMembers")
+      .withIndex("by_community", (q) => q.eq("communityId", community._id))
+      .collect();
+    const activeMemberIds = new Set(
+      memberRows.filter((m) => m.status === "active").map((m) => m.userId.toString()),
+    );
+    const mentionIds = (args.mentionIds ?? [])
+      .map((id) => id.toString())
+      .filter((id) => activeMemberIds.has(id));
+    const mentionEveryone = !!args.mentionEveryone;
+    if (mentionEveryone && !(await isStaffMember(ctx, user._id, community._id))) {
+      throw new Error("Only community tutors and admins can mention @everyone.");
+    }
+
     const id = await ctx.db.insert("communityMessages", {
       communityId: args.communityId,
       senderId: user._id,
@@ -942,21 +1303,25 @@ export const sendCommunityMessage = mutation({
       mimeType: args.mimeType,
       duration: args.duration,
       replyToId: args.replyToId,
+      discussionId,
+      isAnnouncement: isAnnouncement ? true : undefined,
+      mentions: mentionIds.length ? mentionIds : undefined,
       reactions: [],
       deleted: false,
       createdAt: Date.now(),
     });
     await ctx.db.patch(community._id, { lastActivityAt: Date.now() });
+    const preview = messagePreview({
+      body: trimmed,
+      kind: args.kind,
+      fileName: args.fileName,
+    });
 
     // Notify the community's staff (tutors / moderators / admins) when a
     // student posts, so questions don't sit unanswered. Staff never notify
     // themselves, and students are tracked via unread counts instead.
-    const staff = await ctx.db
-      .query("communityMembers")
-      .withIndex("by_community", (q) => q.eq("communityId", community._id))
-      .collect();
     const staffIds = new Set(
-      staff
+      memberRows
         .filter(
           (m) =>
             m.status === "active" &&
@@ -969,10 +1334,50 @@ export const sendCommunityMessage = mutation({
       await notify(ctx, {
         userId: sId,
         title: `New message in ${community.name}`,
-        body: messagePreview({ body: trimmed, kind: args.kind, fileName: args.fileName }).slice(0, 90),
+        body: preview.slice(0, 90),
         type: "community",
-        link: "/dashboard/communities",
+        link: `/dashboard/communities/${community._id}`,
       });
+    }
+
+    // Reply notification → the original sender (if it's not me).
+    if (replied?.senderId && replied.senderId !== user._id) {
+      await notify(ctx, {
+        userId: replied.senderId,
+        title: "💬 New reply to your message",
+        body: `${user.name || "Someone"} replied: ${preview.slice(0, 80)}`,
+        type: "community-reply",
+        link: `/dashboard/communities/${community._id}`,
+      });
+    }
+
+    // @mentions → notify each mentioned user (never myself).
+    for (const mid of mentionIds) {
+      if (mid === user._id.toString()) continue;
+      await notify(ctx, {
+        userId: mid as Id<"users">,
+        title: "📣 You were mentioned",
+        body: `${user.name || "Someone"} mentioned you in ${community.name}`,
+        type: "community-mention",
+        link: `/dashboard/communities/${community._id}`,
+      });
+    }
+
+    // @everyone → notify active members (capped so huge communities stay sane).
+    if (mentionEveryone) {
+      let sent = 0;
+      for (const m of memberRows) {
+        if (sent >= 150) break;
+        if (m.status !== "active" || m.userId === user._id) continue;
+        await notify(ctx, {
+          userId: m.userId,
+          title: `📣 ${community.name}`,
+          body: `${user.name || "A tutor"} said @everyone: ${preview.slice(0, 80)}`,
+          type: "community-mention",
+          link: `/dashboard/communities/${community._id}`,
+        });
+        sent += 1;
+      }
     }
     return id;
   },
@@ -1223,6 +1628,215 @@ export const tutorRemoveCommunityMember = mutation({
       body: `You were removed from ${communityName(ctx, communityId)}${reason ? `: ${reason}` : "."}`,
       type: "moderation",
       link: "/dashboard/communities",
+    });
+    return true;
+  },
+});
+
+// ---------------------------------------------------------------------------
+// Mutations — community upgrade (pins, answers, discussions, polls, saved…)
+// ---------------------------------------------------------------------------
+
+/** Community Tutor / Admin: pin or unpin a message. */
+export const setPinnedCommunityMessage = mutation({
+  args: { messageId: v.id("communityMessages"), pinned: v.boolean() },
+  handler: async (ctx, { messageId, pinned }) => {
+    const user = await requireUserDoc(ctx);
+    const msg = await ctx.db.get(messageId);
+    if (!msg || msg.deleted) throw new Error("Message not found.");
+    await requireStaff(ctx, user, msg.communityId);
+    await ctx.db.patch(messageId, {
+      pinned: pinned ? true : undefined,
+      pinnedBy: pinned ? user._id : undefined,
+      pinnedAt: pinned ? Date.now() : undefined,
+    });
+    return true;
+  },
+});
+
+/** Community Tutor / Admin: mark (or unmark) the verified tutor answer. */
+export const setTutorAnswer = mutation({
+  args: { messageId: v.id("communityMessages"), on: v.boolean() },
+  handler: async (ctx, { messageId, on }) => {
+    const user = await requireUserDoc(ctx);
+    const msg = await ctx.db.get(messageId);
+    if (!msg || msg.deleted) throw new Error("Message not found.");
+    await requireStaff(ctx, user, msg.communityId);
+    await ctx.db.patch(messageId, {
+      tutorAnswer: on ? true : undefined,
+      tutorAnswerBy: on ? user._id : undefined,
+    });
+    return true;
+  },
+});
+
+/** Community Tutor / Admin: turn a message into (or close) a learning thread. */
+export const setDiscussion = mutation({
+  args: { messageId: v.id("communityMessages"), on: v.boolean() },
+  handler: async (ctx, { messageId, on }) => {
+    const user = await requireUserDoc(ctx);
+    const msg = await ctx.db.get(messageId);
+    if (!msg || msg.deleted) throw new Error("Message not found.");
+    await requireStaff(ctx, user, msg.communityId);
+    await ctx.db.patch(messageId, { isDiscussion: on ? true : undefined });
+    return true;
+  },
+});
+
+/** Community Tutor / Admin: create a poll. Renders as a message + poll card. */
+export const createCommunityPoll = mutation({
+  args: {
+    communityId: v.id("courseCommunities"),
+    question: v.string(),
+    options: v.array(v.string()),
+    multiple: v.boolean(),
+    anonymous: v.boolean(),
+    closesAt: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const user = await requireUserDoc(ctx);
+    await requireStaff(ctx, user, args.communityId);
+    const community = await ctx.db.get(args.communityId);
+    if (!community) throw new Error("Community not found.");
+    const question = args.question.trim();
+    const options = [...new Set(args.options.map((o) => o.trim()).filter(Boolean))];
+    if (!question) throw new Error("Poll needs a question.");
+    if (question.length > 200) throw new Error("Keep the question under 200 characters.");
+    if (options.length < 2) throw new Error("Add at least two options.");
+    if (options.length > 8) throw new Error("Max 8 options.");
+    if (args.closesAt && args.closesAt <= Date.now()) {
+      throw new Error("Closing time must be in the future.");
+    }
+    await checkRateLimit(ctx, `poll:${user._id}`, 10, 60 * 60 * 1000, "You're creating polls too quickly.");
+    const msgId = await ctx.db.insert("communityMessages", {
+      communityId: args.communityId,
+      senderId: user._id,
+      senderKind: "user",
+      body: question,
+      reactions: [],
+      deleted: false,
+      createdAt: Date.now(),
+    });
+    const pollId = await ctx.db.insert("communityPolls", {
+      communityId: args.communityId,
+      messageId: msgId,
+      createdBy: user._id,
+      question,
+      options,
+      votes: [],
+      multiple: args.multiple,
+      anonymous: args.anonymous,
+      closesAt: args.closesAt,
+      closed: false,
+      createdAt: Date.now(),
+    });
+    await ctx.db.patch(msgId, { pollId });
+    await ctx.db.patch(community._id, { lastActivityAt: Date.now() });
+    return pollId;
+  },
+});
+
+/** Any active member votes. Duplicate votes are impossible. */
+export const voteCommunityPoll = mutation({
+  args: { pollId: v.id("communityPolls"), optionIndexes: v.array(v.number()) },
+  handler: async (ctx, { pollId, optionIndexes }) => {
+    const user = await requireUserDoc(ctx);
+    const poll = await ctx.db.get(pollId);
+    if (!poll) throw new Error("Poll not found.");
+    const membership = await myMembership(ctx, user._id, poll.communityId);
+    if (!membership || membership.status !== "active") {
+      throw new Error("You're not an active member of this community.");
+    }
+    if (poll.closed) throw new Error("This poll is closed.");
+    if (poll.closesAt && poll.closesAt <= Date.now()) {
+      throw new Error("This poll has closed.");
+    }
+    if (poll.votes.some((v) => v.userId === user._id)) {
+      throw new Error("You've already voted in this poll.");
+    }
+    const idxs = [...new Set(optionIndexes)].filter(
+      (i) => Number.isInteger(i) && i >= 0 && i < poll.options.length,
+    );
+    if (!idxs.length) throw new Error("Pick at least one option.");
+    if (!poll.multiple && idxs.length > 1) {
+      throw new Error("This poll only allows one answer.");
+    }
+    await ctx.db.patch(pollId, {
+      votes: [
+        ...poll.votes,
+        ...idxs.map((optionIndex) => ({ optionIndex, userId: user._id })),
+      ],
+    });
+    return true;
+  },
+});
+
+/** Community Tutor / Admin: close a poll early. */
+export const closeCommunityPoll = mutation({
+  args: { pollId: v.id("communityPolls") },
+  handler: async (ctx, { pollId }) => {
+    const user = await requireUserDoc(ctx);
+    const poll = await ctx.db.get(pollId);
+    if (!poll) throw new Error("Poll not found.");
+    await requireStaff(ctx, user, poll.communityId);
+    await ctx.db.patch(pollId, { closed: true });
+    return true;
+  },
+});
+
+/** Bookmark a message (private to the user). */
+export const saveCommunityMessage = mutation({
+  args: { messageId: v.id("communityMessages") },
+  handler: async (ctx, { messageId }) => {
+    const user = await requireUserDoc(ctx);
+    const msg = await ctx.db.get(messageId);
+    if (!msg || msg.deleted) throw new Error("Message not found.");
+    const membership = await myMembership(ctx, user._id, msg.communityId);
+    if (!membership || membership.status !== "active") {
+      throw new Error("You're not an active member of this community.");
+    }
+    const existing = await ctx.db
+      .query("savedCommunityMessages")
+      .withIndex("by_user_message", (q) =>
+        q.eq("userId", user._id).eq("messageId", messageId),
+      )
+      .first();
+    if (!existing) {
+      await ctx.db.insert("savedCommunityMessages", {
+        userId: user._id,
+        communityId: msg.communityId,
+        messageId,
+        createdAt: Date.now(),
+      });
+    }
+    return true;
+  },
+});
+
+export const unsaveCommunityMessage = mutation({
+  args: { messageId: v.id("communityMessages") },
+  handler: async (ctx, { messageId }) => {
+    const user = await requireUserDoc(ctx);
+    const existing = await ctx.db
+      .query("savedCommunityMessages")
+      .withIndex("by_user_message", (q) =>
+        q.eq("userId", user._id).eq("messageId", messageId),
+      )
+      .first();
+    if (existing) await ctx.db.delete(existing._id);
+    return true;
+  },
+});
+
+/** Debounced typing heartbeat. `typing: false` clears the indicator. */
+export const setCommunityTyping = mutation({
+  args: { communityId: v.id("courseCommunities"), typing: v.boolean() },
+  handler: async (ctx, { communityId, typing }) => {
+    const user = await requireUserDoc(ctx);
+    const membership = await myMembership(ctx, user._id, communityId);
+    if (!membership || membership.status !== "active") return true;
+    await ctx.db.patch(membership._id, {
+      typingAt: typing ? Date.now() : undefined,
     });
     return true;
   },
