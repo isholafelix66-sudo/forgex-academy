@@ -44,6 +44,8 @@ export type ThreadMessage = {
     name: string;
     image: string | null;
     role: string;
+    /** Role inside the community/room (backend-resolved) — drives role-aware UI. */
+    communityRole?: string | null;
     isStaff: boolean;
   };
   body: string;
@@ -172,6 +174,7 @@ export function ReportDialog({
 function MessageBubble({
   message,
   myUserId,
+  viewerRole = "student",
   onReply,
   onToggleReaction,
   onEdit,
@@ -183,6 +186,9 @@ function MessageBubble({
 }: {
   message: ThreadMessage;
   myUserId: string;
+  /** Viewer's community role — controls who gets the delete affordance.
+   *  The backend still enforces every rule; this only drives the UI. */
+  viewerRole?: "student" | "tutor" | "admin";
   onReply?: (m: ThreadMessage) => void;
   onToggleReaction?: (messageId: string, emoji: string) => void;
   onEdit?: (messageId: string, body: string) => Promise<unknown>;
@@ -220,6 +226,18 @@ function MessageBubble({
   const showRole = message.sender.isStaff && !isAdminPost;
   const hasAttachment =
     message.kind === "image" || message.kind === "file" || message.kind === "voice";
+  // UI affordance mirror of the backend rules (backend is authoritative):
+  // own message → delete; admin → delete anything; tutor → student messages only.
+  const senderRole = message.sender.communityRole ?? message.sender.role;
+  const canDeleteThis =
+    !message.deleted &&
+    (message.mine
+      ? true
+      : viewerRole === "admin"
+        ? true
+        : viewerRole === "tutor" &&
+            message.senderKind === "user" &&
+            senderRole === "student");
 
   const saveEdit = async () => {
     if (!editText.trim() || editBusy) return;
@@ -293,9 +311,7 @@ function MessageBubble({
           )}
         >
           {message.deleted ? (
-            <p className="text-xs italic opacity-70">
-              {message.deletedBy === "admin" ? "Message removed by a moderator" : "Message deleted"}
-            </p>
+            <p className="text-xs italic opacity-70">This message was deleted.</p>
           ) : (
             <>
               {message.replyTo && (
@@ -408,7 +424,7 @@ function MessageBubble({
                 <Flag className="size-3" /> Report
               </button>
             )}
-            {(message.mine || (onEdit && message.mine)) && (
+            {onDelete && canDeleteThis && (
               <div className="relative" ref={menuRef}>
                 <button
                   type="button"
@@ -432,7 +448,7 @@ function MessageBubble({
                         <Pencil className="size-3.5" /> Edit
                       </button>
                     )}
-                    {message.mine && onDelete && (
+                    {canDeleteThis && onDelete && (
                       <button
                         type="button"
                         onClick={() => {
@@ -487,6 +503,7 @@ function MessageBubble({
 export function MessageThread({
   messages,
   myUserId,
+  viewerRole = "student",
   loading,
   nextCursor,
   onLoadMore,
@@ -501,6 +518,7 @@ export function MessageThread({
 }: {
   messages: ThreadMessage[];
   myUserId: string;
+  viewerRole?: "student" | "tutor" | "admin";
   loading?: boolean;
   nextCursor?: number | null;
   onLoadMore?: () => void;
@@ -564,6 +582,7 @@ export function MessageThread({
             <MessageBubble
               message={m}
               myUserId={myUserId}
+              viewerRole={viewerRole}
               onReply={readOnly ? undefined : onReply}
               onToggleReaction={readOnly ? undefined : onToggleReaction}
               onEdit={readOnly ? undefined : onEdit}

@@ -31,16 +31,17 @@ async function hydrateSender(ctx: QueryCtx | MutationCtx, m: {
   senderKind: string;
   senderLabel?: string | null;
 }) {
+  const base = { communityRole: undefined as string | undefined };
   if (m.senderKind === "admin") {
-    return { _id: null, name: m.senderLabel || "ForgeX Admin", image: null, role: "admin", isStaff: true };
+    return { ...base, _id: null, name: m.senderLabel || "ForgeX Admin", image: null, role: "admin", isStaff: true };
   }
   if (m.senderKind === "system") {
-    return { _id: null, name: m.senderLabel || "ForgeX", image: null, role: "system", isStaff: true };
+    return { ...base, _id: null, name: m.senderLabel || "ForgeX", image: null, role: "system", isStaff: true };
   }
   const u = m.senderId ? await ctx.db.get(m.senderId) : null;
-  if (!u) return { _id: null, name: "Deleted user", image: null, role: "student", isStaff: false };
+  if (!u) return { ...base, _id: null, name: "Deleted user", image: null, role: "student", isStaff: false };
   const p = publicUser(u);
-  return { _id: p._id, name: p.name, image: p.image, role: p.role, isStaff: p.role === "tutor" || p.role === "admin" };
+  return { ...base, _id: p._id, name: p.name, image: p.image, role: p.role, isStaff: p.role === "tutor" || p.role === "admin" };
 }
 
 /** Notify a user about a moderation outcome. */
@@ -86,6 +87,7 @@ export const adminCommunities = query({
           _id: c._id,
           name: c.name,
           status: c.status,
+          messageMode: c.messageMode ?? "everyone",
           lockedReason: c.lockedReason ?? null,
           courseTitle: course?.title ?? "Unknown course",
           memberCount,
@@ -127,6 +129,7 @@ export const adminCommunityDetail = query({
         _id: community._id,
         name: community.name,
         status: community.status,
+        messageMode: community.messageMode ?? "everyone",
         lockedReason: community.lockedReason ?? null,
         createdAt: community.createdAt,
         lastActivityAt: community.lastActivityAt ?? null,
@@ -175,26 +178,38 @@ export const adminCommunityMessages = query({
       return true;
     });
     const messages = await Promise.all(
-      [...filtered].reverse().map(async (m) => ({
-        _id: m._id,
-        communityId: m.communityId,
-        sender: await hydrateSender(ctx, m),
-        senderKind: m.senderKind,
-        body: m.body,
-        kind: m.kind ?? null,
-        storageId: m.storageId ?? null,
-        url: m.url ?? null,
-        fileName: m.fileName ?? null,
-        fileSize: m.fileSize ?? null,
-        mimeType: m.mimeType ?? null,
-        duration: m.duration ?? null,
-        reactions: m.reactions,
-        deleted: m.deleted,
-        deletedBy: m.deletedBy ?? null,
-        editedAt: m.editedAt ?? null,
-        createdAt: m.createdAt,
-        reported: reportedIds.has(m._id.toString()),
-      })),
+      [...filtered].reverse().map(async (m) => {
+        const sender = await hydrateSender(ctx, m);
+        const senderMembership = m.senderId
+          ? await ctx.db
+              .query("communityMembers")
+              .withIndex("by_community", (q) =>
+                q.eq("communityId", communityId).eq("userId", m.senderId!),
+              )
+              .first()
+          : null;
+        if (senderMembership) sender.communityRole = senderMembership.role;
+        return {
+          _id: m._id,
+          communityId: m.communityId,
+          sender,
+          senderKind: m.senderKind,
+          body: m.body,
+          kind: m.kind ?? null,
+          storageId: m.storageId ?? null,
+          url: m.url ?? null,
+          fileName: m.fileName ?? null,
+          fileSize: m.fileSize ?? null,
+          mimeType: m.mimeType ?? null,
+          duration: m.duration ?? null,
+          reactions: m.reactions,
+          deleted: m.deleted,
+          deletedBy: m.deletedBy ?? null,
+          editedAt: m.editedAt ?? null,
+          createdAt: m.createdAt,
+          reported: reportedIds.has(m._id.toString()),
+        };
+      }),
     );
     return { messages, nextCursor: hasMore ? oldest : null };
   },
@@ -737,6 +752,180 @@ export const adminLogConversationView = mutation({
       targetType: "conversation",
       targetId: conversationId,
       conversationId,
+    });
+    return true;
+  },
+});
+
+/** Admin: change a community's messaging mode (everyone / tutors_only). */
+export const adminSetCommunityMessageMode = mutation({
+  args: {
+    token: v.string(),
+    communityId: v.id("courseCommunities"),
+    mode: v.union(v.literal("everyone"), v.literal("tutors_only")),
+  },
+  handler: async (ctx, { token, communityId, mode }) => {
+    await requireAdminSession(ctx, token);
+    const community = await ctx.db.get(communityId);
+    if (!community) throw new Error("Community not found.");
+    await ctx.db.patch(communityId, { messageMode: mode });
+    await logModeration(ctx, "ADMIN_SET_MESSAGE_MODE", {
+      targetType: "community",
+      targetId: communityId,
+      communityId,
+      reason: mode === "tutors_only" ? "TUTORS_ONLY" : "EVERYONE_CAN_MESSAGE",
+    });
+    return true;
+  },
+});
+
+/** Admin: create a community for a course (auto-members the course tutor). */
+export const adminCreateCommunity = mutation({
+  args: {
+    token: v.string(),
+    courseId: v.id("courses"),
+    name: v.optional(v.string()),
+    messageMode: v.optional(v.union(v.literal("everyone"), v.literal("tutors_only"))),
+  },
+  handler: async (ctx, { token, courseId, name, messageMode }) => {
+    await requireAdminSession(ctx, token);
+    const course = await ctx.db.get(courseId);
+    if (!course) throw new Error("Course not found.");
+    const existing = await ctx.db
+      .query("courseCommunities")
+      .withIndex("by_course", (q) => q.eq("courseId", courseId))
+      .first();
+    if (existing) throw new Error("This course already has a community.");
+    const id = await ctx.db.insert("courseCommunities", {
+      courseId,
+      name: name?.trim() || `${course.title} Community`,
+      status: "active",
+      messageMode: messageMode ?? "everyone",
+      createdAt: Date.now(),
+    });
+    // Auto-member the course tutor as a community tutor.
+    const tutor = await ctx.db.get(course.tutorId);
+    if (tutor) {
+      await addMembership(ctx, id, course.tutorId, "tutor");
+    }
+    await logModeration(ctx, "ADMIN_CREATED_COMMUNITY", {
+      targetType: "community",
+      targetId: id,
+      communityId: id,
+      reason: course.title,
+    });
+    return id;
+  },
+});
+
+/** Admin: edit a community's name / messaging mode. */
+export const adminEditCommunity = mutation({
+  args: {
+    token: v.string(),
+    communityId: v.id("courseCommunities"),
+    name: v.string(),
+    messageMode: v.union(v.literal("everyone"), v.literal("tutors_only")),
+  },
+  handler: async (ctx, { token, communityId, name, messageMode }) => {
+    await requireAdminSession(ctx, token);
+    const community = await ctx.db.get(communityId);
+    if (!community) throw new Error("Community not found.");
+    await ctx.db.patch(communityId, {
+      name: name.trim() || community.name,
+      messageMode,
+    });
+    await logModeration(ctx, "ADMIN_EDITED_COMMUNITY", {
+      targetType: "community",
+      targetId: communityId,
+      communityId,
+      reason: name.trim() || community.name,
+    });
+    return true;
+  },
+});
+
+/** Admin: permanently delete a community (members + messages + the community). */
+export const adminDeleteCommunity = mutation({
+  args: { token: v.string(), communityId: v.id("courseCommunities") },
+  handler: async (ctx, { token, communityId }) => {
+    await requireAdminSession(ctx, token);
+    const community = await ctx.db.get(communityId);
+    if (!community) throw new Error("Community not found.");
+    const messages = await ctx.db
+      .query("communityMessages")
+      .withIndex("by_community", (q) => q.eq("communityId", communityId))
+      .collect();
+    for (const m of messages) await ctx.db.delete(m._id);
+    const members = await ctx.db
+      .query("communityMembers")
+      .withIndex("by_community", (q) => q.eq("communityId", communityId))
+      .collect();
+    for (const m of members) await ctx.db.delete(m._id);
+    const reports = await ctx.db.query("communicationReports").collect();
+    for (const r of reports) {
+      if (r.communityId === communityId) await ctx.db.delete(r._id);
+    }
+    await ctx.db.delete(communityId);
+    await logModeration(ctx, "ADMIN_DELETED_COMMUNITY", {
+      targetType: "community",
+      targetId: communityId,
+      reason: community.name,
+    });
+    return true;
+  },
+});
+
+/**
+ * Admin: promote/demote a community member to/from Community Tutor.
+ * Adds the membership if the user isn't in the community yet. Admin members
+ * are protected — their role can never be changed by anyone.
+ */
+export const adminSetMemberRole = mutation({
+  args: {
+    token: v.string(),
+    communityId: v.id("courseCommunities"),
+    userId: v.id("users"),
+    role: v.union(v.literal("tutor"), v.literal("student")),
+  },
+  handler: async (ctx, { token, communityId, userId, role }) => {
+    await requireAdminSession(ctx, token);
+    const community = await ctx.db.get(communityId);
+    if (!community) throw new Error("Community not found.");
+    const user = await ctx.db.get(userId);
+    if (!user) throw new Error("User not found.");
+    const membership = await ctx.db
+      .query("communityMembers")
+      .withIndex("by_community", (q) => q.eq("communityId", communityId).eq("userId", userId))
+      .first();
+    if (membership?.role === "admin") {
+      throw new Error("Admin roles cannot be changed.");
+    }
+    if (membership) {
+      await ctx.db.patch(membership._id, {
+        role,
+        status: membership.status === "removed" ? "active" : membership.status,
+        removedAt: undefined,
+        removedReason: undefined,
+      });
+    } else {
+      await addMembership(ctx, communityId, userId, role);
+    }
+    await logModeration(ctx, role === "tutor" ? "ADMIN_ADDED_COMMUNITY_TUTOR" : "ADMIN_REMOVED_COMMUNITY_TUTOR", {
+      targetType: "member",
+      targetId: userId,
+      communityId,
+      userId,
+      reason: community.name,
+    });
+    await notify(ctx, {
+      userId,
+      title: role === "tutor" ? "You're now a community tutor 🎓" : "Community tutor role removed",
+      body:
+        role === "tutor"
+          ? `An admin made you a community tutor in ${community.name}. You can now moderate the community.`
+          : `Your community tutor role in ${community.name} was removed by an admin.`,
+      type: "moderation",
+      link: "/dashboard/communities",
     });
     return true;
   },

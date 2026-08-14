@@ -78,6 +78,14 @@ export async function logModeration(
   });
 }
 
+async function communityName(
+  ctx: QueryCtx | MutationCtx,
+  communityId: Id<"courseCommunities">,
+) {
+  const c = await ctx.db.get(communityId);
+  return c?.name ?? "a community";
+}
+
 /** Get (or lazily create) the community for a course. */
 export async function ensureCommunityForCourse(
   ctx: MutationCtx,
@@ -195,22 +203,18 @@ async function hydrateSender(
     senderLabel?: string | null;
   },
 ) {
+  const base = { communityRole: undefined as string | undefined };
   if (m.senderKind === "admin") {
-    return {
-      _id: null,
-      name: m.senderLabel || "ForgeX Admin",
-      image: null,
-      role: "admin",
-      isStaff: true,
-    };
+    return { ...base, _id: null, name: m.senderLabel || "ForgeX Admin", image: null, role: "admin", isStaff: true };
   }
   if (m.senderKind === "system") {
-    return { _id: null, name: m.senderLabel || "ForgeX", image: null, role: "system", isStaff: true };
+    return { ...base, _id: null, name: m.senderLabel || "ForgeX", image: null, role: "system", isStaff: true };
   }
   const u = m.senderId ? await ctx.db.get(m.senderId) : null;
-  if (!u) return { _id: null, name: "Former member", image: null, role: "student", isStaff: false };
+  if (!u) return { ...base, _id: null, name: "Former member", image: null, role: "student", isStaff: false };
   const p = publicUser(u);
   return {
+    ...base,
     _id: p._id,
     name: p.name,
     image: p.image,
@@ -219,7 +223,16 @@ async function hydrateSender(
   };
 }
 
-/** Can this user post in this community? Returns an error message or null. */
+/**
+ * Can this user post in this community? Returns an error message or null.
+ *
+ * Rules (all enforced server-side — the frontend never decides):
+ *   - Removed / restricted / suspended members can't post.
+ *   - Archived communities are read-only for everyone.
+ *   - Students can't post when the community is locked OR its messaging
+ *     mode is TUTORS_ONLY. Community tutors + admins can always post
+ *     (unless archived).
+ */
 async function canPostInCommunity(
   ctx: QueryCtx,
   user: Doc<"users">,
@@ -233,14 +246,25 @@ async function canPostInCommunity(
     return "Your posting access is restricted. Contact an admin.";
   if (community.status === "archived")
     return "This community is archived and read-only.";
-  if (community.status === "locked") {
-    // Locked: students can read; staff can still communicate.
-    if (membership.role === "student") {
-      return "This community is temporarily locked — only staff can post.";
-    }
+  const staffOnly =
+    community.status === "locked" ||
+    community.messageMode === "tutors_only";
+  if (staffOnly && membership.role === "student") {
+    return "Only community tutors can send messages right now.";
   }
   if (user.suspended) return "Your account is suspended.";
   return null;
+}
+
+/** True when the member is a community tutor (or admin) in this community. */
+export async function isStaffMember(
+  ctx: QueryCtx | MutationCtx,
+  userId: Id<"users">,
+  communityId: Id<"courseCommunities">,
+): Promise<boolean> {
+  const m = await myMembership(ctx, userId, communityId);
+  if (!m || m.status !== "active") return false;
+  return m.role === "tutor" || m.role === "admin";
 }
 
 /** Can these two users DM? Returns an error message or null. */
@@ -331,6 +355,7 @@ export const myCommunities = query({
             _id: community._id,
             name: community.name,
             status: community.status,
+            messageMode: community.messageMode ?? "everyone",
             lockedReason: community.lockedReason ?? null,
             createdAt: community.createdAt,
             lastActivityAt: community.lastActivityAt ?? null,
@@ -365,7 +390,7 @@ export const communityDetail = query({
       // A removed student can still be told they're removed (no content leak).
       if (membership?.status === "removed") {
         return {
-          community: { _id: community._id, name: community.name, status: community.status, lockedReason: community.lockedReason ?? null },
+          community: { _id: community._id, name: community.name, status: community.status, messageMode: community.messageMode ?? "everyone", lockedReason: community.lockedReason ?? null },
           course: null,
           membership: { role: membership.role, status: "removed" },
           memberCount: 0,
@@ -386,6 +411,7 @@ export const communityDetail = query({
         _id: community._id,
         name: community.name,
         status: community.status,
+        messageMode: community.messageMode ?? "everyone",
         lockedReason: community.lockedReason ?? null,
       },
       course: course
@@ -426,6 +452,12 @@ export const communityMessages = query({
     const messages = await Promise.all(
       [...page].reverse().map(async (m) => {
         const sender = await hydrateSender(ctx, m);
+        // The sender's role in THIS community (not their platform role) —
+        // drives role-aware delete UI. Backend rules stay authoritative.
+        const senderMembership = m.senderId
+          ? await myMembership(ctx, m.senderId, communityId)
+          : null;
+        if (senderMembership) sender.communityRole = senderMembership.role;
         let replyTo = null;
         if (m.replyToId) {
           const r = await ctx.db.get(m.replyToId);
@@ -997,14 +1029,184 @@ export const editCommunityMessage = mutation({
   },
 });
 
+/**
+ * Role-aware community message deletion (enforced here, never on the client):
+ *   - Any member deletes their own message.
+ *   - Community Tutors delete their own + student messages.
+ *   - Community Tutors can NEVER delete Admin messages or other tutors'.
+ *   - Admins (platform role or community admin member) delete anything.
+ * Deleted rows keep a placeholder — “This message was deleted.”
+ */
 export const deleteCommunityMessage = mutation({
   args: { messageId: v.id("communityMessages") },
   handler: async (ctx, { messageId }) => {
     const user = await requireUserDoc(ctx);
     const msg = await ctx.db.get(messageId);
     if (!msg || msg.deleted) throw new Error("Message not found.");
-    if (msg.senderId !== user._id) throw new Error("You can only delete your own messages.");
-    await ctx.db.patch(messageId, { deleted: true, deletedBy: "user", body: "" });
+    const membership = await myMembership(ctx, user._id, msg.communityId);
+    if (!membership || membership.status !== "active") {
+      throw new Error("You're not an active member of this community.");
+    }
+    const viewerIsAdmin =
+      user.role === ROLES.ADMIN || membership.role === "admin";
+
+    // Own message → always allowed.
+    if (msg.senderId === user._id) {
+      await ctx.db.patch(messageId, { deleted: true, deletedBy: "user", body: "" });
+      return true;
+    }
+
+    // Non-staff members can only delete their own messages.
+    if (!viewerIsAdmin && membership.role !== "tutor") {
+      throw new Error("You can only delete your own messages.");
+    }
+
+    // Community Tutors: student messages only — never Admin or tutor messages.
+    if (!viewerIsAdmin) {
+      const senderUser = msg.senderId ? await ctx.db.get(msg.senderId) : null;
+      const senderMembership = msg.senderId
+        ? await myMembership(ctx, msg.senderId, msg.communityId)
+        : null;
+      const senderIsAdmin =
+        msg.senderKind === "admin" ||
+        senderUser?.role === ROLES.ADMIN ||
+        senderMembership?.role === "admin";
+      const senderIsTutor = senderMembership?.role === "tutor";
+      if (senderIsAdmin || senderIsTutor) {
+        throw new Error("You can only delete student messages.");
+      }
+    }
+
+    await ctx.db.patch(messageId, {
+      deleted: true,
+      deletedBy: viewerIsAdmin ? "admin" : "user",
+      body: "",
+    });
+    return true;
+  },
+});
+
+// ---------------------------------------------------------------------------
+// Community Tutor tools (community-scoped, enforced on the backend)
+// ---------------------------------------------------------------------------
+
+/** Shared guard: viewer must be an active community tutor or admin member. */
+async function requireStaff(
+  ctx: MutationCtx,
+  user: Doc<"users">,
+  communityId: Id<"courseCommunities">,
+): Promise<{ membership: Doc<"communityMembers">; isAdmin: boolean }> {
+  const membership = await myMembership(ctx, user._id, communityId);
+  if (!membership || membership.status !== "active") {
+    throw new Error("You're not an active member of this community.");
+  }
+  const isAdmin =
+    user.role === ROLES.ADMIN || membership.role === "admin";
+  if (!isAdmin && membership.role !== "tutor") {
+    throw new Error("Community tutor access required.");
+  }
+  return { membership, isAdmin };
+}
+
+/** Community Tutor: lock / unlock their assigned community (never archive). */
+export const tutorSetCommunityStatus = mutation({
+  args: {
+    communityId: v.id("courseCommunities"),
+    status: v.union(v.literal("active"), v.literal("locked")),
+    reason: v.optional(v.string()),
+  },
+  handler: async (ctx, { communityId, status, reason }) => {
+    const user = await requireUserDoc(ctx);
+    const { isAdmin } = await requireStaff(ctx, user, communityId);
+    const community = await ctx.db.get(communityId);
+    if (!community) throw new Error("Community not found.");
+    await ctx.db.patch(communityId, {
+      status,
+      lockedReason: status === "active" ? undefined : reason?.trim() || "Locked by community tutor",
+    });
+    await logModeration(
+      ctx,
+      status === "locked" ? "TUTOR_LOCKED_COMMUNITY" : "TUTOR_UNLOCKED_COMMUNITY",
+      { targetType: "community", targetId: communityId, communityId, reason: reason?.trim() },
+    );
+    return true;
+  },
+});
+
+/**
+ * Community Tutor: switch messaging mode between EVERYONE_CAN_MESSAGE and
+ * TUTORS_ONLY for this community only (never affects other communities).
+ */
+export const tutorSetCommunityMessageMode = mutation({
+  args: {
+    communityId: v.id("courseCommunities"),
+    mode: v.union(v.literal("everyone"), v.literal("tutors_only")),
+  },
+  handler: async (ctx, { communityId, mode }) => {
+    const user = await requireUserDoc(ctx);
+    await requireStaff(ctx, user, communityId);
+    const community = await ctx.db.get(communityId);
+    if (!community) throw new Error("Community not found.");
+    await ctx.db.patch(communityId, { messageMode: mode });
+    await logModeration(ctx, "TUTOR_SET_MESSAGE_MODE", {
+      targetType: "community",
+      targetId: communityId,
+      communityId,
+      reason: mode === "tutors_only" ? "TUTORS_ONLY" : "EVERYONE_CAN_MESSAGE",
+    });
+    return true;
+  },
+});
+
+/**
+ * Community Tutor: remove a STUDENT from their assigned community.
+ * Tutors can never remove Admins (or other tutors); Admins can remove anyone.
+ * Removing a member NEVER touches their course enrollment.
+ */
+export const tutorRemoveCommunityMember = mutation({
+  args: {
+    communityId: v.id("courseCommunities"),
+    userId: v.id("users"),
+    reason: v.optional(v.string()),
+  },
+  handler: async (ctx, { communityId, userId, reason }) => {
+    const user = await requireUserDoc(ctx);
+    const { isAdmin } = await requireStaff(ctx, user, communityId);
+    if (userId === user._id) throw new Error("You can't remove yourself.");
+    const targetMembership = await myMembership(ctx, userId, communityId);
+    if (!targetMembership) throw new Error("This user isn't a member.");
+    const targetUser = await ctx.db.get(userId);
+    const targetIsAdmin =
+      targetUser?.role === ROLES.ADMIN || targetMembership.role === "admin";
+    if (targetIsAdmin) {
+      throw new Error("Admins cannot be removed.");
+    }
+    if (!isAdmin && targetMembership.role !== "student") {
+      throw new Error("You can only remove students from the community.");
+    }
+    await ctx.db.patch(targetMembership._id, {
+      status: "removed",
+      removedAt: Date.now(),
+      removedReason: reason?.trim() || undefined,
+    });
+    await logModeration(
+      ctx,
+      isAdmin ? "ADMIN_REMOVED_MEMBER" : "TUTOR_REMOVED_MEMBER",
+      {
+        targetType: "member",
+        targetId: userId,
+        communityId,
+        userId,
+        reason: reason?.trim(),
+      },
+    );
+    await notify(ctx, {
+      userId,
+      title: "Removed from community",
+      body: `You were removed from ${communityName(ctx, communityId)}${reason ? `: ${reason}` : "."}`,
+      type: "moderation",
+      link: "/dashboard/communities",
+    });
     return true;
   },
 });

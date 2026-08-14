@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Link, useParams } from "react-router";
+import { Link, useNavigate, useParams } from "react-router";
 import { useMutation, useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import type { Id } from "@/convex/_generated/dataModel";
@@ -10,9 +10,12 @@ import {
   Loader2,
   Lock,
   MessageCircle,
+  MessageSquareWarning,
+  Pencil,
   Search,
   Send,
   ShieldAlert,
+  ShieldCheck,
   Trash2,
   Unlock,
   UserCog,
@@ -51,6 +54,11 @@ export default function AdminCommunityDetail() {
   const [memberSearch, setMemberSearch] = useState("");
   const [noticeText, setNoticeText] = useState("");
   const [sendingNotice, setSendingNotice] = useState(false);
+  const navigate = useNavigate();
+  const [editOpen, setEditOpen] = useState(false);
+  const [editName, setEditName] = useState("");
+  const [editMode, setEditMode] = useState<"everyone" | "tutors_only">("everyone");
+  const [deleteOpen, setDeleteOpen] = useState(false);
 
   const detail = useQuery(
     api.communityAdmin.adminCommunityDetail,
@@ -66,6 +74,10 @@ export default function AdminCommunityDetail() {
   );
 
   const setStatus = useMutation(api.communityAdmin.adminSetCommunityStatus);
+  const setMessageMode = useMutation(api.communityAdmin.adminSetCommunityMessageMode);
+  const editCommunity = useMutation(api.communityAdmin.adminEditCommunity);
+  const deleteCommunity = useMutation(api.communityAdmin.adminDeleteCommunity);
+  const setMemberRole = useMutation(api.communityAdmin.adminSetMemberRole);
   const removeMember = useMutation(api.communityAdmin.adminRemoveMember);
   const restoreMember = useMutation(api.communityAdmin.adminRestoreMember);
   const restrictMember = useMutation(api.communityAdmin.adminRestrictMember);
@@ -269,8 +281,17 @@ export default function AdminCommunityDetail() {
                   <div className="min-w-0">
                     <p className="truncate text-sm font-semibold">
                       {m.name}{" "}
-                      <span className="ml-1 rounded-full border border-white/10 bg-white/5 px-1.5 py-px text-[10px] font-semibold uppercase text-muted-foreground">
-                        {m.role}
+                      <span
+                        className={cn(
+                          "ml-1 rounded-full border px-1.5 py-px text-[10px] font-semibold uppercase",
+                          m.role === "admin"
+                            ? "border-amber-400/30 bg-amber-400/10 text-amber-300"
+                            : m.role === "tutor"
+                              ? "border-lime-400/30 bg-lime-400/10 text-lime-300"
+                              : "border-white/10 bg-white/5 text-muted-foreground",
+                        )}
+                      >
+                        {m.role === "tutor" ? "Community tutor" : m.role}
                       </span>
                       {m.suspended && (
                         <span className="ml-1 rounded-full border border-rose-400/25 bg-rose-400/10 px-1.5 py-px text-[10px] font-semibold uppercase text-rose-300">
@@ -300,6 +321,40 @@ export default function AdminCommunityDetail() {
                   </Badge>
                   {m.status === "active" && (
                     <>
+                      {m.role !== "admin" && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className={cn(
+                            "gap-1.5",
+                            m.role === "tutor"
+                              ? "border-amber-400/25 text-amber-300 hover:bg-amber-400/10"
+                              : "border-lime-400/30 text-lime-300 hover:bg-lime-400/10",
+                          )}
+                          disabled={busy}
+                          onClick={() =>
+                            void run(
+                              () =>
+                                setMemberRole({
+                                  token,
+                                  communityId,
+                                  userId: m.userId as Id<"users">,
+                                  role: m.role === "tutor" ? "student" : "tutor",
+                                }),
+                              m.role === "tutor"
+                                ? `${m.name} demoted to student`
+                                : `${m.name} is now a community tutor`,
+                            )
+                          }
+                        >
+                          {m.role === "tutor" ? (
+                            <UserCog className="size-3.5" />
+                          ) : (
+                            <ShieldCheck className="size-3.5" />
+                          )}
+                          {m.role === "tutor" ? "Demote" : "Make tutor"}
+                        </Button>
+                      )}
                       <Button
                         variant="outline"
                         size="sm"
@@ -395,6 +450,49 @@ export default function AdminCommunityDetail() {
           </div>
 
           <div className="space-y-4 rounded-2xl border border-white/10 bg-card p-5">
+            <h3 className="font-display flex items-center gap-2 text-base font-bold">
+              <MessageSquareWarning className="size-4 text-lime-300" /> Messaging mode
+            </h3>
+            <p className="text-xs text-muted-foreground">
+              <b className="text-lime-300">Everyone can message:</b> students and tutors can all post.
+              <br />
+              <b className="text-amber-300">Tutors only:</b> students can read but cannot send — they'll
+              see “Only community tutors can send messages right now.”
+            </p>
+            <div className="flex flex-wrap gap-2">
+              {(
+                [
+                  { key: "everyone", label: "Everyone can message", icon: <MessageCircle className="size-4" /> },
+                  { key: "tutors_only", label: "Tutors only", icon: <ShieldCheck className="size-4" /> },
+                ] as const
+              ).map((s) => (
+                <Button
+                  key={s.key}
+                  variant="outline"
+                  size="sm"
+                  className={cn(
+                    "gap-2 border-white/10",
+                    detail?.community.messageMode === s.key
+                      ? "border-lime-400/40 text-lime-300"
+                      : "text-muted-foreground",
+                  )}
+                  disabled={busy || detail?.community.messageMode === s.key}
+                  onClick={() =>
+                    void run(
+                      () => setMessageMode({ token, communityId, mode: s.key }),
+                      s.key === "tutors_only"
+                        ? "Tutors only — students can read but not post."
+                        : "Everyone can message again.",
+                    )
+                  }
+                >
+                  {s.icon} {s.label}
+                </Button>
+              ))}
+            </div>
+          </div>
+
+          <div className="space-y-4 rounded-2xl border border-white/10 bg-card p-5">
             <h3 className="font-display text-base font-bold">Send moderator message</h3>
             <p className="text-xs text-muted-foreground">
               Posted directly in the community as <b className="text-amber-300">🛡️ ForgeX Admin</b> —
@@ -415,8 +513,120 @@ export default function AdminCommunityDetail() {
               Post as ForgeX Admin
             </Button>
           </div>
+
+          <div className="space-y-4 rounded-2xl border border-white/10 bg-card p-5">
+            <h3 className="font-display text-base font-bold">Edit or delete community</h3>
+            <p className="text-xs text-muted-foreground">
+              Edit the community name and default messaging mode, or permanently delete the
+              community (all members and messages are removed — course enrollment is untouched).
+            </p>
+            <div className="flex flex-wrap gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                className="gap-2 border-white/10 text-muted-foreground"
+                disabled={busy}
+                onClick={() => {
+                  setEditName(detail?.community.name ?? "");
+                  setEditMode(detail?.community.messageMode ?? "everyone");
+                  setEditOpen(true);
+                }}
+              >
+                <Pencil className="size-4" /> Edit community
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                className="gap-2 border-rose-400/25 text-rose-300 hover:bg-rose-400/10"
+                disabled={busy}
+                onClick={() => setDeleteOpen(true)}
+              >
+                <Trash2 className="size-4" /> Delete community
+              </Button>
+            </div>
+          </div>
         </div>
       )}
+
+      {/* Edit community dialog */}
+      <Dialog open={editOpen} onOpenChange={(o) => !o && setEditOpen(false)}>
+        <DialogContent className="max-w-md border-white/10 bg-card">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Pencil className="size-5 text-lime-300" /> Edit community
+            </DialogTitle>
+            <DialogDescription>
+              Change the community name and default messaging mode. Changes are logged in the
+              audit log.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <Input
+              value={editName}
+              onChange={(e) => setEditName(e.target.value)}
+              placeholder="Community name"
+              className="border-white/10 bg-black/20"
+            />
+            <div className="flex flex-wrap gap-2">
+              {(
+                [
+                  { key: "everyone", label: "Everyone can message" },
+                  { key: "tutors_only", label: "Tutors only" },
+                ] as const
+              ).map((s) => (
+                <Button
+                  key={s.key}
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className={cn(
+                    "border-white/10",
+                    editMode === s.key ? "border-lime-400/40 text-lime-300" : "text-muted-foreground",
+                  )}
+                  onClick={() => setEditMode(s.key)}
+                >
+                  {s.label}
+                </Button>
+              ))}
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEditOpen(false)} disabled={busy} className="border-white/10">
+              Cancel
+            </Button>
+            <Button
+              className="gap-2 bg-lime-400 text-black hover:bg-lime-300"
+              disabled={!editName.trim() || busy}
+              onClick={() => {
+                setEditOpen(false);
+                void run(
+                  () => editCommunity({ token, communityId, name: editName.trim(), messageMode: editMode }),
+                  "Community updated",
+                );
+              }}
+            >
+              <Pencil className="size-4" /> Save changes
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete community confirm */}
+      <ConfirmDialog
+        open={deleteOpen}
+        onOpenChange={(o) => !o && setDeleteOpen(false)}
+        title={`Delete ${detail?.community.name ?? "this community"}?`}
+        description="This permanently removes the community, every member record and every message. The course itself and student enrollments are NOT affected. This cannot be undone."
+        confirmLabel="Delete community"
+        busy={busy}
+        onConfirm={() => {
+          setDeleteOpen(false);
+          void run(
+            () => deleteCommunity({ token, communityId }),
+            "Community deleted",
+          ).then(() => navigate("/admin/communication"));
+        }}
+      />
 
       {/* Member action dialog */}
       <Dialog

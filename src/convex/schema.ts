@@ -740,6 +740,13 @@ const schema = defineSchema(
         v.literal("locked"),
         v.literal("archived"),
       ),
+      /** Messaging permission mode (independent of `status`):
+       *  everyone — all members can post; tutors_only — only community
+       *  tutors + admins can post, students read-only. Absent = "everyone".
+       */
+      messageMode: v.optional(
+        v.union(v.literal("everyone"), v.literal("tutors_only")),
+      ),
       lockedReason: v.optional(v.string()),
       createdAt: v.number(),
       lastActivityAt: v.optional(v.number()),

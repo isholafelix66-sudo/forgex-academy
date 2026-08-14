@@ -1,12 +1,22 @@
 import { useState } from "react";
-import { Link } from "react-router";
-import { useQuery } from "convex/react";
+import { Link, useNavigate } from "react-router";
+import { useMutation, useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
-import { Loader2, Lock, MessageCircle, Search, ShieldAlert, Users } from "lucide-react";
+import type { Id } from "@/convex/_generated/dataModel";
+import { toast } from "sonner";
+import { BookOpen, Loader2, Lock, MessageCircle, Plus, Search, ShieldAlert, Users } from "lucide-react";
 import { PageHeader } from "@/components/dash/PageHeader";
 import { EmptyState } from "@/components/site/EmptyState";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { getAdminToken } from "@/lib/admin-session";
 import { timeAgo } from "@/lib/format";
 
@@ -18,17 +28,59 @@ const STATUS_STYLE: Record<string, string> = {
 
 export default function AdminCommunication() {
   const token = getAdminToken() ?? "";
+  const navigate = useNavigate();
   const [query, setQuery] = useState("");
+  const [createOpen, setCreateOpen] = useState(false);
+  const [courseQuery, setCourseQuery] = useState("");
+  const [selectedCourse, setSelectedCourse] = useState<{ _id: string; title: string } | null>(null);
+  const [creating, setCreating] = useState(false);
   const communities = useQuery(
     api.communityAdmin.adminCommunities,
     token ? { token, search: query } : "skip",
   );
+  const courses = useQuery(api.admin.allCourses, token ? { token } : "skip");
+  const createCommunity = useMutation(api.communityAdmin.adminCreateCommunity);
+
+  const filteredCourses =
+    courses?.filter(
+      (c) =>
+        !courseQuery.trim() ||
+        c.title.toLowerCase().includes(courseQuery.trim().toLowerCase()),
+    ) ?? [];
+
+  const handleCreate = async () => {
+    if (!selectedCourse || creating) return;
+    setCreating(true);
+    try {
+      const id = await createCommunity({ token, courseId: selectedCourse._id as Id<"courses"> });
+      toast.success("Community created — members are added automatically as they enroll.");
+      setCreateOpen(false);
+      setSelectedCourse(null);
+      navigate(`/admin/communication/communities/${id}`);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Couldn't create the community.");
+    } finally {
+      setCreating(false);
+    }
+  };
 
   return (
     <div className="space-y-6">
       <PageHeader
         title="Communities"
         description="Every course community on the platform — view activity, review messages, lock or archive communities and manage members from here."
+        actions={
+          <Button
+            className="gap-2 bg-lime-400 text-black hover:bg-lime-300"
+            onClick={() => {
+              setSelectedCourse(null);
+              setCourseQuery("");
+              setCreateOpen(true);
+            }}
+          >
+            <Plus className="size-4" /> New community
+          </Button>
+        }
       />
 
       <div className="relative max-w-md">
@@ -49,7 +101,7 @@ export default function AdminCommunication() {
         <EmptyState
           icon={<MessageCircle className="size-6" />}
           title="No communities yet"
-          description="Communities are created automatically when students enroll in courses."
+          description="Communities are created automatically when students enroll in courses — or create one for any course here."
         />
       ) : (
         <div className="space-y-3">
@@ -67,6 +119,11 @@ export default function AdminCommunication() {
                     {c.status === "locked" && <Lock className="size-3" />}
                     {c.status}
                   </span>
+                  {c.messageMode === "tutors_only" && (
+                    <span className="flex items-center gap-1 rounded-full border border-lime-400/25 bg-lime-400/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-lime-300">
+                      Tutors only
+                    </span>
+                  )}
                 </div>
                 <p className="mt-0.5 truncate text-xs text-muted-foreground">
                   {c.courseTitle} · last activity {c.lastActivityAt ? timeAgo(c.lastActivityAt) : "—"}
@@ -94,6 +151,73 @@ export default function AdminCommunication() {
           ))}
         </div>
       )}
+
+      {/* Create community dialog */}
+      <Dialog open={createOpen} onOpenChange={(o) => !o && setCreateOpen(false)}>
+        <DialogContent className="max-w-md border-white/10 bg-card">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Plus className="size-5 text-lime-300" /> New community
+            </DialogTitle>
+            <DialogDescription>
+              Pick a course to create its community. The course tutor is automatically added as a
+              community tutor, and enrolled students join automatically.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              value={courseQuery}
+              onChange={(e) => setCourseQuery(e.target.value)}
+              placeholder="Search courses…"
+              className="border-white/10 bg-black/20 pl-9"
+            />
+          </div>
+          <div className="max-h-56 space-y-1 overflow-y-auto rounded-xl border border-white/10 bg-black/20 p-1.5">
+            {courses === undefined ? (
+              <p className="flex items-center justify-center gap-2 p-4 text-xs text-muted-foreground">
+                <Loader2 className="size-3.5 animate-spin" /> Loading courses…
+              </p>
+            ) : filteredCourses.length === 0 ? (
+              <p className="p-4 text-center text-xs text-muted-foreground">No courses match.</p>
+            ) : (
+              filteredCourses.map((c) => (
+                <button
+                  key={c._id}
+                  type="button"
+                  onClick={() => setSelectedCourse({ _id: c._id, title: c.title })}
+                  className={`flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-left text-sm transition-colors ${
+                    selectedCourse?._id === c._id
+                      ? "bg-lime-400/15 text-lime-200"
+                      : "text-muted-foreground hover:bg-white/5 hover:text-foreground"
+                  }`}
+                >
+                  <BookOpen className="size-4 shrink-0" />
+                  <span className="min-w-0 flex-1 truncate">{c.title}</span>
+                </button>
+              ))
+            )}
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setCreateOpen(false)}
+              disabled={creating}
+              className="border-white/10"
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={() => void handleCreate()}
+              disabled={!selectedCourse || creating}
+              className="gap-2 bg-lime-400 text-black hover:bg-lime-300"
+            >
+              {creating ? <Loader2 className="size-4 animate-spin" /> : <Plus className="size-4" />}
+              Create community
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
