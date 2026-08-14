@@ -7,6 +7,7 @@ import { difficultyValidator, questionValidator, resourceValidator } from "./sch
 // Overview
 // ---------------------------------------------------------------------------
 
+
 export const myCourses = query({
   args: {},
   handler: async (ctx) => {
@@ -583,5 +584,234 @@ export const allAnnouncements = query({
       }),
     );
     return hydrated.sort((a, b) => b.createdAt - a.createdAt);
+  },
+});
+
+// ---------------------------------------------------------------------------
+// Analytical dashboard
+// ---------------------------------------------------------------------------
+
+/**
+ * One-stop overview for the tutor dashboard: headline counts (students,
+ * unanswered questions, active communities, announcements, pending grading)
+ * plus per-cohort learning progress — how many students completed each
+ * lesson/module in every community the tutor teaches, so the tutor can spot
+ * where learners drop off without checking each student manually.
+ *
+ * “Unanswered questions” is a pragmatic heuristic: student messages in the
+ * tutor's active communities (last 30 days) that are either open discussion
+ * threads without a verified tutor answer, or standalone messages that have
+ * received no reply at all.
+ */
+export const analyticsOverview = query({
+  args: {},
+  handler: async (ctx) => {
+    const tutor = await requireTutorPreview(ctx);
+    if (!tutor) return null;
+
+    const courses = await ctx.db
+      .query("courses")
+      .withIndex("by_tutor", (q) => q.eq("tutorId", tutor._id))
+      .collect();
+    const courseIds = new Set(courses.map((c) => c._id));
+
+    // Communities where this tutor is staff.
+    const myMemberships = await ctx.db
+      .query("communityMembers")
+      .withIndex("by_user", (q) => q.eq("userId", tutor._id))
+      .collect();
+    const staffMemberships = myMemberships.filter(
+      (m) =>
+        (m.role === "tutor" || m.role === "admin" || m.role === "moderator") &&
+        m.status === "active",
+    );
+    const communities = (
+      await Promise.all(
+        staffMemberships.map((m) => ctx.db.get(m.communityId)),
+      )
+    ).filter((c): c is NonNullable<typeof c> => !!c);
+    const activeCommunities = communities.filter(
+      (c) => c.status === "active",
+    );
+
+    // Enrollments across the tutor's courses.
+    const enrollments = await ctx.db.query("enrollments").collect();
+    const mine = enrollments.filter((e) => courseIds.has(e.courseId));
+    const totalStudents = new Set(mine.map((e) => e.studentId)).size;
+
+    // Unanswered questions in the tutor's active communities.
+    let unansweredQuestions = 0;
+    const cutoff = Date.now() - 30 * 24 * 60 * 60 * 1000;
+    const studentIdsByCommunity = new Map<string, Set<string>>();
+    for (const community of activeCommunities) {
+      const members = await ctx.db
+        .query("communityMembers")
+        .withIndex("by_community", (q) => q.eq("communityId", community._id))
+        .collect();
+      const studentIds = new Set(
+        members
+          .filter((m) => m.role === "student" && m.status === "active")
+          .map((m) => m.userId),
+      );
+      studentIdsByCommunity.set(community._id, studentIds);
+      const staffIds = new Set(
+        members
+          .filter((m) => m.role !== "student" && m.status === "active")
+          .map((m) => m.userId),
+      );
+      const messages = await ctx.db
+        .query("communityMessages")
+        .withIndex("by_community", (q) =>
+          q.eq("communityId", community._id).gt("createdAt", cutoff),
+        )
+        .collect();
+      const repliedTo = new Set(
+        messages
+          .map((m) => m.replyToId?.toString())
+          .filter((x): x is string => !!x),
+      );
+      for (const m of messages) {
+        if (m.deleted || m.senderKind !== "user") continue;
+        if (m.isAnnouncement || m.pollId) continue;
+        if (!m.senderId) continue;
+        if (staffIds.has(m.senderId)) continue; // staff posts aren't questions
+        if (!studentIds.has(m.senderId)) continue;
+        if (m.discussionId) continue; // replies inside a thread
+        if (m.isDiscussion) {
+          if (!m.tutorAnswer) unansweredQuestions += 1;
+          continue;
+        }
+        if (!m.replyToId && !repliedTo.has(m._id)) {
+          unansweredQuestions += 1;
+        }
+      }
+    }
+
+    // Announcements authored by this tutor (published only).
+    const announcements = await ctx.db.query("announcements").collect();
+    const announcementCount = announcements.filter(
+      (a) => a.authorId === tutor._id && a.published,
+    ).length;
+
+    // Pending grading = ungraded submissions on the tutor's assignments.
+    const assignments = await ctx.db.query("assignments").collect();
+    const submissions = await ctx.db.query("submissions").collect();
+    const myAssignmentIds = new Set(
+      assignments
+        .filter((a) => courseIds.has(a.courseId))
+        .map((a) => a._id),
+    );
+    const pendingAssignments = submissions.filter(
+      (s) => myAssignmentIds.has(s.assignmentId) && s.grade === undefined,
+    ).length;
+
+    // Per-cohort learning progress.
+    const lessons = await ctx.db.query("lessons").collect();
+    const users = await ctx.db.query("users").collect();
+    const userById = new Map(users.map((u) => [u._id, u]));
+    const cohorts = await Promise.all(
+      activeCommunities.map(async (community) => {
+        const course = courses.find((c) => c._id === community.courseId);
+        const studentIds =
+          studentIdsByCommunity.get(community._id) ?? new Set<string>();
+        const courseEnrollments = mine.filter(
+          (e) =>
+            e.courseId === community.courseId &&
+            studentIds.has(e.studentId),
+        );
+        const lessonRows = lessons
+          .filter((l) => l.courseId === community.courseId)
+          .sort((a, b) => a.order - b.order);
+        const modules = lessonRows.map((lesson) => ({
+          lessonId: lesson._id,
+          title: lesson.title,
+          order: lesson.order,
+          completed: courseEnrollments.filter((e) =>
+            e.completedLessons.some((l) => l === lesson._id),
+          ).length,
+          total: courseEnrollments.length,
+        }));
+        const avgProgress = courseEnrollments.length
+          ? Math.round(
+              courseEnrollments.reduce((s, e) => s + e.progress, 0) /
+                courseEnrollments.length,
+            )
+          : 0;
+        const atRisk = courseEnrollments
+          .filter((e) => e.progress < 50)
+          .sort((a, b) => a.progress - b.progress)
+          .slice(0, 5)
+          .map((e) => {
+            const u = userById.get(e.studentId);
+            return {
+              student: u ? publicUser(u) : null,
+              progress: e.progress,
+              lastActivity: u?.lastActivity ?? null,
+            };
+          });
+        const capacity = community.studentCapacity ?? 0;
+        return {
+          communityId: community._id,
+          name: community.name,
+          cohortLabel: community.cohortLabel ?? null,
+          courseId: community.courseId,
+          courseTitle: course?.title ?? "Course",
+          status: community.status,
+          studentCount: courseEnrollments.length,
+          capacity,
+          capacityState: !capacity
+            ? ("open" as const)
+            : community.enrollmentClosed
+              ? ("closed" as const)
+              : courseEnrollments.length >= capacity
+                ? ("full" as const)
+                : ("open" as const),
+          avgProgress,
+          modules,
+          atRisk,
+        };
+      }),
+    );
+    cohorts.sort((a, b) => b.studentCount - a.studentCount);
+
+    return {
+      tutor: publicUser(tutor),
+      counts: {
+        totalStudents,
+        unansweredQuestions,
+        activeCommunities: activeCommunities.length,
+        announcements: announcementCount,
+        pendingAssignments,
+      },
+      cohorts,
+    };
+  },
+});
+
+/**
+ * Assign (once) the tutor's public page slug — e.g. `/tutor/david-ogunleye`.
+ * New tutors get it automatically at approval time; this covers any tutor
+ * who was verified before slugs existed, and returns the stable slug.
+ */
+export const claimMySlug = mutation({
+  args: {},
+  handler: async (ctx) => {
+    const tutor = await requireTutor(ctx);
+    if (tutor.slug) return tutor.slug;
+    const base =
+      slugify(tutor.name ?? "") || `tutor-${tutor._id.toString().slice(0, 8)}`;
+    let slug = base;
+    let i = 2;
+    while (
+      await ctx.db
+        .query("users")
+        .withIndex("by_slug", (q) => q.eq("slug", slug))
+        .first()
+    ) {
+      slug = `${base}-${i}`;
+      i += 1;
+    }
+    await ctx.db.patch(tutor._id, { slug });
+    return slug;
   },
 });

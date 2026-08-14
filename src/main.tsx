@@ -77,6 +77,10 @@ const TutorGrading = lazy(() => import("./pages/tutor/TutorGrading.tsx"));
 const TutorStudents = lazy(() => import("./pages/tutor/TutorStudents.tsx"));
 const TutorInbox = lazy(() => import("./pages/tutor/TutorInbox.tsx"));
 const TutorAnnouncements = lazy(() => import("./pages/tutor/TutorAnnouncements.tsx"));
+const TutorSupport = lazy(() => import("./pages/tutor/TutorSupport.tsx"));
+
+// Public tutor mini-website (shareable /tutor/<slug> page)
+const TutorPage = lazy(() => import("./pages/TutorPage.tsx"));
 
 // ---------------------------------------------------------------------------
 // Admin dashboard
@@ -570,7 +574,13 @@ createRoot(document.getElementById("root")!).render(
                 <Route path="students" element={<TutorStudents />} />
                 <Route path="inbox" element={<TutorInbox />} />
                 <Route path="announcements" element={<TutorAnnouncements />} />
+                <Route path="support" element={<TutorSupport />} />
               </Route>
+
+              {/* Public tutor mini-website — the shareable /tutor/<slug> page.
+                  Static routes under /tutor (courses, grading, …) win over
+                  this dynamic segment, so the dashboard keeps working. */}
+              <Route path="/tutor/:slug" element={<TutorPage />} />
 
               {/* Admin dashboard — password-gated only, no user account needed */}
               <Route path="/admin" element={<AdminShell />}>

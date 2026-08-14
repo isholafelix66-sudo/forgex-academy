@@ -115,7 +115,12 @@ const schema = defineSchema(
       streak: v.optional(v.number()),
       streakLastDay: v.optional(v.number()), // yyyymmdd
       badges: v.optional(v.array(v.string())),
-    }).index("email", ["email"]),
+      // Public tutor page slug — e.g. /tutor/david-ogunleye. Assigned when
+      // a tutor application is approved/verified; unique per user.
+      slug: v.optional(v.string()),
+    })
+      .index("email", ["email"])
+      .index("by_slug", ["slug"]),
 
     // -----------------------------------------------------------------------
     // Catalog
@@ -724,6 +729,35 @@ const schema = defineSchema(
     })
       .index("by_user", ["userId", "read", "createdAt"])
       .index("by_userId", ["userId"]),
+
+    /** Tutor → Admin issue reports / messages. A structured, lightweight
+     *  support channel: the tutor submits a report, an admin replies with a
+     *  note and marks it responded/resolved. The tutor is notified when the
+     *  admin responds. */
+    tutorSupportMessages: defineTable({
+      tutorId: v.id("users"),
+      category: v.union(
+        v.literal("bug"),
+        v.literal("feature"),
+        v.literal("account"),
+        v.literal("content"),
+        v.literal("other"),
+      ),
+      subject: v.string(),
+      body: v.string(),
+      status: v.union(
+        v.literal("open"),
+        v.literal("responded"),
+        v.literal("resolved"),
+      ),
+      adminNote: v.optional(v.string()),
+      adminNoteAt: v.optional(v.number()),
+      createdAt: v.number(),
+      updatedAt: v.number(),
+    })
+      .index("by_tutor", ["tutorId", "createdAt"])
+      .index("by_status", ["status"])
+      .index("by_created", ["createdAt"]),
 
     // -----------------------------------------------------------------------
     // Communication & Community module (independent of the existing

@@ -2,7 +2,7 @@ import { query } from "./_generated/server";
 import type { Doc, Id } from "./_generated/dataModel";
 import { v } from "convex/values";
 import { difficultyValidator, ROLES } from "./schema";
-import { hydrateCourse, hydrateCourses, publicUser } from "./lib";
+import { hydrateCourse, hydrateCourses, publicUser, slugify } from "./lib";
 
 // ---------------------------------------------------------------------------
 // Site content
@@ -63,6 +63,7 @@ export const popularTutors = query({
         );
         return {
           ...publicUser(t),
+          slug: t.slug ?? null,
           bio: t.bio ?? "",
           socials: t.socials ?? null,
           courseCount: courses.length,
@@ -89,6 +90,7 @@ export const tutorsList = query({
         );
         return {
           ...publicUser(t),
+          slug: t.slug ?? null,
           bio: t.bio ?? "",
           skills: t.skills ?? [],
           socials: t.socials ?? null,
@@ -104,6 +106,30 @@ export const tutorsList = query({
   },
 });
 
+/** Shared public projection of a tutor's mini website profile. */
+async function tutorProfile(ctx: import("./_generated/server").QueryCtx, tutor: Doc<"users">) {
+  const allCourses = await ctx.db.query("courses").collect();
+  const courses = await hydrateCourses(
+    ctx,
+    allCourses
+      .filter((c) => c.tutorId === tutor._id && c.published)
+      .sort((a, b) => b.rating - a.rating),
+  );
+  const ratings = courses.map((c) => c.rating);
+  return {
+    ...publicUser(tutor),
+    slug: tutor.slug ?? null,
+    bio: tutor.bio ?? "",
+    skills: tutor.skills ?? [],
+    socials: tutor.socials ?? null,
+    courses,
+    avgRating: ratings.length
+      ? ratings.reduce((s, r) => s + r, 0) / ratings.length
+      : 0,
+    studentCount: courses.reduce((s, c) => s + c.enrolledCount, 0),
+  };
+}
+
 export const tutorDetail = query({
   args: { id: v.string() },
   handler: async (ctx, { id }) => {
@@ -116,25 +142,36 @@ export const tutorDetail = query({
       return null;
     }
     if (!tutor || tutor.role !== ROLES.TUTOR) return null;
-    const allCourses = await ctx.db.query("courses").collect();
-    const courses = await hydrateCourses(
-      ctx,
-      allCourses
-        .filter((c) => c.tutorId === id && c.published)
-        .sort((a, b) => b.rating - a.rating),
-    );
-    const ratings = courses.map((c) => c.rating);
-    return {
-      ...publicUser(tutor),
-      bio: tutor.bio ?? "",
-      skills: tutor.skills ?? [],
-      socials: tutor.socials ?? null,
-      courses,
-      avgRating: ratings.length
-        ? ratings.reduce((s, r) => s + r, 0) / ratings.length
-        : 0,
-      studentCount: courses.reduce((s, c) => s + c.enrolledCount, 0),
-    };
+    return tutorProfile(ctx, tutor);
+  },
+});
+
+/**
+ * Public tutor mini-website — the shareable `forgeX.academy/tutor/<slug>`
+ * page. Resolves the tutor's stable slug first; falls back to a slugified
+ * name match so tutors verified before slugs existed still get a page.
+ */
+export const tutorBySlug = query({
+  args: { slug: v.string() },
+  handler: async (ctx, { slug }) => {
+    const s = slug.trim().toLowerCase();
+    if (!s) return null;
+    let tutor = await ctx.db
+      .query("users")
+      .withIndex("by_slug", (q) => q.eq("slug", s))
+      .first();
+    if (!tutor) {
+      const all = await ctx.db.query("users").collect();
+      tutor =
+        all.find(
+          (u) =>
+            u.role === ROLES.TUTOR &&
+            !!u.verified &&
+            slugify(u.name ?? "") === s,
+        ) ?? null;
+    }
+    if (!tutor || tutor.role !== ROLES.TUTOR) return null;
+    return tutorProfile(ctx, tutor);
   },
 });
 

@@ -9,6 +9,7 @@ export type TutorCardData = {
   image?: string | null;
   headline?: string | null;
   bio?: string;
+  slug?: string | null;
   courseCount: number;
   avgRating: number;
   studentCount: number;
@@ -23,7 +24,7 @@ export function TutorCard({
 }) {
   return (
     <Link
-      to={`/tutors/${tutor._id}`}
+      to={tutor.slug ? `/tutor/${tutor.slug}` : `/tutors/${tutor._id}`}
       className={cn(
         "card-lift group flex flex-col items-center gap-3 rounded-2xl border border-white/8 bg-card p-6 text-center",
         className,

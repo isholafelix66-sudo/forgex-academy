@@ -753,6 +753,24 @@ export const reviewTutorApplication = mutation({
     const user = await ctx.db.get(tutorId);
     if (user) {
       if (action === "approve" || action === "verify" || action === "reactivate") {
+        // Public tutor page slug (e.g. /tutor/david-ogunleye) — assigned once
+        // at approval time and never regenerated, so shareable links stay
+        // stable. Falls back to a uniquified form when the slug is taken.
+        let slug = user.slug;
+        if (!slug) {
+          const base = slugify(user.name || app.fullName) || `tutor-${tutorId}`;
+          slug = base;
+          let i = 2;
+          while (
+            await ctx.db
+              .query("users")
+              .withIndex("by_slug", (q) => q.eq("slug", slug))
+              .first()
+          ) {
+            slug = `${base}-${i}`;
+            i += 1;
+          }
+        }
         await ctx.db.patch(tutorId, {
           role: ROLES.TUTOR,
           verified: nextVerified,
@@ -760,6 +778,7 @@ export const reviewTutorApplication = mutation({
           headline: user.headline || app.professionalTitle,
           bio: user.bio || app.biography,
           skills: user.skills?.length ? user.skills : app.skills,
+          slug,
         });
       } else if (action === "suspend") {
         await ctx.db.patch(tutorId, { verified: false });

@@ -105,6 +105,10 @@ export default function AdminShell() {
     api.admin.coursesPendingReview,
     token ? { token } : "skip",
   );
+  const supportStats = useQuery(
+    api.tutorSupport.adminSupportStats,
+    token ? { token } : "skip",
+  );
 
   const handleUnlocked = (t: string) => {
     setAdminToken(t);
@@ -168,7 +172,17 @@ export default function AdminShell() {
       items: [
         { to: "/admin/communication", label: "Communities", icon: <MessageCircle className="size-4" /> },
         { to: "/admin/communication/dms", label: "Private DMs", icon: <MessageSquare className="size-4" /> },
-        { to: "/admin/communication/reports", label: "Reports", icon: <Flag className="size-4" /> },
+        {
+          to: "/admin/communication/reports",
+          label: "Reports & tutor support",
+          icon: <Flag className="size-4" />,
+          badge:
+            (supportStats?.open ?? 0) > 0 ? (
+              <span className="rounded-full bg-lime-400 px-1.5 py-0.5 text-[10px] font-bold text-black">
+                {(supportStats?.open ?? 0) > 99 ? "99+" : supportStats?.open}
+              </span>
+            ) : undefined,
+        },
         { to: "/admin/communication/audit", label: "Audit log", icon: <ScrollText className="size-4" /> },
       ],
     },

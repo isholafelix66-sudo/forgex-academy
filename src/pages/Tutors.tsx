@@ -48,7 +48,7 @@ export default function Tutors() {
             {tutors.map((t, i) => (
               <Reveal key={t._id} delay={(i % 3) * 0.06}>
                 <Link
-                  to={`/tutors/${t._id}`}
+                  to={t.slug ? `/tutor/${t.slug}` : `/tutors/${t._id}`}
                   className="card-lift group flex h-full flex-col rounded-2xl border border-white/8 bg-card p-6"
                 >
                   <div className="flex items-center gap-4">

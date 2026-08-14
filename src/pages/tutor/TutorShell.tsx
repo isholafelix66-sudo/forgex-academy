@@ -6,6 +6,7 @@ import {
   BookOpen,
   ClipboardCheck,
   LayoutDashboard,
+  LifeBuoy,
   Megaphone,
   MessageCircle,
   MessageSquare,
@@ -41,6 +42,7 @@ export default function TutorShell() {
         },
         { to: "/tutor/students", label: "Students", icon: <Users className="size-4" /> },
         { to: "/tutor/announcements", label: "Announcements", icon: <Megaphone className="size-4" /> },
+        { to: "/tutor/support", label: "Support", icon: <LifeBuoy className="size-4" /> },
       ],
     },
     {

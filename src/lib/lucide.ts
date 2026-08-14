@@ -15,6 +15,7 @@
  * list (the build fails loudly with "X is not exported by lucide-react"
  * otherwise).
  */
+export { default as Activity } from "lucide-react/dist/esm/icons/activity.js";
 export { default as AlertCircle } from "lucide-react/dist/esm/icons/alert-circle.js";
 export { default as AlertTriangle } from "lucide-react/dist/esm/icons/alert-triangle.js";
 export { default as Archive } from "lucide-react/dist/esm/icons/archive.js";
@@ -37,6 +38,7 @@ export { default as BookmarkCheck } from "lucide-react/dist/esm/icons/bookmark-c
 export { default as Bot } from "lucide-react/dist/esm/icons/bot.js";
 export { default as Braces } from "lucide-react/dist/esm/icons/braces.js";
 export { default as Briefcase } from "lucide-react/dist/esm/icons/briefcase.js";
+export { default as Bug } from "lucide-react/dist/esm/icons/bug.js";
 export { default as CalendarClock } from "lucide-react/dist/esm/icons/calendar-clock.js";
 export { default as CalendarDays } from "lucide-react/dist/esm/icons/calendar-days.js";
 export { default as Camera } from "lucide-react/dist/esm/icons/camera.js";
@@ -80,6 +82,7 @@ export { default as GraduationCap } from "lucide-react/dist/esm/icons/graduation
 export { default as GripVerticalIcon } from "lucide-react/dist/esm/icons/grip-vertical.js";
 export { default as Heart } from "lucide-react/dist/esm/icons/heart.js";
 export { default as HeartHandshake } from "lucide-react/dist/esm/icons/heart-handshake.js";
+export { default as HelpCircle } from "lucide-react/dist/esm/icons/help-circle.js";
 export { default as Home } from "lucide-react/dist/esm/icons/home.js";
 export { default as ImageDown } from "lucide-react/dist/esm/icons/image-down.js";
 export { default as ImageIcon } from "lucide-react/dist/esm/icons/image.js";
@@ -90,6 +93,7 @@ export { default as InfoIcon } from "lucide-react/dist/esm/icons/info.js";
 export { default as KeyRound } from "lucide-react/dist/esm/icons/key-round.js";
 export { default as Layers } from "lucide-react/dist/esm/icons/layers.js";
 export { default as LayoutDashboard } from "lucide-react/dist/esm/icons/layout-dashboard.js";
+export { default as LifeBuoy } from "lucide-react/dist/esm/icons/life-buoy.js";
 export { default as Link2 } from "lucide-react/dist/esm/icons/link-2.js";
 export { default as ListChecks } from "lucide-react/dist/esm/icons/list-checks.js";
 export { default as ListOrdered } from "lucide-react/dist/esm/icons/list-ordered.js";
@@ -152,6 +156,7 @@ export { default as Target } from "lucide-react/dist/esm/icons/target.js";
 export { default as ToggleLeft } from "lucide-react/dist/esm/icons/toggle-left.js";
 export { default as ToggleRight } from "lucide-react/dist/esm/icons/toggle-right.js";
 export { default as Trash2 } from "lucide-react/dist/esm/icons/trash-2.js";
+export { default as TrendingUp } from "lucide-react/dist/esm/icons/trending-up.js";
 export { default as TriangleAlert } from "lucide-react/dist/esm/icons/triangle-alert.js";
 export { default as TriangleAlertIcon } from "lucide-react/dist/esm/icons/triangle-alert.js";
 export { default as Trophy } from "lucide-react/dist/esm/icons/trophy.js";
