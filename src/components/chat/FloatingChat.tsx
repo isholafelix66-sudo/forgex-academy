@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { useLocation } from "react-router";
 import { useMutation, useQuery } from "convex/react";
 import { AnimatePresence, motion } from "framer-motion";
 import { api } from "@/convex/_generated/api";
@@ -35,6 +36,14 @@ import { timeAgo } from "@/lib/format";
 export function FloatingChat() {
   const { user } = useAuth();
   const signedIn = !!user?._id;
+  const { pathname } = useLocation();
+
+  // These screens have their own full chat composer (course communities,
+  // student DMs, admin communication moderation). The floating FAB would
+  // sit on top of the input, so hide it (and the panel) there entirely.
+  const hideFab = /^\/(?:dashboard\/(?:communities|dms)|admin\/communication)/.test(
+    pathname,
+  );
   const conversations = useQuery(
     api.messages.myConversations,
     signedIn ? {} : "skip",
@@ -44,6 +53,10 @@ export function FloatingChat() {
   const markRead = useMutation(api.messages.markThreadRead);
 
   const [open, setOpen] = useState(false);
+  // Close the panel if the user navigates onto a screen with its own composer.
+  useEffect(() => {
+    if (hideFab) setOpen(false);
+  }, [hideFab]);
   const [threadId, setThreadId] = useState<string | null>(null);
   const [draftTo, setDraftTo] = useState<string | null>(null);
   const [composing, setComposing] = useState(false);
@@ -154,8 +167,10 @@ export function FloatingChat() {
     });
   };
 
-  // Admin sessions have no user account — nothing to chat with.
-  if (!user?._id) return null;
+  // Admin sessions have no user account — nothing to chat with. Also hidden
+  // on chat screens that ship their own composer so the FAB never overlaps
+  // the message input (presence heartbeat still runs — hooks are above).
+  if (!user?._id || hideFab) return null;
 
   const back = () => {
     if (composing) setComposing(false);

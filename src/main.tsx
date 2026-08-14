@@ -483,13 +483,14 @@ createRoot(document.getElementById("root")!).render(
         <SentryUserSync />
         {/* WhatsApp-style floating chat — global, signed-in users only.
             Lazy-loaded so it (and its data queries) never block first paint
-            or initial bundle for visitors. */}
-        <Suspense fallback={null}>
-          <LazyFloatingChat />
-        </Suspense>
+            or initial bundle for visitors. Rendered inside the router so it
+            can hide itself on screens that have their own composer. */}
         <OfflineBadge />
         <BrowserRouter>
           <RouteSyncer />
+          <Suspense fallback={null}>
+            <LazyFloatingChat />
+          </Suspense>
           <Suspense fallback={<RouteLoading />}>
             <RouteBoundary>
             <Routes>

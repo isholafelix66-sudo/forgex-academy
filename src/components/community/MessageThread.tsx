@@ -1,8 +1,17 @@
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import {
+  useEffect,
+  useRef,
+  useState,
+  type MouseEvent as ReactMouseEvent,
+  type PointerEvent as ReactPointerEvent,
+  type ReactNode,
+  type RefObject,
+} from "react";
 import { toast } from "sonner";
 import {
   Check,
   ChevronDown,
+  Copy,
   CornerDownRight,
   Flag,
   Loader2,
@@ -87,6 +96,24 @@ export const ROLE_BADGE: Record<string, { label: string; className: string }> = 
   moderator: { label: "Moderator", className: "bg-amber-400/15 text-amber-300 border border-amber-400/25" },
   system: { label: "System", className: "bg-white/10 text-muted-foreground border border-white/10" },
 };
+
+/**
+ * Mirror of the backend deletion rules (backend is authoritative — this only
+ * drives which affordances the UI shows):
+ *   - own message → always deletable
+ *   - admin viewer → any message
+ *   - community tutor → student messages only (never admin or fellow tutors)
+ */
+export function canDeleteMessage(message: ThreadMessage, viewerRole: "student" | "tutor" | "admin") {
+  if (message.deleted) return false;
+  if (message.mine) return true;
+  if (viewerRole === "admin") return true;
+  if (viewerRole === "tutor") {
+    const senderRole = message.sender.communityRole ?? message.sender.role;
+    return message.senderKind === "user" && senderRole === "student";
+  }
+  return false;
+}
 
 /** Report dialog used from message + user action menus. */
 export function ReportDialog({
@@ -173,6 +200,122 @@ export function ReportDialog({
   );
 }
 
+/** Shared action list used by both the desktop popover and the mobile sheet. */
+function ActionList({
+  message,
+  viewerRole,
+  readOnly,
+  onReply,
+  onToggleReaction,
+  onEditRequest,
+  onDelete,
+  onReport,
+  extraActions,
+  onClose,
+}: {
+  message: ThreadMessage;
+  viewerRole: "student" | "tutor" | "admin";
+  readOnly?: boolean;
+  onReply?: (m: ThreadMessage) => void;
+  onToggleReaction?: (messageId: string, emoji: string) => void;
+  onEditRequest?: () => void;
+  onDelete?: (messageId: string) => Promise<unknown>;
+  onReport?: (m: ThreadMessage) => void;
+  extraActions?: (m: ThreadMessage) => ReactNode;
+  onClose: () => void;
+}) {
+  const deleted = message.deleted;
+  const canDelete = canDeleteMessage(message, viewerRole);
+  const canInteract = !readOnly && !deleted;
+
+  const copyBody = async () => {
+    try {
+      await navigator.clipboard.writeText(message.body);
+      toast.success("Message copied");
+    } catch {
+      toast.error("Couldn't copy the message.");
+    }
+    onClose();
+  };
+
+  const item =
+    (icon: ReactNode, label: string, onClick: () => void, danger = false) =>
+    (
+      <button
+        type="button"
+        onClick={onClick}
+        className={cn(
+          "flex w-full items-center gap-2.5 rounded-xl px-3 py-2.5 text-left text-sm font-medium transition-colors",
+          danger
+            ? "text-rose-300 hover:bg-rose-400/10"
+            : "text-foreground hover:bg-white/10",
+        )}
+      >
+        <span className={cn("shrink-0", danger ? "text-rose-300" : "text-muted-foreground")}>
+          {icon}
+        </span>
+        {label}
+      </button>
+    );
+
+  return (
+    <div className="w-full">
+      {canInteract && onToggleReaction && (
+        <div className="mb-1 flex items-center justify-between gap-1 rounded-2xl border border-white/10 bg-black/20 px-2 py-2">
+          {EMOJIS.map((e) => (
+            <button
+              key={e}
+              type="button"
+              onClick={() => {
+                onToggleReaction(message._id, e);
+                onClose();
+              }}
+              className="rounded-xl px-1 py-0.5 text-xl transition-transform hover:scale-125"
+            >
+              {e}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {canInteract && onReply && item(<CornerDownRight className="size-4" />, "Reply", () => {
+        onReply(message);
+        onClose();
+      })}
+
+      {message.body && item(<Copy className="size-4" />, "Copy", () => void copyBody())}
+
+      {canInteract && message.mine && onEditRequest && item(<Pencil className="size-4" />, "Edit", () => {
+        onEditRequest();
+        onClose();
+      })}
+
+      {canInteract && onDelete && canDelete && item(<Trash2 className="size-4" />, "Delete", () => {
+        onDelete(message._id)
+          .then(() => toast.success("Message deleted"))
+          .catch((err) =>
+            toast.error(err instanceof Error ? err.message : "Couldn't delete the message."),
+          );
+        onClose();
+      }, true)}
+
+      {canInteract && onReport && item(<Flag className="size-4" />, "Report", () => {
+        onReport(message);
+        onClose();
+      })}
+
+      {extraActions && (
+        <div
+          onClick={() => onClose()}
+          className="mt-1 border-t border-white/8 pt-1"
+        >
+          {extraActions(message)}
+        </div>
+      )}
+    </div>
+  );
+}
+
 /** One message bubble with its action row (reply / react / edit / delete / report). */
 function MessageBubble({
   message,
@@ -210,41 +353,135 @@ function MessageBubble({
   const [editing, setEditing] = useState(false);
   const [editText, setEditText] = useState("");
   const [editBusy, setEditBusy] = useState(false);
+  // Tap / long-press action menu. `null` = closed. Position is the anchor for
+  // the desktop popover; `fromTouch` switches to the bottom-sheet layout.
+  const [actionMenu, setActionMenu] = useState<{
+    x: number;
+    y: number;
+    fromTouch: boolean;
+  } | null>(null);
   const pickerRef = useRef<HTMLDivElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
+  const actionRef = useRef<HTMLDivElement>(null);
+  const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const suppressClick = useRef(false);
+  // The synthetic mousedown a touch release fires would immediately close the
+  // menu a long-press just opened — swallow exactly one outside-click.
+  const ignoreNextOutside = useRef(false);
+  const isCoarsePointer = useRef(
+    typeof window !== "undefined" &&
+      (window.matchMedia("(pointer: coarse)").matches || window.innerWidth < 640),
+  ).current;
 
   useEffect(() => {
-    if (!pickerOpen && !menuOpen) return;
+    if (!pickerOpen && !menuOpen && !actionMenu) return;
     const onClick = (e: MouseEvent) => {
       if (
         pickerRef.current?.contains(e.target as Node) ||
-        menuRef.current?.contains(e.target as Node)
+        menuRef.current?.contains(e.target as Node) ||
+        actionRef.current?.contains(e.target as Node)
       ) {
+        return;
+      }
+      if (ignoreNextOutside.current) {
+        ignoreNextOutside.current = false;
         return;
       }
       setPickerOpen(false);
       setMenuOpen(false);
+      setActionMenu(null);
     };
     document.addEventListener("mousedown", onClick);
     return () => document.removeEventListener("mousedown", onClick);
-  }, [pickerOpen, menuOpen]);
+  }, [pickerOpen, menuOpen, actionMenu]);
+
+  // Close the action menu on Escape and when the thread scrolls.
+  useEffect(() => {
+    if (!actionMenu) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setActionMenu(null);
+    };
+    const onScroll = () => setActionMenu(null);
+    document.addEventListener("keydown", onKey);
+    document.addEventListener("forgex-chat-scroll", onScroll);
+    return () => {
+      document.removeEventListener("keydown", onKey);
+      document.removeEventListener("forgex-chat-scroll", onScroll);
+    };
+  }, [actionMenu]);
+
+  // Clear any pending long-press timer on unmount.
+  useEffect(() => () => {
+    if (longPressTimer.current) clearTimeout(longPressTimer.current);
+  }, []);
 
   const isAdminPost = message.senderKind === "admin" || message.sender.role === "admin";
   const showRole = message.sender.isStaff && !isAdminPost;
   const hasAttachment =
     message.kind === "image" || message.kind === "file" || message.kind === "voice";
-  // UI affordance mirror of the backend rules (backend is authoritative):
-  // own message → delete; admin → delete anything; tutor → student messages only.
-  const senderRole = message.sender.communityRole ?? message.sender.role;
-  const canDeleteThis =
-    !message.deleted &&
-    (message.mine
-      ? true
-      : viewerRole === "admin"
-        ? true
-        : viewerRole === "tutor" &&
-            message.senderKind === "user" &&
-            senderRole === "student");
+  const canDelete = canDeleteMessage(message, viewerRole);
+  const voicePlayable = onVoicePlay && message.kind === "voice" && (!message.deleted || showDeletedContent);
+
+  const openMenu = (x: number, y: number, fromTouch: boolean) => {
+    setPickerOpen(false);
+    setMenuOpen(false);
+    setActionMenu({ x, y, fromTouch });
+  };
+
+  const clearLongPress = () => {
+    if (longPressTimer.current) {
+      clearTimeout(longPressTimer.current);
+      longPressTimer.current = null;
+    }
+  };
+
+  const onPointerDown = (e: ReactPointerEvent<HTMLDivElement>) => {
+    if (message.deleted) return;
+    if (e.pointerType !== "touch" && e.pointerType !== "pen") return;
+    if ((e.target as HTMLElement).closest("a,button,[data-menu-skip]")) return;
+    clearLongPress();
+    longPressTimer.current = setTimeout(() => {
+      suppressClick.current = true;
+      ignoreNextOutside.current = true;
+      openMenu(e.clientX, e.clientY, true);
+      // Safety net: clear the flags even if the browser never fires the
+      // synthetic mousedown / click after the touch gesture (e.g. the finger
+      // was released off the bubble).
+      setTimeout(() => {
+        suppressClick.current = false;
+        ignoreNextOutside.current = false;
+      }, 700);
+    }, 450);
+  };
+
+  const onPointerUp = () => clearLongPress();
+  const onPointerCancel = () => clearLongPress();
+
+  const onBubbleClick = (e: ReactMouseEvent<HTMLDivElement>) => {
+    if (message.deleted) {
+      if (voicePlayable) onVoicePlay(message);
+      return;
+    }
+    // A long-press already opened the menu — swallow the click it leaves behind.
+    if (suppressClick.current) {
+      suppressClick.current = false;
+      return;
+    }
+    if ((e.target as HTMLElement).closest("a,button,[data-menu-skip]")) return;
+    // Voice keeps its tap-to-play behaviour (the menu is reachable via long-press).
+    if (onVoicePlay && message.kind === "voice") {
+      onVoicePlay(message);
+      return;
+    }
+    openMenu(e.clientX, e.clientY, isCoarsePointer);
+  };
+
+  const onBubbleContextMenu = (e: ReactMouseEvent<HTMLDivElement>) => {
+    if (message.deleted) return;
+    if ((e.target as HTMLElement).closest("a,button,[data-menu-skip]")) return;
+    e.preventDefault();
+    openMenu(e.clientX, e.clientY, isCoarsePointer);
+  };
 
   const saveEdit = async () => {
     if (!editText.trim() || editBusy) return;
@@ -298,18 +535,16 @@ function MessageBubble({
           {extraActions?.(message)}
         </div>
 
-        {/* Bubble */}
+        {/* Bubble — tap (or long-press on touch) opens the message actions */}
         <div
-          onClick={
-            onVoicePlay && message.kind === "voice" && (!message.deleted || showDeletedContent)
-              ? () => onVoicePlay(message)
-              : undefined
-          }
+          onClick={onBubbleClick}
+          onContextMenu={onBubbleContextMenu}
+          onPointerDown={onPointerDown}
+          onPointerUp={onPointerUp}
+          onPointerCancel={onPointerCancel}
           className={cn(
-            onVoicePlay && message.kind === "voice" && (!message.deleted || showDeletedContent)
-              ? "cursor-pointer"
-              : undefined,
-            "inline-block max-w-full rounded-2xl px-3.5 py-2 text-sm leading-relaxed",
+            voicePlayable ? "cursor-pointer" : undefined,
+            "inline-block max-w-full select-none touch-manipulation rounded-2xl px-3.5 py-2 text-sm leading-relaxed",
             message.mine && !isAdminPost
               ? "rounded-bl-sm bg-lime-400 text-black"
               : isAdminPost
@@ -409,7 +644,7 @@ function MessageBubble({
           </div>
         )}
 
-        {/* Action row */}
+        {/* Action row (desktop hover) */}
         {!readOnly && !message.deleted && (
           <div className="mt-1 flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100">
             {onReply && (
@@ -458,7 +693,7 @@ function MessageBubble({
                 <Flag className="size-3" /> Report
               </button>
             )}
-            {onDelete && canDeleteThis && (
+            {onDelete && canDelete && (
               <div className="relative" ref={menuRef}>
                 <button
                   type="button"
@@ -482,7 +717,7 @@ function MessageBubble({
                         <Pencil className="size-3.5" /> Edit
                       </button>
                     )}
-                    {canDeleteThis && onDelete && (
+                    {canDelete && onDelete && (
                       <button
                         type="button"
                         onClick={() => {
@@ -524,15 +759,137 @@ function MessageBubble({
           </div>
         )}
       </div>
+
+      {/* Tap / long-press message actions */}
+      {actionMenu && (
+        <MessageActions
+          ref={actionRef}
+          message={message}
+          viewerRole={viewerRole}
+          position={actionMenu}
+          readOnly={readOnly}
+          onReply={onReply}
+          onToggleReaction={onToggleReaction}
+          onEditRequest={() => {
+            setEditText(message.body);
+            setEditing(true);
+          }}
+          onDelete={onDelete}
+          onReport={onReport}
+          extraActions={extraActions}
+          onClose={() => setActionMenu(null)}
+        />
+      )}
     </div>
   );
 }
+
+/** Fixed-position menu: bottom sheet on touch/small screens, popover on desktop. */
+const MessageActions = ({
+  ref,
+  message,
+  viewerRole,
+  position,
+  readOnly,
+  onReply,
+  onToggleReaction,
+  onEditRequest,
+  onDelete,
+  onReport,
+  extraActions,
+  onClose,
+}: {
+  ref: RefObject<HTMLDivElement | null>;
+  message: ThreadMessage;
+  viewerRole: "student" | "tutor" | "admin";
+  position: { x: number; y: number; fromTouch: boolean };
+  readOnly?: boolean;
+  onReply?: (m: ThreadMessage) => void;
+  onToggleReaction?: (messageId: string, emoji: string) => void;
+  onEditRequest?: () => void;
+  onDelete?: (messageId: string) => Promise<unknown>;
+  onReport?: (m: ThreadMessage) => void;
+  extraActions?: (m: ThreadMessage) => ReactNode;
+  onClose: () => void;
+}) => {
+  const isSheet =
+    position.fromTouch ||
+    (typeof window !== "undefined" && window.innerWidth < 640);
+
+  const list = (
+    <ActionList
+      message={message}
+      viewerRole={viewerRole}
+      readOnly={readOnly}
+      onReply={onReply}
+      onToggleReaction={onToggleReaction}
+      onEditRequest={onEditRequest}
+      onDelete={onDelete}
+      onReport={onReport}
+      extraActions={extraActions}
+      onClose={onClose}
+    />
+  );
+
+  if (isSheet) {
+    return (
+      <div className="fixed inset-0 z-[70]" role="dialog" aria-modal="true">
+        {/* Backdrop — tap outside to close */}
+        <div className="absolute inset-0 bg-black/60 backdrop-blur-[2px]" onClick={onClose} />
+        <div
+          ref={ref}
+          onClick={(e) => e.stopPropagation()}
+          className="absolute inset-x-0 bottom-0 mx-auto w-full max-w-lg rounded-t-3xl border-t border-white/10 bg-card p-3 shadow-2xl shadow-black/60 pb-[calc(0.75rem+env(safe-area-inset-bottom))]"
+        >
+          {/* Grab handle */}
+          <div className="mx-auto mb-2 h-1 w-10 rounded-full bg-white/15" />
+          <div className="mb-2 flex items-center gap-2.5 border-b border-white/8 pb-2">
+            <Avatar name={message.sender.name} image={message.sender.image} className="size-8" />
+            <div className="min-w-0">
+              <p className="truncate text-sm font-semibold">
+                {message.senderKind === "admin" ? "🛡️ ForgeX Admin" : message.sender.name}
+              </p>
+              <p className="truncate text-[11px] text-muted-foreground">
+                {timeAgo(message.createdAt)}
+                {message.body ? ` · ${message.body.slice(0, 40)}${message.body.length > 40 ? "…" : ""}` : message.kind === "voice" ? " · Voice message" : " · Attachment"}
+              </p>
+            </div>
+          </div>
+          {list}
+        </div>
+      </div>
+    );
+  }
+
+  // Desktop popover — anchored near the tap/click point, flipped when it would
+  // overflow the viewport. Position is fixed so the scroll container can't cut it.
+  const MENU_W = 224;
+  const MENU_H = 330;
+  const pad = 10;
+  const left = Math.max(pad, Math.min(position.x - MENU_W / 2, window.innerWidth - MENU_W - pad));
+  const top =
+    position.y + MENU_H + pad > window.innerHeight - pad
+      ? Math.max(pad, position.y - MENU_H - pad)
+      : position.y + 4;
+  return (
+    <div
+      ref={ref}
+      className="fixed z-[70] overflow-hidden rounded-2xl border border-white/10 bg-card p-1.5 shadow-2xl shadow-black/60"
+      style={{ left, top, width: MENU_W }}
+    >
+      {list}
+    </div>
+  );
+};
 
 /**
  * A scrollable message thread shared by course communities and student DMs.
  * `messages` should be ordered oldest → newest. Pass `onVoicePlay` to log
  * audio playback (admin moderation), `readOnly` for the admin view (no
  * reply/react/edit affordances beyond report-adjacent actions).
+ *
+ * Messages are directly interactive: tap (desktop click), long-press (touch)
+ * or right-click opens the message actions — no floating button required.
  */
 export function MessageThread({
   messages,
@@ -571,11 +928,13 @@ export function MessageThread({
   const scrollRef = useRef<HTMLDivElement>(null);
   const stickToBottom = useRef(true);
 
-  // Track scroll position: stick to bottom when already at the bottom.
+  // Track scroll position: stick to bottom when already at the bottom, and
+  // let open action menus know the thread moved (they close themselves).
   const onScroll = () => {
     const el = scrollRef.current;
     if (!el) return;
     stickToBottom.current = el.scrollHeight - el.scrollTop - el.clientHeight < 120;
+    document.dispatchEvent(new Event("forgex-chat-scroll"));
   };
 
   useEffect(() => {

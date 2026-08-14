@@ -223,7 +223,7 @@ export default function StudentDMThread() {
           }
           onReport={setReportTarget}
         />
-        <div className="border-t border-white/8 p-3">
+        <div className="border-t border-white/8 p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
           {replyTo && (
             <div className="mb-2 flex items-center gap-2 rounded-xl border border-lime-400/20 bg-lime-400/8 px-3 py-2 text-xs">
               <CornerDownRightIcon />
