@@ -39,9 +39,10 @@ export function FloatingChat() {
   const { pathname } = useLocation();
 
   // These screens have their own full chat composer (course communities,
-  // student DMs, admin communication moderation). The floating FAB would
-  // sit on top of the input, so hide it (and the panel) there entirely.
-  const hideFab = /^\/(?:dashboard\/(?:communities|dms)|admin\/communication)/.test(
+  // student DMs, the tutor/student Messages page, admin communication
+  // moderation). The floating FAB would sit on top of the input, so hide it
+  // (and the panel) there entirely.
+  const hideFab = /^\/(?:dashboard\/(?:communities|dms|messages)|admin\/communication)/.test(
     pathname,
   );
   const conversations = useQuery(
