@@ -189,6 +189,7 @@ export const adminCommunityMessages = query({
               .first()
           : null;
         if (senderMembership) sender.communityRole = senderMembership.role;
+        const deleter = m.deletedById ? await ctx.db.get(m.deletedById) : null;
         return {
           _id: m._id,
           communityId: m.communityId,
@@ -205,6 +206,9 @@ export const adminCommunityMessages = query({
           reactions: m.reactions,
           deleted: m.deleted,
           deletedBy: m.deletedBy ?? null,
+          deletedById: m.deletedById ?? null,
+          deletedByName: deleter?.name ?? null,
+          deletedAt: m.deletedAt ?? null,
           editedAt: m.editedAt ?? null,
           createdAt: m.createdAt,
           reported: reportedIds.has(m._id.toString()),
@@ -321,6 +325,7 @@ export const adminConversationMessages = query({
     const messages = await Promise.all(
       [...page].reverse().map(async (m) => {
         const sender = m.senderId === a?._id ? a : b;
+        const deleter = m.deletedById ? await ctx.db.get(m.deletedById) : null;
         return {
           _id: m._id,
           conversationId: m.conversationId,
@@ -346,6 +351,9 @@ export const adminConversationMessages = query({
           reactions: m.reactions,
           deleted: m.deleted,
           deletedBy: m.deletedBy ?? null,
+          deletedById: m.deletedById ?? null,
+          deletedByName: deleter?.name ?? null,
+          deletedAt: m.deletedAt ?? null,
           editedAt: m.editedAt ?? null,
           createdAt: m.createdAt,
           readAt: m.readAt ?? null,
@@ -582,7 +590,11 @@ export const adminRemoveMessage = mutation({
     if (scope === "community") {
       const msg = await ctx.db.get(messageId as Id<"communityMessages">).catch(() => null);
       if (!msg) throw new Error("Message not found.");
-      await ctx.db.patch(msg._id, { deleted: true, deletedBy: "admin", body: "" });
+      await ctx.db.patch(msg._id, {
+        deleted: true,
+        deletedBy: "admin",
+        deletedAt: Date.now(),
+      });
       await logModeration(ctx, "ADMIN_REMOVED_MESSAGE", {
         targetType: "community-message",
         targetId: msg._id,
@@ -594,7 +606,11 @@ export const adminRemoveMessage = mutation({
     } else {
       const msg = await ctx.db.get(messageId as Id<"studentMessages">).catch(() => null);
       if (!msg) throw new Error("Message not found.");
-      await ctx.db.patch(msg._id, { deleted: true, deletedBy: "admin", body: "" });
+      await ctx.db.patch(msg._id, {
+        deleted: true,
+        deletedBy: "admin",
+        deletedAt: Date.now(),
+      });
       await logModeration(ctx, "ADMIN_REMOVED_MESSAGE", {
         targetType: "dm-message",
         targetId: msg._id,

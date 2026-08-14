@@ -61,6 +61,9 @@ export type ThreadMessage = {
   reactions: { emoji: string; count: number; userIds: string[] }[];
   deleted: boolean;
   deletedBy: string | null;
+  deletedById: string | null;
+  deletedByName: string | null;
+  deletedAt: number | null;
   editedAt: number | null;
   createdAt: number;
   mine: boolean;
@@ -175,6 +178,7 @@ function MessageBubble({
   message,
   myUserId,
   viewerRole = "student",
+  showDeletedContent = false,
   onReply,
   onToggleReaction,
   onEdit,
@@ -189,6 +193,9 @@ function MessageBubble({
   /** Viewer's community role — controls who gets the delete affordance.
    *  The backend still enforces every rule; this only drives the UI. */
   viewerRole?: "student" | "tutor" | "admin";
+  /** Admin moderation view: reveal the original content of deleted messages
+   *  (students/tutors only ever see the placeholder). */
+  showDeletedContent?: boolean;
   onReply?: (m: ThreadMessage) => void;
   onToggleReaction?: (messageId: string, emoji: string) => void;
   onEdit?: (messageId: string, body: string) => Promise<unknown>;
@@ -294,12 +301,12 @@ function MessageBubble({
         {/* Bubble */}
         <div
           onClick={
-            onVoicePlay && message.kind === "voice" && !message.deleted
+            onVoicePlay && message.kind === "voice" && (!message.deleted || showDeletedContent)
               ? () => onVoicePlay(message)
               : undefined
           }
           className={cn(
-            onVoicePlay && message.kind === "voice" && !message.deleted
+            onVoicePlay && message.kind === "voice" && (!message.deleted || showDeletedContent)
               ? "cursor-pointer"
               : undefined,
             "inline-block max-w-full rounded-2xl px-3.5 py-2 text-sm leading-relaxed",
@@ -311,7 +318,34 @@ function MessageBubble({
           )}
         >
           {message.deleted ? (
-            <p className="text-xs italic opacity-70">This message was deleted.</p>
+            showDeletedContent ? (
+              <>
+                <span className="mb-1 flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wide text-rose-300">
+                  <Trash2 className="size-3" />
+                  Deleted
+                  {message.deletedByName
+                    ? ` by ${message.deletedByName}`
+                    : message.deletedBy === "admin"
+                      ? " by ForgeX Admin"
+                      : ""}
+                  {message.deletedAt ? ` · ${timeAgo(message.deletedAt)}` : ""}
+                </span>
+                {hasAttachment && (
+                  <ChatAttachmentView
+                    attachment={{ ...message, senderId: message.senderId ?? undefined }}
+                    mine={false}
+                  />
+                )}
+                {message.body ? (
+                  <p className="whitespace-pre-line">{message.body}</p>
+                ) : null}
+                {message.editedAt && (
+                  <span className="mt-0.5 block text-[10px] italic opacity-60">edited</span>
+                )}
+              </>
+            ) : (
+              <p className="text-xs italic opacity-70">This message was deleted.</p>
+            )
           ) : (
             <>
               {message.replyTo && (
@@ -504,6 +538,7 @@ export function MessageThread({
   messages,
   myUserId,
   viewerRole = "student",
+  showDeletedContent = false,
   loading,
   nextCursor,
   onLoadMore,
@@ -519,6 +554,8 @@ export function MessageThread({
   messages: ThreadMessage[];
   myUserId: string;
   viewerRole?: "student" | "tutor" | "admin";
+  /** Admin moderation view: reveal the original content of deleted messages. */
+  showDeletedContent?: boolean;
   loading?: boolean;
   nextCursor?: number | null;
   onLoadMore?: () => void;
@@ -583,6 +620,7 @@ export function MessageThread({
               message={m}
               myUserId={myUserId}
               viewerRole={viewerRole}
+              showDeletedContent={showDeletedContent}
               onReply={readOnly ? undefined : onReply}
               onToggleReaction={readOnly ? undefined : onToggleReaction}
               onEdit={readOnly ? undefined : onEdit}

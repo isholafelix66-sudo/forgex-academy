@@ -224,6 +224,7 @@ export default function AdminCommunityDetail() {
           <MessageThread
             messages={messages}
             myUserId=""
+            showDeletedContent
             loading={thread === undefined}
             nextCursor={thread?.nextCursor ?? null}
             onLoadMore={() => {

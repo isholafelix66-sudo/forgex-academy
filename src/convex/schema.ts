@@ -816,6 +816,8 @@ const schema = defineSchema(
       ),
       deleted: v.boolean(),
       deletedBy: v.optional(v.union(v.literal("user"), v.literal("admin"))),
+      deletedById: v.optional(v.id("users")),
+      deletedAt: v.optional(v.number()),
       editedAt: v.optional(v.number()),
       createdAt: v.number(),
     })
@@ -875,6 +877,8 @@ const schema = defineSchema(
       ),
       deleted: v.boolean(),
       deletedBy: v.optional(v.union(v.literal("user"), v.literal("admin"))),
+      deletedById: v.optional(v.id("users")),
+      deletedAt: v.optional(v.number()),
       editedAt: v.optional(v.number()),
       createdAt: v.number(),
       readAt: v.optional(v.number()),

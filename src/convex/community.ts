@@ -474,25 +474,30 @@ export const communityMessages = query({
             };
           }
         }
+        // Deleted content is retained in storage for moderation but never
+        // leaked to students/tutors — they see the deletion placeholder only.
+        const hidden = m.deleted;
         return {
           _id: m._id,
           communityId: m.communityId,
           senderId: m.senderId ?? null,
           sender,
           senderKind: m.senderKind,
-          body: m.body,
-          kind: m.kind ?? null,
-          storageId: m.storageId ?? null,
-          url: m.url ?? null,
-          fileName: m.fileName ?? null,
-          fileSize: m.fileSize ?? null,
-          mimeType: m.mimeType ?? null,
-          duration: m.duration ?? null,
+          body: hidden ? "" : m.body,
+          kind: hidden ? null : (m.kind ?? null),
+          storageId: hidden ? null : (m.storageId ?? null),
+          url: hidden ? null : (m.url ?? null),
+          fileName: hidden ? null : (m.fileName ?? null),
+          fileSize: hidden ? null : (m.fileSize ?? null),
+          mimeType: hidden ? null : (m.mimeType ?? null),
+          duration: hidden ? null : (m.duration ?? null),
           replyToId: m.replyToId ?? null,
           replyTo,
           reactions: m.reactions,
           deleted: m.deleted,
           deletedBy: m.deletedBy ?? null,
+          deletedById: hidden ? null : (m.deletedById ?? null),
+          deletedAt: m.deletedAt ?? null,
           editedAt: m.editedAt ?? null,
           createdAt: m.createdAt,
           mine: m.senderId === userId,
@@ -778,6 +783,9 @@ export const studentConversationMessages = query({
             };
           }
         }
+        // Deleted content stays in storage for moderation but DM partners
+        // only ever see the deletion placeholder.
+        const hidden = m.deleted;
         return {
           _id: m._id,
           conversationId: m.conversationId,
@@ -790,19 +798,21 @@ export const studentConversationMessages = query({
             role: m.senderId === me._id ? me.role ?? "student" : other?.role ?? "student",
             isStaff: false,
           },
-          body: m.body,
-          kind: m.kind ?? null,
-          storageId: m.storageId ?? null,
-          url: m.url ?? null,
-          fileName: m.fileName ?? null,
-          fileSize: m.fileSize ?? null,
-          mimeType: m.mimeType ?? null,
-          duration: m.duration ?? null,
+          body: hidden ? "" : m.body,
+          kind: hidden ? null : (m.kind ?? null),
+          storageId: hidden ? null : (m.storageId ?? null),
+          url: hidden ? null : (m.url ?? null),
+          fileName: hidden ? null : (m.fileName ?? null),
+          fileSize: hidden ? null : (m.fileSize ?? null),
+          mimeType: hidden ? null : (m.mimeType ?? null),
+          duration: hidden ? null : (m.duration ?? null),
           replyToId: m.replyToId ?? null,
           replyTo,
           reactions: m.reactions,
           deleted: m.deleted,
           deletedBy: m.deletedBy ?? null,
+          deletedById: m.deletedById ?? null,
+          deletedAt: m.deletedAt ?? null,
           editedAt: m.editedAt ?? null,
           createdAt: m.createdAt,
           mine: m.senderId === me._id,
@@ -1050,9 +1060,15 @@ export const deleteCommunityMessage = mutation({
     const viewerIsAdmin =
       user.role === ROLES.ADMIN || membership.role === "admin";
 
-    // Own message → always allowed.
+    // Own message → always allowed. The original body/attachment is kept for
+    // moderation (admins can review deleted content) — students see a placeholder.
     if (msg.senderId === user._id) {
-      await ctx.db.patch(messageId, { deleted: true, deletedBy: "user", body: "" });
+      await ctx.db.patch(messageId, {
+        deleted: true,
+        deletedBy: "user",
+        deletedById: user._id,
+        deletedAt: Date.now(),
+      });
       return true;
     }
 
@@ -1080,7 +1096,8 @@ export const deleteCommunityMessage = mutation({
     await ctx.db.patch(messageId, {
       deleted: true,
       deletedBy: viewerIsAdmin ? "admin" : "user",
-      body: "",
+      deletedById: user._id,
+      deletedAt: Date.now(),
     });
     return true;
   },
@@ -1422,7 +1439,13 @@ export const deleteStudentMessage = mutation({
     const msg = await ctx.db.get(messageId);
     if (!msg || msg.deleted) throw new Error("Message not found.");
     if (msg.senderId !== me._id) throw new Error("You can only delete your own messages.");
-    await ctx.db.patch(messageId, { deleted: true, deletedBy: "user", body: "" });
+    // Original body is preserved for moderation; the DM partners see a placeholder.
+    await ctx.db.patch(messageId, {
+      deleted: true,
+      deletedBy: "user",
+      deletedById: me._id,
+      deletedAt: Date.now(),
+    });
     return true;
   },
 });
