@@ -27,12 +27,26 @@ const EXACT: Array<[string, Importer]> = [
   ["/admin", () => import("@/pages/admin/AdminShell.tsx")],
 ];
 
+// Tutor dashboard subroutes live under /tutor/ too — they must keep
+// resolving to the dashboard (or their own chunk), never the public
+// mini-site. Public tutor pages are single-segment slugs, so we only
+// prefetch TutorPage for /tutor/<slug>.
+const TUTOR_DASHBOARD_SUBROUTES = new Set([
+  "courses",
+  "grading",
+  "students",
+  "inbox",
+  "announcements",
+  "support",
+]);
+
 const PREFIX: Array<[string, Importer]> = [
   ["/learn/", () => import("@/pages/Learn.tsx")],
   ["/verify/", () => import("@/pages/VerifyCertificate.tsx")],
   ["/courses/", () => import("@/pages/CourseDetail.tsx")],
   ["/prompts/", () => import("@/pages/PromptDetail.tsx")],
   ["/tutors/", () => import("@/pages/TutorDetail.tsx")],
+  ["/tutor/", () => import("@/pages/TutorPage.tsx")],
 ];
 
 const prefetched = new Set<string>();
@@ -41,6 +55,12 @@ function resolve(path: string): Importer | null {
   const clean = path.split("?")[0].split("#")[0];
   const exact = EXACT.find(([to]) => to === clean);
   if (exact) return exact[1];
+  // A tutor-dashboard subroute (/tutor/courses, /tutor/grading, …) is not a
+  // public slug — skip the /tutor/ prefix entry for those.
+  if (clean.startsWith("/tutor/") && !clean.slice("/tutor/".length).includes("/")) {
+    const segment = clean.slice("/tutor/".length).split("?")[0].split("#")[0];
+    if (TUTOR_DASHBOARD_SUBROUTES.has(segment)) return null;
+  }
   for (const [prefix, imp] of PREFIX) {
     if (clean.startsWith(prefix)) return imp;
   }
