@@ -2,7 +2,50 @@ import { vlyPlugin } from "@vly-ai/integrations";
 import tailwindcss from "@tailwindcss/vite";
 import react from "@vitejs/plugin-react";
 import path from "path";
+import { spawnSync } from "node:child_process";
 import { defineConfig } from "vite";
+
+// The deploy runner invokes `tsc -b && vite build` directly (it never runs
+// `npm run build`), so a wrapper script can't bound the build's memory. V8's
+// heap limit is only honoured when set at process start (runtime
+// setFlagsFromString cannot lower it), so when we detect a production build
+// invocation we re-exec the build as a child process with the cap applied
+// from the first instruction. This keeps peak RSS ~1.1 GB — without it the
+// build (three.js, recharts, Mux, canvas/PDF libs — 3,400+ modules) balloons
+// past the container limit and the platform kills it with a bare "Killed".
+// Dev server and preview runs (`vite`, `vite dev`, `vite preview`) are
+// untouched — only `vite build` re-executes.
+if (
+  process.argv.includes("build") &&
+  !process.env.__FORGEX_VITE_MEM_CAPPED__
+) {
+  // Prefer system Node (the flag is a V8 heap limit); if the CLI is being
+  // executed by Bun, spawn Node explicitly and fall back to the current
+  // runtime if Node is not on PATH.
+  const execPath = process.execPath;
+  const runner =
+    execPath.includes("bun") && !execPath.includes("node")
+      ? "node"
+      : execPath;
+  const run = (bin: string) =>
+    spawnSync(bin, ["--max-old-space-size=896", ...process.argv.slice(1)], {
+      stdio: "inherit",
+      env: {
+        ...process.env,
+        __FORGEX_VITE_MEM_CAPPED__: "1",
+        // Don't double-apply a NODE_OPTIONS cap from a wrapper script.
+        NODE_OPTIONS: "",
+      },
+    });
+  let result;
+  try {
+    result = run(runner);
+  } catch {
+    // `node` wasn't on PATH — fall back to the current runtime.
+    result = run(execPath);
+  }
+  process.exit(result.status ?? 1);
+}
 
 // https://vite.dev/config/
 export default defineConfig({
@@ -38,6 +81,11 @@ export default defineConfig({
     target: 'esnext',
     // Minify options - using esbuild (faster than terser)
     minify: 'esbuild',
+    rollupOptions: {
+      // Limit concurrent module transforms: for a 3,400+ module graph this
+      // measurably lowers peak memory during the transform/render phase.
+      maxParallelFileOps: 2,
+    },
   },
   // Optimize dependencies
   optimizeDeps: {
