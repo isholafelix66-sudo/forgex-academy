@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link, useParams } from "react-router";
 import { useMutation, useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
@@ -39,7 +39,6 @@ export default function CommunityRoom() {
   const [replyTo, setReplyTo] = useState<ThreadMessage | null>(null);
   const [reportTarget, setReportTarget] = useState<ThreadMessage | null>(null);
   const [sending, setSending] = useState(false);
-  const bottomRef = useRef<HTMLDivElement>(null);
 
   // Ensure membership on first open (enrollment normally adds it already).
   useEffect(() => {

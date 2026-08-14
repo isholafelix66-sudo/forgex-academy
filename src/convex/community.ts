@@ -596,9 +596,14 @@ export const discoverStudents = query({
     );
     return filtered
       .sort((a, b) => {
+        // Same-course students first, then online status, then name.
         const aShared = a.sharedCourses.length > 0 ? 1 : 0;
         const bShared = b.sharedCourses.length > 0 ? 1 : 0;
-        return bShared - aShared || b.online ? 1 : 0 - (a.online ? 1 : 0);
+        if (bShared !== aShared) return bShared - aShared;
+        const aOnline = a.online ? 1 : 0;
+        const bOnline = b.online ? 1 : 0;
+        if (bOnline !== aOnline) return bOnline - aOnline;
+        return a.name.localeCompare(b.name);
       })
       .slice(0, 60);
   },
@@ -745,6 +750,7 @@ export const studentConversationMessages = query({
           _id: m._id,
           conversationId: m.conversationId,
           senderId: m.senderId,
+          senderKind: "user",
           sender: {
             _id: m.senderId,
             name: (m.senderId === me._id ? me.name || "You" : other?.name) ?? "Student",

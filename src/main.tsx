@@ -58,6 +58,14 @@ const Notifications = lazy(() => import("./pages/dashboard/Notifications.tsx"));
 const Profile = lazy(() => import("./pages/dashboard/Profile.tsx"));
 const Settings = lazy(() => import("./pages/dashboard/Settings.tsx"));
 
+// Communication & Community module (student side)
+const Communities = lazy(() => import("./pages/dashboard/Communities.tsx"));
+const CommunityRoom = lazy(() => import("./pages/dashboard/CommunityRoom.tsx"));
+const Discover = lazy(() => import("./pages/dashboard/Discover.tsx"));
+const Connections = lazy(() => import("./pages/dashboard/Connections.tsx"));
+const StudentDMs = lazy(() => import("./pages/dashboard/StudentDMs.tsx"));
+const StudentDMThread = lazy(() => import("./pages/dashboard/StudentDMThread.tsx"));
+
 // ---------------------------------------------------------------------------
 // Tutor dashboard
 // ---------------------------------------------------------------------------
@@ -92,6 +100,14 @@ const AdminProfile = lazy(() => import("./pages/admin/AdminProfile.tsx"));
 const AdminChat = lazy(() => import("./pages/admin/AdminChat.tsx"));
 const AdminInbox = lazy(() => import("./pages/admin/AdminInbox.tsx"));
 const AdminCoursePreview = lazy(() => import("./pages/admin/AdminCoursePreview.tsx"));
+
+// Communication & Community module (admin moderation)
+const AdminCommunication = lazy(() => import("./pages/admin/AdminCommunication.tsx"));
+const AdminCommunityDetail = lazy(() => import("./pages/admin/AdminCommunityDetail.tsx"));
+const AdminDMs = lazy(() => import("./pages/admin/AdminDMs.tsx"));
+const AdminDMDetail = lazy(() => import("./pages/admin/AdminDMDetail.tsx"));
+const AdminReports = lazy(() => import("./pages/admin/AdminReports.tsx"));
+const AdminCommAudit = lazy(() => import("./pages/admin/AdminCommAudit.tsx"));
 
 // Compact spinner fallback for lazy route transitions — matches the brand
 // and avoids the layout shift of a full-page text swap.
@@ -526,6 +542,14 @@ createRoot(document.getElementById("root")!).render(
                 <Route path="notifications" element={<Notifications />} />
                 <Route path="profile" element={<Profile />} />
                 <Route path="settings" element={<Settings />} />
+
+                {/* Communication & Community */}
+                <Route path="communities" element={<Communities />} />
+                <Route path="communities/:id" element={<CommunityRoom />} />
+                <Route path="discover" element={<Discover />} />
+                <Route path="connections" element={<Connections />} />
+                <Route path="dms" element={<StudentDMs />} />
+                <Route path="dms/:id" element={<StudentDMThread />} />
               </Route>
 
               {/* Tutor dashboard — verified tutors only, or the admin session
@@ -567,6 +591,14 @@ createRoot(document.getElementById("root")!).render(
                 <Route path="profile" element={<AdminProfile />} />
                 <Route path="inbox" element={<AdminInbox />} />
                 <Route path="chat" element={<AdminChat />} />
+
+                {/* Communication moderation */}
+                <Route path="communication" element={<AdminCommunication />} />
+                <Route path="communication/communities/:id" element={<AdminCommunityDetail />} />
+                <Route path="communication/dms" element={<AdminDMs />} />
+                <Route path="communication/dms/:id" element={<AdminDMDetail />} />
+                <Route path="communication/reports" element={<AdminReports />} />
+                <Route path="communication/audit" element={<AdminCommAudit />} />
               </Route>
 
               <Route path="*" element={<NotFound />} />

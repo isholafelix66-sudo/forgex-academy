@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useNavigate } from "react-router";
 import { useMutation, useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import type { Id } from "@/convex/_generated/dataModel";
@@ -15,6 +16,8 @@ export default function Discover() {
   const [query, setQuery] = useState("");
   const students = useQuery(api.community.discoverStudents, { q: query });
   const requestConnection = useMutation(api.community.requestConnection);
+  const openConversation = useMutation(api.community.openConversationWith);
+  const navigate = useNavigate();
   const [busyId, setBusyId] = useState<string | null>(null);
 
   const act = async (userId: string, fn: () => Promise<unknown>, success: string) => {
@@ -91,12 +94,19 @@ export default function Discover() {
                     variant="outline"
                     size="sm"
                     className="w-full gap-2 border-lime-400/30 text-lime-300"
-                    onClick={() => void act(s._id, () => Promise.resolve(), "")}
-                    asChild
+                    disabled={busyId === s._id}
+                    onClick={() => {
+                      setBusyId(s._id);
+                      openConversation({ userId: s._id as Id<"users"> })
+                        .then((convoId) => navigate(`/dashboard/dms/${convoId}`))
+                        .catch((err) => {
+                          toast.error(err instanceof Error ? err.message : "Couldn't open the chat.");
+                        })
+                        .finally(() => setBusyId(null));
+                    }}
                   >
-                    <a href={`/dashboard/dms?with=${s._id}`}>
-                      <Send className="size-3.5" /> Message
-                    </a>
+                    {busyId === s._id ? <Loader2 className="size-3.5 animate-spin" /> : <Send className="size-3.5" />}
+                    Message
                   </Button>
                 ) : s.connectionStatus === "pending" ? (
                   <Button variant="outline" size="sm" disabled className="w-full gap-2 border-white/10 text-muted-foreground">

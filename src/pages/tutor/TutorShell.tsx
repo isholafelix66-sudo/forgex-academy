@@ -7,6 +7,7 @@ import {
   ClipboardCheck,
   LayoutDashboard,
   Megaphone,
+  MessageCircle,
   MessageSquare,
   ShieldCheck,
   Users,
@@ -18,6 +19,7 @@ export default function TutorShell() {
   const { isAdmin } = useAdminSession();
   const pending = useQuery(api.tutor.pendingSubmissions);
   const conversations = useQuery(api.messages.myConversations);
+  const communityUnread = useQuery(api.community.communityUnreadCount);
   const unreadMessages = conversations?.reduce((s, c) => s + c.unread, 0) ?? 0;
 
   const sections = [
@@ -52,6 +54,17 @@ export default function TutorShell() {
             unreadMessages > 0 ? (
               <span className="rounded-full bg-lime-400 px-1.5 py-0.5 text-[10px] font-bold text-black">
                 {unreadMessages}
+              </span>
+            ) : undefined,
+        },
+        {
+          to: "/dashboard/communities",
+          label: "Course Communities",
+          icon: <MessageCircle className="size-4" />,
+          badge:
+            (communityUnread ?? 0) > 0 ? (
+              <span className="rounded-full bg-lime-400 px-1.5 py-0.5 text-[10px] font-bold text-black">
+                {(communityUnread ?? 0) > 99 ? "99+" : communityUnread}
               </span>
             ) : undefined,
         },

@@ -8,15 +8,20 @@ import {
   Globe,
   LayoutDashboard,
   Map,
+  MessageCircle,
   MessageSquare,
   Settings,
   User,
+  UserPlus,
+  Users,
 } from "lucide-react";
 import { AppShell } from "@/components/dash/AppShell";
 
 export default function DashboardShell() {
   const unread = useQuery(api.notifications.unreadCount);
   const conversations = useQuery(api.messages.myConversations);
+  const communityUnread = useQuery(api.community.communityUnreadCount);
+  const dmUnread = useQuery(api.community.dmUnreadCount);
 
   const unreadMessages = conversations?.reduce((s, c) => s + c.unread, 0) ?? 0;
 
@@ -44,6 +49,24 @@ export default function DashboardShell() {
       ],
     },
     {
+      label: "Community",
+      items: [
+        {
+          to: "/dashboard/communities",
+          label: "My Communities",
+          icon: <MessageCircle className="size-4" />,
+          badge:
+            (communityUnread ?? 0) > 0 ? (
+              <span className="rounded-full bg-lime-400 px-1.5 py-0.5 text-[10px] font-bold text-black">
+                {(communityUnread ?? 0) > 99 ? "99+" : communityUnread}
+              </span>
+            ) : undefined,
+        },
+        { to: "/dashboard/discover", label: "Discover Students", icon: <UserPlus className="size-4" /> },
+        { to: "/dashboard/connections", label: "Connections", icon: <Users className="size-4" /> },
+      ],
+    },
+    {
       label: "Account",
       items: [
         {
@@ -54,6 +77,17 @@ export default function DashboardShell() {
             unreadMessages > 0 ? (
               <span className="rounded-full bg-lime-400 px-1.5 py-0.5 text-[10px] font-bold text-black">
                 {unreadMessages}
+              </span>
+            ) : undefined,
+        },
+        {
+          to: "/dashboard/dms",
+          label: "Student DMs",
+          icon: <MessageCircle className="size-4" />,
+          badge:
+            (dmUnread ?? 0) > 0 ? (
+              <span className="rounded-full bg-lime-400 px-1.5 py-0.5 text-[10px] font-bold text-black">
+                {(dmUnread ?? 0) > 99 ? "99+" : dmUnread}
               </span>
             ) : undefined,
         },

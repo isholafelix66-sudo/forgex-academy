@@ -8,6 +8,7 @@ import {
   Bot,
   Braces,
   ClipboardList,
+  Flag,
   GraduationCap,
   Heart,
   ImageIcon,
@@ -17,6 +18,7 @@ import {
   ListChecks,
   Loader2,
   Megaphone,
+  MessageCircle,
   MessageSquare,
   PenSquare,
   ScrollText,
@@ -159,6 +161,15 @@ export default function AdminShell() {
         { to: "/admin/form-builder", label: "Tutor registration form", icon: <ClipboardList className="size-4" /> },
         { to: "/admin/certificates", label: "Certificates", icon: <Award className="size-4" /> },
         { to: "/admin/audit", label: "Audit log", icon: <ScrollText className="size-4" /> },
+      ],
+    },
+    {
+      label: "Communication",
+      items: [
+        { to: "/admin/communication", label: "Communities", icon: <MessageCircle className="size-4" /> },
+        { to: "/admin/communication/dms", label: "Private DMs", icon: <MessageSquare className="size-4" /> },
+        { to: "/admin/communication/reports", label: "Reports", icon: <Flag className="size-4" /> },
+        { to: "/admin/communication/audit", label: "Audit log", icon: <ScrollText className="size-4" /> },
       ],
     },
     {

@@ -1,6 +1,4 @@
-import { useEffect, useRef, useState } from "react";
-import { useMutation } from "convex/react";
-import { api } from "@/convex/_generated/api";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { toast } from "sonner";
 import {
   Check,
@@ -180,16 +178,18 @@ function MessageBubble({
   onDelete,
   onReport,
   onVoicePlay,
+  extraActions,
   readOnly,
 }: {
   message: ThreadMessage;
   myUserId: string;
   onReply?: (m: ThreadMessage) => void;
   onToggleReaction?: (messageId: string, emoji: string) => void;
-  onEdit?: (messageId: string, body: string) => Promise<void>;
-  onDelete?: (messageId: string) => Promise<void>;
+  onEdit?: (messageId: string, body: string) => Promise<unknown>;
+  onDelete?: (messageId: string) => Promise<unknown>;
   onReport?: (m: ThreadMessage) => void;
   onVoicePlay?: (m: ThreadMessage) => void;
+  extraActions?: (m: ThreadMessage) => ReactNode;
   readOnly?: boolean;
 }) {
   const [pickerOpen, setPickerOpen] = useState(false);
@@ -270,11 +270,20 @@ function MessageBubble({
           )}
           {message.mine && <span className="text-[10px] font-medium text-muted-foreground">You</span>}
           <span className="text-[10px] text-muted-foreground">{timeAgo(message.createdAt)}</span>
+          {extraActions?.(message)}
         </div>
 
         {/* Bubble */}
         <div
+          onClick={
+            onVoicePlay && message.kind === "voice" && !message.deleted
+              ? () => onVoicePlay(message)
+              : undefined
+          }
           className={cn(
+            onVoicePlay && message.kind === "voice" && !message.deleted
+              ? "cursor-pointer"
+              : undefined,
             "inline-block max-w-full rounded-2xl px-3.5 py-2 text-sm leading-relaxed",
             message.mine && !isAdminPost
               ? "rounded-bl-sm bg-lime-400 text-black"
@@ -311,7 +320,12 @@ function MessageBubble({
                   </span>
                 </button>
               )}
-              {hasAttachment && <ChatAttachmentView attachment={message} mine={message.mine && !isAdminPost} />}
+              {hasAttachment && (
+                <ChatAttachmentView
+                  attachment={{ ...message, senderId: message.senderId ?? undefined }}
+                  mine={message.mine && !isAdminPost}
+                />
+              )}
               {message.body ? (
                 <p className={cn("whitespace-pre-line", hasAttachment && "mt-1.5")}>{message.body}</p>
               ) : null}
@@ -482,6 +496,7 @@ export function MessageThread({
   onDelete,
   onReport,
   onVoicePlay,
+  extraActions,
   readOnly,
 }: {
   messages: ThreadMessage[];
@@ -491,10 +506,11 @@ export function MessageThread({
   onLoadMore?: () => void;
   onReply?: (m: ThreadMessage) => void;
   onToggleReaction?: (messageId: string, emoji: string) => void;
-  onEdit?: (messageId: string, body: string) => Promise<void>;
-  onDelete?: (messageId: string) => Promise<void>;
+  onEdit?: (messageId: string, body: string) => Promise<unknown>;
+  onDelete?: (messageId: string) => Promise<unknown>;
   onReport?: (m: ThreadMessage) => void;
   onVoicePlay?: (m: ThreadMessage) => void;
+  extraActions?: (m: ThreadMessage) => ReactNode;
   readOnly?: boolean;
 }) {
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -554,6 +570,7 @@ export function MessageThread({
               onDelete={readOnly ? undefined : onDelete}
               onReport={readOnly ? undefined : onReport}
               onVoicePlay={readOnly ? wrapPlay : undefined}
+              extraActions={extraActions}
               readOnly={readOnly}
             />
           </div>

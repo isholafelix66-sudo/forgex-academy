@@ -310,6 +310,7 @@ export const adminConversationMessages = query({
           _id: m._id,
           conversationId: m.conversationId,
           senderId: m.senderId,
+          senderKind: "user",
           sender: {
             _id: m.senderId,
             name: sender?.name ?? "Deleted user",
