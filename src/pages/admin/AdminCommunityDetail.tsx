@@ -12,6 +12,7 @@ import {
   MessageCircle,
   MessageSquareWarning,
   Pencil,
+  Plus,
   Search,
   Send,
   ShieldAlert,
@@ -58,7 +59,21 @@ export default function AdminCommunityDetail() {
   const [editOpen, setEditOpen] = useState(false);
   const [editName, setEditName] = useState("");
   const [editMode, setEditMode] = useState<"everyone" | "tutors_only">("everyone");
+  const [editCohort, setEditCohort] = useState("");
+  const [editDescription, setEditDescription] = useState("");
+  const [editRules, setEditRules] = useState("");
+  const [editImage, setEditImage] = useState("");
+  const [editCapacity, setEditCapacity] = useState("");
   const [deleteOpen, setDeleteOpen] = useState(false);
+  const [capacityInput, setCapacityInput] = useState("");
+  const [capacityBusy, setCapacityBusy] = useState(false);
+  const [cohortOpen, setCohortOpen] = useState(false);
+  const [cohortName, setCohortName] = useState("");
+  const [cohortCapacity, setCohortCapacity] = useState("");
+  const [cohortBusy, setCohortBusy] = useState(false);
+  const [moveTarget, setMoveTarget] = useState<{ userId: string; name: string } | null>(null);
+  const [moveTargetId, setMoveTargetId] = useState("");
+  const [moveBusy, setMoveBusy] = useState(false);
 
   const detail = useQuery(
     api.communityAdmin.adminCommunityDetail,
@@ -84,6 +99,10 @@ export default function AdminCommunityDetail() {
   const removeMessage = useMutation(api.communityAdmin.adminRemoveMessage);
   const sendNotice = useMutation(api.communityAdmin.adminSendCommunityNotice);
   const logAudio = useMutation(api.communityAdmin.adminLogAudioPlay);
+  const setCapacity = useMutation(api.communityAdmin.adminSetCommunityCapacity);
+  const setEnrollment = useMutation(api.communityAdmin.adminSetCommunityEnrollment);
+  const moveStudent = useMutation(api.communityAdmin.adminMoveStudent);
+  const createCommunity = useMutation(api.communityAdmin.adminCreateCommunity);
 
   // Member action state (reason prompt)
   const [memberAction, setMemberAction] = useState<{
@@ -94,6 +113,13 @@ export default function AdminCommunityDetail() {
   const [reason, setReason] = useState("");
   const [confirmMsg, setConfirmMsg] = useState<ThreadMessage | null>(null);
   const [busy, setBusy] = useState(false);
+
+  // Keep the capacity input in sync with the live community.
+  useEffect(() => {
+    if (detail) {
+      setCapacityInput(detail.capacity.capacity ? String(detail.capacity.capacity) : "0");
+    }
+  }, [detail]);
 
   // Accumulate paginated messages
   const [cache, setCache] = useState<Map<string, ThreadMessage>>(new Map());
@@ -145,6 +171,95 @@ export default function AdminCommunityDetail() {
     }
   };
 
+  const saveCapacity = async () => {
+    const n = Number(capacityInput);
+    if (!Number.isInteger(n) || n < 0) {
+      toast.error("Enter a valid student limit (0 = unlimited).");
+      return;
+    }
+    setCapacityBusy(true);
+    try {
+      await setCapacity({ token, communityId, capacity: n });
+      toast.success(n > 0 ? `Student limit set to ${n}.` : "Student limit removed — unlimited enrollment.");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Couldn't update the student limit.");
+    } finally {
+      setCapacityBusy(false);
+    }
+  };
+
+  const toggleEnrollment = async () => {
+    setCapacityBusy(true);
+    try {
+      await setEnrollment({ token, communityId, closed: !detail?.capacity.closed });
+      toast.success(detail?.capacity.closed ? "Enrollment reopened — new students can join again." : "Enrollment closed — new students can't join this community.");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Couldn't change enrollment.");
+    } finally {
+      setCapacityBusy(false);
+    }
+  };
+
+  const saveCohort = async () => {
+    if (!detail?.course) {
+      toast.error("Course not found.");
+      return;
+    }
+    const name = cohortName.trim();
+    if (!name) {
+      toast.error("Give the cohort a name.");
+      return;
+    }
+    let capacity: number | undefined;
+    if (cohortCapacity.trim()) {
+      const n = Number(cohortCapacity);
+      if (!Number.isInteger(n) || n < 0) {
+        toast.error("Enter a valid student limit (0 = unlimited).");
+        return;
+      }
+      capacity = n > 0 ? n : undefined;
+    }
+    setCohortBusy(true);
+    try {
+      const cid = await createCommunity({
+        token,
+        courseId: detail.course._id as Id<"courses">,
+        name,
+        studentCapacity: capacity,
+        messageMode: "everyone",
+      });
+      toast.success("Cohort created — students can now be moved into it.");
+      setCohortOpen(false);
+      setCohortName("");
+      setCohortCapacity("");
+      navigate(`/admin/communication/communities/${cid}`);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Couldn't create the cohort.");
+    } finally {
+      setCohortBusy(false);
+    }
+  };
+
+  const confirmMove = async () => {
+    if (!moveTarget || !moveTargetId) return;
+    setMoveBusy(true);
+    try {
+      await moveStudent({
+        token,
+        communityId,
+        userId: moveTarget.userId as Id<"users">,
+        targetCommunityId: moveTargetId as Id<"courseCommunities">,
+      });
+      toast.success(`${moveTarget.name} moved to the new cohort. Their account is unchanged.`);
+      setMoveTarget(null);
+      setMoveTargetId("");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Couldn't move the student.");
+    } finally {
+      setMoveBusy(false);
+    }
+  };
+
   return (
     <div className="space-y-6">
       <PageHeader
@@ -172,6 +287,126 @@ export default function AdminCommunityDetail() {
               {detail.community.lockedReason ? `Reason: ${detail.community.lockedReason}` : "No reason recorded."}
             </p>
           </div>
+        </div>
+      )}
+
+      {/* Student capacity & cohorts */}
+      {detail && (
+        <div className="rounded-2xl border border-white/10 bg-card p-5">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <h3 className="font-display flex items-center gap-2 text-base font-bold">
+                <Users className="size-4 text-lime-300" /> Student capacity
+              </h3>
+              <p className="mt-0.5 text-xs text-muted-foreground">
+                {detail.capacity.capacity === null
+                  ? "No student limit — unlimited enrollment."
+                  : `${detail.capacity.studentCount} / ${detail.capacity.capacity} students · ${
+                      detail.capacity.state === "closed"
+                        ? "enrollment closed"
+                        : detail.capacity.state === "full"
+                          ? "🔴 full"
+                          : `🟢 ${detail.capacity.spaces} space${detail.capacity.spaces === 1 ? "" : "s"} available`
+                    }`}
+              </p>
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <div className="flex items-center gap-1.5">
+                <Input
+                  type="number"
+                  min={0}
+                  value={capacityInput}
+                  onChange={(e) => setCapacityInput(e.target.value)}
+                  placeholder="0 = unlimited"
+                  className="h-8 w-24 border-white/10 bg-black/20"
+                />
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="gap-1.5 border-lime-400/30 text-lime-300 hover:bg-lime-400/10"
+                  onClick={() => void saveCapacity()}
+                  disabled={capacityBusy}
+                >
+                  {capacityBusy ? <Loader2 className="size-3.5 animate-spin" /> : <Users className="size-3.5" />}
+                  Set limit
+                </Button>
+              </div>
+              <Button
+                size="sm"
+                variant="outline"
+                className="gap-1.5 border-white/10"
+                onClick={() => void toggleEnrollment()}
+                disabled={capacityBusy}
+              >
+                {detail.capacity.closed ? <Unlock className="size-3.5 text-lime-300" /> : <Lock className="size-3.5 text-amber-300" />}
+                {detail.capacity.closed ? "Reopen" : "Close enrollment"}
+              </Button>
+              <Button
+                size="sm"
+                className="gap-1.5 bg-lime-400 text-black hover:bg-lime-300"
+                onClick={() => setCohortOpen(true)}
+              >
+                <Plus className="size-3.5" /> New cohort
+              </Button>
+            </div>
+          </div>
+          {detail.capacity.capacity !== null && (
+            <div className="mt-3 flex items-center gap-3">
+              <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-white/10">
+                <div
+                  className={cn(
+                    "h-full rounded-full transition-all",
+                    detail.capacity.state === "full" ? "bg-rose-400" : "bg-lime-400",
+                  )}
+                  style={{ width: `${Math.min(100, (detail.capacity.studentCount / detail.capacity.capacity) * 100)}%` }}
+                />
+              </div>
+              <span
+                className={cn(
+                  "text-[11px] font-bold uppercase tracking-wide",
+                  detail.capacity.state === "closed"
+                    ? "text-amber-300"
+                    : detail.capacity.state === "full"
+                      ? "text-rose-300"
+                      : "text-lime-300",
+                )}
+              >
+                {detail.capacity.state === "closed" ? "🔒 Closed" : detail.capacity.state === "full" ? "🔴 Full" : "🟢 Open"}
+              </span>
+            </div>
+          )}
+          {detail.capacity.capacity !== null && detail.capacity.spaces === 0 && detail.capacity.state !== "closed" && (
+            <p className="mt-2 text-xs text-amber-300">
+              This community is at capacity — create a new cohort and move students into it instead of growing this one further.
+            </p>
+          )}
+          {detail.cohorts.length > 0 && (
+            <div className="mt-3 flex flex-wrap gap-2">
+              <span className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Cohorts of {detail.course?.title ?? "this course"}:</span>
+              {detail.cohorts.map((c) => (
+                <Link
+                  key={c._id}
+                  to={`/admin/communication/communities/${c._id}`}
+                  className="flex items-center gap-1.5 rounded-full border border-white/10 bg-black/20 px-2.5 py-1 text-[11px] text-muted-foreground transition-colors hover:border-lime-400/40 hover:text-lime-300"
+                >
+                  <Users className="size-3" />
+                  {c.name}
+                  <span
+                    className={cn(
+                      "font-semibold tabular-nums",
+                      c.capacity.state === "closed"
+                        ? "text-amber-300"
+                        : c.capacity.state === "full"
+                          ? "text-rose-300"
+                          : "text-lime-300",
+                    )}
+                  >
+                    {c.capacity.capacity === null ? "∞" : `${c.capacity.studentCount}/${c.capacity.capacity}`}
+                  </span>
+                </Link>
+              ))}
+            </div>
+          )}
         </div>
       )}
 
@@ -365,6 +600,20 @@ export default function AdminCommunityDetail() {
                       >
                         Restrict
                       </Button>
+                      {m.role === "student" && detail && detail.cohorts.length > 0 && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="border-white/10 text-muted-foreground"
+                          disabled={busy}
+                          onClick={() => {
+                            setMoveTarget({ userId: m.userId, name: m.name });
+                            setMoveTargetId("");
+                          }}
+                        >
+                          Move
+                        </Button>
+                      )}
                       <Button
                         variant="outline"
                         size="sm"
@@ -530,6 +779,11 @@ export default function AdminCommunityDetail() {
                 onClick={() => {
                   setEditName(detail?.community.name ?? "");
                   setEditMode(detail?.community.messageMode ?? "everyone");
+                  setEditCohort(detail?.community.cohortLabel ?? "");
+                  setEditDescription(detail?.community.description ?? "");
+                  setEditRules(detail?.community.rules ?? "");
+                  setEditImage(detail?.community.image ?? "");
+                  setEditCapacity(detail?.capacity.capacity ? String(detail.capacity.capacity) : "0");
                   setEditOpen(true);
                 }}
               >
@@ -590,6 +844,55 @@ export default function AdminCommunityDetail() {
                 </Button>
               ))}
             </div>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div className="space-y-1.5">
+                <label className="text-xs font-medium text-muted-foreground">Cohort label</label>
+                <Input
+                  value={editCohort}
+                  onChange={(e) => setEditCohort(e.target.value)}
+                  placeholder="e.g. Cohort B"
+                  className="border-white/10 bg-black/20"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-xs font-medium text-muted-foreground">Student limit (0 = unlimited)</label>
+                <Input
+                  type="number"
+                  min={0}
+                  value={editCapacity}
+                  onChange={(e) => setEditCapacity(e.target.value)}
+                  className="border-white/10 bg-black/20"
+                />
+              </div>
+              <div className="space-y-1.5 sm:col-span-2">
+                <label className="text-xs font-medium text-muted-foreground">Description</label>
+                <Input
+                  value={editDescription}
+                  onChange={(e) => setEditDescription(e.target.value)}
+                  placeholder="What this community/cohort is about"
+                  className="border-white/10 bg-black/20"
+                />
+              </div>
+              <div className="space-y-1.5 sm:col-span-2">
+                <label className="text-xs font-medium text-muted-foreground">Community rules</label>
+                <Textarea
+                  value={editRules}
+                  onChange={(e) => setEditRules(e.target.value)}
+                  rows={3}
+                  placeholder="e.g. Be respectful, stay on topic"
+                  className="border-white/10 bg-black/20"
+                />
+              </div>
+              <div className="space-y-1.5 sm:col-span-2">
+                <label className="text-xs font-medium text-muted-foreground">Community image URL</label>
+                <Input
+                  value={editImage}
+                  onChange={(e) => setEditImage(e.target.value)}
+                  placeholder="https://…"
+                  className="border-white/10 bg-black/20"
+                />
+              </div>
+            </div>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setEditOpen(false)} disabled={busy} className="border-white/10">
@@ -599,14 +902,143 @@ export default function AdminCommunityDetail() {
               className="gap-2 bg-lime-400 text-black hover:bg-lime-300"
               disabled={!editName.trim() || busy}
               onClick={() => {
+                const capacity = editCapacity.trim() ? Number(editCapacity) : 0;
+                if (editCapacity.trim() && (!Number.isInteger(capacity) || capacity < 0)) {
+                  toast.error("Enter a valid student limit (0 = unlimited).");
+                  return;
+                }
                 setEditOpen(false);
                 void run(
-                  () => editCommunity({ token, communityId, name: editName.trim(), messageMode: editMode }),
+                  () =>
+                    editCommunity({
+                      token,
+                      communityId,
+                      name: editName.trim(),
+                      messageMode: editMode,
+                      cohortLabel: editCohort.trim() || undefined,
+                      description: editDescription.trim() || undefined,
+                      rules: editRules.trim() || undefined,
+                      image: editImage.trim() || undefined,
+                      studentCapacity: capacity > 0 ? capacity : undefined,
+                    }),
                   "Community updated",
                 );
               }}
             >
               <Pencil className="size-4" /> Save changes
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Move student to another cohort */}
+      <Dialog open={!!moveTarget} onOpenChange={(o) => !o && setMoveTarget(null)}>
+        <DialogContent className="max-w-md border-white/10 bg-card">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Users className="size-5 text-lime-300" /> Move {moveTarget?.name ?? "student"}
+            </DialogTitle>
+            <DialogDescription>
+              Move this student to another cohort of the same course. Their ForgeX account, email
+              and course progress are completely unchanged — only their community membership moves.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-2">
+            {detail && detail.cohorts.length === 0 ? (
+              <p className="rounded-xl border border-white/10 bg-black/20 p-4 text-xs text-muted-foreground">
+                No other cohorts exist yet — create one with the "New cohort" button above, then move
+                students into it.
+              </p>
+            ) : (
+              (detail?.cohorts ?? []).map((c) => (
+                <button
+                  key={c._id}
+                  type="button"
+                  onClick={() => setMoveTargetId(c._id)}
+                  disabled={c.capacity.state !== "open"}
+                  className={`flex w-full items-center justify-between gap-2 rounded-xl border px-3 py-2.5 text-left text-sm transition-colors ${
+                    moveTargetId === c._id
+                      ? "border-lime-400/40 bg-lime-400/10 text-lime-200"
+                      : c.capacity.state !== "open"
+                        ? "cursor-not-allowed border-white/10 bg-black/20 opacity-50"
+                        : "border-white/10 bg-black/20 text-foreground hover:border-lime-400/40"
+                  }`}
+                >
+                  <span className="min-w-0 flex-1 truncate">{c.name}</span>
+                  <span className="text-xs text-muted-foreground">
+                    {c.capacity.state === "closed"
+                      ? "🔒 closed"
+                      : c.capacity.state === "full"
+                        ? "🔴 full"
+                        : c.capacity.capacity === null
+                          ? "unlimited"
+                          : `${c.capacity.spaces} spaces`}
+                  </span>
+                </button>
+              ))
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setMoveTarget(null)} disabled={moveBusy} className="border-white/10">
+              Cancel
+            </Button>
+            <Button
+              onClick={() => void confirmMove()}
+              disabled={!moveTargetId || moveBusy}
+              className="gap-2 bg-lime-400 text-black hover:bg-lime-300"
+            >
+              {moveBusy ? <Loader2 className="size-4 animate-spin" /> : <Users className="size-4" />}
+              Move student
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Create new cohort dialog */}
+      <Dialog open={cohortOpen} onOpenChange={(o) => !o && setCohortOpen(false)}>
+        <DialogContent className="max-w-md border-white/10 bg-card">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Plus className="size-5 text-lime-300" /> New cohort
+            </DialogTitle>
+            <DialogDescription>
+              Create a separate community for the same course (e.g. "NUD 417 — Cohort B") with its own
+              members, messages and settings. Students can then be moved into it from the members tab.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div className="space-y-1.5">
+              <label className="text-xs font-medium text-muted-foreground">Cohort name *</label>
+              <Input
+                value={cohortName}
+                onChange={(e) => setCohortName(e.target.value)}
+                placeholder={`${detail?.course?.title ?? "Course"} — Cohort B`}
+                className="border-white/10 bg-black/20"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-xs font-medium text-muted-foreground">Student limit (optional, 0 = unlimited)</label>
+              <Input
+                type="number"
+                min={0}
+                value={cohortCapacity}
+                onChange={(e) => setCohortCapacity(e.target.value)}
+                placeholder="e.g. 50"
+                className="border-white/10 bg-black/20"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setCohortOpen(false)} disabled={cohortBusy} className="border-white/10">
+              Cancel
+            </Button>
+            <Button
+              onClick={() => void saveCohort()}
+              disabled={cohortBusy || !cohortName.trim()}
+              className="gap-2 bg-lime-400 text-black hover:bg-lime-300"
+            >
+              {cohortBusy ? <Loader2 className="size-4 animate-spin" /> : <Plus className="size-4" />}
+              Create cohort
             </Button>
           </DialogFooter>
         </DialogContent>

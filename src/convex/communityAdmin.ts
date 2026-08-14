@@ -14,6 +14,7 @@ import { v } from "convex/values";
 import { requireAdminSession, notify, publicUser } from "./lib";
 import {
   addMembership,
+  communityCapacity,
   ensureCommunityForCourse,
   logModeration,
   messagePreview,
@@ -83,6 +84,7 @@ export const adminCommunities = query({
         const reportCount = reports.filter(
           (r) => r.communityId === c._id && r.status === "open",
         ).length;
+        const capacityInfo = await communityCapacity(ctx, c);
         return {
           _id: c._id,
           name: c.name,
@@ -90,9 +92,11 @@ export const adminCommunities = query({
           messageMode: c.messageMode ?? "everyone",
           lockedReason: c.lockedReason ?? null,
           courseTitle: course?.title ?? "Unknown course",
+          cohortLabel: c.cohortLabel ?? null,
           memberCount,
           messageCount,
           reportCount,
+          capacity: capacityInfo,
           lastActivityAt: c.lastActivityAt ?? null,
           createdAt: c.createdAt,
         };
@@ -124,6 +128,27 @@ export const adminCommunityDetail = query({
         .query("communicationReports")
         .collect(),
     ]);
+    const capacityInfo = await communityCapacity(ctx, community);
+    // Sibling cohorts of the same course (for moving students / creating new
+    // cohorts) with their own live capacity.
+    const courseCommunities = await ctx.db
+      .query("courseCommunities")
+      .withIndex("by_course", (q) => q.eq("courseId", community.courseId))
+      .collect();
+    const cohorts = await Promise.all(
+      courseCommunities
+        .filter((c) => c._id !== community._id)
+        .map(async (c) => {
+          const info = await communityCapacity(ctx, c);
+          return {
+            _id: c._id,
+            name: c.name,
+            status: c.status,
+            cohortLabel: c.cohortLabel ?? null,
+            capacity: info,
+          };
+        }),
+    );
     return {
       community: {
         _id: community._id,
@@ -131,6 +156,10 @@ export const adminCommunityDetail = query({
         status: community.status,
         messageMode: community.messageMode ?? "everyone",
         lockedReason: community.lockedReason ?? null,
+        description: community.description ?? null,
+        rules: community.rules ?? null,
+        image: community.image ?? null,
+        cohortLabel: community.cohortLabel ?? null,
         createdAt: community.createdAt,
         lastActivityAt: community.lastActivityAt ?? null,
       },
@@ -140,6 +169,8 @@ export const adminCommunityDetail = query({
       restrictedCount: members.filter((m) => m.status === "restricted").length,
       messageCount: messages.length,
       openReports: reports.filter((r) => r.communityId === communityId && r.status === "open").length,
+      capacity: capacityInfo,
+      cohorts,
     };
   },
 });
@@ -795,28 +826,45 @@ export const adminSetCommunityMessageMode = mutation({
   },
 });
 
-/** Admin: create a community for a course (auto-members the course tutor). */
+/**
+ * Admin: create a community/cohort for a course (auto-members the course
+ * tutor). Courses may have MULTIPLE communities (e.g. "NUD 417 - Cohort A",
+ * "- Cohort B") to keep enrollments manageable — each has separate members,
+ * messages and settings.
+ */
 export const adminCreateCommunity = mutation({
   args: {
     token: v.string(),
     courseId: v.id("courses"),
     name: v.optional(v.string()),
+    cohortLabel: v.optional(v.string()),
+    description: v.optional(v.string()),
+    rules: v.optional(v.string()),
+    image: v.optional(v.string()),
+    studentCapacity: v.optional(v.number()),
     messageMode: v.optional(v.union(v.literal("everyone"), v.literal("tutors_only"))),
   },
-  handler: async (ctx, { token, courseId, name, messageMode }) => {
-    await requireAdminSession(ctx, token);
-    const course = await ctx.db.get(courseId);
+  handler: async (ctx, args) => {
+    await requireAdminSession(ctx, args.token);
+    const course = await ctx.db.get(args.courseId);
     if (!course) throw new Error("Course not found.");
-    const existing = await ctx.db
-      .query("courseCommunities")
-      .withIndex("by_course", (q) => q.eq("courseId", courseId))
-      .first();
-    if (existing) throw new Error("This course already has a community.");
+    if (
+      args.studentCapacity !== undefined &&
+      (!Number.isInteger(args.studentCapacity) || args.studentCapacity < 0 || args.studentCapacity > 100_000)
+    ) {
+      throw new Error("Enter a valid student limit (0 = unlimited).");
+    }
     const id = await ctx.db.insert("courseCommunities", {
-      courseId,
-      name: name?.trim() || `${course.title} Community`,
+      courseId: args.courseId,
+      name: args.name?.trim() || `${course.title} Community`,
       status: "active",
-      messageMode: messageMode ?? "everyone",
+      messageMode: args.messageMode ?? "everyone",
+      studentCapacity:
+        args.studentCapacity && args.studentCapacity > 0 ? args.studentCapacity : undefined,
+      cohortLabel: args.cohortLabel?.trim() || undefined,
+      description: args.description?.trim() || undefined,
+      rules: args.rules?.trim() || undefined,
+      image: args.image?.trim() || undefined,
       createdAt: Date.now(),
     });
     // Auto-member the course tutor as a community tutor.
@@ -828,34 +876,162 @@ export const adminCreateCommunity = mutation({
       targetType: "community",
       targetId: id,
       communityId: id,
-      reason: course.title,
+      reason: `${course.title}${args.cohortLabel?.trim() ? ` / ${args.cohortLabel.trim()}` : ""}`,
     });
     return id;
   },
 });
 
-/** Admin: edit a community's name / messaging mode. */
+/** Admin: edit a community's name / messaging mode / cohort details. */
 export const adminEditCommunity = mutation({
   args: {
     token: v.string(),
     communityId: v.id("courseCommunities"),
     name: v.string(),
     messageMode: v.union(v.literal("everyone"), v.literal("tutors_only")),
+    cohortLabel: v.optional(v.string()),
+    description: v.optional(v.string()),
+    rules: v.optional(v.string()),
+    image: v.optional(v.string()),
+    studentCapacity: v.optional(v.number()),
   },
-  handler: async (ctx, { token, communityId, name, messageMode }) => {
-    await requireAdminSession(ctx, token);
-    const community = await ctx.db.get(communityId);
+  handler: async (ctx, args) => {
+    await requireAdminSession(ctx, args.token);
+    const community = await ctx.db.get(args.communityId);
     if (!community) throw new Error("Community not found.");
-    await ctx.db.patch(communityId, {
-      name: name.trim() || community.name,
-      messageMode,
+    if (
+      args.studentCapacity !== undefined &&
+      (!Number.isInteger(args.studentCapacity) || args.studentCapacity < 0 || args.studentCapacity > 100_000)
+    ) {
+      throw new Error("Enter a valid student limit (0 = unlimited).");
+    }
+    await ctx.db.patch(args.communityId, {
+      name: args.name.trim() || community.name,
+      messageMode: args.messageMode,
+      studentCapacity:
+        args.studentCapacity && args.studentCapacity > 0 ? args.studentCapacity : undefined,
+      cohortLabel: args.cohortLabel?.trim() || undefined,
+      description: args.description?.trim() || undefined,
+      rules: args.rules?.trim() || undefined,
+      image: args.image?.trim() || undefined,
     });
     await logModeration(ctx, "ADMIN_EDITED_COMMUNITY", {
       targetType: "community",
+      targetId: args.communityId,
+      communityId: args.communityId,
+      reason: args.name.trim() || community.name,
+    });
+    return true;
+  },
+});
+
+/** Admin: override the student capacity (0 = unlimited). */
+export const adminSetCommunityCapacity = mutation({
+  args: {
+    token: v.string(),
+    communityId: v.id("courseCommunities"),
+    capacity: v.number(),
+  },
+  handler: async (ctx, { token, communityId, capacity }) => {
+    await requireAdminSession(ctx, token);
+    const community = await ctx.db.get(communityId);
+    if (!community) throw new Error("Community not found.");
+    if (!Number.isInteger(capacity) || capacity < 0 || capacity > 100_000) {
+      throw new Error("Enter a valid student limit (0 = unlimited).");
+    }
+    await ctx.db.patch(communityId, {
+      studentCapacity: capacity > 0 ? capacity : undefined,
+    });
+    await logModeration(ctx, "ADMIN_SET_CAPACITY", {
+      targetType: "community",
       targetId: communityId,
       communityId,
-      reason: name.trim() || community.name,
+      reason: capacity > 0 ? String(capacity) : "unlimited",
     });
+    return true;
+  },
+});
+
+/** Admin: manually close or reopen enrollment (override). */
+export const adminSetCommunityEnrollment = mutation({
+  args: {
+    token: v.string(),
+    communityId: v.id("courseCommunities"),
+    closed: v.boolean(),
+  },
+  handler: async (ctx, { token, communityId, closed }) => {
+    await requireAdminSession(ctx, token);
+    const community = await ctx.db.get(communityId);
+    if (!community) throw new Error("Community not found.");
+    await ctx.db.patch(communityId, { enrollmentClosed: closed || undefined });
+    await logModeration(ctx, "ADMIN_TOGGLED_ENROLLMENT", {
+      targetType: "community",
+      targetId: communityId,
+      communityId,
+      reason: closed ? "closed" : "reopened",
+    });
+    return true;
+  },
+});
+
+/**
+ * Admin: move a student from one community/cohort to another of the SAME
+ * course. The student's membership moves — never their account, email or user
+ * id (one person = one ForgeX account). The old membership is marked removed
+ * and the new one is created (subject to the target's capacity).
+ */
+export const adminMoveStudent = mutation({
+  args: {
+    token: v.string(),
+    communityId: v.id("courseCommunities"),
+    userId: v.id("users"),
+    targetCommunityId: v.id("courseCommunities"),
+  },
+  handler: async (ctx, { token, communityId, userId, targetCommunityId }) => {
+    await requireAdminSession(ctx, token);
+    if (communityId === targetCommunityId) {
+      throw new Error("Pick a different cohort to move the student into.");
+    }
+    const source = await ctx.db.get(communityId);
+    const target = await ctx.db.get(targetCommunityId);
+    if (!source || !target) throw new Error("Community not found.");
+    if (source.courseId !== target.courseId) {
+      throw new Error("Students can only be moved between cohorts of the same course.");
+    }
+    const user = await ctx.db.get(userId);
+    if (!user) throw new Error("User not found.");
+    const membership = await ctx.db
+      .query("communityMembers")
+      .withIndex("by_community", (q) =>
+        q.eq("communityId", communityId).eq("userId", userId),
+      )
+      .first();
+    if (!membership || membership.status !== "active") {
+      throw new Error("This user isn't an active member here.");
+    }
+    if (membership.role === "admin") throw new Error("Admins cannot be moved.");
+    const role: Doc<"communityMembers">["role"] =
+      membership.role === "tutor" ? "tutor" : "student";
+    // Moving a tutor also moves their tutor role in the new cohort.
+    await addMembership(ctx, targetCommunityId, userId, role);
+    await ctx.db.patch(membership._id, {
+      status: "removed",
+      removedAt: Date.now(),
+      removedReason: `Moved to ${target.name}`,
+    });
+    await logModeration(ctx, "ADMIN_MOVED_MEMBER", {
+      targetType: "member",
+      targetId: userId,
+      communityId,
+      userId,
+      reason: `${source.name} -> ${target.name}`,
+    });
+    await moderateNotify(
+      ctx,
+      userId,
+      "Moved to a new cohort",
+      `You were moved from ${source.name} to ${target.name}. Your account, courses and progress are unchanged.`,
+    );
     return true;
   },
 });

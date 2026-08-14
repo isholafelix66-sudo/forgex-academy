@@ -7,6 +7,7 @@ import { PageHeader } from "@/components/dash/PageHeader";
 import { EmptyState } from "@/components/site/EmptyState";
 import { Badge } from "@/components/ui/badge";
 import { useAuth } from "@/hooks/use-auth";
+import { cn } from "@/lib/utils";
 import { timeAgo } from "@/lib/format";
 
 export default function Communities() {
@@ -73,12 +74,40 @@ export default function Communities() {
                 {c.course?.title ?? "Course community"}
               </p>
 
-              <div className="mt-4 flex items-center justify-between text-[11px] text-muted-foreground">
+              <div className="mt-4 flex items-center justify-between gap-2 text-[11px] text-muted-foreground">
                 <span className="flex items-center gap-1.5">
                   <Users className="size-3.5" /> {c.memberCount} members
                 </span>
-                <span>{c.lastMessageAt ? `Last active ${timeAgo(c.lastMessageAt)}` : "New community"}</span>
+                {c.capacity.capacity !== null && (
+                  <span
+                    className={cn(
+                      "flex items-center gap-1 rounded-full border px-2 py-0.5 font-semibold tabular-nums",
+                      c.capacity.state === "closed"
+                        ? "border-amber-400/25 bg-amber-400/10 text-amber-300"
+                        : c.capacity.state === "full"
+                          ? "border-rose-400/25 bg-rose-400/10 text-rose-300"
+                          : "border-lime-400/25 bg-lime-400/10 text-lime-300",
+                    )}
+                  >
+                    {c.capacity.state === "closed" ? (
+                      <>
+                        <Lock className="size-3" /> Enrollment closed
+                      </>
+                    ) : c.capacity.state === "full" ? (
+                      <>
+                        <span className="size-1.5 rounded-full bg-rose-400" /> Full · {c.capacity.studentCount}/{c.capacity.capacity}
+                      </>
+                    ) : (
+                      <>
+                        <span className="size-1.5 rounded-full bg-lime-400" /> {c.capacity.studentCount}/{c.capacity.capacity}
+                      </>
+                    )}
+                  </span>
+                )}
               </div>
+              {c.lastMessageAt && (
+                <p className="mt-1.5 text-[10px] text-muted-foreground/70">Last active {timeAgo(c.lastMessageAt)}</p>
+              )}
 
               {c.unread > 0 && (
                 <span className="absolute right-4 top-4 flex size-6 items-center justify-center rounded-full bg-lime-400 text-[11px] font-bold text-black">

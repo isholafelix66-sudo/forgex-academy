@@ -748,6 +748,17 @@ const schema = defineSchema(
         v.union(v.literal("everyone"), v.literal("tutors_only")),
       ),
       lockedReason: v.optional(v.string()),
+      /** Student capacity & cohort management. `studentCapacity` caps how many
+       *  students can be enrolled (0/absent = unlimited); `enrollmentClosed`
+       *  is a manual stop. Capacity state is derived: OPEN when below the
+       *  limit, FULL at the limit, CLOSED when manually stopped — spaces free
+       *  up automatically when students leave or are moved. */
+      studentCapacity: v.optional(v.number()),
+      enrollmentClosed: v.optional(v.boolean()),
+      description: v.optional(v.string()),
+      rules: v.optional(v.string()),
+      image: v.optional(v.string()),
+      cohortLabel: v.optional(v.string()),
       createdAt: v.number(),
       lastActivityAt: v.optional(v.number()),
     })

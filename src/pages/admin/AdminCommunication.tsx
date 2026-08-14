@@ -18,6 +18,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { getAdminToken } from "@/lib/admin-session";
+import { cn } from "@/lib/utils";
 import { timeAgo } from "@/lib/format";
 
 const STATUS_STYLE: Record<string, string> = {
@@ -34,6 +35,13 @@ export default function AdminCommunication() {
   const [courseQuery, setCourseQuery] = useState("");
   const [selectedCourse, setSelectedCourse] = useState<{ _id: string; title: string } | null>(null);
   const [creating, setCreating] = useState(false);
+  const [createName, setCreateName] = useState("");
+  const [createCohort, setCreateCohort] = useState("");
+  const [createCapacity, setCreateCapacity] = useState("");
+  const [createMode, setCreateMode] = useState<"everyone" | "tutors_only">("everyone");
+  const [createDescription, setCreateDescription] = useState("");
+  const [createRules, setCreateRules] = useState("");
+  const [createImage, setCreateImage] = useState("");
   const communities = useQuery(
     api.communityAdmin.adminCommunities,
     token ? { token, search: query } : "skip",
@@ -50,9 +58,28 @@ export default function AdminCommunication() {
 
   const handleCreate = async () => {
     if (!selectedCourse || creating) return;
+    let capacity: number | undefined;
+    if (createCapacity.trim()) {
+      const n = Number(createCapacity);
+      if (!Number.isInteger(n) || n < 0) {
+        toast.error("Enter a valid student limit (0 = unlimited).");
+        return;
+      }
+      capacity = n > 0 ? n : undefined;
+    }
     setCreating(true);
     try {
-      const id = await createCommunity({ token, courseId: selectedCourse._id as Id<"courses"> });
+      const id = await createCommunity({
+        token,
+        courseId: selectedCourse._id as Id<"courses">,
+        name: createName.trim() || undefined,
+        cohortLabel: createCohort.trim() || undefined,
+        studentCapacity: capacity,
+        messageMode: createMode,
+        description: createDescription.trim() || undefined,
+        rules: createRules.trim() || undefined,
+        image: createImage.trim() || undefined,
+      });
       toast.success("Community created — members are added automatically as they enroll.");
       setCreateOpen(false);
       setSelectedCourse(null);
@@ -75,6 +102,13 @@ export default function AdminCommunication() {
             onClick={() => {
               setSelectedCourse(null);
               setCourseQuery("");
+              setCreateName("");
+              setCreateCohort("");
+              setCreateCapacity("");
+              setCreateMode("everyone");
+              setCreateDescription("");
+              setCreateRules("");
+              setCreateImage("");
               setCreateOpen(true);
             }}
           >
@@ -124,6 +158,36 @@ export default function AdminCommunication() {
                       Tutors only
                     </span>
                   )}
+                  {c.cohortLabel && (
+                    <span className="rounded-full border border-white/15 bg-white/5 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                      Cohort · {c.cohortLabel}
+                    </span>
+                  )}
+                  {c.capacity.capacity !== null && (
+                    <span
+                      className={`flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${
+                        c.capacity.state === "closed"
+                          ? "border-amber-400/25 bg-amber-400/10 text-amber-300"
+                          : c.capacity.state === "full"
+                            ? "border-rose-400/25 bg-rose-400/10 text-rose-300"
+                            : "border-lime-400/25 bg-lime-400/10 text-lime-300"
+                      }`}
+                    >
+                      {c.capacity.state === "closed" ? (
+                        <>
+                          <Lock className="size-3" /> {c.capacity.studentCount}/{c.capacity.capacity} · closed
+                        </>
+                      ) : c.capacity.state === "full" ? (
+                        <>
+                          <span className="size-1.5 rounded-full bg-rose-400" /> {c.capacity.studentCount}/{c.capacity.capacity} · full
+                        </>
+                      ) : (
+                        <>
+                          <span className="size-1.5 rounded-full bg-lime-400" /> {c.capacity.studentCount}/{c.capacity.capacity}
+                        </>
+                      )}
+                    </span>
+                  )}
                 </div>
                 <p className="mt-0.5 truncate text-xs text-muted-foreground">
                   {c.courseTitle} · last activity {c.lastActivityAt ? timeAgo(c.lastActivityAt) : "—"}
@@ -154,14 +218,15 @@ export default function AdminCommunication() {
 
       {/* Create community dialog */}
       <Dialog open={createOpen} onOpenChange={(o) => !o && setCreateOpen(false)}>
-        <DialogContent className="max-w-md border-white/10 bg-card">
+        <DialogContent className="max-w-lg border-white/10 bg-card">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              <Plus className="size-5 text-lime-300" /> New community
+              <Plus className="size-5 text-lime-300" /> New community / cohort
             </DialogTitle>
             <DialogDescription>
-              Pick a course to create its community. The course tutor is automatically added as a
-              community tutor, and enrolled students join automatically.
+              Pick a course, then optionally name this as a cohort (e.g. "NUD 417 — Cohort B") and
+              set its student limit. Courses can have several cohorts — each with separate
+              members, messages and settings. The course tutor joins automatically.
             </DialogDescription>
           </DialogHeader>
           <div className="relative">
@@ -173,7 +238,7 @@ export default function AdminCommunication() {
               className="border-white/10 bg-black/20 pl-9"
             />
           </div>
-          <div className="max-h-56 space-y-1 overflow-y-auto rounded-xl border border-white/10 bg-black/20 p-1.5">
+          <div className="max-h-44 space-y-1 overflow-y-auto rounded-xl border border-white/10 bg-black/20 p-1.5">
             {courses === undefined ? (
               <p className="flex items-center justify-center gap-2 p-4 text-xs text-muted-foreground">
                 <Loader2 className="size-3.5 animate-spin" /> Loading courses…
@@ -197,6 +262,90 @@ export default function AdminCommunication() {
                 </button>
               ))
             )}
+          </div>
+
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div className="space-y-1.5">
+              <label className="text-xs font-medium text-muted-foreground">Community name</label>
+              <Input
+                value={createName}
+                onChange={(e) => setCreateName(e.target.value)}
+                placeholder={selectedCourse ? `${selectedCourse.title} Community` : "Community name (optional)"}
+                className="border-white/10 bg-black/20"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-xs font-medium text-muted-foreground">Cohort label</label>
+              <Input
+                value={createCohort}
+                onChange={(e) => setCreateCohort(e.target.value)}
+                placeholder="e.g. Cohort B"
+                className="border-white/10 bg-black/20"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-xs font-medium text-muted-foreground">Student limit (0 = unlimited)</label>
+              <Input
+                type="number"
+                min={0}
+                value={createCapacity}
+                onChange={(e) => setCreateCapacity(e.target.value)}
+                placeholder="e.g. 50"
+                className="border-white/10 bg-black/20"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-xs font-medium text-muted-foreground">Messaging</label>
+              <div className="flex gap-1.5">
+                {(
+                  [
+                    { key: "everyone", label: "Everyone" },
+                    { key: "tutors_only", label: "Tutors only" },
+                  ] as const
+                ).map((s) => (
+                  <Button
+                    key={s.key}
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className={cn(
+                      "flex-1 border-white/10",
+                      createMode === s.key ? "border-lime-400/40 text-lime-300" : "text-muted-foreground",
+                    )}
+                    onClick={() => setCreateMode(s.key)}
+                  >
+                    {s.label}
+                  </Button>
+                ))}
+              </div>
+            </div>
+            <div className="space-y-1.5 sm:col-span-2">
+              <label className="text-xs font-medium text-muted-foreground">Description</label>
+              <Input
+                value={createDescription}
+                onChange={(e) => setCreateDescription(e.target.value)}
+                placeholder="What this community/cohort is about (optional)"
+                className="border-white/10 bg-black/20"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-xs font-medium text-muted-foreground">Community rules</label>
+              <Input
+                value={createRules}
+                onChange={(e) => setCreateRules(e.target.value)}
+                placeholder="e.g. Be respectful, stay on topic (optional)"
+                className="border-white/10 bg-black/20"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-xs font-medium text-muted-foreground">Community image URL</label>
+              <Input
+                value={createImage}
+                onChange={(e) => setCreateImage(e.target.value)}
+                placeholder="https://… (optional)"
+                className="border-white/10 bg-black/20"
+              />
+            </div>
           </div>
           <DialogFooter>
             <Button

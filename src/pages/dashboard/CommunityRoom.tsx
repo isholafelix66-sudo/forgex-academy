@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Link, useParams } from "react-router";
+import { Link, useNavigate, useParams } from "react-router";
 import { useMutation, useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import type { Id } from "@/convex/_generated/dataModel";
@@ -18,6 +18,7 @@ import {
   MessageSquareWarning,
   Mic,
   Pin,
+  Plus,
   Search,
   ShieldAlert,
   ShieldCheck,
@@ -103,6 +104,10 @@ export default function CommunityRoom() {
   const saveMsg = useMutation(api.community.saveCommunityMessage);
   const unsaveMsg = useMutation(api.community.unsaveCommunityMessage);
   const setTyping = useMutation(api.community.setCommunityTyping);
+  const setCapacity = useMutation(api.community.tutorSetCommunityCapacity);
+  const setEnrollment = useMutation(api.community.tutorSetCommunityEnrollment);
+  const createCohort = useMutation(api.community.tutorCreateCohort);
+  const navigate = useNavigate();
 
   const [cursor, setCursor] = useState<number | undefined>(undefined);
   const thread = useQuery(api.community.communityMessages, { communityId, cursor });
@@ -123,6 +128,13 @@ export default function CommunityRoom() {
   const [modeBusy, setModeBusy] = useState(false);
   const [removeTarget, setRemoveTarget] = useState<{ userId: string; name: string } | null>(null);
   const [removeBusy, setRemoveBusy] = useState(false);
+  const [capacityOpen, setCapacityOpen] = useState(false);
+  const [capacityInput, setCapacityInput] = useState("");
+  const [capacityBusy, setCapacityBusy] = useState(false);
+  const [cohortOpen, setCohortOpen] = useState(false);
+  const [cohortName, setCohortName] = useState("");
+  const [cohortCapacity, setCohortCapacity] = useState("");
+  const [cohortBusy, setCohortBusy] = useState(false);
 
   // Upgrade panels + discussion view + jump-to-message.
   const [panel, setPanel] = useState<PanelId>(null);
@@ -288,6 +300,8 @@ export default function CommunityRoom() {
 
   const myRole = detail?.membership.role ?? "student";
   const isStaff = myRole === "tutor" || myRole === "admin" || myRole === "moderator";
+  const cap = detail?.capacity;
+
   const viewerRole: "student" | "tutor" | "admin" =
     myRole === "admin" || myRole === "moderator" ? "admin" : myRole === "tutor" ? "tutor" : "student";
   const isLocked = detail?.community.status === "locked";
@@ -384,6 +398,71 @@ export default function CommunityRoom() {
       toast.error(err instanceof Error ? err.message : "Couldn't change the messaging mode.");
     } finally {
       setModeBusy(false);
+    }
+  };
+
+  const openCapacityDialog = () => {
+    setCapacityInput(cap?.capacity ? String(cap.capacity) : "0");
+    setCapacityOpen(true);
+  };
+
+  const saveCapacity = async () => {
+    const n = Number(capacityInput);
+    if (!Number.isInteger(n) || n < 0) {
+      toast.error("Enter a valid student limit (0 = unlimited).");
+      return;
+    }
+    setCapacityBusy(true);
+    try {
+      await setCapacity({ communityId, capacity: n });
+      toast.success(n > 0 ? `Student limit set to ${n}.` : "Student limit removed — unlimited enrollment.");
+      setCapacityOpen(false);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Couldn't update the student limit.");
+    } finally {
+      setCapacityBusy(false);
+    }
+  };
+
+  const toggleEnrollment = async () => {
+    setCapacityBusy(true);
+    try {
+      await setEnrollment({ communityId, closed: !cap?.closed });
+      toast.success(cap?.closed ? "Enrollment reopened — new students can join again." : "Enrollment closed — new students can't join this community.");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Couldn't change enrollment.");
+    } finally {
+      setCapacityBusy(false);
+    }
+  };
+
+  const saveCohort = async () => {
+    const name = cohortName.trim();
+    if (!name) {
+      toast.error("Give the cohort a name.");
+      return;
+    }
+    let capacity: number | undefined;
+    if (cohortCapacity.trim()) {
+      const n = Number(cohortCapacity);
+      if (!Number.isInteger(n) || n < 0) {
+        toast.error("Enter a valid student limit (0 = unlimited).");
+        return;
+      }
+      capacity = n > 0 ? n : undefined;
+    }
+    setCohortBusy(true);
+    try {
+      const id = await createCohort({ communityId, name, studentCapacity: capacity });
+      toast.success("Cohort created — students can be moved into it from the admin panel.");
+      setCohortOpen(false);
+      setCohortName("");
+      setCohortCapacity("");
+      navigate(`/dashboard/communities/${id}`);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Couldn't create the cohort.");
+    } finally {
+      setCohortBusy(false);
     }
   };
 
@@ -557,12 +636,33 @@ export default function CommunityRoom() {
           </Link>
         </Button>
         <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <h2 className="font-display truncate text-lg font-bold">{detail.community.name}</h2>
             {statusChip}
+            {cap && cap.capacity !== null && cap.state !== "open" && (
+              <Badge
+                className={cn(
+                  "gap-1.5",
+                  cap.state === "closed"
+                    ? "border-amber-400/25 bg-amber-400/10 text-amber-300"
+                    : "border-rose-400/25 bg-rose-400/10 text-rose-300",
+                )}
+              >
+                {cap.state === "closed" ? (
+                  <>
+                    <Lock className="size-3" /> Enrollment closed
+                  </>
+                ) : (
+                  <>
+                    <span className="size-1.5 rounded-full bg-rose-400" /> Community full
+                  </>
+                )}
+              </Badge>
+            )}
           </div>
           <p className="truncate text-xs text-muted-foreground">
             {detail.course?.title ?? "Course community"} · {detail.memberCount} members
+            {cap && cap.capacity !== null && ` · ${cap.studentCount}/${cap.capacity} students`}
           </p>
         </div>
 
@@ -599,6 +699,25 @@ export default function CommunityRoom() {
                 <Lock className="size-3.5 text-amber-300" /> Lock
               </Button>
             )}
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setCohortOpen(true)}
+              className="gap-2 border-white/10 text-xs"
+              title="Create another cohort for this course"
+            >
+              <Plus className="size-3.5 text-lime-300" /> Cohort
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={openCapacityDialog}
+              className="gap-2 border-white/10 text-xs"
+              title="Student capacity & cohorts"
+            >
+              <Users className="size-3.5 text-lime-300" />
+              {cap && cap.capacity !== null ? `${cap.studentCount}/${cap.capacity}` : "Capacity"}
+            </Button>
           </div>
         )}
 
@@ -627,6 +746,34 @@ export default function CommunityRoom() {
           {isLocked ? "Locked" : "Active"} · {detail.community.messageMode === "tutors_only" ? "read-only for students" : "open to all members"}
         </span>
       </div>
+
+      {/* Capacity banner — students see the enrollment status of this cohort */}
+      {cap && cap.capacity !== null && (
+        <div
+          className={cn(
+            "flex items-center gap-2 rounded-xl border px-4 py-2 text-xs",
+            cap.state === "closed"
+              ? "border-amber-400/20 bg-amber-400/8 text-amber-200"
+              : cap.state === "full"
+                ? "border-rose-400/20 bg-rose-400/8 text-rose-200"
+                : "border-lime-400/20 bg-lime-400/8 text-lime-200",
+          )}
+        >
+          {cap.state === "closed" ? (
+            <span className="flex items-center gap-1.5 font-semibold">
+              <Lock className="size-3.5" /> Enrollment closed — this cohort isn't taking new students.
+            </span>
+          ) : cap.state === "full" ? (
+            <span className="flex items-center gap-1.5 font-semibold">
+              <span className="size-1.5 rounded-full bg-rose-400" /> This community is currently full ({cap.studentCount}/{cap.capacity}).
+            </span>
+          ) : (
+            <span className="flex items-center gap-1.5 font-semibold">
+              <span className="size-1.5 rounded-full bg-lime-400" /> {cap.spaces} space{cap.spaces === 1 ? "" : "s"} available · {cap.studentCount}/{cap.capacity} students.
+            </span>
+          )}
+        </div>
+      )}
 
       {/* Locked/archived notice */}
       {detail.community.status !== "active" && (
@@ -1308,6 +1455,141 @@ export default function CommunityRoom() {
             >
               {lockBusy ? <Loader2 className="size-4 animate-spin" /> : <Lock className="size-4" />}
               Lock community
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Capacity & cohort management dialog */}
+      <Dialog open={capacityOpen} onOpenChange={(o) => !o && setCapacityOpen(false)}>
+        <DialogContent className="max-w-md border-white/10 bg-card">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Users className="size-5 text-lime-300" /> Student capacity
+            </DialogTitle>
+            <DialogDescription>
+              Set how many students this community can hold. Spaces free up automatically when
+              students leave or are moved — a full community can always be reopened or expanded.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            {cap && cap.capacity !== null && (
+              <div className="rounded-xl border border-white/10 bg-black/20 p-3">
+                <div className="flex items-center justify-between text-xs">
+                  <span className="font-semibold">
+                    {cap.studentCount} / {cap.capacity} students
+                  </span>
+                  <span
+                    className={cn(
+                      "font-semibold uppercase tracking-wide",
+                      cap.state === "closed"
+                        ? "text-amber-300"
+                        : cap.state === "full"
+                          ? "text-rose-300"
+                          : "text-lime-300",
+                    )}
+                  >
+                    {cap.state === "closed" ? "🔒 Closed" : cap.state === "full" ? "🔴 Full" : `🟢 ${cap.spaces} spaces`}
+                  </span>
+                </div>
+                <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-white/10">
+                  <div
+                    className={cn(
+                      "h-full rounded-full transition-all",
+                      cap.state === "full" ? "bg-rose-400" : "bg-lime-400",
+                    )}
+                    style={{ width: `${Math.min(100, (cap.studentCount / cap.capacity) * 100)}%` }}
+                  />
+                </div>
+              </div>
+            )}
+            <div className="space-y-1.5">
+              <label className="text-xs font-medium text-muted-foreground">Student limit (0 = unlimited)</label>
+              <Input
+                type="number"
+                min={0}
+                value={capacityInput}
+                onChange={(e) => setCapacityInput(e.target.value)}
+                placeholder="e.g. 50"
+                className="border-white/10 bg-black/20"
+              />
+            </div>
+          </div>
+          <DialogFooter className="flex-wrap gap-2">
+            <Button
+              variant="outline"
+              onClick={() => void toggleEnrollment()}
+              disabled={capacityBusy}
+              className="gap-2 border-white/10"
+            >
+              {cap?.closed ? <Unlock className="size-4 text-lime-300" /> : <Lock className="size-4 text-amber-300" />}
+              {cap?.closed ? "Reopen enrollment" : "Close enrollment"}
+            </Button>
+            <div className="flex gap-2">
+              <Button variant="outline" onClick={() => setCapacityOpen(false)} disabled={capacityBusy} className="border-white/10">
+                Cancel
+              </Button>
+              <Button
+                onClick={() => void saveCapacity()}
+                disabled={capacityBusy}
+                className="gap-2 bg-lime-400 text-black hover:bg-lime-300"
+              >
+                {capacityBusy ? <Loader2 className="size-4 animate-spin" /> : <Users className="size-4" />}
+                Save capacity
+              </Button>
+            </div>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Create new cohort dialog */}
+      <Dialog open={cohortOpen} onOpenChange={(o) => !o && setCohortOpen(false)}>
+        <DialogContent className="max-w-md border-white/10 bg-card">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Plus className="size-5 text-lime-300" /> Create another cohort
+            </DialogTitle>
+            <DialogDescription>
+              When this community is full or too crowded, create a separate cohort for the same
+              course. Cohorts have their own members, messages and settings.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div className="space-y-1.5">
+              <label className="text-xs font-medium text-muted-foreground">Cohort name *</label>
+              <Input
+                value={cohortName}
+                onChange={(e) => setCohortName(e.target.value)}
+                placeholder={`${detail.course?.title ?? "Course"} — Cohort B`}
+                className="border-white/10 bg-black/20"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-xs font-medium text-muted-foreground">Student limit (optional, 0 = unlimited)</label>
+              <Input
+                type="number"
+                min={0}
+                value={cohortCapacity}
+                onChange={(e) => setCohortCapacity(e.target.value)}
+                placeholder="e.g. 50"
+                className="border-white/10 bg-black/20"
+              />
+            </div>
+            {cap && cap.capacity !== null && cap.state !== "closed" && cap.spaces === 0 && (
+              <p className="text-xs text-amber-300">This community is full — consider creating a new cohort for incoming students.</p>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setCohortOpen(false)} disabled={cohortBusy} className="border-white/10">
+              Cancel
+            </Button>
+            <Button
+              onClick={() => void saveCohort()}
+              disabled={cohortBusy || !cohortName.trim()}
+              className="gap-2 bg-lime-400 text-black hover:bg-lime-300"
+            >
+              {cohortBusy ? <Loader2 className="size-4 animate-spin" /> : <Plus className="size-4" />}
+              Create cohort
             </Button>
           </DialogFooter>
         </DialogContent>

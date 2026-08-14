@@ -27,6 +27,128 @@ import { ROLES } from "./schema";
 
 const MAX_ATTACHMENT_BYTES = 25 * 1024 * 1024; // 25 MB (matches chat)
 const COMMUNITY_PAGE = 50;
+
+// ---------------------------------------------------------------------------
+// Mutations - capacity & cohorts
+// ---------------------------------------------------------------------------
+
+/**
+ * Community Tutor / Admin: set the maximum number of students allowed in this
+ * community. `0` (or a negative) clears the limit back to unlimited. Spaces
+ * are computed from live memberships, so existing students are never
+ * affected - a lower limit simply shows the community as FULL.
+ */
+export const tutorSetCommunityCapacity = mutation({
+  args: {
+    communityId: v.id("courseCommunities"),
+    capacity: v.number(),
+  },
+  handler: async (ctx, { communityId, capacity }) => {
+    const user = await requireUserDoc(ctx);
+    const { isAdmin } = await requireStaff(ctx, user, communityId);
+    if (!Number.isInteger(capacity) || capacity < 0 || capacity > 100_000) {
+      throw new Error("Enter a valid student limit (0 = unlimited).");
+    }
+    const community = await ctx.db.get(communityId);
+    if (!community) throw new Error("Community not found.");
+    await ctx.db.patch(communityId, {
+      studentCapacity: capacity > 0 ? capacity : undefined,
+    });
+    await logModeration(
+      ctx,
+      isAdmin ? "ADMIN_SET_CAPACITY" : "TUTOR_SET_CAPACITY",
+      {
+        targetType: "community",
+        targetId: communityId,
+        communityId,
+        reason: capacity > 0 ? String(capacity) : "unlimited",
+      },
+    );
+    return true;
+  },
+});
+
+/** Community Tutor / Admin: manually stop (or reopen) new enrollment. */
+export const tutorSetCommunityEnrollment = mutation({
+  args: {
+    communityId: v.id("courseCommunities"),
+    closed: v.boolean(),
+  },
+  handler: async (ctx, { communityId, closed }) => {
+    const user = await requireUserDoc(ctx);
+    const { isAdmin } = await requireStaff(ctx, user, communityId);
+    const community = await ctx.db.get(communityId);
+    if (!community) throw new Error("Community not found.");
+    await ctx.db.patch(communityId, { enrollmentClosed: closed || undefined });
+    await logModeration(
+      ctx,
+      isAdmin ? "ADMIN_TOGGLED_ENROLLMENT" : "TUTOR_TOGGLED_ENROLLMENT",
+      {
+        targetType: "community",
+        targetId: communityId,
+        communityId,
+        reason: closed ? "closed" : "reopened",
+      },
+    );
+    return true;
+  },
+});
+
+/**
+ * Community Tutor / Admin: create another community (cohort) for the same
+ * course, e.g. "NUD 417 - Cohort B". Cohorts share the course but keep
+ * separate members, messages and settings. The course tutor is auto-membered.
+ */
+export const tutorCreateCohort = mutation({
+  args: {
+    communityId: v.id("courseCommunities"),
+    name: v.string(),
+    cohortLabel: v.optional(v.string()),
+    description: v.optional(v.string()),
+    studentCapacity: v.optional(v.number()),
+    messageMode: v.optional(v.union(v.literal("everyone"), v.literal("tutors_only"))),
+  },
+  handler: async (ctx, args) => {
+    const user = await requireUserDoc(ctx);
+    const { isAdmin } = await requireStaff(ctx, user, args.communityId);
+    const source = await ctx.db.get(args.communityId);
+    if (!source) throw new Error("Community not found.");
+    const name = args.name.trim();
+    if (!name) throw new Error("Give the cohort a name.");
+    if (name.length > 80) throw new Error("Cohort name is too long.");
+    if (
+      args.studentCapacity !== undefined &&
+      (!Number.isInteger(args.studentCapacity) || args.studentCapacity < 0 || args.studentCapacity > 100_000)
+    ) {
+      throw new Error("Enter a valid student limit (0 = unlimited).");
+    }
+    const course = await ctx.db.get(source.courseId);
+    const id = await ctx.db.insert("courseCommunities", {
+      courseId: source.courseId,
+      name,
+      status: "active",
+      messageMode: args.messageMode ?? "everyone",
+      studentCapacity:
+        args.studentCapacity && args.studentCapacity > 0 ? args.studentCapacity : undefined,
+      cohortLabel: args.cohortLabel?.trim() || undefined,
+      description: args.description?.trim() || undefined,
+      createdAt: Date.now(),
+    });
+    const tutor = course?.tutorId ? await ctx.db.get(course.tutorId) : null;
+    if (tutor) await addMembership(ctx, id, tutor._id, "tutor");
+    await logModeration(
+      ctx,
+      isAdmin ? "ADMIN_CREATED_COHORT" : "TUTOR_CREATED_COHORT",
+      {
+        targetType: "community",
+        targetId: id,
+        communityId: id,
+        reason: name,
+      },
+    );
+    return id;
+  },
+});
 const DM_PAGE = 50;
 
 export const threadKey = (a: string, b: string) => [a, b].sort().join("|");
@@ -86,6 +208,76 @@ async function communityName(
   return c?.name ?? "a community";
 }
 
+/**
+ * Student capacity state of a community.
+ *
+ * - `studentCount` counts active (non-removed) student memberships.
+ * - `capacity` is the configured student limit (null = unlimited).
+ * - `state`: "open" (below limit), "full" (at limit), "closed" (manually
+ *   stopped via `enrollmentClosed` — wins over everything).
+ * - `spaces` is how many more students fit (null when unlimited).
+ *
+ * Leaving/moving students automatically frees spaces because the count is
+ * derived from live memberships — nothing extra to "unlock".
+ */
+export async function communityCapacity(
+  ctx: QueryCtx | MutationCtx,
+  community: Pick<Doc<"courseCommunities">, "_id" | "studentCapacity" | "enrollmentClosed">,
+): Promise<{
+  studentCount: number;
+  capacity: number | null;
+  state: "open" | "full" | "closed";
+  spaces: number | null;
+  closed: boolean;
+}> {
+  const members = await ctx.db
+    .query("communityMembers")
+    .withIndex("by_community", (q) => q.eq("communityId", community._id))
+    .collect();
+  const studentCount = members.filter(
+    (m) => m.status !== "removed" && m.role === "student",
+  ).length;
+  const capacity =
+    community.studentCapacity && community.studentCapacity > 0
+      ? Math.floor(community.studentCapacity)
+      : null;
+  const closed = !!community.enrollmentClosed;
+  const full = capacity !== null && studentCount >= capacity;
+  return {
+    studentCount,
+    capacity,
+    state: closed ? "closed" : full ? "full" : "open",
+    spaces: capacity === null ? null : Math.max(0, capacity - studentCount),
+    closed,
+  };
+}
+
+/**
+ * The community a new enrollment should auto-join for a course: the oldest
+ * community that is open (not manually closed) and still has space. Falls
+ * back to `ensureCommunityForCourse` (creates the primary community) when
+ * every existing one is full/closed — the student is then left unassigned
+ * until a tutor/admin places them (sync swallows the capacity error).
+ */
+export async function pickCommunityForCourse(
+  ctx: MutationCtx,
+  courseId: Id<"courses">,
+): Promise<Doc<"courseCommunities">> {
+  const communities = await ctx.db
+    .query("courseCommunities")
+    .withIndex("by_course", (q) => q.eq("courseId", courseId))
+    .order("asc")
+    .collect();
+  for (const c of communities) {
+    if (c.enrollmentClosed) continue;
+    const info = await communityCapacity(ctx, c);
+    if (info.capacity === null || info.studentCount < info.capacity) {
+      return c;
+    }
+  }
+  return communities[0] ?? ensureCommunityForCourse(ctx, courseId);
+}
+
 /** Get (or lazily create) the community for a course. */
 export async function ensureCommunityForCourse(
   ctx: MutationCtx,
@@ -110,7 +302,11 @@ export async function ensureCommunityForCourse(
 
 /** Insert an active membership row (idempotent — never downgrades an existing
  *  row's status unless the user was removed, in which case the admin's removal
- *  decision wins and we refuse to silently re-add). */
+ *  decision wins and we refuse to silently re-add).
+ *
+ * New STUDENT memberships are gated by the community's student capacity:
+ *  closed → error, full → error. Staff (tutor/admin) memberships and existing
+ *  members are never blocked. */
 export async function addMembership(
   ctx: MutationCtx,
   communityId: Id<"courseCommunities">,
@@ -130,6 +326,17 @@ export async function addMembership(
     if (existing.role === role) return existing;
     await ctx.db.patch(existing._id, { role });
     return existing;
+  }
+  if (role === "student") {
+    const community = await ctx.db.get(communityId);
+    if (!community) throw new Error("Community not found.");
+    const info = await communityCapacity(ctx, community);
+    if (info.closed) {
+      throw new Error("Enrollment for this community is currently closed.");
+    }
+    if (info.capacity !== null && info.studentCount >= info.capacity) {
+      throw new Error("This community is currently full.");
+    }
   }
   const id = await ctx.db.insert("communityMembers", {
     communityId,
@@ -164,15 +371,31 @@ export const syncMyCommunities = mutation({
     const targets = new Set<string>();
     for (const e of enrollments) targets.add(e.courseId);
     for (const c of taughtCourses) targets.add(c._id);
+    const role: Doc<"communityMembers">["role"] =
+      user.role === ROLES.ADMIN
+        ? "admin"
+        : user.role === ROLES.TUTOR
+          ? "tutor"
+          : "student";
     for (const courseId of targets) {
-      const community = await ensureCommunityForCourse(ctx, courseId as Id<"courses">);
-      const role: Doc<"communityMembers">["role"] =
-        user.role === ROLES.ADMIN
-          ? "admin"
-          : user.role === ROLES.TUTOR
-            ? "tutor"
-            : "student";
-      await addMembership(ctx, community._id, user._id, role);
+      // If the user is already an active member of ANY community of this
+      // course (e.g. assigned to a specific cohort), keep them there — never
+      // silently add a second membership in another cohort.
+      const courseCommunities = await ctx.db
+        .query("courseCommunities")
+        .withIndex("by_course", (q) => q.eq("courseId", courseId as Id<"courses">))
+        .collect();
+      const mine = await Promise.all(
+        courseCommunities.map((c) => myMembership(ctx, user._id, c._id)),
+      );
+      if (mine.some((m) => m && m.status !== "removed")) continue;
+      try {
+        const community = await pickCommunityForCourse(ctx, courseId as Id<"courses">);
+        await addMembership(ctx, community._id, user._id, role);
+      } catch {
+        // Community full or closed — the student stays unassigned until a
+        // tutor/admin places them in a cohort. Never fail the whole sync.
+      }
     }
     return targets.size;
   },
@@ -423,6 +646,7 @@ export const myCommunities = query({
             !msg.discussionId,
         ).length;
         const last = [...msgs].sort((a, b) => b.createdAt - a.createdAt)[0];
+        const capacityInfo = await communityCapacity(ctx, community);
         return {
           community: {
             _id: community._id,
@@ -432,6 +656,8 @@ export const myCommunities = query({
             lockedReason: community.lockedReason ?? null,
             createdAt: community.createdAt,
             lastActivityAt: community.lastActivityAt ?? null,
+            cohortLabel: community.cohortLabel ?? null,
+            image: community.image ?? null,
           },
           course: course
             ? { _id: course._id, title: course.title, slug: course.slug, image: course.image ?? null, gradient: course.gradient ?? null }
@@ -439,6 +665,7 @@ export const myCommunities = query({
           myRole: m.role,
           myStatus: m.status,
           memberCount,
+          capacity: capacityInfo,
           unread,
           lastMessage: last ? messagePreview(last) : null,
           lastMessageAt: last?.createdAt ?? null,
@@ -479,6 +706,28 @@ export const communityDetail = query({
       .withIndex("by_community", (q) => q.eq("communityId", communityId))
       .collect();
     const memberCount = members.filter((x) => x.status !== "removed").length;
+    const capacityInfo = await communityCapacity(ctx, community);
+    // Sibling cohorts for the same course (used by staff for capacity
+    // management + "create another cohort" — a single account may belong to
+    // several of these, never duplicated).
+    const courseCommunities = await ctx.db
+      .query("courseCommunities")
+      .withIndex("by_course", (q) => q.eq("courseId", community.courseId))
+      .collect();
+    const cohorts = await Promise.all(
+      courseCommunities
+        .filter((c) => c._id !== community._id)
+        .map(async (c) => {
+          const info = await communityCapacity(ctx, c);
+          return {
+            _id: c._id,
+            name: c.name,
+            status: c.status,
+            cohortLabel: c.cohortLabel ?? null,
+            capacity: info,
+          };
+        }),
+    );
     return {
       community: {
         _id: community._id,
@@ -486,12 +735,18 @@ export const communityDetail = query({
         status: community.status,
         messageMode: community.messageMode ?? "everyone",
         lockedReason: community.lockedReason ?? null,
+        description: community.description ?? null,
+        rules: community.rules ?? null,
+        image: community.image ?? null,
+        cohortLabel: community.cohortLabel ?? null,
       },
       course: course
         ? { _id: course._id, title: course.title, slug: course.slug, image: course.image ?? null }
         : null,
       membership: { role: membership.role, status: membership.status },
       memberCount,
+      capacity: capacityInfo,
+      cohorts,
       allowed: true,
     };
   },
