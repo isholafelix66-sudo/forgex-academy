@@ -43,6 +43,12 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
     redirectAfterAuth,
   );
 
+  // Signing up through the Become-a-Tutor flow creates a TUTOR account
+  // (pending verification), never a student account. The account's role is
+  // the source of truth everywhere else, so it must be right from day one.
+  const intendedRole =
+    redirect.startsWith("/become-tutor") ? ("tutor" as const) : undefined;
+
   const initialMode: Mode =
     searchParams.get("mode") === "signup" ? "signup" : "signin";
   const [mode, setMode] = useState<Mode>(initialMode);
@@ -54,22 +60,31 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
   const [error, setError] = useState<string | null>(null);
   const [info, setInfo] = useState<string | null>(null);
 
-  // Onboarding: once signed in, initialize the account (role + name).
+  // Onboarding: once signed in, initialize the account (role + name). The
+  // role is assigned once and never overwritten, so a tutor account stays a
+  // tutor account no matter how often they sign in afterwards.
   useEffect(() => {
     if (!authLoading && isAuthenticated && user && !user.onboarded) {
       const pendingName = sessionStorage.getItem("fx-pending-name") ?? undefined;
-      void initializeUser({ name: pendingName }).catch(() => {});
+      void initializeUser({ name: pendingName, intendedRole }).catch(() => {});
       sessionStorage.removeItem("fx-pending-name");
     }
-  }, [authLoading, isAuthenticated, user, initializeUser]);
+  }, [authLoading, isAuthenticated, user, initializeUser, intendedRole]);
 
-  // Role-aware landing after sign-in: verified tutors go straight to their
-  // tutor dashboard, admins to the admin area — no student portal with the
-  // same account. Only students (and admins browsing) fall back to the
-  // student dashboard.
+  // Role-aware landing after sign-in. The account's role is the source of
+  // truth: a tutor ALWAYS goes to the tutor dashboard (the verification gate
+  // shows its own screen until an admin verifies), an admin to the admin
+  // area, and only students land on the student dashboard. A tutor account
+  // is never pushed into the student portal.
   useEffect(() => {
     if (!authLoading && isAuthenticated) {
-      const dest = user?.role === "tutor" && user.verified ? "/tutor" : redirect;
+      const role = user?.role;
+      const dest =
+        role === "tutor"
+          ? "/tutor"
+          : role === "admin"
+            ? "/admin"
+            : redirect;
       navigate(dest);
     }
   }, [authLoading, isAuthenticated, navigate, redirect, user]);

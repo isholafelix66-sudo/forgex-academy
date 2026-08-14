@@ -32,6 +32,18 @@ export function PublicNav() {
 
   const brandLogo = (content?.logo as string | undefined) || logo;
 
+  // The account's role is the source of truth: a tutor's "Dashboard" button
+  // opens the tutor dashboard, an admin's opens the admin area, and only
+  // students land on the student dashboard. A tutor is never sent into the
+  // student portal from the public nav.
+  const dashboardTo =
+    user?.role === "tutor"
+      ? "/tutor"
+      : user?.role === "admin"
+        ? "/admin"
+        : "/dashboard";
+  const profileTo = user?.role === "tutor" ? "/tutor" : "/dashboard/profile";
+
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 12);
     onScroll();
@@ -91,8 +103,8 @@ export function PublicNav() {
               <Button
                 variant="ghost"
                 size="sm"
-                data-prefetch="/dashboard"
-                onClick={() => navigate("/dashboard")}
+                data-prefetch={dashboardTo}
+                onClick={() => navigate(dashboardTo)}
               >
                 <LayoutDashboard className="mr-2 size-4" />
                 Dashboard
@@ -100,8 +112,8 @@ export function PublicNav() {
               <Button
                 variant="ghost"
                 size="sm"
-                data-prefetch="/dashboard/profile"
-                onClick={() => navigate("/dashboard/profile")}
+                data-prefetch={profileTo}
+                onClick={() => navigate(profileTo)}
               >
                 <User className="mr-2 size-4" />
                 Profile
@@ -109,7 +121,7 @@ export function PublicNav() {
               <Button variant="ghost" size="icon" className="rounded-full" onClick={handleSignOut} title="Sign out">
                 <LogOut className="size-4" />
               </Button>
-              <Link to="/dashboard/profile">
+              <Link to={profileTo}>
                 <Avatar name={user?.name ?? "Student"} image={user?.image} className="size-8" />
               </Link>
             </>
@@ -159,16 +171,16 @@ export function PublicNav() {
                 <>
                   <Button
                     className="w-full"
-                    data-prefetch="/dashboard"
-                    onClick={() => navigate("/dashboard")}
+                    data-prefetch={dashboardTo}
+                    onClick={() => navigate(dashboardTo)}
                   >
                     Dashboard
                   </Button>
                   <Button
                     variant="outline"
                     className="w-full"
-                    data-prefetch="/dashboard/profile"
-                    onClick={() => navigate("/dashboard/profile")}
+                    data-prefetch={profileTo}
+                    onClick={() => navigate(profileTo)}
                   >
                     Profile
                   </Button>

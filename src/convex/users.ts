@@ -120,14 +120,44 @@ export const getPublicUser = query({
   },
 });
 
-/** First sign-in setup: assign default role, capture name, mark onboarded. */
+/**
+ * First sign-in setup: assign default role, capture name, mark onboarded.
+ *
+ * Role assignment is the single source of truth for the account's identity
+ * — ONE account = ONE role, and the role is never guessed from a profile.
+ *
+ *  • The role is only ever set ONCE (when the account has none). It is never
+ *    overwritten afterwards, so an approved tutor can never be re-labelled
+ *    as a student by signing in again.
+ *  • The role comes from the signup intent first: signing up through the
+ *    Become-a-Tutor flow creates a TUTOR account (pending verification), not
+ *    a student account. A plain student signup creates a STUDENT account.
+ *  • Existing accounts that already submitted a tutor application are also
+ *    treated as tutor accounts — the application is the intent.
+ */
 export const initializeUser = mutation({
-  args: { name: v.optional(v.string()) },
-  handler: async (ctx, { name }) => {
+  args: {
+    name: v.optional(v.string()),
+    intendedRole: v.optional(
+      v.union(v.literal("student"), v.literal("tutor")),
+    ),
+  },
+  handler: async (ctx, { name, intendedRole }) => {
     const user = await requireUserDoc(ctx);
     await checkRateLimit(ctx, `profile:${user._id}`, 60, 60 * 60 * 1000);
     const patch: Record<string, unknown> = {};
-    if (!user.role) patch.role = ROLES.STUDENT;
+    if (!user.role) {
+      // A tutor application (any status) is intent to teach — the account is
+      // a tutor account from that moment on, never a student one.
+      const hasApplication = !!(await ctx.db
+        .query("tutorApplications")
+        .withIndex("by_user", (q) => q.eq("userId", user._id))
+        .first());
+      patch.role =
+        intendedRole === "tutor" || hasApplication
+          ? ROLES.TUTOR
+          : ROLES.STUDENT;
+    }
     if (!user.onboarded) patch.onboarded = true;
     if (name && !user.name) patch.name = name;
     if (Object.keys(patch).length > 0) {

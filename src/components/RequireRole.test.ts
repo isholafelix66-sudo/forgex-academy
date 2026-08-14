@@ -78,15 +78,40 @@ describe("resolveTutorAccess", () => {
     });
   });
 
-  it("shows the pending-verification gate for an unverified tutor", () => {
+  it("shows the pending-verification gate for an approved-but-unverified tutor", () => {
     expect(
       resolveTutorAccess({
         ...base,
         isAuthenticated: true,
         role: "tutor",
         verified: false,
+        applicationStatus: "approved",
       }),
     ).toEqual({ kind: "pending-verification" });
+  });
+
+  it("shows the under-review gate for an unverified tutor with an application in flight", () => {
+    expect(
+      resolveTutorAccess({
+        ...base,
+        isAuthenticated: true,
+        role: "tutor",
+        verified: false,
+        applicationStatus: "under-review",
+      }),
+    ).toEqual({ kind: "under-review" });
+  });
+
+  it("sends an unverified tutor with no application to the apply-first gate, not the student dashboard", () => {
+    expect(
+      resolveTutorAccess({
+        ...base,
+        isAuthenticated: true,
+        role: "tutor",
+        verified: false,
+        applicationStatus: null,
+      }),
+    ).toEqual({ kind: "no-access" });
   });
 
   it("shows the under-review gate for submitted applications", () => {

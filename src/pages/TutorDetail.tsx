@@ -32,11 +32,13 @@ const SOCIAL_LINKS: Array<{
 ];
 
 export default function TutorDetail() {
-  const { id } = useParams();
+  const { id: key } = useParams();
   const { isAuthenticated } = useAuth();
+  // Accepts both the legacy `/tutors/<userId>` link and the shareable
+  // `/tutors/<username-slug>` link — both resolve to the same tutor profile.
   const tutor = useQuery(
-    api.public.tutorDetail,
-    id ? { id: id as never } : "skip",
+    api.public.tutorByIdOrSlug,
+    key ? { key } : "skip",
   );
 
   if (!tutor) {

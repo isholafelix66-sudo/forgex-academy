@@ -1,4 +1,4 @@
-import { Link } from "react-router";
+import { Link, Navigate } from "react-router";
 import { useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import {
@@ -29,6 +29,13 @@ export default function DashboardHome() {
   const deadlines = useQuery(api.submissions.upcomingDeadlines);
   const announcements = useQuery(api.public.announcementsList);
   const recommendations = useQuery(api.learn.recommendations);
+
+  // Role is the source of truth: this is the STUDENT dashboard. A tutor (or
+  // admin) account is never shown student content here — they belong in
+  // their own dashboard. (The other /dashboard/* pages — communities,
+  // messaging — stay reachable for tutors via their own shell.)
+  if (user?.role === "tutor") return <Navigate to="/tutor" replace />;
+  if (user?.role === "admin") return <Navigate to="/admin" replace />;
 
   const inProgress = enrollments?.filter(
     (e) => e.enrollment.status === "in-progress",

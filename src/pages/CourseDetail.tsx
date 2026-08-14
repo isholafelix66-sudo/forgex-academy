@@ -58,7 +58,12 @@ function formatRelative(ts: number) {
 export default function CourseDetail() {
   const { slug } = useParams();
   const navigate = useNavigate();
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, user } = useAuth();
+
+  // A tutor account never enrolls as a student — one account, one role. If a
+  // tutor opens a course page, they get their own dashboard, not an
+  // enrollment record on their tutor identity.
+  const isTutorAccount = user?.role === "tutor";
   const course = useQuery(api.public.courseBySlug, { slug: slug ?? "" });
   const enroll = useMutation(api.learn.enroll);
   const enrollment = useQuery(
@@ -110,6 +115,10 @@ export default function CourseDetail() {
   const handleEnroll = async () => {
     if (!isAuthenticated) {
       navigate(`/auth?returnTo=${encodeURIComponent(`/courses/${slug}`)}`);
+      return;
+    }
+    if (isTutorAccount) {
+      navigate("/tutor");
       return;
     }
     await enroll({ courseId: course._id });
@@ -654,7 +663,11 @@ export default function CourseDetail() {
                         className="mt-5 w-full gap-2 bg-lime-400 font-semibold text-black hover:bg-lime-300 glow-lime-soft"
                       >
                         <GraduationCap className="size-4" />
-                        {isAuthenticated ? "Enroll now" : "Sign in to enroll"}
+                        {isTutorAccount
+                          ? "Open your tutor dashboard"
+                          : isAuthenticated
+                            ? "Enroll now"
+                            : "Sign in to enroll"}
                       </Button>
                       <p className="mt-3 text-center text-xs text-muted-foreground">
                         Track progress · complete lessons · earn certificate

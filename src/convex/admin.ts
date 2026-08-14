@@ -516,6 +516,92 @@ export const mergeDuplicateAccounts = mutation({
 });
 
 // ---------------------------------------------------------------------------
+// Tutor account integrity — ONE tutor account = ONE tutor role. No student
+// profile, no student enrollment record, no student dashboard.
+// ---------------------------------------------------------------------------
+
+/**
+ * Identify tutors whose account is still carrying student-side records
+ * (enrollments, certificates, quiz attempts, submissions). These are the
+ * leftovers of the old flow that stamped a student profile onto a tutor;
+ * the tutor's identity stays untouched — only the student records are
+ * detached (admin-confirmed, see `clearTutorStudentRecords`).
+ */
+export const tutorAccountIntegrity = query({
+  args: { token: v.string() },
+  handler: async (ctx, { token }) => {
+    await requireAdminSession(ctx, token);
+    const [users, enrollments, certificates, attempts, submissions] =
+      await Promise.all([
+        ctx.db.query("users").collect(),
+        ctx.db.query("enrollments").collect(),
+        ctx.db.query("certificates").collect(),
+        ctx.db.query("quizAttempts").collect(),
+        ctx.db.query("submissions").collect(),
+      ]);
+    const tutors = users.filter((u) => u.role === ROLES.TUTOR && !u.isSeed);
+    const rows = tutors.map((t) => {
+      const e = enrollments.filter((r) => r.studentId === t._id);
+      const c = certificates.filter((r) => r.studentId === t._id);
+      const a = attempts.filter((r) => r.studentId === t._id);
+      const s = submissions.filter((r) => r.studentId === t._id);
+      const total = e.length + c.length + a.length + s.length;
+      return {
+        tutor: publicUser(t),
+        verified: !!t.verified,
+        enrollments: e.length,
+        certificates: c.length,
+        quizAttempts: a.length,
+        submissions: s.length,
+        total,
+      };
+    });
+    return rows
+      .filter((r) => r.total > 0)
+      .sort((a, b) => b.total - a.total);
+  },
+});
+
+/**
+ * Detach the student-side records from a tutor's account (enrollments,
+ * certificates, quiz attempts, submissions). Admin-confirmed only — this
+ * never touches the tutor's identity, role, courses, communities or messages.
+ */
+export const clearTutorStudentRecords = mutation({
+  args: { tutorId: v.id("users"), token: v.string() },
+  handler: async (ctx, { tutorId, token }) => {
+    await requireAdminSession(ctx, token);
+    const tutor = await ctx.db.get(tutorId);
+    if (!tutor || tutor.role !== ROLES.TUTOR) {
+      throw new Error("That account is not a tutor.");
+    }
+    if (tutor.isSeed) throw new Error("Demo accounts can't be edited.");
+    const del = async (table: "enrollments" | "certificates" | "quizAttempts" | "submissions") => {
+      const rows = await ctx.db
+        .query(table)
+        .withIndex("by_student", (q) => q.eq("studentId", tutorId))
+        .collect();
+      for (const r of rows) await ctx.db.delete(r._id);
+      return rows.length;
+    };
+    const [enrollments, certificates, attempts, submissions] = await Promise.all([
+      del("enrollments"),
+      del("certificates"),
+      del("quizAttempts"),
+      del("submissions"),
+    ]);
+    await audit(
+      ctx,
+      undefined,
+      tutorId,
+      "tutor-student-records-cleared",
+      `Detached student records from tutor ${tutor.name ?? tutor.email ?? tutorId}: ${enrollments} enrollments, ${certificates} certificates, ${attempts} quiz attempts, ${submissions} submissions`,
+    );
+    return { enrollments, certificates, quizAttempts: attempts, submissions };
+  },
+});
+
+// ---------------------------------------------------------------------------
 // Audit log
 // ---------------------------------------------------------------------------
 

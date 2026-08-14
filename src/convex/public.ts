@@ -175,6 +175,47 @@ export const tutorBySlug = query({
   },
 });
 
+/**
+ * Resolve a tutor's public profile from either a user id (`/tutors/<id>`,
+ * the legacy link) or their stable slug (`/tutors/david-ogunleye`, the
+ * shareable username link). Both URL shapes land on the same page.
+ */
+export const tutorByIdOrSlug = query({
+  args: { key: v.string() },
+  handler: async (ctx, { key }) => {
+    const k = key.trim();
+    if (!k) return null;
+    // Try as a user id first (legacy links use the raw id).
+    let tutor: Doc<"users"> | null = null;
+    try {
+      tutor = await ctx.db.get(k as Id<"users">);
+    } catch {
+      tutor = null;
+    }
+    if (!tutor || tutor.role !== ROLES.TUTOR) {
+      // Not an id (or not a tutor id) — try the slug / slugified name.
+      const s = k.toLowerCase();
+      tutor =
+        (await ctx.db
+          .query("users")
+          .withIndex("by_slug", (q) => q.eq("slug", s))
+          .first()) ?? null;
+      if (!tutor) {
+        const all = await ctx.db.query("users").collect();
+        tutor =
+          all.find(
+            (u) =>
+              u.role === ROLES.TUTOR &&
+              !!u.verified &&
+              slugify(u.name ?? "") === s,
+          ) ?? null;
+      }
+    }
+    if (!tutor || tutor.role !== ROLES.TUTOR) return null;
+    return tutorProfile(ctx, tutor);
+  },
+});
+
 export const coursesList = query({
   args: {
     search: v.optional(v.string()),

@@ -254,8 +254,8 @@ export default function BecomeTutor() {
               <li className="flex gap-2"><ShieldCheck className="mt-0.5 size-4 shrink-0 text-lime-400" /> Once verified, the tutor dashboard unlocks automatically</li>
             </ul>
           </div>
-          <Link to="/dashboard" className="mt-8 inline-block text-sm text-lime-300 hover:underline">
-            Back to dashboard
+          <Link to="/become-tutor" className="mt-8 inline-block text-sm text-lime-300 hover:underline">
+            Back to application status
           </Link>
         </section>
       </PageShell>

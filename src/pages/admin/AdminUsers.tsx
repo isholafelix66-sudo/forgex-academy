@@ -7,6 +7,7 @@ import {
   Ban,
   Eye,
   FlaskConical,
+  GraduationCap,
   RotateCcw,
   Search,
   ShieldCheck,
@@ -91,6 +92,29 @@ export default function AdminUsers() {
       });
     } finally {
       setMerging(null);
+    }
+  };
+
+  // Tutor account integrity — one tutor account = one tutor role. Tutors that
+  // still carry student-side records (from the old flow) can have them
+  // detached without touching their tutor identity.
+  const tutorIntegrity = useQuery(
+    api.admin.tutorAccountIntegrity,
+    token ? { token } : "skip",
+  );
+  const clearStudentRecords = useMutation(api.admin.clearTutorStudentRecords);
+  const [clearingTutor, setClearingTutor] = useState<
+    (FunctionReturnType<typeof api.admin.tutorAccountIntegrity>[number]) | null
+  >(null);
+  const [clearing, setClearing] = useState<string | null>(null);
+
+  const doClear = async (row: NonNullable<typeof clearingTutor>) => {
+    setClearing(row.tutor._id);
+    try {
+      await clearStudentRecords({ tutorId: row.tutor._id as never, token });
+    } finally {
+      setClearing(null);
+      setClearingTutor(null);
     }
   };
 
@@ -329,6 +353,61 @@ export default function AdminUsers() {
         </div>
       )}
 
+      {/* Tutor account integrity — one tutor account, one role. No student
+          profile or student records may ride along on a tutor's identity. */}
+      {tutorIntegrity !== undefined && tutorIntegrity.length > 0 && (
+        <div className="rounded-2xl border border-rose-400/25 bg-rose-400/5 p-5">
+          <h2 className="font-display flex items-center gap-2 text-base font-semibold text-rose-200">
+            <GraduationCap className="size-4 text-rose-300" />
+            Tutor accounts carrying student records ({tutorIntegrity.length})
+          </h2>
+          <p className="mt-1 text-sm text-muted-foreground">
+            These tutor accounts are still holding student-side records left
+            over from the old registration flow. Detaching them removes only
+            the student data — the tutor&rsquo;s identity, role, courses,
+            communities and messages are never touched.
+          </p>
+          <div className="mt-4 space-y-3">
+            {tutorIntegrity.map((r) => (
+              <div
+                key={r.tutor._id}
+                className="flex flex-wrap items-center gap-3 rounded-xl border border-white/10 bg-black/20 p-4"
+              >
+                <Avatar name={r.tutor.name} image={r.tutor.image} className="size-8" />
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-sm font-semibold">
+                    {r.tutor.name}{" "}
+                    {r.verified && (
+                      <BadgeCheck className="ml-1 inline size-4 text-lime-300" />
+                    )}
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    {r.enrollments} enrollments · {r.certificates} certificates
+                    · {r.quizAttempts} quiz attempts · {r.submissions} submissions
+                  </p>
+                </div>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={clearing === r.tutor._id}
+                  onClick={() => setClearingTutor(r)}
+                  className="shrink-0 gap-1.5 border-rose-400/30 text-rose-300 hover:bg-rose-400/10"
+                >
+                  <Trash2
+                    className={
+                      clearing === r.tutor._id ? "size-3.5 animate-pulse" : "size-3.5"
+                    }
+                  />
+                  {clearing === r.tutor._id
+                    ? "Detaching…"
+                    : "Detach student records"}
+                </Button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
         <Users className="size-3.5 text-lime-300" />
         Deleting a user permanently removes their account and associated records
@@ -400,6 +479,40 @@ export default function AdminUsers() {
               }}
             >
               Suspend account
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Detach tutor student records confirm */}
+      <AlertDialog
+        open={!!clearingTutor}
+        onOpenChange={(o) => !o && setClearingTutor(null)}
+      >
+        <AlertDialogContent className="border-white/10 bg-card">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="font-display">
+              Detach student records from {clearingTutor?.tutor.name}?
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              This removes {clearingTutor?.tutor.name}&rsquo;s student-side
+              records ({clearingTutor?.enrollments} enrollments,{" "}
+              {clearingTutor?.certificates} certificates,{" "}
+              {clearingTutor?.quizAttempts} quiz attempts,{" "}
+              {clearingTutor?.submissions} submissions) so the account is
+              purely a tutor account. The tutor&rsquo;s role, courses,
+              communities and messages are not affected.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel className="border-white/10">Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="gap-1.5 bg-rose-500 font-semibold text-white hover:bg-rose-400"
+              onClick={() => {
+                if (clearingTutor) void doClear(clearingTutor);
+              }}
+            >
+              <GraduationCap className="size-4" /> Detach student records
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

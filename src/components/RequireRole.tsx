@@ -60,8 +60,23 @@ export function resolveTutorAccess(input: TutorAccessInput): TutorAccessState {
 
   if (!input.isAuthenticated) return { kind: "redirect-auth" };
 
+  // An unverified TUTOR account never falls through to the student portal.
+  // Where they land depends on their application state:
+  //   approved            -> waiting for the admin's verify step
+  //   submitted / in-review / needs-more-info -> still being reviewed
+  //   rejected / no application -> apply (or re-apply) first
   if (input.role === "tutor" && !input.verified) {
-    return { kind: "pending-verification" };
+    if (input.applicationStatus === "approved") {
+      return { kind: "pending-verification" };
+    }
+    if (
+      input.applicationStatus === "submitted" ||
+      input.applicationStatus === "under-review" ||
+      input.applicationStatus === "information-required"
+    ) {
+      return { kind: "under-review" };
+    }
+    return { kind: "no-access" };
   }
 
   if (
@@ -144,10 +159,10 @@ export function RequireTutor({ children }: { children: ReactNode }) {
         <GateScreen
           icon={<Clock className="size-7" />}
           title="Tutor verification pending"
-          body="Your tutor account is still under review — most decisions are made within 24 hours or less. The Tutor Dashboard unlocks as soon as an admin verifies you, and we'll email you the decision."
+          body="Your application was approved — an admin is verifying your account. Most verifications happen within 24 hours or less. The Tutor Dashboard unlocks as soon as you're verified, and we'll email you the decision."
         >
-          <Link to="/dashboard">
-            <Button variant="outline">Back to dashboard</Button>
+          <Link to="/become-tutor">
+            <Button variant="outline">View application status</Button>
           </Link>
         </GateScreen>
       );
@@ -158,8 +173,8 @@ export function RequireTutor({ children }: { children: ReactNode }) {
           title="Application under review"
           body="Your application is under review — check back within the next 24 hours or less. An admin will verify your account, and we'll email you the moment a decision is made. The Tutor Dashboard unlocks automatically once verified."
         >
-          <Link to="/dashboard">
-            <Button variant="outline">Back to dashboard</Button>
+          <Link to="/become-tutor">
+            <Button variant="outline">View application status</Button>
           </Link>
         </GateScreen>
       );
@@ -168,16 +183,22 @@ export function RequireTutor({ children }: { children: ReactNode }) {
         <GateScreen
           icon={<ShieldCheck className="size-7" />}
           title="Tutor access required"
-          body="This area is for verified tutors. Apply to teach — applications are reviewed by our admin team."
+          body={
+            user?.role === "tutor"
+              ? "This is a tutor account — apply to teach and an admin will review your application. The Tutor Dashboard unlocks once you're verified."
+              : "This area is for verified tutors. Apply to teach — applications are reviewed by our admin team."
+          }
         >
           <Link to="/become-tutor">
             <Button className="bg-lime-400 font-semibold text-black hover:bg-lime-300">
               Apply to teach
             </Button>
           </Link>
-          <Link to="/dashboard">
-            <Button variant="outline">Student dashboard</Button>
-          </Link>
+          {user?.role !== "tutor" && (
+            <Link to="/dashboard">
+              <Button variant="outline">Student dashboard</Button>
+            </Link>
+          )}
         </GateScreen>
       );
   }
