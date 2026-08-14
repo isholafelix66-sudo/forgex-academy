@@ -2,6 +2,7 @@ import { mutation, query, MutationCtx, QueryCtx } from "./_generated/server";
 import { v } from "convex/values";
 import { Doc, Id } from "./_generated/dataModel";
 import { checkRateLimit, requireUser, requireUserDoc, hydrateCourses, hydrateCourse, notify, yyyymmdd, makeCertificateId } from "./lib";
+import { addMembership, ensureCommunityForCourse } from "./community";
 
 // ---------------------------------------------------------------------------
 // Shared learning helpers (imported by lessonquizzes.ts / exams.ts)
@@ -198,6 +199,15 @@ export const enroll = mutation({
       progress: 0,
     });
     await ctx.db.patch(courseId, { enrolledCount: course.enrolledCount + 1 });
+
+    // Communication module: every course has a community, and enrolling
+    // makes you a member automatically (no separate registration).
+    try {
+      const community = await ensureCommunityForCourse(ctx, courseId);
+      await addMembership(ctx, community._id, user._id, "student");
+    } catch {
+      // Community creation must never break enrollment itself.
+    }
     if (course.tutorId !== user._id) {
       await notify(ctx, {
         userId: course.tutorId,

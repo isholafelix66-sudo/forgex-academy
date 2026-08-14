@@ -724,6 +724,238 @@ const schema = defineSchema(
     })
       .index("by_user", ["userId", "read", "createdAt"])
       .index("by_userId", ["userId"]),
+
+    // -----------------------------------------------------------------------
+    // Communication & Community module (independent of the existing
+    // tutor ↔ student `messages` chat — that system is untouched)
+    // -----------------------------------------------------------------------
+
+    /** One community per course. Created on demand (first enrollment or
+     *  first sync) and managed by admins: active → locked → archived. */
+    courseCommunities: defineTable({
+      courseId: v.id("courses"),
+      name: v.string(), // e.g. "Graphic Design Community"
+      status: v.union(
+        v.literal("active"),
+        v.literal("locked"),
+        v.literal("archived"),
+      ),
+      lockedReason: v.optional(v.string()),
+      createdAt: v.number(),
+      lastActivityAt: v.optional(v.number()),
+    })
+      .index("by_course", ["courseId"])
+      .index("by_status", ["status"]),
+
+    /** Membership join table. Enrollment determines default eligibility;
+     *  membership status determines current access. Removing someone from a
+     *  community never touches their enrollment. */
+    communityMembers: defineTable({
+      communityId: v.id("courseCommunities"),
+      userId: v.id("users"),
+      role: v.union(
+        v.literal("student"),
+        v.literal("tutor"),
+        v.literal("admin"),
+        v.literal("moderator"),
+      ),
+      status: v.union(
+        v.literal("active"),
+        v.literal("restricted"),
+        v.literal("removed"),
+      ),
+      joinedAt: v.number(),
+      lastReadAt: v.optional(v.number()),
+      removedAt: v.optional(v.number()),
+      removedReason: v.optional(v.string()),
+    })
+      .index("by_community", ["communityId", "userId"])
+      .index("by_user", ["userId"]),
+
+    /** Community chat messages. `senderId` is absent for moderator/system
+     *  posts (password-gated admins have no user account); those use
+     *  `senderKind: "admin"` + `senderLabel: "ForgeX Admin"`. */
+    communityMessages: defineTable({
+      communityId: v.id("courseCommunities"),
+      senderId: v.optional(v.id("users")),
+      senderKind: v.union(
+        v.literal("user"),
+        v.literal("admin"),
+        v.literal("system"),
+      ),
+      senderLabel: v.optional(v.string()),
+      body: v.string(),
+      kind: v.optional(
+        v.union(
+          v.literal("text"),
+          v.literal("image"),
+          v.literal("file"),
+          v.literal("voice"),
+        ),
+      ),
+      storageId: v.optional(v.id("_storage")),
+      url: v.optional(v.string()),
+      fileName: v.optional(v.string()),
+      fileSize: v.optional(v.number()),
+      mimeType: v.optional(v.string()),
+      duration: v.optional(v.number()),
+      replyToId: v.optional(v.id("communityMessages")),
+      reactions: v.array(
+        v.object({
+          emoji: v.string(),
+          count: v.number(),
+          userIds: v.array(v.string()),
+        }),
+      ),
+      deleted: v.boolean(),
+      deletedBy: v.optional(v.union(v.literal("user"), v.literal("admin"))),
+      editedAt: v.optional(v.number()),
+      createdAt: v.number(),
+    })
+      .index("by_community", ["communityId", "createdAt"])
+      .index("by_sender", ["senderId"]),
+
+    /** A private student ↔ student DM thread. `key` is the sorted pair of
+     *  user ids, matching the existing messages thread convention. */
+    studentConversations: defineTable({
+      key: v.string(),
+      userAId: v.id("users"),
+      userBId: v.id("users"),
+      status: v.union(v.literal("active"), v.literal("locked")),
+      lockedReason: v.optional(v.string()),
+      createdAt: v.number(),
+      lastActivityAt: v.optional(v.number()),
+    })
+      .index("by_key", ["key"])
+      .index("by_userA", ["userAId", "lastActivityAt"])
+      .index("by_userB", ["userBId", "lastActivityAt"]),
+
+    /** Per-participant state (last read cursor) for a student DM thread. */
+    studentConversationParticipants: defineTable({
+      conversationId: v.id("studentConversations"),
+      userId: v.id("users"),
+      lastReadAt: v.optional(v.number()),
+    })
+      .index("by_user", ["userId"])
+      .index("by_conversation", ["conversationId", "userId"]),
+
+    /** Messages inside a student DM thread. */
+    studentMessages: defineTable({
+      conversationId: v.id("studentConversations"),
+      senderId: v.id("users"),
+      body: v.string(),
+      kind: v.optional(
+        v.union(
+          v.literal("text"),
+          v.literal("image"),
+          v.literal("file"),
+          v.literal("voice"),
+        ),
+      ),
+      storageId: v.optional(v.id("_storage")),
+      url: v.optional(v.string()),
+      fileName: v.optional(v.string()),
+      fileSize: v.optional(v.number()),
+      mimeType: v.optional(v.string()),
+      duration: v.optional(v.number()),
+      replyToId: v.optional(v.id("studentMessages")),
+      reactions: v.array(
+        v.object({
+          emoji: v.string(),
+          count: v.number(),
+          userIds: v.array(v.string()),
+        }),
+      ),
+      deleted: v.boolean(),
+      deletedBy: v.optional(v.union(v.literal("user"), v.literal("admin"))),
+      editedAt: v.optional(v.number()),
+      createdAt: v.number(),
+      readAt: v.optional(v.number()),
+    })
+      .index("by_conversation", ["conversationId", "createdAt"])
+      .index("by_sender", ["senderId"]),
+
+    /** Student ↔ student connection (friend) requests. `key` is the sorted
+     *  user-id pair so a pair always maps to exactly one row. A "blocked"
+     *  row blocks DMs between the pair in both directions. */
+    studentConnections: defineTable({
+      key: v.string(),
+      requesterId: v.id("users"),
+      addresseeId: v.id("users"),
+      status: v.union(
+        v.literal("pending"),
+        v.literal("accepted"),
+        v.literal("declined"),
+        v.literal("blocked"),
+        v.literal("removed"),
+      ),
+      blockedBy: v.optional(v.id("users")),
+      createdAt: v.number(),
+      respondedAt: v.optional(v.number()),
+    })
+      .index("by_key", ["key"])
+      .index("by_requester", ["requesterId", "status"])
+      .index("by_addressee", ["addresseeId", "status"]),
+
+    /** Student-submitted reports (messages, users, communities, DMs). */
+    communicationReports: defineTable({
+      reporterId: v.id("users"),
+      targetType: v.union(
+        v.literal("message"),
+        v.literal("user"),
+        v.literal("community"),
+        v.literal("conversation"),
+      ),
+      scope: v.union(v.literal("community"), v.literal("dm")),
+      communityId: v.optional(v.id("courseCommunities")),
+      conversationId: v.optional(v.id("studentConversations")),
+      messageId: v.optional(v.string()),
+      targetUserId: v.optional(v.id("users")),
+      reason: v.string(),
+      details: v.optional(v.string()),
+      status: v.union(
+        v.literal("open"),
+        v.literal("under-review"),
+        v.literal("resolved"),
+        v.literal("dismissed"),
+      ),
+      adminNote: v.optional(v.string()),
+      createdAt: v.number(),
+      resolvedAt: v.optional(v.number()),
+    })
+      .index("by_status", ["status"])
+      .index("by_created", ["createdAt"])
+      .index("by_target", ["targetUserId"]),
+
+    /** Moderation actions taken against users/communities/conversations. */
+    moderationActions: defineTable({
+      action: v.string(),
+      userId: v.optional(v.id("users")),
+      communityId: v.optional(v.id("courseCommunities")),
+      conversationId: v.optional(v.id("studentConversations")),
+      messageId: v.optional(v.string()),
+      reason: v.optional(v.string()),
+      createdAt: v.number(),
+    })
+      .index("by_created", ["createdAt"])
+      .index("by_user", ["userId"]),
+
+    /** Every sensitive admin moderation/view action, logged for audit. */
+    moderationAuditLogs: defineTable({
+      action: v.string(),
+      targetType: v.optional(v.string()),
+      targetId: v.optional(v.string()),
+      communityId: v.optional(v.id("courseCommunities")),
+      conversationId: v.optional(v.id("studentConversations")),
+      messageId: v.optional(v.string()),
+      userId: v.optional(v.id("users")),
+      reason: v.optional(v.string()),
+      createdAt: v.number(),
+    })
+      .index("by_created", ["createdAt"])
+      .index("by_community", ["communityId"])
+      .index("by_conversation", ["conversationId"])
+      .index("by_user", ["userId"]),
   },
   {
     schemaValidation: false,
