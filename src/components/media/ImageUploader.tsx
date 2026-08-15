@@ -13,6 +13,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { getAdminToken } from "@/lib/admin-session";
+import { uploadFileToConvex } from "@/lib/convex-upload";
 
 export type UploadedImage = {
   publicId: string;
@@ -61,6 +62,7 @@ export function ImageUploader({
   record,
   maxBytes = DEFAULT_MAX_BYTES,
   compact = false,
+  adminToken,
 }: {
   value?: string | null;
   label?: string;
@@ -72,9 +74,19 @@ export function ImageUploader({
   record?: { kind: string; label?: string };
   maxBytes?: number;
   compact?: boolean;
+  /**
+   * When set (password-gated admin portal), uploads fall back to built-in
+   * Convex file storage when Cloudinary isn't configured — so branding
+   * images (robot mascot, logo, about images) can always be uploaded with
+   * zero external services.
+   */
+  adminToken?: string;
 }) {
   const config = useQuery(api.cloudinary.mediaConfig);
   const mediaRecord = useMutation(api.cloudinary.mediaRecord);
+  const adminUploadUrl = useMutation(api.storage.adminGenerateUploadUrl);
+  const adminResolveUrl = useMutation(api.storage.adminResolveUploadUrl);
+  const useStorageFallback = !!adminToken;
   const galleryRef = useRef<HTMLInputElement>(null);
   const cameraRef = useRef<HTMLInputElement>(null);
   const [busy, setBusy] = useState(false);
@@ -105,68 +117,99 @@ export function ImageUploader({
   };
 
   const upload = async (file: File) => {
-    if (!config?.configured) return;
     const vErr = validate(file);
     if (vErr) {
       setError(vErr);
+      return;
+    }
+    if (!config?.configured && !useStorageFallback) {
+      setError("Image uploads are unavailable right now — Cloudinary isn't configured.");
       return;
     }
     setBusy(true);
     setError(null);
     setProgress(0);
     try {
-      const form = new FormData();
-      form.append("file", file);
-      form.append("upload_preset", config.uploadPreset);
-      const result = await new Promise<CloudinaryResponse>((resolve, reject) => {
-        const xhr = new XMLHttpRequest();
-        xhr.open("POST", `https://api.cloudinary.com/v1_1/${config.cloudName}/image/upload`);
-        xhr.upload.onprogress = (e) => {
-          if (e.lengthComputable) setProgress(Math.round((e.loaded / e.total) * 100));
-        };
-        xhr.onload = () => {
-          if (xhr.status >= 200 && xhr.status < 300) {
-            try {
-              resolve(JSON.parse(xhr.responseText));
-            } catch {
-              reject(new Error("Invalid upload response."));
+      if (config?.configured) {
+        const form = new FormData();
+        form.append("file", file);
+        form.append("upload_preset", config.uploadPreset);
+        const result = await new Promise<CloudinaryResponse>((resolve, reject) => {
+          const xhr = new XMLHttpRequest();
+          xhr.open("POST", `https://api.cloudinary.com/v1_1/${config.cloudName}/image/upload`);
+          xhr.upload.onprogress = (e) => {
+            if (e.lengthComputable) setProgress(Math.round((e.loaded / e.total) * 100));
+          };
+          xhr.onload = () => {
+            if (xhr.status >= 200 && xhr.status < 300) {
+              try {
+                resolve(JSON.parse(xhr.responseText));
+              } catch {
+                reject(new Error("Invalid upload response."));
+              }
+            } else {
+              reject(new Error("Upload failed. Check your Cloudinary preset."));
             }
-          } else {
-            reject(new Error("Upload failed. Check your Cloudinary preset."));
-          }
+          };
+          xhr.onerror = () => reject(new Error("Network error during upload."));
+          xhr.send(form);
+        });
+
+        const img: UploadedImage = {
+          publicId: result.public_id,
+          secureUrl: result.secure_url,
+          width: result.width,
+          height: result.height,
+          format: result.format,
+          bytes: result.bytes,
         };
-        xhr.onerror = () => reject(new Error("Network error during upload."));
-        xhr.send(form);
-      });
 
-      const img: UploadedImage = {
-        publicId: result.public_id,
-        secureUrl: result.secure_url,
-        width: result.width,
-        height: result.height,
-        format: result.format,
-        bytes: result.bytes,
-      };
-
-      if (record) {
-        try {
-          await mediaRecord({
-            publicId: img.publicId,
-            secureUrl: img.secureUrl,
-            kind: record.kind,
-            label: record.label,
-            width: img.width,
-            height: img.height,
-            format: img.format,
-            bytes: img.bytes,
-            token: token ?? undefined,
-          });
-        } catch {
-          // Recording must never block a successful upload.
+        if (record) {
+          try {
+            await mediaRecord({
+              publicId: img.publicId,
+              secureUrl: img.secureUrl,
+              kind: record.kind,
+              label: record.label,
+              width: img.width,
+              height: img.height,
+              format: img.format,
+              bytes: img.bytes,
+              token: token ?? undefined,
+            });
+          } catch {
+            // Recording must never block a successful upload.
+          }
         }
+
+        onUploaded(img);
+        return;
       }
 
-      onUploaded(img);
+      // Cloudinary not configured — admin portal fallback: upload straight to
+      // built-in Convex file storage (no external keys needed) and hand the
+      // resolved public URL back to the caller, which saves it to siteContent.
+      if (useStorageFallback && adminToken) {
+        setProgress(30);
+        const { storageId } = await uploadFileToConvex(file, () =>
+          adminUploadUrl({ token: adminToken }),
+        );
+        setProgress(70);
+        const url = await adminResolveUrl({
+          storageId: storageId as never,
+          token: adminToken,
+        });
+        if (!url) {
+          throw new Error("The image couldn't be stored — please upload it again.");
+        }
+        setProgress(100);
+        onUploaded({
+          publicId: storageId,
+          secureUrl: url,
+          format: file.type.split("/")[1],
+          bytes: file.size,
+        });
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Upload failed.");
     } finally {
@@ -190,7 +233,7 @@ export function ImageUploader({
 
   if (config === undefined) return null;
 
-  if (!config.configured) {
+  if (!config.configured && !useStorageFallback) {
     return (
       <div className={cn("rounded-xl border border-dashed border-amber-400/30 bg-amber-400/5 p-4 text-xs text-amber-200/90", className)}>
         <p className="font-semibold">Cloudinary is not configured yet.</p>

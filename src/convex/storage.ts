@@ -28,6 +28,32 @@ export const getStorageUrl = query({
   },
 });
 
+// ---------------------------------------------------------------------------
+// Admin uploads — the password-gated admin portal has no user account, so
+// it gets its own storage endpoints. This lets admins upload branding images
+// (robot mascot, logo, about images…) with ZERO external services: files go
+// straight into Convex file storage and resolve to public URLs that are
+// stored in siteContent (e.g. key `heroImage`) and shown on the homepage.
+// ---------------------------------------------------------------------------
+
+/** Admin-only: short-lived URL the browser POSTs a file to. */
+export const adminGenerateUploadUrl = mutation({
+  args: { token: v.string() },
+  handler: async (ctx, { token }) => {
+    await requireAdminSession(ctx, token);
+    return await ctx.storage.generateUploadUrl();
+  },
+});
+
+/** Admin-only: resolve an uploaded file to its authoritative public URL. */
+export const adminResolveUploadUrl = mutation({
+  args: { storageId: v.id("_storage"), token: v.string() },
+  handler: async (ctx, { storageId, token }) => {
+    await requireAdminSession(ctx, token);
+    return (await ctx.storage.getUrl(storageId)) ?? "";
+  },
+});
+
 /** Delete an orphaned file (e.g. when a course image is replaced). */
 export const deleteFile = mutation({
   args: { storageId: v.id("_storage") },

@@ -232,7 +232,8 @@ export default function AdminContent() {
                 <p className="mt-1 max-w-2xl text-sm leading-relaxed text-muted-foreground">
                   The official ForgeX robot that floats on the homepage hero with its
                   neon glow. Upload the robot PNG here and it goes live on the homepage
-                  instantly — no code needed.
+                  instantly — no code needed. Uploads are stored in ForgeX file
+                  storage, so no Cloudinary keys are required.
                 </p>
               </div>
               {heroImage ? (
@@ -251,6 +252,7 @@ export default function AdminContent() {
                 value={heroImage}
                 label="Upload robot PNG"
                 hint="Robot mascot"
+                adminToken={token}
                 onUploaded={(img) => void saveImage("heroImage", img)}
                 onClear={() => void contentSet({ key: "heroImage", value: "", token })}
                 record={{ kind: "mascot", label: "ForgeX robot mascot" }}
@@ -293,6 +295,7 @@ export default function AdminContent() {
                     <ImageUploader
                       value={current}
                       label="Upload"
+                      adminToken={token}
                       onUploaded={(img) => void saveImage(f.key, img)}
                       onClear={() => void contentSet({ key: f.key, value: "", token })}
                     />
