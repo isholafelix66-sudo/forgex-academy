@@ -76,6 +76,15 @@ export function HeroRobot({ imageSrc }: { imageSrc?: string }) {
   const src =
     typeof imageSrc === "string" && imageSrc.trim() ? imageSrc : ROBOT_IMAGE_SRC;
 
+  // Reset the failed state whenever the source changes. On first render the
+  // Convex query hasn't arrived yet, so the image tries the /robot.png
+  // fallback, 404s and flips the placeholder — and the admin-uploaded URL
+  // arriving a moment later must be able to recover from that, otherwise the
+  // placeholder sticks forever even though the upload succeeded.
+  useEffect(() => {
+    setImgFailed(false);
+  }, [src]);
+
   // ---------------------------------------------------------------- parallax
   // Cursor: normalized -1..1 across the scene, smoothed with springs so the
   // robot eases toward the pointer instead of snapping.
