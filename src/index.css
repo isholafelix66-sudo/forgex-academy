@@ -350,6 +350,39 @@
    image itself. All loops are suppressed for prefers-reduced-motion; the
    mobile media query keeps the glow subtle and reduces blur cost.
    --------------------------------------------------------------------------- */
+/* Laptop screen light — additive lime glow that pulses while the robot
+   "works". Sits behind the robot; the image itself is never altered. */
+.hero-laptop-light {
+  position: absolute;
+  left: 55%;
+  top: 57%;
+  width: 36%;
+  height: 24%;
+  transform: translate(-50%, -50%);
+  border-radius: 999px;
+  background: radial-gradient(
+    closest-side,
+    rgba(192, 253, 2, 0.5),
+    rgba(192, 253, 2, 0.16) 45%,
+    transparent 75%
+  );
+  mix-blend-mode: screen;
+  opacity: 0.1;
+  pointer-events: none;
+}
+
+/* Thumbs-up sparkle burst dots — hidden until the confident moment. */
+.hero-sparkle {
+  position: absolute;
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: #c0fd02;
+  box-shadow: 0 0 10px rgba(192, 253, 2, 0.9);
+  opacity: 0;
+  pointer-events: none;
+}
+
 @media (prefers-reduced-motion: no-preference) {
   @keyframes hero-float {
     0%,
@@ -427,6 +460,122 @@
   }
   .hero-particle {
     animation: hero-particle var(--p-duration, 11s) ease-in-out infinite;
+  }
+
+  /* Typing micro-jitter — tiny, fast body vibrations while "working". */
+  @keyframes hero-typing {
+    0%,
+    100% {
+      transform: translate3d(0, 0, 0);
+    }
+    20% {
+      transform: translate3d(0, -0.8px, 0);
+    }
+    40% {
+      transform: translate3d(0, 0.6px, 0);
+    }
+    60% {
+      transform: translate3d(0, -0.7px, 0);
+    }
+    80% {
+      transform: translate3d(0, 0.5px, 0);
+    }
+  }
+  .hero-robot-work {
+    animation: hero-typing 0.9s linear infinite;
+  }
+
+  /* Greeting — robot pauses typing and turns gently toward the visitor. */
+  @keyframes hero-greet-float {
+    0%,
+    100% {
+      transform: translate3d(0, -6px, 0) rotate(1.6deg);
+    }
+    50% {
+      transform: translate3d(0, -2px, 0) rotate(1.1deg);
+    }
+  }
+  [data-mood="greeting"] .hero-robot-float,
+  [data-mood="thumbsup"] .hero-robot-float {
+    animation: hero-greet-float 6s ease-in-out infinite;
+  }
+  [data-mood="greeting"] .hero-robot-work,
+  [data-mood="thumbsup"] .hero-robot-work {
+    animation: none;
+  }
+
+  /* Eyes/face brighten while greeting — a soft lighting change only. */
+  @keyframes hero-eye-bright {
+    0%,
+    100% {
+      filter: brightness(1.03);
+    }
+    50% {
+      filter: brightness(1.07);
+    }
+  }
+  [data-mood="greeting"] .hero-robot-img,
+  [data-mood="thumbsup"] .hero-robot-img {
+    animation: hero-eye-bright 3.2s ease-in-out infinite;
+  }
+
+  /* Confident thumbs-up — one quick whole-body pulse, then return. */
+  @keyframes hero-thumbsup {
+    0% {
+      transform: scale3d(1, 1, 1);
+    }
+    30% {
+      transform: scale3d(1.035, 1.02, 1) rotate(1.5deg);
+    }
+    60% {
+      transform: scale3d(1.02, 1.01, 1);
+    }
+    100% {
+      transform: scale3d(1, 1, 1);
+    }
+  }
+  [data-mood="thumbsup"] .hero-robot-breath {
+    animation: hero-thumbsup 0.8s cubic-bezier(0.22, 1, 0.36, 1);
+  }
+
+  /* Laptop screen light — rhythmic blink while typing. */
+  @keyframes hero-screen-blink {
+    0%,
+    100% {
+      opacity: 0.07;
+    }
+    50% {
+      opacity: 0.16;
+    }
+  }
+  [data-mood="working"] .hero-laptop-light {
+    animation: hero-screen-blink 2.8s ease-in-out infinite;
+  }
+  [data-mood="greeting"] .hero-laptop-light {
+    animation: none;
+    opacity: 0.09;
+  }
+  [data-mood="thumbsup"] .hero-laptop-light {
+    animation: none;
+    opacity: 0.14;
+  }
+
+  /* Thumbs-up sparkles — tiny outward burst during the confident moment. */
+  @keyframes hero-sparkle-burst {
+    0% {
+      opacity: 0;
+      transform: translate3d(0, 0, 0) scale(0.4);
+    }
+    25% {
+      opacity: 0.9;
+    }
+    100% {
+      opacity: 0;
+      transform: translate3d(var(--sx), var(--sy), 0) scale(1);
+    }
+  }
+  [data-mood="thumbsup"] .hero-sparkle {
+    animation: hero-sparkle-burst 0.9s ease-out;
   }
 }
 

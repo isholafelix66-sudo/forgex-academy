@@ -125,14 +125,20 @@ export default function Landing() {
               </motion.p>
 
               <motion.div variants={item} className="mt-9 flex flex-wrap items-center justify-center gap-3 lg:justify-start">
-                <AnimatedCta to={hero?.primaryCta?.link ?? "/courses"}>
-                  {hero?.primaryCta?.label ?? "Start learning free"}
-                  <ArrowRight className="size-4 transition-transform group-hover:translate-x-0.5" />
-                </AnimatedCta>
-                <AnimatedCta to={hero?.secondaryCta?.link ?? "/roadmap"} variant="outline">
-                  <Map className="size-4" />
-                  {hero?.secondaryCta?.label ?? "Explore roadmaps"}
-                </AnimatedCta>
+                {/* data-hero-cta lets the robot subtly watch these buttons —
+                    purely visual, never intercepting clicks or navigation. */}
+                <span data-hero-cta>
+                  <AnimatedCta to={hero?.primaryCta?.link ?? "/courses"}>
+                    {hero?.primaryCta?.label ?? "Start learning free"}
+                    <ArrowRight className="size-4 transition-transform group-hover:translate-x-0.5" />
+                  </AnimatedCta>
+                </span>
+                <span data-hero-cta>
+                  <AnimatedCta to={hero?.secondaryCta?.link ?? "/roadmap"} variant="outline">
+                    <Map className="size-4" />
+                    {hero?.secondaryCta?.label ?? "Explore roadmaps"}
+                  </AnimatedCta>
+                </span>
               </motion.div>
 
               <motion.div
