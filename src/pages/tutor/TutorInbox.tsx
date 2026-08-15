@@ -72,7 +72,7 @@ export default function TutorInbox() {
           description="Students can message you from your profile and course pages."
         />
       ) : (
-        <div className="grid gap-5 lg:grid-cols-[320px_1fr]">
+        <div className="grid min-w-0 gap-5 lg:grid-cols-[320px_minmax(0,1fr)]">
           {/* Conversation list */}
           <div className="h-fit overflow-hidden rounded-2xl border border-white/10 bg-card">
             {conversations.map((c) => (

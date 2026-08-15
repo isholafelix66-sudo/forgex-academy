@@ -129,7 +129,7 @@ export default function TutorOverview() {
   const pendingCount = counts?.pendingAssignments ?? 0;
 
   return (
-    <div className="space-y-8">
+    <div className="min-w-0 space-y-8">
       {/* Greeting hero */}
       <div className="relative overflow-hidden rounded-3xl border border-white/10 bg-card">
         <div className="absolute inset-0 bg-gradient-to-br from-lime-400/15 via-transparent to-transparent" />
@@ -197,7 +197,7 @@ export default function TutorOverview() {
         />
       </div>
 
-      <div className="grid gap-6 xl:grid-cols-[1fr_360px]">
+      <div className="grid min-w-0 gap-6 xl:grid-cols-[minmax(0,1fr)_360px]">
         {/* Learning progress per cohort */}
         <section className="space-y-4">
           <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
@@ -265,9 +265,9 @@ export default function TutorOverview() {
                       const ratio = m.total ? m.completed / m.total : 0;
                       const isLowest = lowest && m.lessonId === lowest.lessonId && ratio < 0.5;
                       return (
-                        <div key={m.lessonId}>
+                        <div key={m.lessonId} className="min-w-0">
                           <div className="flex items-center justify-between gap-3">
-                            <p className="truncate text-sm text-muted-foreground">
+                            <p className="min-w-0 flex-1 truncate text-sm text-muted-foreground">
                               <span className="font-medium text-foreground">Module {m.order}:</span>{" "}
                               {m.title}
                             </p>
@@ -305,16 +305,16 @@ export default function TutorOverview() {
                             <Avatar
                               name={r.student?.name ?? "Student"}
                               image={r.student?.image}
-                              className="size-8 text-xs"
+                              className="size-8 shrink-0 text-xs"
                             />
                             <div className="min-w-0 flex-1">
                               <p className="truncate text-sm font-medium">{r.student?.name ?? "Student"}</p>
-                              <p className="text-xs text-muted-foreground">
+                              <p className="truncate text-xs text-muted-foreground">
                                 {r.progress}% complete
                                 {r.lastActivity ? ` · active ${timeAgo(r.lastActivity)}` : ""}
                               </p>
                             </div>
-                            <div className="h-1.5 w-20 overflow-hidden rounded-full bg-white/8">
+                            <div className="h-1.5 w-20 shrink-0 overflow-hidden rounded-full bg-white/8">
                               <div className="h-full rounded-full bg-amber-400" style={{ width: `${r.progress}%` }} />
                             </div>
                           </div>

@@ -17,22 +17,17 @@
   <link rel="apple-touch-icon" href="/logo.svg" />
   <title>ForgeX Academy — Discover. Express. Build.</title>
 
-  <!-- Fonts: preconnect removes the TLS handshake, and the stylesheet is
-       non-blocking (media="print" trick) so first paint isn't held up. -->
+  <!-- Fonts: preconnect removes the TLS handshake. The stylesheet is a
+       plain link (no inline onload handler) so it also loads when the strict
+       Content-Security-Policy in vercel.json applies — inline event handlers
+       are blocked by `script-src 'self'` and would silently kill the font
+       load on the deployed site. -->
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link
     rel="stylesheet"
     href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Space+Grotesk:wght@500;600;700&display=swap"
-    media="print"
-    onload="this.media='all'"
   />
-  <noscript>
-    <link
-      rel="stylesheet"
-      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Space+Grotesk:wght@500;600;700&display=swap"
-    />
-  </noscript>
 </head>
 
 <body>

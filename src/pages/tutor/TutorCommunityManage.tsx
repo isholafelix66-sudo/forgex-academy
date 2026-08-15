@@ -480,7 +480,7 @@ export default function TutorCommunityManage() {
 
       {/* Overview */}
       {tab === "overview" && (
-        <div className="grid gap-6 xl:grid-cols-[1fr_360px]">
+        <div className="grid min-w-0 gap-6 xl:grid-cols-[minmax(0,1fr)_360px]">
           <section className="rounded-2xl border border-white/10 bg-card">
             <div className="border-b border-white/10 px-5 py-4">
               <h3 className="font-display text-sm font-semibold">Recent activity</h3>

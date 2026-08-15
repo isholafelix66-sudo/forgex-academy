@@ -75,7 +75,7 @@ export default function TutorProfile() {
         }
       />
 
-      <div className="grid gap-8 lg:grid-cols-[340px_1fr]">
+      <div className="grid min-w-0 gap-8 lg:grid-cols-[340px_minmax(0,1fr)]">
         {/* Preview card */}
         <div className="h-fit space-y-6 rounded-3xl border border-white/10 bg-card p-6">
           <div className="flex flex-col items-center text-center">

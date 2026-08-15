@@ -35,31 +35,33 @@ export default function TutorStudents() {
         <div className="space-y-3">
           {students.map((row) => (
             <div key={row.student?._id} className="rounded-2xl border border-white/10 bg-card p-5">
-              <div className="flex items-center gap-3">
-                <Avatar name={row.student?.name ?? "Student"} image={row.student?.image} className="size-10" />
-                <div className="min-w-0 flex-1">
+              <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+                <Avatar name={row.student?.name ?? "Student"} image={row.student?.image} className="size-10 shrink-0" />
+                <div className="min-w-0 flex-1 basis-44">
                   <p className="truncate text-sm font-medium">{row.student?.name}</p>
                   <p className="text-xs text-muted-foreground">
                     {row.enrolledCourses.length} course{row.enrolledCourses.length !== 1 ? "s" : ""} · avg {Math.round(row.avgProgress)}%
                   </p>
                 </div>
-                <div className="w-32">
-                  <ProgressBar
-                    value={row.avgProgress}
-                    className="h-1.5 bg-white/10 [&>div]:bg-lime-400"
-                  />
+                <div className="flex w-full items-center gap-3 sm:w-auto">
+                  <div className="w-24 min-w-0 sm:w-32">
+                    <ProgressBar
+                      value={row.avgProgress}
+                      className="h-1.5 bg-white/10 [&>div]:bg-lime-400"
+                    />
+                  </div>
+                  <span className="w-10 shrink-0 text-right text-xs font-bold text-lime-300">
+                    {Math.round(row.avgProgress)}%
+                  </span>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => row.student?._id && openChatWith(row.student._id)}
+                    className="ml-auto shrink-0 gap-1.5 border-white/15 text-lime-300 hover:bg-lime-400/10 sm:ml-0"
+                  >
+                    <MessageSquare className="size-3.5" /> Message
+                  </Button>
                 </div>
-                <span className="w-10 shrink-0 text-right text-xs font-bold text-lime-300">
-                  {Math.round(row.avgProgress)}%
-                </span>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() => row.student?._id && openChatWith(row.student._id)}
-                  className="shrink-0 gap-1.5 border-white/15 text-lime-300 hover:bg-lime-400/10"
-                >
-                  <MessageSquare className="size-3.5" /> Message
-                </Button>
               </div>
               <div className="mt-3 space-y-1.5 border-t border-white/5 pt-3">
                 {row.enrolledCourses.map((c) => (
