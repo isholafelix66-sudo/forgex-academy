@@ -88,8 +88,8 @@ export default function TutorShell() {
   // structure.
 
   const banner = isAdmin ? (
-    <div className="flex items-center justify-between gap-3 border-b border-lime-400/25 bg-lime-400/10 px-4 py-2 text-xs text-lime-200 sm:px-6">
-      <span className="inline-flex items-center gap-2 font-medium">
+    <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1.5 border-b border-lime-400/25 bg-lime-400/10 px-4 py-2 text-xs text-lime-200 sm:px-6">
+      <span className="inline-flex min-w-0 items-center gap-2 font-medium">
         <ShieldCheck className="size-3.5 shrink-0" />
         Admin preview — you're viewing the tutor dashboard without an account.
       </span>

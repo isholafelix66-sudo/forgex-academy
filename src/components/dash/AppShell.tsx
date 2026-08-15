@@ -163,7 +163,7 @@ export function AppShell({
   );
 
   return (
-    <div className="flex min-h-screen bg-background">
+    <div className="flex min-h-screen w-full overflow-x-clip bg-background">
       {/* Desktop sidebar */}
       <aside className="fixed inset-y-0 left-0 z-40 hidden w-64 border-r border-white/8 bg-sidebar lg:block">
         {sidebar}
@@ -189,13 +189,13 @@ export function AppShell({
       <div className="flex min-w-0 flex-1 flex-col lg:pl-64">
         {banner}
         <header className="sticky top-0 z-30 flex h-16 items-center justify-between border-b border-white/8 bg-background/85 px-4 backdrop-blur-xl sm:px-6">
-          <div className="flex items-center gap-3">
-            <Button variant="ghost" size="icon" className="lg:hidden" onClick={() => setOpen(true)}>
+          <div className="flex min-w-0 items-center gap-3">
+            <Button variant="ghost" size="icon" className="shrink-0 lg:hidden" onClick={() => setOpen(true)}>
               <Menu className="size-5" />
             </Button>
-            <h1 className="font-display text-lg font-bold">{title}</h1>
+            <h1 className="font-display min-w-0 truncate text-lg font-bold">{title}</h1>
           </div>
-          <div className="flex items-center gap-3">
+          <div className="flex shrink-0 items-center gap-3">
             {roleLink && (
               <Link to={roleLink.to} className="hidden sm:block">
                 <Button variant="outline" size="sm" className="border-lime-400/30 text-lime-300 hover:bg-lime-400/10">

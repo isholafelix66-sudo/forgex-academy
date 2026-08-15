@@ -78,28 +78,30 @@ function TutorPageLink() {
     }
   };
   return (
-    <div className="flex items-center gap-2">
+    <div className="flex w-full flex-col items-stretch gap-2 sm:flex-row sm:items-center">
       <code className="min-w-0 flex-1 truncate rounded-lg border border-white/10 bg-black/20 px-3 py-2 text-xs text-lime-200">
         {url.replace(/^https?:\/\//, "")}
       </code>
-      <Button
-        size="sm"
-        variant="outline"
-        onClick={() => void onCopy()}
-        className="shrink-0 border-white/10"
-        aria-label="Copy link"
-      >
-        {copied ? <Check className="size-3.5 text-lime-300" /> : <Copy className="size-3.5" />}
-      </Button>
-      <a
-        href={url}
-        target="_blank"
-        rel="noopener noreferrer"
-        className="inline-flex size-8 shrink-0 items-center justify-center rounded-lg border border-white/10 text-muted-foreground transition-colors hover:border-lime-400/40 hover:text-lime-300"
-        aria-label="Open your tutor page"
-      >
-        <ExternalLink className="size-3.5" />
-      </a>
+      <div className="flex shrink-0 items-center gap-2">
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={() => void onCopy()}
+          className="border-white/10"
+          aria-label="Copy link"
+        >
+          {copied ? <Check className="size-3.5 text-lime-300" /> : <Copy className="size-3.5" />}
+        </Button>
+        <a
+          href={url}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="inline-flex size-8 shrink-0 items-center justify-center rounded-lg border border-white/10 text-muted-foreground transition-colors hover:border-lime-400/40 hover:text-lime-300"
+          aria-label="Open your tutor page"
+        >
+          <ExternalLink className="size-3.5" />
+        </a>
+      </div>
     </div>
   );
 }
@@ -131,7 +133,7 @@ export default function TutorOverview() {
       {/* Greeting hero */}
       <div className="relative overflow-hidden rounded-3xl border border-white/10 bg-card">
         <div className="absolute inset-0 bg-gradient-to-br from-lime-400/15 via-transparent to-transparent" />
-        <div className="relative flex flex-col gap-5 px-6 py-7 sm:flex-row sm:items-center sm:justify-between sm:px-8">
+        <div className="relative flex w-full flex-col gap-5 px-5 py-6 sm:flex-row sm:items-center sm:justify-between sm:px-8 sm:py-7">
           <div>
             <p className="inline-flex items-center gap-2 rounded-full border border-lime-400/25 bg-lime-400/10 px-3 py-1 text-xs font-semibold text-lime-300">
               <Sparkles className="size-3.5" /> Tutor analytics
@@ -144,7 +146,7 @@ export default function TutorOverview() {
               where students might need a hand.
             </p>
           </div>
-          <div className="flex shrink-0 flex-wrap gap-2">
+          <div className="flex w-full shrink-0 flex-wrap gap-2 sm:w-auto">
             <Link to="/tutor/support">
               <Button variant="outline" className="gap-2 border-white/10">
                 <LifeBuoy className="size-4" /> Report an issue
@@ -198,16 +200,16 @@ export default function TutorOverview() {
       <div className="grid gap-6 xl:grid-cols-[1fr_360px]">
         {/* Learning progress per cohort */}
         <section className="space-y-4">
-          <div className="flex items-center justify-between">
-            <div>
+          <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
+            <div className="min-w-0">
               <h2 className="font-display flex items-center gap-2 text-lg font-semibold">
-                <TrendingUp className="size-4 text-lime-300" /> Learning progress
+                <TrendingUp className="size-4 shrink-0 text-lime-300" /> Learning progress
               </h2>
               <p className="mt-0.5 text-xs text-muted-foreground">
                 How many students completed each module, per cohort — spot the drop-offs at a glance.
               </p>
             </div>
-            <Link to="/tutor/communities" className="shrink-0 text-xs text-lime-300 hover:underline">
+            <Link to="/tutor/communities" className="shrink-0 whitespace-nowrap text-xs text-lime-300 hover:underline">
               Manage communities <ArrowRight className="ml-0.5 inline size-3" />
             </Link>
           </div>
@@ -353,7 +355,7 @@ export default function TutorOverview() {
           {/* Needs attention */}
           <section className="rounded-2xl border border-white/10 bg-card">
             <div className="border-b border-white/10 px-5 py-4">
-              <h3 className="font-display text-sm font-semibold">Needs your attention</h3>
+              <h3 className="font-display min-w-0 truncate text-sm font-semibold">Needs your attention</h3>
             </div>
             <div className="divide-y divide-white/5">
               <AttentionRow
@@ -385,9 +387,9 @@ export default function TutorOverview() {
 
           {/* Recent submissions */}
           <section className="rounded-2xl border border-white/10 bg-card">
-            <div className="flex items-center justify-between border-b border-white/10 px-5 py-4">
-              <h3 className="font-display text-sm font-semibold">Latest submissions</h3>
-              <Link to="/tutor/grading" className="text-xs text-lime-300 hover:underline">
+            <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 border-b border-white/10 px-5 py-4">
+              <h3 className="font-display min-w-0 truncate text-sm font-semibold">Latest submissions</h3>
+              <Link to="/tutor/grading" className="shrink-0 whitespace-nowrap text-xs text-lime-300 hover:underline">
                 Grade now
               </Link>
             </div>
@@ -423,9 +425,9 @@ export default function TutorOverview() {
 
           {/* Courses quick stats */}
           <section className="rounded-2xl border border-white/10 bg-card">
-            <div className="flex items-center justify-between border-b border-white/10 px-5 py-4">
-              <h3 className="font-display text-sm font-semibold">Your courses</h3>
-              <Link to="/tutor/courses" className="text-xs text-lime-300 hover:underline">
+            <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 border-b border-white/10 px-5 py-4">
+              <h3 className="font-display min-w-0 truncate text-sm font-semibold">Your courses</h3>
+              <Link to="/tutor/courses" className="shrink-0 whitespace-nowrap text-xs text-lime-300 hover:underline">
                 Manage
               </Link>
             </div>

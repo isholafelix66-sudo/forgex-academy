@@ -19,7 +19,7 @@ export function StatCard({
   return (
     <div
       className={cn(
-        "rounded-2xl border p-5",
+        "min-w-0 w-full rounded-2xl border p-5",
         accent
           ? "border-lime-400/25 bg-lime-400/8"
           : "border-white/10 bg-card",
