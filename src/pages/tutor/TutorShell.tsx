@@ -10,7 +10,9 @@ import {
   Megaphone,
   MessageCircle,
   MessageSquare,
+  Settings,
   ShieldCheck,
+  UserCircle,
   Users,
 } from "lucide-react";
 import { AppShell } from "@/components/dash/AppShell";
@@ -60,7 +62,7 @@ export default function TutorShell() {
             ) : undefined,
         },
         {
-          to: "/dashboard/communities",
+          to: "/tutor/communities",
           label: "Course Communities",
           icon: <MessageCircle className="size-4" />,
           badge:
@@ -72,7 +74,18 @@ export default function TutorShell() {
         },
       ],
     },
+    {
+      label: "Account",
+      items: [
+        { to: "/tutor/profile", label: "Tutor Profile", icon: <UserCircle className="size-4" /> },
+        { to: "/tutor/settings", label: "Settings", icon: <Settings className="size-4" /> },
+      ],
+    },
   ];
+
+  // "Logout" lives in the account footer of the app shell (bottom-right),
+  // keeping the sidebar exactly to the TEACHING / COMMUNICATION / ACCOUNT
+  // structure.
 
   const banner = isAdmin ? (
     <div className="flex items-center justify-between gap-3 border-b border-lime-400/25 bg-lime-400/10 px-4 py-2 text-xs text-lime-200 sm:px-6">

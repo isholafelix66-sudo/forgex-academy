@@ -1,3 +1,4 @@
+import { Navigate } from "react-router";
 import { useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import {
@@ -16,14 +17,22 @@ import {
   Users,
 } from "lucide-react";
 import { AppShell } from "@/components/dash/AppShell";
+import { useAuth } from "@/hooks/use-auth";
 
 export default function DashboardShell() {
+  const { user } = useAuth();
   const unread = useQuery(api.notifications.unreadCount);
   const conversations = useQuery(api.messages.myConversations);
   const communityUnread = useQuery(api.community.communityUnreadCount);
   const dmUnread = useQuery(api.community.dmUnreadCount);
 
   const unreadMessages = conversations?.reduce((s, c) => s + c.unread, 0) ?? 0;
+
+  // Role is the source of truth: /dashboard/* is the STUDENT portal. A tutor
+  // (or admin) account never sees student pages — not even by typing the URL
+  // directly. Tutors belong in /tutor/*, admins in /admin/*.
+  if (user?.role === "tutor") return <Navigate to="/tutor" replace />;
+  if (user?.role === "admin") return <Navigate to="/admin" replace />;
 
   const sections = [
     {

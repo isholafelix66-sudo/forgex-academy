@@ -207,8 +207,8 @@ export default function TutorOverview() {
                 How many students completed each module, per cohort — spot the drop-offs at a glance.
               </p>
             </div>
-            <Link to="/dashboard/communities" className="shrink-0 text-xs text-lime-300 hover:underline">
-              Open communities <ArrowRight className="ml-0.5 inline size-3" />
+            <Link to="/tutor/communities" className="shrink-0 text-xs text-lime-300 hover:underline">
+              Manage communities <ArrowRight className="ml-0.5 inline size-3" />
             </Link>
           </div>
 
@@ -357,7 +357,7 @@ export default function TutorOverview() {
             </div>
             <div className="divide-y divide-white/5">
               <AttentionRow
-                to="/dashboard/communities"
+                to="/tutor/communities"
                 icon={<MessageSquare className="size-4 text-amber-300" />}
                 label="Unanswered questions"
                 value={analytics === undefined ? "…" : String(unanswered)}
@@ -369,7 +369,7 @@ export default function TutorOverview() {
                 value={analytics === undefined ? "…" : String(pendingCount)}
               />
               <AttentionRow
-                to="/dashboard/communities"
+                to="/tutor/communities"
                 icon={<BookOpen className="size-4 text-lime-300" />}
                 label="Active communities"
                 value={analytics === undefined ? "…" : String(activeCommunities)}

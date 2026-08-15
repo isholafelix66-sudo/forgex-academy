@@ -377,14 +377,32 @@ export const syncMyCommunities = mutation({
         : user.role === ROLES.TUTOR
           ? "tutor"
           : "student";
+    const isTutor =
+      user.role === ROLES.TUTOR && !!user.verified;
     for (const courseId of targets) {
-      // If the user is already an active member of ANY community of this
-      // course (e.g. assigned to a specific cohort), keep them there — never
-      // silently add a second membership in another cohort.
       const courseCommunities = await ctx.db
         .query("courseCommunities")
         .withIndex("by_course", (q) => q.eq("courseId", courseId as Id<"courses">))
         .collect();
+      // A TUTOR manages every cohort of every course they teach — join them
+      // all. (A tutor is a staff member, never a student, and this is what
+      // lets the tutor management pages reach every cohort's chat + members.)
+      if (isTutor) {
+        for (const community of courseCommunities) {
+          const mine = await myMembership(ctx, user._id, community._id);
+          if (mine && mine.status !== "removed") continue;
+          try {
+            await addMembership(ctx, community._id, user._id, "tutor");
+          } catch {
+            // Ignore per-community failures — the tutor stays a member of
+            // the cohorts that succeeded.
+          }
+        }
+        continue;
+      }
+      // Students: if already an active member of ANY community of this
+      // course (e.g. assigned to a specific cohort), keep them there — never
+      // silently add a second membership in another cohort.
       const mine = await Promise.all(
         courseCommunities.map((c) => myMembership(ctx, user._id, c._id)),
       );
@@ -859,6 +877,204 @@ export const communityUnreadCount = query({
 });
 
 // ---------------------------------------------------------------------------
+// ---------------------------------------------------------------------------
+// Queries — tutor community management center (/tutor/communities)
+// ---------------------------------------------------------------------------
+
+/** Verified tutor: every community of every course they teach, with the
+ *  management stats shown on the Course Communities page. The tutor is a
+ *  staff member of these communities (see requireStaff) even before the
+ *  membership sync runs — this list is course-scoped, never membership-
+ *  scoped, so cohorts created by an admin show up immediately. */
+export const tutorCommunities = query({
+  args: {},
+  handler: async (ctx) => {
+    const userId = await getAuthUserId(ctx);
+    if (userId === null) return [];
+    const user = await ctx.db.get(userId);
+    if (!user) return [];
+    if (user.role === ROLES.ADMIN) return []; // admin preview — no tutor identity
+    if (user.role !== ROLES.TUTOR || !user.verified) {
+      throw new Error("Tutor access required.");
+    }
+    const courses = await ctx.db
+      .query("courses")
+      .withIndex("by_tutor", (q) => q.eq("tutorId", user._id))
+      .collect();
+    const courseIds = new Set(courses.map((c) => c._id.toString()));
+    const all = await ctx.db.query("courseCommunities").collect();
+    const mine = all.filter((c) => courseIds.has(c.courseId.toString()));
+    const rows = await Promise.all(
+      mine.map(async (community) => {
+        const course = courses.find((c) => c._id === community.courseId);
+        const info = await communityCapacity(ctx, community);
+        const members = await ctx.db
+          .query("communityMembers")
+          .withIndex("by_community", (q) => q.eq("communityId", community._id))
+          .collect();
+        const msgs = await ctx.db
+          .query("communityMessages")
+          .withIndex("by_community", (q) => q.eq("communityId", community._id))
+          .collect();
+        const last = [...msgs].sort((a, b) => b.createdAt - a.createdAt)[0];
+        return {
+          _id: community._id,
+          name: community.name,
+          status: community.status,
+          messageMode: community.messageMode ?? "everyone",
+          lockedReason: community.lockedReason ?? null,
+          cohortLabel: community.cohortLabel ?? null,
+          image: community.image ?? null,
+          createdAt: community.createdAt,
+          lastActivityAt: community.lastActivityAt ?? null,
+          course: course
+            ? { _id: course._id, title: course.title, slug: course.slug, image: course.image ?? null }
+            : null,
+          capacity: info,
+          memberCount: members.filter((m) => m.status !== "removed").length,
+          messageCount: msgs.filter((m) => !m.deleted).length,
+          lastMessage: last ? messagePreview(last) : null,
+          lastMessageAt: last?.createdAt ?? null,
+        };
+      }),
+    );
+    return rows.sort(
+      (a, b) => (b.lastActivityAt ?? b.createdAt) - (a.lastActivityAt ?? a.createdAt),
+    );
+  },
+});
+
+/** Full management detail for one community the tutor teaches: students with
+ *  enrollment progress, sibling cohorts, capacity + community settings and a
+ *  recent-activity feed. Null when the caller has no staff access. */
+export const tutorCommunityDetail = query({
+  args: { communityId: v.id("courseCommunities") },
+  handler: async (ctx, { communityId }) => {
+    const userId = await getAuthUserId(ctx);
+    if (userId === null) return null;
+    const user = await ctx.db.get(userId);
+    if (!user) return null;
+    const community = await ctx.db.get(communityId);
+    if (!community) return null;
+    const course = await ctx.db.get(community.courseId);
+    const membership = await myMembership(ctx, userId, communityId);
+    const staff =
+      user.role === ROLES.ADMIN ||
+      (membership &&
+        membership.status === "active" &&
+        (membership.role === "tutor" || membership.role === "moderator")) ||
+      (user.role === ROLES.TUTOR &&
+        user.verified &&
+        course?.tutorId === user._id);
+    if (!staff) return null;
+    const capacityInfo = await communityCapacity(ctx, community);
+    const memberRows = await ctx.db
+      .query("communityMembers")
+      .withIndex("by_community", (q) => q.eq("communityId", communityId))
+      .collect();
+    // Students with their enrollment progress (in-memory filter keeps this
+    // independent of enrollment index shape).
+    const allEnrollments = await ctx.db.query("enrollments").collect();
+    const enrollments = allEnrollments.filter(
+      (e) => e.courseId === community.courseId,
+    );
+    const students = await Promise.all(
+      memberRows
+        .filter((m) => m.role === "student")
+        .map(async (m) => {
+          const u = await ctx.db.get(m.userId);
+          const enrollment = enrollments.find(
+            (e) => e.studentId === m.userId && e.courseId === community.courseId,
+          );
+          return {
+            membershipId: m._id,
+            userId: m.userId,
+            name: u?.name ?? "Former member",
+            image: u?.image ?? null,
+            email: u?.email ?? null,
+            status: m.status,
+            joinedAt: m.joinedAt,
+            removedReason: m.removedReason ?? null,
+            progress: enrollment?.progress ?? 0,
+            online: !!u?.lastActivity && Date.now() - u.lastActivity < 60_000,
+            lastActivity: u?.lastActivity ?? null,
+          };
+        }),
+    );
+    // Sibling cohorts of the same course.
+    const courseCommunities = await ctx.db
+      .query("courseCommunities")
+      .withIndex("by_course", (q) => q.eq("courseId", community.courseId))
+      .collect();
+    const cohorts = await Promise.all(
+      courseCommunities
+        .filter((c) => c._id !== community._id)
+        .map(async (c) => {
+          const info = await communityCapacity(ctx, c);
+          return {
+            _id: c._id,
+            name: c.name,
+            status: c.status,
+            messageMode: c.messageMode ?? "everyone",
+            cohortLabel: c.cohortLabel ?? null,
+            capacity: info,
+          };
+        }),
+    );
+    // Recent activity (latest messages).
+    const msgs = await ctx.db
+      .query("communityMessages")
+      .withIndex("by_community", (q) => q.eq("communityId", communityId))
+      .collect();
+    const recent = [...msgs].sort((a, b) => b.createdAt - a.createdAt).slice(0, 12);
+    const activity = await Promise.all(
+      recent.map(async (m) => {
+        const sender = m.senderId ? await ctx.db.get(m.senderId) : null;
+        return {
+          _id: m._id,
+          senderName:
+            sender?.name ??
+            (m.senderKind === "admin" ? "ForgeX Admin" : "Former member"),
+          kind: m.kind ?? "text",
+          body: m.deleted ? "[deleted]" : messagePreview(m),
+          isAnnouncement: !!m.isAnnouncement,
+          pinned: !!m.pinned,
+          createdAt: m.createdAt,
+        };
+      }),
+    );
+    return {
+      community: {
+        _id: community._id,
+        name: community.name,
+        status: community.status,
+        messageMode: community.messageMode ?? "everyone",
+        lockedReason: community.lockedReason ?? null,
+        description: community.description ?? null,
+        rules: community.rules ?? null,
+        image: community.image ?? null,
+        cohortLabel: community.cohortLabel ?? null,
+        enrollmentClosed: community.enrollmentClosed ?? false,
+        studentCapacity: community.studentCapacity ?? null,
+        createdAt: community.createdAt,
+      },
+      course: course
+        ? { _id: course._id, title: course.title, slug: course.slug, image: course.image ?? null }
+        : null,
+      capacity: capacityInfo,
+      stats: {
+        studentCount: capacityInfo.studentCount,
+        messageCount: msgs.filter((m) => !m.deleted).length,
+        pinnedCount: msgs.filter((m) => m.pinned && !m.deleted).length,
+        announcementCount: msgs.filter((m) => m.isAnnouncement && !m.deleted).length,
+      },
+      students,
+      cohorts,
+      activity,
+    };
+  },
+});
+
 // Queries — community upgrade (pins, polls, search, saved, resources…)
 // ---------------------------------------------------------------------------
 
@@ -1586,35 +1802,58 @@ export const sendCommunityMessage = mutation({
         .map((m) => m.userId),
     );
     for (const sId of staffIds) {
+      const staffUser = await ctx.db.get(sId);
+      // Role-aware destination: staff land in their own management console,
+      // never the student community page.
+      const link =
+        staffUser?.role === ROLES.ADMIN
+          ? `/admin/communication/communities/${community._id}`
+          : staffUser?.role === ROLES.TUTOR
+            ? `/tutor/communities/${community._id}`
+            : `/dashboard/communities/${community._id}`;
       await notify(ctx, {
         userId: sId,
         title: `New message in ${community.name}`,
         body: preview.slice(0, 90),
         type: "community",
-        link: `/dashboard/communities/${community._id}`,
+        link,
       });
     }
 
     // Reply notification → the original sender (if it's not me).
     if (replied?.senderId && replied.senderId !== user._id) {
+      const repliedUser = await ctx.db.get(replied.senderId);
+      const replyLink =
+        repliedUser?.role === ROLES.ADMIN
+          ? `/admin/communication/communities/${community._id}`
+          : repliedUser?.role === ROLES.TUTOR
+            ? `/tutor/communities/${community._id}`
+            : `/dashboard/communities/${community._id}`;
       await notify(ctx, {
         userId: replied.senderId,
         title: "💬 New reply to your message",
         body: `${user.name || "Someone"} replied: ${preview.slice(0, 80)}`,
         type: "community-reply",
-        link: `/dashboard/communities/${community._id}`,
+        link: replyLink,
       });
     }
 
     // @mentions → notify each mentioned user (never myself).
     for (const mid of mentionIds) {
       if (mid === user._id.toString()) continue;
+      const mentioned = await ctx.db.get(mid as Id<"users">);
+      const mentionLink =
+        mentioned?.role === ROLES.ADMIN
+          ? `/admin/communication/communities/${community._id}`
+          : mentioned?.role === ROLES.TUTOR
+            ? `/tutor/communities/${community._id}`
+            : `/dashboard/communities/${community._id}`;
       await notify(ctx, {
         userId: mid as Id<"users">,
         title: "📣 You were mentioned",
         body: `${user.name || "Someone"} mentioned you in ${community.name}`,
         type: "community-mention",
-        link: `/dashboard/communities/${community._id}`,
+        link: mentionLink,
       });
     }
 
@@ -1767,22 +2006,39 @@ export const deleteCommunityMessage = mutation({
 // Community Tutor tools (community-scoped, enforced on the backend)
 // ---------------------------------------------------------------------------
 
-/** Shared guard: viewer must be an active community tutor or admin member. */
+/**
+ * Shared guard: viewer must be an active community tutor or admin member.
+ * Verified tutors are ALSO staff of every community of a course they teach,
+ * even when they haven't been auto-joined to that specific cohort yet — this
+ * is the server-side guarantee that a tutor can only manage communities of
+ * their own courses. Admins can manage everything.
+ */
 async function requireStaff(
   ctx: MutationCtx,
   user: Doc<"users">,
   communityId: Id<"courseCommunities">,
-): Promise<{ membership: Doc<"communityMembers">; isAdmin: boolean }> {
+): Promise<{ membership: Doc<"communityMembers"> | null; isAdmin: boolean }> {
+  const community = await ctx.db.get(communityId);
+  if (!community) throw new Error("Community not found.");
   const membership = await myMembership(ctx, user._id, communityId);
-  if (!membership || membership.status !== "active") {
-    throw new Error("You're not an active member of this community.");
-  }
+  const activeMember =
+    membership && membership.status === "active" ? membership : null;
   const isAdmin =
-    user.role === ROLES.ADMIN || membership.role === "admin";
-  if (!isAdmin && membership.role !== "tutor") {
-    throw new Error("Community tutor access required.");
+    user.role === ROLES.ADMIN || activeMember?.role === "admin";
+  if (isAdmin) return { membership: activeMember, isAdmin: true };
+  if (
+    activeMember &&
+    (activeMember.role === "tutor" || activeMember.role === "moderator")
+  ) {
+    return { membership: activeMember, isAdmin: false };
   }
-  return { membership, isAdmin };
+  if (user.role === ROLES.TUTOR && user.verified) {
+    const course = await ctx.db.get(community.courseId);
+    if (course?.tutorId === user._id) {
+      return { membership: activeMember, isAdmin: false };
+    }
+  }
+  throw new Error("Community tutor access required.");
 }
 
 /** Community Tutor: lock / unlock their assigned community (never archive). */
@@ -1889,6 +2145,186 @@ export const tutorRemoveCommunityMember = mutation({
 });
 
 // ---------------------------------------------------------------------------
+// ---------------------------------------------------------------------------
+// Mutations — tutor community management (all staff-checked server-side)
+// ---------------------------------------------------------------------------
+
+/** Community Tutor / Admin: restrict or unrestrict a STUDENT's posting
+ *  access. Tutors can never restrict Admins (or other tutors). */
+export const tutorSetCommunityMemberStatus = mutation({
+  args: {
+    communityId: v.id("courseCommunities"),
+    userId: v.id("users"),
+    restricted: v.boolean(),
+    reason: v.optional(v.string()),
+  },
+  handler: async (ctx, { communityId, userId, restricted, reason }) => {
+    const user = await requireUserDoc(ctx);
+    const { isAdmin } = await requireStaff(ctx, user, communityId);
+    if (userId === user._id) {
+      throw new Error("You can't change your own access.");
+    }
+    const target = await myMembership(ctx, userId, communityId);
+    if (!target) throw new Error("This user isn't a member.");
+    const targetUser = await ctx.db.get(userId);
+    if (targetUser?.role === ROLES.ADMIN || target.role === "admin") {
+      throw new Error("Admins cannot be restricted.");
+    }
+    if (!isAdmin && target.role !== "student") {
+      throw new Error("You can only restrict students.");
+    }
+    await ctx.db.patch(target._id, {
+      status: restricted ? "restricted" : "active",
+      removedReason: undefined,
+    });
+    await logModeration(
+      ctx,
+      isAdmin
+        ? restricted ? "ADMIN_RESTRICTED_MEMBER" : "ADMIN_UNRESTRICTED_MEMBER"
+        : restricted ? "TUTOR_RESTRICTED_MEMBER" : "TUTOR_UNRESTRICTED_MEMBER",
+      {
+        targetType: "member",
+        targetId: userId,
+        communityId,
+        userId,
+        reason: reason?.trim(),
+      },
+    );
+    await notify(ctx, {
+      userId,
+      title: restricted ? "Posting restricted" : "Posting access restored",
+      body: restricted
+        ? `Your posting access in ${await communityName(ctx, communityId)} was restricted${reason ? `: ${reason}` : "."}`
+        : `You can post in ${await communityName(ctx, communityId)} again.`,
+      type: "moderation",
+      link: `/dashboard/communities/${communityId}`,
+    });
+    return true;
+  },
+});
+
+/** Community Tutor / Admin: move a student from one cohort to another of the
+ *  same course. Membership moves only — never a new account, never touches
+ *  the enrollment. Destination capacity is enforced. */
+export const tutorMoveStudentToCohort = mutation({
+  args: {
+    fromCommunityId: v.id("courseCommunities"),
+    toCommunityId: v.id("courseCommunities"),
+    userId: v.id("users"),
+  },
+  handler: async (ctx, { fromCommunityId, toCommunityId, userId }) => {
+    const user = await requireUserDoc(ctx);
+    const { isAdmin } = await requireStaff(ctx, user, fromCommunityId);
+    await requireStaff(ctx, user, toCommunityId);
+    const from = await ctx.db.get(fromCommunityId);
+    const to = await ctx.db.get(toCommunityId);
+    if (!from || !to) throw new Error("Community not found.");
+    if (from.courseId !== to.courseId) {
+      throw new Error("Cohorts must belong to the same course.");
+    }
+    if (userId === user._id) throw new Error("You can't move yourself.");
+    const target = await myMembership(ctx, userId, fromCommunityId);
+    if (!target) throw new Error("This student isn't a member of the source cohort.");
+    const targetUser = await ctx.db.get(userId);
+    if (targetUser?.role === ROLES.ADMIN || target.role === "admin") {
+      throw new Error("Admins cannot be moved.");
+    }
+    if (!isAdmin && target.role !== "student") {
+      throw new Error("You can only move students.");
+    }
+    // Remove from the old cohort, then add to the new one (addMembership
+    // enforces the destination's capacity / enrollment state).
+    await ctx.db.patch(target._id, {
+      status: "removed",
+      removedAt: Date.now(),
+      removedReason: "Moved to another cohort",
+    });
+    await addMembership(ctx, toCommunityId, userId, "student");
+    await logModeration(
+      ctx,
+      isAdmin ? "ADMIN_MOVED_MEMBER" : "TUTOR_MOVED_MEMBER",
+      {
+        targetType: "member",
+        targetId: userId,
+        communityId: toCommunityId,
+        userId,
+        reason: `${from.name} → ${to.name}`,
+      },
+    );
+    await notify(ctx, {
+      userId,
+      title: "Moved to another cohort",
+      body: `You were moved from ${from.name} to ${to.name}.`,
+      type: "moderation",
+      link: `/dashboard/communities/${toCommunityId}`,
+    });
+    return true;
+  },
+});
+
+/** Community Tutor / Admin: rename a community/cohort and update its
+ *  description, rules and cohort label. */
+export const tutorUpdateCommunity = mutation({
+  args: {
+    communityId: v.id("courseCommunities"),
+    name: v.optional(v.string()),
+    cohortLabel: v.optional(v.string()),
+    description: v.optional(v.string()),
+    rules: v.optional(v.string()),
+  },
+  handler: async (ctx, { communityId, name, cohortLabel, description, rules }) => {
+    const user = await requireUserDoc(ctx);
+    const { isAdmin } = await requireStaff(ctx, user, communityId);
+    const community = await ctx.db.get(communityId);
+    if (!community) throw new Error("Community not found.");
+    const patch: Partial<Doc<"courseCommunities">> = {};
+    if (name !== undefined) {
+      const trimmed = name.trim();
+      if (!trimmed) throw new Error("Community name can't be empty.");
+      if (trimmed.length > 80) throw new Error("Community name is too long.");
+      patch.name = trimmed;
+    }
+    if (cohortLabel !== undefined) {
+      patch.cohortLabel = cohortLabel.trim() || undefined;
+    }
+    if (description !== undefined) {
+      patch.description = description.trim() || undefined;
+    }
+    if (rules !== undefined) {
+      patch.rules = rules.trim() || undefined;
+    }
+    if (Object.keys(patch).length > 0) {
+      await ctx.db.patch(communityId, patch);
+    }
+    await logModeration(
+      ctx,
+      isAdmin ? "ADMIN_UPDATED_COMMUNITY" : "TUTOR_UPDATED_COMMUNITY",
+      { targetType: "community", targetId: communityId, communityId, reason: name?.trim() },
+    );
+    return true;
+  },
+});
+
+/** Community Tutor / Admin: archive a cohort/community (read-only). */
+export const tutorArchiveCommunity = mutation({
+  args: {
+    communityId: v.id("courseCommunities"),
+  },
+  handler: async (ctx, { communityId }) => {
+    const user = await requireUserDoc(ctx);
+    const { isAdmin } = await requireStaff(ctx, user, communityId);
+    const community = await ctx.db.get(communityId);
+    if (!community) throw new Error("Community not found.");
+    await ctx.db.patch(communityId, { status: "archived" });
+    await logModeration(
+      ctx,
+      isAdmin ? "ADMIN_ARCHIVED_COMMUNITY" : "TUTOR_ARCHIVED_COMMUNITY",
+      { targetType: "community", targetId: communityId, communityId },
+    );
+    return true;
+  },
+});
+
 // Mutations — community upgrade (pins, answers, discussions, polls, saved…)
 // ---------------------------------------------------------------------------
 

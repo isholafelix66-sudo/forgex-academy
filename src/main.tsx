@@ -78,6 +78,10 @@ const TutorStudents = lazy(() => import("./pages/tutor/TutorStudents.tsx"));
 const TutorInbox = lazy(() => import("./pages/tutor/TutorInbox.tsx"));
 const TutorAnnouncements = lazy(() => import("./pages/tutor/TutorAnnouncements.tsx"));
 const TutorSupport = lazy(() => import("./pages/tutor/TutorSupport.tsx"));
+const TutorCommunities = lazy(() => import("./pages/tutor/TutorCommunities.tsx"));
+const TutorCommunityManage = lazy(() => import("./pages/tutor/TutorCommunityManage.tsx"));
+const TutorProfile = lazy(() => import("./pages/tutor/TutorProfile.tsx"));
+const TutorSettings = lazy(() => import("./pages/tutor/TutorSettings.tsx"));
 
 // Public tutor mini-website (shareable /tutor/<slug> page)
 const TutorPage = lazy(() => import("./pages/TutorPage.tsx"));
@@ -575,6 +579,10 @@ createRoot(document.getElementById("root")!).render(
                 <Route path="inbox" element={<TutorInbox />} />
                 <Route path="announcements" element={<TutorAnnouncements />} />
                 <Route path="support" element={<TutorSupport />} />
+                <Route path="communities" element={<TutorCommunities />} />
+                <Route path="communities/:id" element={<TutorCommunityManage />} />
+                <Route path="profile" element={<TutorProfile />} />
+                <Route path="settings" element={<TutorSettings />} />
               </Route>
 
               {/* Public tutor mini-website — the shareable /tutor/<slug> page.

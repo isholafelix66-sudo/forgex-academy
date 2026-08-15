@@ -24,6 +24,7 @@ const EXACT: Array<[string, Importer]> = [
   ["/auth", () => import("@/pages/Auth.tsx")],
   ["/dashboard", () => import("@/pages/dashboard/DashboardShell.tsx")],
   ["/tutor", () => import("@/pages/tutor/TutorShell.tsx")],
+  ["/tutor/communities", () => import("@/pages/tutor/TutorCommunities.tsx")],
   ["/admin", () => import("@/pages/admin/AdminShell.tsx")],
 ];
 
@@ -38,6 +39,9 @@ const TUTOR_DASHBOARD_SUBROUTES = new Set([
   "inbox",
   "announcements",
   "support",
+  "communities",
+  "profile",
+  "settings",
 ]);
 
 const PREFIX: Array<[string, Importer]> = [
@@ -46,6 +50,7 @@ const PREFIX: Array<[string, Importer]> = [
   ["/courses/", () => import("@/pages/CourseDetail.tsx")],
   ["/prompts/", () => import("@/pages/PromptDetail.tsx")],
   ["/tutors/", () => import("@/pages/TutorDetail.tsx")],
+  ["/tutor/communities/", () => import("@/pages/tutor/TutorCommunityManage.tsx")],
   ["/tutor/", () => import("@/pages/TutorPage.tsx")],
 ];
 
