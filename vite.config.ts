@@ -19,16 +19,24 @@ if (
   process.argv.includes("build") &&
   !process.env.__FORGEX_VITE_MEM_CAPPED__
 ) {
-  // Prefer system Node (the flag is a V8 heap limit); if the CLI is being
-  // executed by Bun, spawn Node explicitly and fall back to the current
-  // runtime if Node is not on PATH.
+  // Prefer system Node (the flag is a V8 heap limit; Bun uses JavaScriptCore
+  // and silently ignores --max-old-space-size, which is exactly when the
+  // platform build balloons past the container limit and gets "Killed"). If
+  // the CLI is being executed by Bun, spawn Node explicitly — trying PATH
+  // first, then the standard install locations — and only fall back to the
+  // current runtime (Bun, uncappable) when no Node binary exists at all.
   const execPath = process.execPath;
-  const runner =
+  const candidates =
     execPath.includes("bun") && !execPath.includes("node")
-      ? "node"
-      : execPath;
+      ? [
+          "node",
+          "/usr/bin/node",
+          "/usr/local/bin/node",
+          "/opt/homebrew/bin/node",
+        ]
+      : [execPath];
   const run = (bin: string) =>
-    spawnSync(bin, ["--max-old-space-size=896", ...process.argv.slice(1)], {
+    spawnSync(bin, ["--max-old-space-size=768", ...process.argv.slice(1)], {
       stdio: "inherit",
       env: {
         ...process.env,
@@ -37,14 +45,16 @@ if (
         NODE_OPTIONS: "",
       },
     });
-  let result;
-  try {
-    result = run(runner);
-  } catch {
-    // `node` wasn't on PATH — fall back to the current runtime.
-    result = run(execPath);
+  let result: ReturnType<typeof run> | null = null;
+  for (const candidate of candidates) {
+    try {
+      result = run(candidate);
+      if (!result.error) break;
+    } catch {
+      // Binary missing — try the next candidate.
+    }
   }
-  process.exit(result.status ?? 1);
+  process.exit(result?.status ?? 1);
 }
 
 // https://vite.dev/config/
@@ -75,6 +85,10 @@ export default defineConfig({
   build: {
     // Enable source maps for better debugging (disable in production if needed)
     sourcemap: false,
+    // Skip the gzip-size computation pass — saves time and a little peak
+    // memory during the final render phase (sizes still appear, just not
+    // gzipped).
+    reportCompressedSize: false,
     // Optimize chunk size
     chunkSizeWarningLimit: 1000,
     // Target modern browsers for better optimization

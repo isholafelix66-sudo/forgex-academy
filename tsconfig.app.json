@@ -26,7 +26,16 @@
     "baseUrl": ".",
     "paths": {
       "@/*": ["./src/*"]
-    }
+    },
+    /* Only auto-load these global type packages. Without this, tsc loads
+       EVERY @types/* folder under node_modules (three, vitest's transitive
+       types, etc.) even when unused, which balloons the platform build's
+       memory. Everything else still resolves through its import. */
+    "types": ["vite/client", "node"]
   },
-  "include": ["src", "vly-toolbar-readonly.tsx"]
+  "include": ["src", "vly-toolbar-readonly.tsx"],
+  /* Tests are run (not shipped) by vitest, which transpiles them itself;
+     excluding them keeps their large testing-library/jsdom type graph out of
+     the production typecheck and the platform build's memory profile. */
+  "exclude": ["src/**/*.test.ts", "src/**/*.test.tsx", "src/test-setup.ts"]
 }
