@@ -7,8 +7,9 @@ const MuxTracked = lazy(() => import("./MuxTracked").then((m) => ({ default: m.M
 export function youtubeId(url: string): string | null {
   const m =
     url.match(/youtu\.be\/([\w-]+)/) ||
-    url.match(/youtube\.com\/watch\?v=([\w-]+)/) ||
-    url.match(/youtube\.com\/embed\/([\w-]+)/);
+    url.match(
+      /(?:www\.|m\.)?youtube\.com\/(?:watch\?(?:.*&)?v=|embed\/|shorts\/|live\/)([\w-]+)/,
+    );
   return m ? m[1] : null;
 }
 
@@ -22,20 +23,13 @@ export function loomId(url: string): string | null {
   return m ? m[1] : null;
 }
 
-declare global {
-  interface Window {
-    YT?: {
-      Player: new (
-        el: HTMLElement,
-        opts: Record<string, unknown>,
-      ) => unknown;
-    };
-    onYouTubeIframeAPIReady?: () => void;
-  }
-}
-
-/** YouTube player driven by the official IFrame API so we can poll progress. */
-function YouTubeWithProgress({
+/**
+ * YouTube via a plain <iframe> embed — no IFrame API script required, so it
+ * plays even under strict CSPs (`frame-src` allows youtube.com). Progress is
+ * tracked from the player's `infoDelivery` postMessage events, which the
+ * embed sends to the parent frame on its own.
+ */
+function YouTubeEmbed({
   id,
   title,
   onEmit,
@@ -44,66 +38,43 @@ function YouTubeWithProgress({
   title?: string;
   onEmit: (pct: number) => void;
 }) {
-  const containerRef = useRef<HTMLDivElement>(null);
   const emitRef = useRef(onEmit);
   emitRef.current = onEmit;
 
   useEffect(() => {
-    let player: any = null;
-    let interval: number | null = null;
-    let destroyed = false;
-
-    const poll = () => {
-      if (!player) return;
-      try {
-        const d = player.getDuration();
-        if (d > 0) emitRef.current((player.getCurrentTime() / d) * 100);
-      } catch {
-        // player mid-teardown — ignore
+    const handler = (e: MessageEvent) => {
+      if (
+        e.origin !== "https://www.youtube.com" &&
+        e.origin !== "https://www.youtube-nocookie.com"
+      ) {
+        return;
       }
-    };
-
-    const load = () => {
-      if (destroyed || !containerRef.current || !window.YT?.Player) return;
-      player = new window.YT.Player(containerRef.current, {
-        videoId: id,
-        playerVars: { rel: 0 },
-        events: {
-          onStateChange: (e: { data: number }) => {
-            if (e.data === 1 && interval === null) {
-              interval = window.setInterval(poll, 500);
-            } else if (e.data !== 1 && interval !== null) {
-              window.clearInterval(interval);
-              interval = null;
-            }
-          },
-        },
-      });
-    };
-
-    if (window.YT?.Player) {
-      load();
-    } else {
-      const prev = window.onYouTubeIframeAPIReady;
-      window.onYouTubeIframeAPIReady = () => {
-        prev?.();
-        load();
+      const d = e.data as {
+        event?: string;
+        info?: { currentTime?: number; duration?: number };
       };
-      if (!document.getElementById("yt-iframe-api")) {
-        const tag = document.createElement("script");
-        tag.id = "yt-iframe-api";
-        tag.src = "https://www.youtube.com/iframe_api";
-        document.head.appendChild(tag);
+      if (
+        d?.event === "infoDelivery" &&
+        typeof d.info?.currentTime === "number" &&
+        typeof d.info?.duration === "number" &&
+        d.info.duration > 0
+      ) {
+        emitRef.current((d.info.currentTime / d.info.duration) * 100);
       }
-    }
-
-    return () => {
-      destroyed = true;
-      if (interval !== null) window.clearInterval(interval);
     };
-  }, [id]);
+    window.addEventListener("message", handler);
+    return () => window.removeEventListener("message", handler);
+  }, []);
 
-  return <div ref={containerRef} className="size-full" />;
+  return (
+    <iframe
+      src={`https://www.youtube.com/embed/${id}?rel=0&playsinline=1`}
+      title={title ?? "Lesson video"}
+      allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share; fullscreen"
+      allowFullScreen
+      className="size-full"
+    />
+  );
 }
 
 export function VideoPlayer({
@@ -137,6 +108,39 @@ export function VideoPlayer({
     }
   };
 
+  // Recognized embed URLs (YouTube / Vimeo / Loom) always win — a stale Mux
+  // playback ID must never shadow the video URL a tutor actually saved.
+  const yt = url ? youtubeId(url) : null;
+  if (yt) {
+    return (
+      <div className="aspect-video w-full overflow-hidden rounded-2xl border border-white/10 bg-black">
+        <YouTubeEmbed id={yt} title={title} onEmit={emit} />
+      </div>
+    );
+  }
+
+  const vimeo = url ? vimeoId(url) : null;
+  if (vimeo) {
+    return (
+      <VimeoTracked vimeo={vimeo} title={title ?? "Lesson video"} emit={emit} />
+    );
+  }
+
+  const loom = url ? loomId(url) : null;
+  if (loom) {
+    return (
+      <div className="aspect-video w-full overflow-hidden rounded-2xl border border-white/10 bg-black">
+        <iframe
+          src={`https://www.loom.com/embed/${loom}`}
+          title={title ?? "Lesson video"}
+          allow="autoplay; fullscreen"
+          allowFullScreen
+          className="size-full"
+        />
+      </div>
+    );
+  }
+
   if (muxPlaybackId) {
     return (
       <Suspense
@@ -169,37 +173,6 @@ export function VideoPlayer({
         <p className="text-sm text-muted-foreground">
           No video for this lesson — follow the notes and resources below.
         </p>
-      </div>
-    );
-  }
-
-  const yt = youtubeId(url);
-  if (yt) {
-    return (
-      <div className="aspect-video w-full overflow-hidden rounded-2xl border border-white/10 bg-black">
-        <YouTubeWithProgress id={yt} title={title} onEmit={emit} />
-      </div>
-    );
-  }
-
-  const vimeo = vimeoId(url);
-  if (vimeo) {
-    return (
-      <VimeoTracked vimeo={vimeo} title={title ?? "Lesson video"} emit={emit} />
-    );
-  }
-
-  const loom = loomId(url);
-  if (loom) {
-    return (
-      <div className="aspect-video w-full overflow-hidden rounded-2xl border border-white/10 bg-black">
-        <iframe
-          src={`https://www.loom.com/embed/${loom}`}
-          title={title ?? "Lesson video"}
-          allow="autoplay; fullscreen"
-          allowFullScreen
-          className="size-full"
-        />
       </div>
     );
   }
