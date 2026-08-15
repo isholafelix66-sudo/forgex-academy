@@ -25,12 +25,24 @@ import {
  *   - subtle reactions to the hero CTAs (look toward the button, glow) —
  *     purely visual, never intercepting clicks or navigation
  *
+ * Loading is designed to feel instant:
+ *   - the image URL is <link rel="preload">-ed the moment it is known (the
+ *     admin-uploaded Convex URL or the bundled fallback), so the PNG fetches
+ *     in parallel with the hero layout instead of after the <img> parses
+ *   - a fixed aspect-ratio box reserves the space so nothing jumps
+ *   - the cinematic entrance (fade + rise + settle) is HELD until the
+ *     picture is actually ready, so the mascot always animates in — it never
+ *     pops in as a static picture after the mount animation finished
+ *   - when no image is available at all, a quiet breathing lime aura is
+ *     shown — never an instructional skeleton/placeholder box
+ *
  * The component is homepage-only (rendered solely from `Landing`), unmounts
  * on every other route, and every loop is suppressed for
  * prefers-reduced-motion.
  *
  * To swap in a different file, change ROBOT_IMAGE_SRC to the path of the
- * uploaded PNG (e.g. a file dropped into `public/` or `src/assets/`).
+ * uploaded PNG (e.g. a file dropped into `public/` or `src/assets/`), or set
+ * the admin "Homepage hero image" (stored in site content as `heroImage`).
  */
 export const ROBOT_IMAGE_SRC = "/robot.png";
 
@@ -63,6 +75,7 @@ export function HeroRobot({ imageSrc }: { imageSrc?: string }) {
   const sceneRef = useRef<HTMLDivElement>(null);
   const [isMobile, setIsMobile] = useState(false);
   const [imgFailed, setImgFailed] = useState(false);
+  const [imgLoaded, setImgLoaded] = useState(false);
 
   // ------------------------------------------------------ "alive" choreography
   // Working → greeting → thumbs-up, then back to working. The cycle is long
@@ -134,13 +147,34 @@ export function HeroRobot({ imageSrc }: { imageSrc?: string }) {
   const src =
     typeof imageSrc === "string" && imageSrc.trim() ? imageSrc : ROBOT_IMAGE_SRC;
 
-  // Reset the failed state whenever the source changes. On first render the
-  // Convex query hasn't arrived yet, so the image tries the /robot.png
-  // fallback, 404s and flips the placeholder — and the admin-uploaded URL
+  // Reset the load/failed state whenever the source changes. On first render
+  // the Convex query hasn't arrived yet, so the image tries the /robot.png
+  // fallback, 404s and flips the fallback aura — and the admin-uploaded URL
   // arriving a moment later must be able to recover from that, otherwise the
-  // placeholder sticks forever even though the upload succeeded.
+  // fallback sticks forever even though the upload succeeded.
   useEffect(() => {
     setImgFailed(false);
+    setImgLoaded(false);
+  }, [src]);
+
+  // Start downloading the robot PNG the moment its URL is known instead of
+  // waiting for the <img> to be parsed and rendered. This is what makes the
+  // mascot "load on time": the admin-uploaded Convex storage URL is fetched
+  // immediately when the query resolves, in parallel with the hero layout.
+  useEffect(() => {
+    if (!src || typeof document === "undefined") return;
+    let link = document.getElementById(
+      "hero-robot-preload",
+    ) as HTMLLinkElement | null;
+    if (!link) {
+      link = document.createElement("link");
+      link.id = "hero-robot-preload";
+      link.rel = "preload";
+      link.as = "image";
+      link.fetchPriority = "high";
+      document.head.appendChild(link);
+    }
+    link.href = src;
   }, [src]);
 
   // ---------------------------------------------------------------- parallax
@@ -250,6 +284,12 @@ export function HeroRobot({ imageSrc }: { imageSrc?: string }) {
     ? { duration: 0 }
     : { duration: 1.2, ease: [0.22, 1, 0.36, 1] as const };
 
+  // The cinematic entrance is held until the picture is actually available
+  // (loaded, or failed → the quiet fallback aura). Without this the image
+  // pops in as a static picture whenever it arrives after the mount
+  // animation finished — this way the robot always fades/rises/settles in.
+  const imgReady = imgLoaded || imgFailed;
+
   // Thumbs-up sparkle burst — tiny additive dots that pop around the robot's
   // upper body once during the confident moment.
   const sparkles = [
@@ -337,10 +377,15 @@ export function HeroRobot({ imageSrc }: { imageSrc?: string }) {
         )}
       </AnimatePresence>
 
-      {/* Robot — cinematic entrance, then cursor + scroll parallax */}
+      {/* Robot — cinematic entrance (held until the picture is ready), then
+          cursor + scroll parallax */}
       <motion.div
         initial={{ opacity: 0, y: 44, scale: 0.97 }}
-        animate={{ opacity: 1, y: 0, scale: 1 }}
+        animate={
+          imgReady
+            ? { opacity: 1, y: 0, scale: 1 }
+            : { opacity: 0, y: 44, scale: 0.97 }
+        }
         transition={entranceTransition}
         className="relative z-10"
       >
@@ -355,23 +400,27 @@ export function HeroRobot({ imageSrc }: { imageSrc?: string }) {
                 <div className="hero-robot-breath will-change-transform">
                   <div className="drop-shadow-[0_24px_48px_rgba(0,0,0,0.55)]">
                     {imgFailed ? (
-                      <div className="flex aspect-[4/5] w-full flex-col items-center justify-center rounded-3xl border border-dashed border-lime-400/30 bg-lime-400/5 text-center">
-                        <p className="font-display text-2xl font-bold text-lime-300">
-                          ForgeX
-                        </p>
-                        <p className="mt-2 max-w-[220px] px-4 text-xs text-muted-foreground">
-                          Robot mascot PNG goes here — place it at{" "}
-                          <code className="text-lime-300">public/robot.png</code>
-                        </p>
+                      /* Quiet fallback while no robot image is available — a
+                         soft breathing lime aura, never an instructional
+                         skeleton. The admin-uploaded hero image replaces it
+                         the moment it loads. */
+                      <div className="flex aspect-[4/5] w-full items-center justify-center">
+                        <div aria-hidden className="hero-robot-fallback" />
                       </div>
                     ) : (
-                      <motion.div style={{ filter: brightFilter }} className="relative">
+                      <motion.div
+                        style={{ filter: brightFilter }}
+                        className="relative aspect-[4/5] w-full"
+                      >
                         <img
                           src={src}
                           alt="ForgeX robot mascot"
                           draggable={false}
+                          decoding="async"
+                          fetchPriority="high"
+                          onLoad={() => setImgLoaded(true)}
                           onError={() => setImgFailed(true)}
-                          className="hero-robot-img pointer-events-none h-auto w-full select-none"
+                          className="hero-robot-img pointer-events-none h-full w-full select-none object-contain"
                         />
                       </motion.div>
                     )}
