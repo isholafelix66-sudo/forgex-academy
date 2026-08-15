@@ -28,6 +28,21 @@ export const getStorageUrl = query({
   },
 });
 
+/**
+ * Resolve a just-uploaded file to its authoritative public URL — used right
+ * after a device upload (lesson videos, profile media…) so the UI can show
+ * the real playable link immediately. Resolution happens server-side; the
+ * client never derives a playback URL from the upload endpoint.
+ */
+export const resolveUploadedFile = mutation({
+  args: { storageId: v.id("_storage") },
+  handler: async (ctx, { storageId }) => {
+    const userId = await requireUser(ctx);
+    await checkRateLimit(ctx, `upload:${userId}`, 60, 60 * 1000);
+    return (await ctx.storage.getUrl(storageId)) ?? "";
+  },
+});
+
 // ---------------------------------------------------------------------------
 // Admin uploads — the password-gated admin portal has no user account, so
 // it gets its own storage endpoints. This lets admins upload branding images

@@ -209,6 +209,9 @@ const schema = defineSchema(
       image: v.optional(v.string()),
       muxAssetId: v.optional(v.string()),
       muxPlaybackId: v.optional(v.string()),
+      // Direct device uploads live in Convex file storage; the id lets the
+      // backend resolve the authoritative playback URL and clean up files.
+      videoStorageId: v.optional(v.id("_storage")),
       notes: v.string(),
       transcript: v.string(),
       resources: v.array(resourceValidator),

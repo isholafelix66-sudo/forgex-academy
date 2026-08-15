@@ -36,6 +36,10 @@ import { PageHeader } from "@/components/dash/PageHeader";
 import { useAuth } from "@/hooks/use-auth";
 import { cn } from "@/lib/utils";
 import { ImageUploader } from "@/components/media/ImageUploader";
+import {
+  MAX_CONVEX_UPLOAD_BYTES,
+  uploadFileToConvex,
+} from "@/lib/convex-upload";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -54,6 +58,7 @@ type LessonDraft = {
   videoType: VideoSource;
   muxAssetId?: string;
   muxPlaybackId?: string;
+  videoStorageId?: string;
   notes: string;
   transcript: string;
   resources: Resource[];
@@ -507,9 +512,12 @@ function LessonsTab({ courseId }: { courseId: string }) {
   const deleteLessonQuiz = useMutation(api.lessonquizzes.deleteLessonQuiz);
   const generateQuizQuestions = useAction(api.quizgen.generateQuizQuestions);
   const transcribeVideo = useAction(api.quizgen.transcribeVideo);
+  const generateUploadUrl = useMutation(api.storage.generateUploadUrl);
+  const resolveUploadedFile = useMutation(api.storage.resolveUploadedFile);
+  const deleteFile = useMutation(api.storage.deleteFile);
   const [draft, setDraft] = useState<LessonDraft | null>(null);
   const [saving, setSaving] = useState(false);
-  const [mediaMode, setMediaMode] = useState<"image" | "video" | "url">("url");
+  const [mediaMode, setMediaMode] = useState<"image" | "video" | "url" | "file">("url");
   const [quizDraft, setQuizDraft] = useState<LessonQuizDraft | null>(null);
   const [quizSaving, setQuizSaving] = useState(false);
   const [quizGenerating, setQuizGenerating] = useState(false);
@@ -523,6 +531,7 @@ function LessonsTab({ courseId }: { courseId: string }) {
   const [processing, setProcessing] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const uploaderRef = useRef<HTMLElement | null>(null);
+  const videoInputRef = useRef<HTMLInputElement | null>(null);
 
   // Close upload state when the dialog closes
   useEffect(() => {
@@ -603,7 +612,9 @@ function LessonsTab({ courseId }: { courseId: string }) {
   };
 
   const open = (l?: NonNullable<typeof lessons>[number]) => {
-    setMediaMode(l?.image ? "image" : l?.muxPlaybackId ? "video" : "url");
+    setMediaMode(
+      l?.image ? "image" : l?.muxPlaybackId ? "video" : l?.videoStorageId ? "file" : "url",
+    );
     setDraft(
       l
         ? {
@@ -616,6 +627,7 @@ function LessonsTab({ courseId }: { courseId: string }) {
             videoType: (l.videoType as VideoSource) ?? "youtube",
             muxAssetId: l.muxAssetId ?? undefined,
             muxPlaybackId: l.muxPlaybackId ?? undefined,
+            videoStorageId: l.videoStorageId ?? undefined,
             notes: l.notes,
             transcript: l.transcript,
             resources: l.resources,
@@ -625,20 +637,80 @@ function LessonsTab({ courseId }: { courseId: string }) {
   };
 
   /** Switch media type, clearing the other media fields so only one is used. */
-  const chooseMediaMode = (m: "image" | "video" | "url") => {
+  const chooseMediaMode = (m: "image" | "video" | "url" | "file") => {
     setMediaMode(m);
+    // Leaving file mode drops the storage id so a stale uploaded file can
+    // never override a URL/paste saved later. Image/video modes free the file.
+    const oldStorageId = draft?.videoStorageId;
+    if (oldStorageId && (m === "image" || m === "video")) {
+      void deleteFile({ storageId: oldStorageId as never }).catch(() => {});
+    }
     setDraft((d) => {
       if (!d) return d;
       if (m === "image") {
-        return { ...d, videoUrl: "", muxAssetId: undefined, muxPlaybackId: undefined };
+        return {
+          ...d,
+          videoUrl: "",
+          videoStorageId: undefined,
+          muxAssetId: undefined,
+          muxPlaybackId: undefined,
+        };
       }
       if (m === "video") {
-        return { ...d, image: "", videoUrl: "" };
+        return { ...d, image: "", videoUrl: "", videoStorageId: undefined };
       }
-      return { ...d, image: "", muxAssetId: undefined, muxPlaybackId: undefined };
+      if (m === "file") {
+        return { ...d, image: "", muxAssetId: undefined, muxPlaybackId: undefined };
+      }
+      return {
+        ...d,
+        image: "",
+        videoStorageId: undefined,
+        muxAssetId: undefined,
+        muxPlaybackId: undefined,
+      };
     });
     setUploadUrl(null);
     setUploadId(null);
+  };
+
+  /** Upload a video file from the device straight into Convex file storage. */
+  const uploadVideoFile = async (file: File) => {
+    if (!file.type.startsWith("video/")) {
+      setUploadError("Pick a video file — MP4, WebM or MOV work best.");
+      return;
+    }
+    if (file.size > MAX_CONVEX_UPLOAD_BYTES) {
+      setUploadError(
+        `That video is ${Math.round(file.size / 1024 / 1024)} MB — the limit is ${Math.round(MAX_CONVEX_UPLOAD_BYTES / 1024 / 1024)} MB. For larger files use the Mux upload or a YouTube link.`,
+      );
+      return;
+    }
+    setUploading(true);
+    setUploadError(null);
+    try {
+      const { storageId } = await uploadFileToConvex(file, () => generateUploadUrl());
+      const url = await resolveUploadedFile({ storageId: storageId as never });
+      if (!url) throw new Error("The video couldn't be stored — please try again.");
+      // Free the previous uploaded file when replacing one.
+      const oldId = draft?.videoStorageId;
+      if (oldId && oldId !== storageId) {
+        void deleteFile({ storageId: oldId as never }).catch(() => {});
+      }
+      setDraft((d) =>
+        d
+          ? { ...d, videoUrl: url, videoType: "mp4", videoStorageId: storageId }
+          : d,
+      );
+      toast.success("Video uploaded — it plays as an MP4 lesson video.");
+    } catch (err) {
+      setUploadError(
+        err instanceof Error ? err.message : "Upload failed — please try again.",
+      );
+    } finally {
+      setUploading(false);
+      if (videoInputRef.current) videoInputRef.current.value = "";
+    }
   };
 
   const saveLesson = async () => {
@@ -655,6 +727,9 @@ function LessonsTab({ courseId }: { courseId: string }) {
       image: draft.image || undefined,
       muxAssetId: draft.muxAssetId,
       muxPlaybackId: draft.muxPlaybackId,
+      videoStorageId: draft.videoStorageId
+        ? (draft.videoStorageId as never)
+        : undefined,
       notes: draft.notes,
       transcript: draft.transcript,
       resources: draft.resources.filter((r) => r.name && r.url),
@@ -835,7 +910,8 @@ function LessonsTab({ courseId }: { courseId: string }) {
 
       {lessons !== undefined && lessons.length === 0 && (
         <p className="rounded-xl border border-dashed border-white/10 p-6 text-center text-sm text-muted-foreground">
-          No lessons yet — add your first lesson with a YouTube or MP4 video link.
+          No lessons yet — add your first lesson: upload a video from your device,
+          paste a YouTube/Vimeo/Loom link, or use the Mux upload.
         </p>
       )}
 
@@ -863,8 +939,8 @@ function LessonsTab({ courseId }: { courseId: string }) {
                 </div>
                 <div className="space-y-2">
                   <Label>Media type</Label>
-                  <div className="grid h-10 grid-cols-3 overflow-hidden rounded-xl border border-white/10 bg-black/20 text-xs font-medium">
-                    {(["image", "video", "url"] as const).map((m) => (
+                  <div className="grid h-10 grid-cols-4 overflow-hidden rounded-xl border border-white/10 bg-black/20 text-xs font-medium">
+                    {(["image", "video", "file", "url"] as const).map((m) => (
                       <button
                         key={m}
                         type="button"
@@ -876,7 +952,13 @@ function LessonsTab({ courseId }: { courseId: string }) {
                             : "text-muted-foreground hover:text-foreground",
                         )}
                       >
-                        {m === "image" ? "Image" : m === "video" ? "Video" : "URL"}
+                        {m === "image"
+                          ? "Image"
+                          : m === "video"
+                            ? "Video"
+                            : m === "file"
+                              ? "File"
+                              : "URL"}
                       </button>
                     ))}
                   </div>
@@ -956,6 +1038,88 @@ function LessonsTab({ courseId }: { courseId: string }) {
                       )}
                       {uploading ? "Preparing upload…" : "Upload video with Mux"}
                     </Button>
+                  )}
+                  {uploadError && (
+                    <p className="mt-2 rounded-lg border border-rose-400/25 bg-rose-400/8 p-2.5 text-xs text-rose-300">
+                      {uploadError}
+                    </p>
+                  )}
+                </div>
+              )}
+
+              {mediaMode === "file" && (
+                <div className="rounded-xl border border-white/10 bg-black/20 p-4">
+                  <div className="flex items-center gap-2">
+                    <CloudUpload className="size-4 text-lime-300" />
+                    <p className="text-sm font-semibold">Upload video from device</p>
+                    {draft.videoUrl && draft.videoStorageId && (
+                      <span className="ml-auto inline-flex items-center gap-1 rounded-full border border-lime-400/30 bg-lime-400/10 px-2 py-0.5 text-[11px] font-semibold text-lime-300">
+                        <CloudUpload className="size-3" /> Uploaded
+                      </span>
+                    )}
+                  </div>
+                  <p className="mt-1.5 text-xs leading-relaxed text-muted-foreground">
+                    Pick an MP4 / WebM / MOV straight from your device (up to{" "}
+                    {Math.round(MAX_CONVEX_UPLOAD_BYTES / 1024 / 1024)} MB). It is stored
+                    in ForgeX file storage and plays as a normal lesson video.
+                  </p>
+                  {draft.videoUrl && draft.videoStorageId ? (
+                    <div className="mt-3 flex items-center gap-2 text-xs text-lime-300/90">
+                      <PlayCircle className="size-3.5 shrink-0" />
+                      <span className="min-w-0 flex-1 truncate font-mono">
+                        {draft.videoUrl}
+                      </span>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-7 shrink-0 gap-1 text-muted-foreground hover:text-rose-300"
+                        onClick={() => {
+                          void deleteFile({
+                            storageId: draft.videoStorageId as never,
+                          }).catch(() => {});
+                          setDraft({
+                            ...draft,
+                            videoUrl: "",
+                            videoType: "youtube",
+                            videoStorageId: undefined,
+                          });
+                        }}
+                      >
+                        <X className="size-3.5" /> Remove
+                      </Button>
+                    </div>
+                  ) : (
+                    <div className="mt-3">
+                      <input
+                        ref={videoInputRef}
+                        type="file"
+                        accept="video/*"
+                        className="hidden"
+                        onChange={(e) => {
+                          const f = e.target.files?.[0];
+                          if (f) void uploadVideoFile(f);
+                        }}
+                      />
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="gap-1.5 border-lime-400/30 text-lime-300"
+                        onClick={() => videoInputRef.current?.click()}
+                        disabled={uploading}
+                      >
+                        {uploading ? (
+                          <Loader2 className="size-3.5 animate-spin" />
+                        ) : (
+                          <CloudUpload className="size-3.5" />
+                        )}
+                        {uploading ? "Uploading video…" : "Choose video from device"}
+                      </Button>
+                      {uploading && (
+                        <p className="mt-2 text-xs text-muted-foreground">
+                          Uploading… keep this window open.
+                        </p>
+                      )}
+                    </div>
                   )}
                   {uploadError && (
                     <p className="mt-2 rounded-lg border border-rose-400/25 bg-rose-400/8 p-2.5 text-xs text-rose-300">

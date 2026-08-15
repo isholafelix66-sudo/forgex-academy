@@ -319,6 +319,7 @@ export const upsertLesson = mutation({
     image: v.optional(v.string()),
     muxAssetId: v.optional(v.string()),
     muxPlaybackId: v.optional(v.string()),
+    videoStorageId: v.optional(v.id("_storage")),
     notes: v.string(),
     transcript: v.string(),
     resources: v.array(resourceValidator),
@@ -326,17 +327,24 @@ export const upsertLesson = mutation({
   handler: async (ctx, args) => {
     const tutor = await requireTutor(ctx);
     await checkRateLimit(ctx, `tutor:${tutor._id}`, 20, 60 * 60 * 1000);
+    // Direct device uploads: resolve the authoritative playback URL from
+    // Convex storage server-side — never trust a client-derived URL.
+    let videoUrl = args.videoUrl;
+    if (args.videoStorageId) {
+      videoUrl = (await ctx.storage.getUrl(args.videoStorageId)) ?? args.videoUrl;
+    }
     if (args.id) {
       await ctx.db.patch(args.id, {
         courseId: args.courseId,
         title: args.title,
         order: args.order,
         durationMinutes: args.durationMinutes,
-        videoUrl: args.videoUrl,
+        videoUrl,
         videoType: args.videoType,
         image: args.image,
         muxAssetId: args.muxAssetId,
         muxPlaybackId: args.muxPlaybackId,
+        videoStorageId: args.videoStorageId,
         notes: args.notes,
         transcript: args.transcript,
         resources: args.resources,
@@ -348,11 +356,12 @@ export const upsertLesson = mutation({
       title: args.title,
       order: args.order,
       durationMinutes: args.durationMinutes,
-      videoUrl: args.videoUrl,
+      videoUrl,
       videoType: args.videoType,
       image: args.image,
       muxAssetId: args.muxAssetId,
       muxPlaybackId: args.muxPlaybackId,
+      videoStorageId: args.videoStorageId,
       notes: args.notes,
       transcript: args.transcript,
       resources: args.resources,

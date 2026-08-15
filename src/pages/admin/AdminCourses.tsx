@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { Link } from "react-router";
 import { useMutation, useQuery } from "convex/react";
 import type { FunctionReturnType } from "convex/server";
@@ -9,6 +9,7 @@ import {
   BookOpen,
   CheckCircle2,
   Clock,
+  CloudUpload,
   ExternalLink,
   Eye,
   Loader2,
@@ -28,6 +29,11 @@ import { Avatar } from "@/components/site/Avatar";
 import { ImageUploader, type UploadedImage } from "@/components/admin/ImageUploader";
 import { ConfirmDialog } from "@/components/admin/ConfirmDialog";
 import { StatusChip } from "@/pages/tutor/status";
+import { toast } from "sonner";
+import {
+  MAX_CONVEX_UPLOAD_BYTES,
+  uploadFileToConvex,
+} from "@/lib/convex-upload";
 import { timeAgo } from "@/lib/format";
 import { getAdminToken } from "@/lib/admin-session";
 
@@ -70,6 +76,8 @@ export default function AdminCourses() {
   const adminDeleteQuiz = useMutation(api.admin.adminDeleteQuiz);
   const adminUpsertAssignment = useMutation(api.admin.adminUpsertAssignment);
   const adminDeleteAssignment = useMutation(api.admin.adminDeleteAssignment);
+  const adminGenerateUploadUrl = useMutation(api.storage.adminGenerateUploadUrl);
+  const adminResolveUploadUrl = useMutation(api.storage.adminResolveUploadUrl);
 
   const [reviewing, setReviewing] = useState<CourseRow | null>(null);
   const [reviewNote, setReviewNote] = useState("");
@@ -95,6 +103,61 @@ export default function AdminCourses() {
   // Quiz / assignment mini-editors
   const [quizDraft, setQuizDraft] = useState<{ id?: string; title: string; description: string; timeLimitMinutes: number } | null>(null);
   const [assignDraft, setAssignDraft] = useState<{ id?: string; title: string; description: string; instructions: string; maxScore: number; deadline: string } | null>(null);
+
+  // Lesson video upload from device (Convex file storage, admin token flow)
+  const [lessonVideoBusy, setLessonVideoBusy] = useState(false);
+  const [lessonVideoError, setLessonVideoError] = useState<string | null>(null);
+  const lessonVideoInput = useRef<HTMLInputElement | null>(null);
+
+  const uploadLessonVideo = async (file: File) => {
+    setLessonVideoError(null);
+    if (!file.type.startsWith("video/")) {
+      setLessonVideoError("Pick a video file — MP4, WebM or MOV work best.");
+      return;
+    }
+    if (file.size > MAX_CONVEX_UPLOAD_BYTES) {
+      setLessonVideoError(
+        `That video is ${Math.round(file.size / 1024 / 1024)} MB — the limit is ${Math.round(MAX_CONVEX_UPLOAD_BYTES / 1024 / 1024)} MB.`,
+      );
+      return;
+    }
+    if (!token) {
+      setLessonVideoError("Admin session missing — reopen the admin panel.");
+      return;
+    }
+    setLessonVideoBusy(true);
+    try {
+      const { storageId } = await uploadFileToConvex(file, () =>
+        adminGenerateUploadUrl({ token }),
+      );
+      const url = await adminResolveUploadUrl({
+        token,
+        storageId: storageId as never,
+      });
+      if (!url) throw new Error("The video couldn't be stored — please try again.");
+      setLessonDraft((d) => ({
+        ...(d ?? {
+          title: "",
+          order: 1,
+          durationMinutes: 10,
+          image: "",
+          videoType: "mp4",
+          videoUrl: "",
+          notes: "",
+        }),
+        videoUrl: url,
+        videoType: "mp4",
+      }));
+      toast.success("Video uploaded — it plays as an MP4 lesson video.");
+    } catch (err) {
+      setLessonVideoError(
+        err instanceof Error ? err.message : "Upload failed — please try again.",
+      );
+    } finally {
+      setLessonVideoBusy(false);
+      if (lessonVideoInput.current) lessonVideoInput.current.value = "";
+    }
+  };
 
   const rows = all ?? [];
   const content = useQuery(
@@ -541,6 +604,49 @@ export default function AdminCourses() {
                             <option value="mp4">MP4 URL</option>
                           </select>
                           <Input placeholder="Video URL (YouTube / Vimeo / Loom / MP4)" value={lessonDraft?.videoUrl ?? ""} onChange={(e) => setLessonDraft((d) => ({ ...(d ?? { title: "", order: 1, durationMinutes: 10, image: "", videoType: "", videoUrl: "", notes: "" }), videoUrl: e.target.value }))} className="border-white/10 bg-black/30" />
+                          <div className="flex flex-wrap items-center gap-2 sm:col-span-2">
+                            <input
+                              ref={lessonVideoInput}
+                              type="file"
+                              accept="video/*"
+                              className="hidden"
+                              onChange={(e) => {
+                                const f = e.target.files?.[0];
+                                if (f) void uploadLessonVideo(f);
+                              }}
+                            />
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              className="gap-1.5 border-lime-400/30 text-lime-300"
+                              onClick={() => lessonVideoInput.current?.click()}
+                              disabled={lessonVideoBusy}
+                            >
+                              {lessonVideoBusy ? (
+                                <Loader2 className="size-3.5 animate-spin" />
+                              ) : (
+                                <CloudUpload className="size-3.5" />
+                              )}
+                              {lessonVideoBusy
+                                ? "Uploading video…"
+                                : "Upload video from device"}
+                            </Button>
+                            {lessonDraft?.videoType === "mp4" &&
+                              lessonDraft.videoUrl && (
+                                <span className="flex min-w-0 flex-1 items-center gap-1.5 truncate text-xs text-lime-300/90">
+                                  <CheckCircle2 className="size-3.5 shrink-0" />
+                                  <span className="truncate">
+                                    Uploaded — video URL is set
+                                  </span>
+                                </span>
+                              )}
+                            {lessonVideoError && (
+                              <p className="w-full text-xs text-rose-300">
+                                {lessonVideoError}
+                              </p>
+                            )}
+                          </div>
                           <div className="sm:col-span-2">
                             <ImageUploader
                               value={lessonDraft?.image || null}
