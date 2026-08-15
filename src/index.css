@@ -340,3 +340,101 @@
     background-position: 200% center;
   }
 }
+
+/* ---------------------------------------------------------------------------
+   Hero robot — ambient "alive" motion for the ForgeX mascot PNG.
+
+   Every loop animates transform / opacity / filter only (GPU-friendly, no
+   layout properties). Layers are split so each owns a single transform:
+   float+rotate on one wrapper, breath scale on another, brightness on the
+   image itself. All loops are suppressed for prefers-reduced-motion; the
+   mobile media query keeps the glow subtle and reduces blur cost.
+   --------------------------------------------------------------------------- */
+@media (prefers-reduced-motion: no-preference) {
+  @keyframes hero-float {
+    0%,
+    100% {
+      transform: translate3d(0, 0, 0) rotate(-0.9deg);
+    }
+    50% {
+      transform: translate3d(0, -12px, 0) rotate(0.9deg);
+    }
+  }
+  .hero-robot-float {
+    animation: hero-float 7s ease-in-out infinite;
+  }
+
+  @keyframes hero-breath {
+    0%,
+    100% {
+      transform: scale3d(0.99, 0.99, 1);
+    }
+    50% {
+      transform: scale3d(1.01, 1.01, 1);
+    }
+  }
+  .hero-robot-breath {
+    animation: hero-breath 5.5s ease-in-out infinite;
+  }
+
+  /* Laptop screen activity — a faint, slow light pulse read as screen glow.
+     The robot image itself is never altered, only gently brightened. */
+  @keyframes hero-screen-glow {
+    0%,
+    100% {
+      filter: brightness(1);
+    }
+    50% {
+      filter: brightness(1.045);
+    }
+  }
+  .hero-robot-img {
+    animation: hero-screen-glow 6.5s ease-in-out infinite;
+  }
+
+  @keyframes hero-glow-pulse {
+    0%,
+    100% {
+      opacity: 0.45;
+      transform: scale3d(1, 1, 1);
+    }
+    50% {
+      opacity: 0.75;
+      transform: scale3d(1.05, 1.05, 1);
+    }
+  }
+  .hero-glow-pulse {
+    animation: hero-glow-pulse 6s ease-in-out infinite;
+  }
+
+  /* Floating dust particles — each drifts up, sways and fades. Per-particle
+     duration / drift / opacity come from inline CSS custom properties. */
+  @keyframes hero-particle {
+    0% {
+      transform: translate3d(0, 0, 0);
+      opacity: 0;
+    }
+    15% {
+      opacity: var(--p-opacity, 0.5);
+    }
+    85% {
+      opacity: var(--p-opacity, 0.5);
+    }
+    100% {
+      transform: translate3d(var(--p-drift-x, 10px), -110px, 0);
+      opacity: 0;
+    }
+  }
+  .hero-particle {
+    animation: hero-particle var(--p-duration, 11s) ease-in-out infinite;
+  }
+}
+
+/* Mobile: keep the robot float + breath alive (the mascot stays animated), but
+   drop heavy blurred-glow pulsing to static to keep small GPUs cool. */
+@media (max-width: 767px) {
+  .hero-glow-pulse {
+    animation: none;
+    opacity: 0.5;
+  }
+}

@@ -1,4 +1,4 @@
-import { Suspense, lazy, useEffect } from "react";
+import { useEffect } from "react";
 import { Link } from "react-router";
 import { motion } from "framer-motion";
 import { useMutation, useQuery } from "convex/react";
@@ -46,33 +46,7 @@ const item = {
   },
 };
 
-// Interactive 3D Learning Device — lazy so the hero text paints first and
-// the Three.js chunk only loads once the page is interactive.
-const ForgeXLearningDevice = lazy(() =>
-  import("@/components/site/ForgeXLearningDevice").then((m) => ({
-    default: m.ForgeXLearningDevice,
-  })),
-);
-
-function HeroVisualFallback() {
-  return (
-    <div className="mx-auto mt-14 w-full max-w-5xl">
-      <div className="mb-3 flex items-center justify-center gap-2.5">
-        <span className="h-px w-8 bg-gradient-to-r from-transparent to-lime-400/60" />
-        <p className="text-[11px] font-semibold uppercase tracking-[0.28em] text-lime-300/90">
-          ForgeX Learning Device
-        </p>
-        <span className="h-px w-8 bg-gradient-to-l from-transparent to-lime-400/60" />
-      </div>
-      <div className="h-80 animate-pulse rounded-3xl border border-white/10 bg-black/30 sm:h-[30rem]">
-        <div className="flex h-full items-center justify-center">
-          <div className="size-8 animate-spin rounded-full border-2 border-lime-400/30 border-t-lime-400" />
-        </div>
-      </div>
-    </div>
-  );
-}
-
+import { HeroRobot } from "@/components/site/HeroRobot";
 export default function Landing() {
   const seed = useMutation(api.seed.ensureSeedData);
   const content = useQuery(api.public.siteContentAll);
@@ -120,65 +94,72 @@ export default function Landing() {
       {/* ------------------------------------------------ Hero */}
       <section className="relative overflow-hidden">
         <div className="mx-auto max-w-7xl px-4 pb-20 pt-16 sm:px-6 sm:pt-24">
-          <motion.div
-            variants={container}
-            initial="hidden"
-            animate="show"
-            className="flex flex-col items-center text-center"
-          >
-            <motion.div variants={item}>
-              <span className="inline-flex items-center gap-2 rounded-full border border-lime-400/30 bg-lime-400/10 px-4 py-1.5 text-xs font-semibold text-lime-300">
-                <Sparkles className="size-3.5" />
-                {hero?.badge ?? "The learning platform of ForgeX Network"}
-              </span>
-            </motion.div>
-
-            <motion.h1
-              variants={item}
-              className="font-display mt-6 max-w-4xl text-5xl font-bold leading-[1.05] tracking-tight sm:text-7xl"
-            >
-              Discover. <span className="text-gradient">Express.</span> Build.
-            </motion.h1>
-
-            <motion.p
-              variants={item}
-              className="mt-6 max-w-2xl text-lg leading-relaxed text-muted-foreground"
-            >
-              {hero?.subtitle ??
-                "ForgeX Academy turns curiosity into career-ready skills — structured roadmaps, hands-on projects, expert tutors and verifiable certificates. Free to start, forever useful."}
-            </motion.p>
-
-            <motion.div variants={item} className="mt-9 flex flex-wrap items-center justify-center gap-3">
-              <AnimatedCta to={hero?.primaryCta?.link ?? "/courses"}>
-                {hero?.primaryCta?.label ?? "Start learning free"}
-                <ArrowRight className="size-4 transition-transform group-hover:translate-x-0.5" />
-              </AnimatedCta>
-              <AnimatedCta to={hero?.secondaryCta?.link ?? "/roadmap"} variant="outline">
-                <Map className="size-4" />
-                {hero?.secondaryCta?.label ?? "Explore roadmaps"}
-              </AnimatedCta>
-            </motion.div>
-
+          <div className="grid items-center gap-14 lg:grid-cols-[1.05fr_0.95fr] lg:gap-8">
+            {/* Left — headline, supporting copy, CTAs */}
             <motion.div
-              variants={item}
-              className="mt-10 flex flex-wrap items-center justify-center gap-x-8 gap-y-3 text-sm text-muted-foreground"
+              variants={container}
+              initial="hidden"
+              animate="show"
+              className="flex flex-col items-center text-center lg:items-start lg:text-left"
             >
-              <span className="inline-flex items-center gap-2">
-                <CheckCircle2 className="size-4 text-lime-400" /> Free to start
-              </span>
-              <span className="inline-flex items-center gap-2">
-                <Award className="size-4 text-lime-400" /> Verifiable certificates
-              </span>
-              <span className="inline-flex items-center gap-2">
-                <Users className="size-4 text-lime-400" /> Learn at your pace
-              </span>
-            </motion.div>
-          </motion.div>
+              <motion.div variants={item}>
+                <span className="inline-flex items-center gap-2 rounded-full border border-lime-400/30 bg-lime-400/10 px-4 py-1.5 text-xs font-semibold text-lime-300">
+                  <Sparkles className="size-3.5" />
+                  {hero?.badge ?? "The learning platform of ForgeX Network"}
+                </span>
+              </motion.div>
 
-          {/* ForgeX Learning Device — interactive 3D centerpiece */}
-          <Suspense fallback={<HeroVisualFallback />}>
-            <ForgeXLearningDevice />
-          </Suspense>
+              <motion.h1
+                variants={item}
+                className="font-display mt-6 max-w-4xl text-5xl font-bold leading-[1.05] tracking-tight sm:text-7xl"
+              >
+                Discover. <span className="text-gradient">Express.</span> Build.
+              </motion.h1>
+
+              <motion.p
+                variants={item}
+                className="mt-6 max-w-2xl text-lg leading-relaxed text-muted-foreground"
+              >
+                {hero?.subtitle ??
+                  "ForgeX Academy turns curiosity into career-ready skills — structured roadmaps, hands-on projects, expert tutors and verifiable certificates. Free to start, forever useful."}
+              </motion.p>
+
+              <motion.div variants={item} className="mt-9 flex flex-wrap items-center justify-center gap-3 lg:justify-start">
+                <AnimatedCta to={hero?.primaryCta?.link ?? "/courses"}>
+                  {hero?.primaryCta?.label ?? "Start learning free"}
+                  <ArrowRight className="size-4 transition-transform group-hover:translate-x-0.5" />
+                </AnimatedCta>
+                <AnimatedCta to={hero?.secondaryCta?.link ?? "/roadmap"} variant="outline">
+                  <Map className="size-4" />
+                  {hero?.secondaryCta?.label ?? "Explore roadmaps"}
+                </AnimatedCta>
+              </motion.div>
+
+              <motion.div
+                variants={item}
+                className="mt-10 flex flex-wrap items-center justify-center gap-x-8 gap-y-3 text-sm text-muted-foreground lg:justify-start"
+              >
+                <span className="inline-flex items-center gap-2">
+                  <CheckCircle2 className="size-4 text-lime-400" /> Free to start
+                </span>
+                <span className="inline-flex items-center gap-2">
+                  <Award className="size-4 text-lime-400" /> Verifiable certificates
+                </span>
+                <span className="inline-flex items-center gap-2">
+                  <Users className="size-4 text-lime-400" /> Learn at your pace
+                </span>
+              </motion.div>
+            </motion.div>
+
+            {/* Right — the ForgeX robot mascot, floating in the environment */}
+            <HeroRobot
+              imageSrc={
+                typeof content?.heroImage === "string" && content.heroImage.trim()
+                  ? content.heroImage
+                  : undefined
+              }
+            />
+          </div>
 
           {/* Stats */}
           <div className="mx-auto mt-16 grid max-w-3xl grid-cols-2 gap-8 rounded-3xl border border-white/10 bg-card/60 p-8 backdrop-blur sm:grid-cols-4">
