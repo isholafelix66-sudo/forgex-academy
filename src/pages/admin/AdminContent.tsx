@@ -2,10 +2,12 @@ import { useEffect, useState } from "react";
 import { useMutation, useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import {
+  Bot,
   Check,
   Clapperboard,
   CloudUpload,
   ImageIcon,
+  ImageOff,
   Link2,
   Loader2,
   Mail,
@@ -40,7 +42,6 @@ const TEXT_FIELDS: Array<{ key: string; label: string; hint: string; rows: numbe
 const IMAGE_FIELDS: Array<{ key: string; label: string; hint: string }> = [
   { key: "logo", label: "Website logo", hint: "Replaces the logo in the nav, footer and app." },
   { key: "favicon", label: "Favicon", hint: "Small browser-tab icon." },
-  { key: "heroImage", label: "Homepage hero image", hint: "Background visual on the landing hero." },
   { key: "missionImage", label: "Mission image", hint: "Shown beside the mission statement." },
   { key: "visionImage", label: "Vision image", hint: "Shown beside the vision statement." },
   { key: "aboutImage", label: "About image", hint: "Shown on the About page." },
@@ -105,6 +106,7 @@ export default function AdminContent() {
   const content = useQuery(api.public.siteContentAll);
   const contentSet = useMutation(api.admin.contentSet);
   const token = getAdminToken() ?? "";
+  const heroImage = typeof content?.heroImage === "string" ? content.heroImage : undefined;
 
   const [contact, setContact] = useState<{ email: string; phone: string; address: string } | null>(null);
   const [savingContact, setSavingContact] = useState(false);
@@ -220,6 +222,55 @@ export default function AdminContent() {
         </div>
       ) : (
         <div className="space-y-8">
+          {/* ForgeX robot mascot — the homepage hero centerpiece */}
+          <section className="rounded-2xl border border-lime-400/30 bg-gradient-to-br from-lime-400/10 via-card to-card p-6">
+            <div className="flex flex-wrap items-start justify-between gap-4">
+              <div>
+                <h2 className="font-display flex items-center gap-2 text-base font-semibold">
+                  <Bot className="size-4 text-lime-300" /> ForgeX robot mascot
+                </h2>
+                <p className="mt-1 max-w-2xl text-sm leading-relaxed text-muted-foreground">
+                  The official ForgeX robot that floats on the homepage hero with its
+                  neon glow. Upload the robot PNG here and it goes live on the homepage
+                  instantly — no code needed.
+                </p>
+              </div>
+              {heroImage ? (
+                <span className="inline-flex items-center gap-1.5 rounded-full border border-lime-400/40 bg-lime-400/10 px-3 py-1 text-xs font-semibold text-lime-300">
+                  <Check className="size-3.5" /> Live on homepage
+                </span>
+              ) : (
+                <span className="inline-flex items-center gap-1.5 rounded-full border border-white/15 bg-white/5 px-3 py-1 text-xs font-medium text-muted-foreground">
+                  <ImageOff className="size-3.5" /> Not set — placeholder shown
+                </span>
+              )}
+            </div>
+
+            <div className="mt-5 grid items-center gap-6 md:grid-cols-2">
+              <ImageUploader
+                value={heroImage}
+                label="Upload robot PNG"
+                hint="Robot mascot"
+                onUploaded={(img) => void saveImage("heroImage", img)}
+                onClear={() => void contentSet({ key: "heroImage", value: "", token })}
+                record={{ kind: "mascot", label: "ForgeX robot mascot" }}
+              />
+              <div className="flex h-full min-h-56 flex-col items-center justify-center rounded-xl border border-dashed border-white/10 bg-black/20 p-6 text-center">
+                {heroImage ? (
+                  <img src={heroImage} alt="ForgeX robot mascot preview" className="max-h-64 w-auto" />
+                ) : (
+                  <>
+                    <Bot className="size-10 text-lime-300/40" />
+                    <p className="mt-3 max-w-xs text-xs leading-relaxed text-muted-foreground">
+                      No robot uploaded yet. Upload the PNG on the left and it replaces
+                      the homepage placeholder immediately.
+                    </p>
+                  </>
+                )}
+              </div>
+            </div>
+          </section>
+
           {/* Branding images */}
           <section className="rounded-2xl border border-white/10 bg-card p-6">
             <h2 className="font-display flex items-center gap-2 text-base font-semibold">
