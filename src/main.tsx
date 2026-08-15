@@ -369,10 +369,17 @@ function RouteBoundary({ children }: { children: React.ReactNode }) {
   );
 }
 
-// Create the Convex client only when a deployment URL is actually available.
-// If it's missing (or the client fails to construct) the app still renders a
-// friendly "warming up" screen instead of crashing to a blank page.
-const convexUrl = (import.meta.env.VITE_CONVEX_URL as string | undefined)?.trim();
+// The Convex deployment URL is normally injected at build time through the
+// VITE_CONVEX_URL environment variable (the managed platform build sets it;
+// on Vercel it must live in Project → Settings → Environment Variables). If
+// it is missing from the build, fall back to this app's production
+// deployment so the deployed site can never boot to the "warming up"
+// screen — the URL is public by design and already shipped in the client
+// bundle. VITE_CONVEX_URL (when set) always wins over this fallback.
+const DEFAULT_CONVEX_URL = "https://hidden-poodle-567.convex.cloud";
+const convexUrl =
+  (import.meta.env.VITE_CONVEX_URL as string | undefined)?.trim() ||
+  DEFAULT_CONVEX_URL;
 let convex: ConvexReactClient | null = null;
 try {
   if (convexUrl) {
