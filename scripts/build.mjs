@@ -55,5 +55,5 @@ function run(step, bin, args, memoryMb) {
 const tscBin = resolvePackageBin("typescript");
 const viteBin = resolvePackageBin("vite");
 
-run("tsc -b", tscBin, ["-b"], 3072);
+run("tsc -b", tscBin, ["-b"], 2048);
 run("vite build", viteBin, ["build"], 1024);
