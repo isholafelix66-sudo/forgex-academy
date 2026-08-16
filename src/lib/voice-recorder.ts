@@ -39,13 +39,48 @@ function pickRecordingMime(): string | undefined {
   return RECORD_MIME_PREFERENCE.find((m) => MediaRecorder.isTypeSupported(m));
 }
 
+/**
+ * Detect a browser-level mic block BEFORE calling getUserMedia.
+ *
+ * The most common "mic is blocked" case on a newly deployed site is a stale
+ * permission: the browser auto-denied the mic once (e.g. an old deployment
+ * served `Permissions-Policy: microphone=()`, or the user clicked "block"),
+ * and now remembers that origin as "denied" — every later request fails
+ * silently without prompting. `navigator.permissions.query` exposes that
+ * state where supported (Chrome/Edge/Firefox), so we can tell the user the
+ * exact unlock steps instead of a generic error. Returns `null` when the
+ * state can't be read (Safari) — those browsers surface the same situation
+ * through getUserMedia's NotAllowedError instead.
+ */
+async function isMicPermissionBlocked(): Promise<boolean | null> {
+  if (typeof navigator === "undefined" || !navigator.permissions?.query) {
+    return null; // can't tell — let getUserMedia report the failure
+  }
+  try {
+    // `microphone` isn't in every TS lib's PermissionName union yet.
+    const status = await navigator.permissions.query({
+      name: "microphone",
+    } as unknown as PermissionDescriptor);
+    return status.state === "denied";
+  } catch {
+    return null; // unsupported in this browser (e.g. Safari) — proceed
+  }
+}
+
+function micBlockedInstructions(): string {
+  const isSafari =
+    typeof navigator !== "undefined" && /safari/i.test(navigator.userAgent) &&
+    !/chrome/i.test(navigator.userAgent);
+  return isSafari
+    ? "Microphone access was denied — open Safari Settings → Websites → Microphone, allow this site, then refresh and try again."
+    : "Microphone access was denied — click the padlock icon in the address bar → Site settings → Microphone → Allow, then refresh and try again.";
+}
+
 /** Translate getUserMedia failures into copy users actually understand. */
 function friendlyMicError(err: unknown): Error {
   const name = err instanceof DOMException ? err.name : "";
   if (name === "NotAllowedError" || name === "SecurityError") {
-    return new Error(
-      "Microphone access was denied — allow the mic in your browser settings, then try again.",
-    );
+    return new Error(micBlockedInstructions());
   }
   if (name === "NotFoundError" || name === "DevicesNotFoundError") {
     return new Error("No microphone was found — connect one and try again.");
@@ -135,6 +170,22 @@ export async function startVoiceRecording(): Promise<VoiceRecording> {
     throw new Error(
       "Voice recording isn't supported in this browser — try Chrome, Safari or Firefox.",
     );
+  }
+
+  // Sanity check BEFORE the prompt: if the site isn't a secure context
+  // (http, or a sandboxed/embedded frame), mediaDevices doesn't exist and the
+  // browser reports nothing useful. Name the real cause instead.
+  if (!navigator.mediaDevices) {
+    throw new Error(
+      "Voice recording needs a secure (HTTPS) page — and this app must not run inside a sandboxed frame. Open the site directly in a new tab.",
+    );
+  }
+
+  // Pre-flight permission check — catches the browser-remembered "denied"
+  // state and turns it into exact unlock steps instead of a silent failure.
+  const blocked = await isMicPermissionBlocked();
+  if (blocked) {
+    throw new Error(micBlockedInstructions());
   }
 
   let stream: MediaStream;
