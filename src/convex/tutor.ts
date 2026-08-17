@@ -182,6 +182,8 @@ export const upsertCourse = mutation({
     difficulty: difficultyValidator,
     durationHours: v.number(),
     image: v.optional(v.string()),
+    // Device-uploaded thumbnail: resolved to an authoritative URL below.
+    imageStorageId: v.optional(v.id("_storage")),
     gradient: v.optional(v.string()),
     icon: v.optional(v.string()),
     prerequisites: v.array(v.string()),
@@ -214,6 +216,12 @@ export const upsertCourse = mutation({
       exists && exists._id !== args.id
         ? `${baseSlug}-${Date.now().toString(36)}`
         : baseSlug;
+    // Resolve a device-uploaded thumbnail to its authoritative public URL.
+    let image = args.image;
+    if (args.imageStorageId) {
+      image =
+        (await ctx.storage.getUrl(args.imageStorageId)) ?? args.image;
+    }
     if (args.id) {
       await ctx.db.patch(args.id, {
         title: args.title,
@@ -226,7 +234,8 @@ export const upsertCourse = mutation({
         levelId: args.levelId,
         difficulty: args.difficulty,
         durationHours: args.durationHours,
-        image: args.image,
+        image,
+        imageStorageId: args.imageStorageId,
         gradient: args.gradient,
         icon: args.icon,
         prerequisites: args.prerequisites,
@@ -251,7 +260,8 @@ export const upsertCourse = mutation({
       durationHours: args.durationHours,
       rating: 0,
       ratingCount: 0,
-      image: args.image,
+      image,
+      imageStorageId: args.imageStorageId,
       gradient: args.gradient,
       icon: args.icon,
       prerequisites: args.prerequisites,

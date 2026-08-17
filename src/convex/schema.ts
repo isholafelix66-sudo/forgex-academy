@@ -166,6 +166,9 @@ const schema = defineSchema(
       rating: v.number(),
       ratingCount: v.number(),
       image: v.optional(v.string()), // external image URL (optional)
+      // Device-uploaded thumbnail lives in Convex file storage; the id lets
+      // the backend resolve the authoritative URL and clean up files.
+      imageStorageId: v.optional(v.id("_storage")),
       gradient: v.optional(v.string()), // gradient preset key
       icon: v.optional(v.string()), // emoji or lucide name
       prerequisites: v.array(v.string()),

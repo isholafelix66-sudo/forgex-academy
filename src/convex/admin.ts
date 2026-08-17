@@ -1523,6 +1523,8 @@ export const adminUpsertCourse = mutation({
     difficulty: difficultyValidator,
     durationHours: v.number(),
     image: v.optional(v.string()),
+    // Device-uploaded thumbnail: resolved to an authoritative URL below.
+    imageStorageId: v.optional(v.id("_storage")),
     gradient: v.optional(v.string()),
     icon: v.optional(v.string()),
     prerequisites: v.array(v.string()),
@@ -1533,7 +1535,10 @@ export const adminUpsertCourse = mutation({
   },
   handler: async (ctx, args) => {
     await requireAdminSession(ctx, args.token);
-    const { token, id, ...data } = args;
+    const { token, id, imageStorageId, ...data } = args;
+    if (imageStorageId) {
+      data.image = (await ctx.storage.getUrl(imageStorageId)) ?? data.image;
+    }
     const baseSlug = slugify(data.title) || `course-${Date.now()}`;
     const exists = await ctx.db
       .query("courses")
@@ -1544,6 +1549,7 @@ export const adminUpsertCourse = mutation({
     if (id) {
       await ctx.db.patch(id, {
         ...data,
+        imageStorageId,
         slug,
         status: data.published ? "approved" : "draft",
         reviewNote: undefined,
@@ -1553,6 +1559,7 @@ export const adminUpsertCourse = mutation({
     }
     const newId = await ctx.db.insert("courses", {
       ...data,
+      imageStorageId,
       slug,
       rating: 0,
       ratingCount: 0,

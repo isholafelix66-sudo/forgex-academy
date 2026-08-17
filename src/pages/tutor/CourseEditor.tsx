@@ -1,10 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Link, useNavigate, useParams } from "react-router";
+import { Link, useNavigate, useParams, useSearchParams } from "react-router";
 import { useAction, useMutation, useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import MuxUploader from "@mux/mux-uploader-react";
 import {
   ArrowLeft,
+  ArrowRight,
+  CheckCircle2,
   CloudUpload,
   FileText,
   ListChecks,
@@ -12,6 +14,7 @@ import {
   Mic,
   PlayCircle,
   Plus,
+  Rocket,
   Save,
   Sparkles,
   Trash2,
@@ -25,7 +28,6 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
-import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import {
   Dialog,
   DialogContent,
@@ -176,6 +178,8 @@ type CourseLike = {
   levelId?: string;
   difficulty?: string;
   durationHours?: number;
+  image?: string | null;
+  imageStorageId?: string | null;
   gradient?: string | null;
   icon?: string | null;
   prerequisites?: string[];
@@ -183,12 +187,25 @@ type CourseLike = {
   featured?: boolean;
 };
 
-function DetailsForm({ courseId, initial }: { courseId?: string; initial?: CourseLike | null }) {
+function DetailsForm({
+  courseId,
+  initial,
+  onSaved,
+}: {
+  courseId?: string;
+  initial?: CourseLike | null;
+  /** Called with the (possibly new) course id after a successful save. */
+  onSaved?: (id: string) => void;
+}) {
   const { user } = useAuth();
   const navigate = useNavigate();
   const categories = useQuery(api.public.categoriesList);
   const roadmaps = useQuery(api.public.roadmapsAll);
   const upsertCourse = useMutation(api.tutor.upsertCourse);
+  const generateUploadUrl = useMutation(api.storage.generateUploadUrl);
+  const resolveUploadedFile = useMutation(api.storage.resolveUploadedFile);
+  const deleteFile = useMutation(api.storage.deleteFile);
+  const thumbInputRef = useRef<HTMLInputElement | null>(null);
 
   const [form, setForm] = useState(() => ({
     title: initial?.title ?? "",
@@ -200,6 +217,8 @@ function DetailsForm({ courseId, initial }: { courseId?: string; initial?: Cours
     levelId: initial?.levelId ?? "",
     difficulty: initial?.difficulty ?? "beginner",
     durationHours: initial?.durationHours ?? 12,
+    image: initial?.image ?? "",
+    imageStorageId: initial?.imageStorageId ?? undefined,
     gradient: initial?.gradient ?? "lime",
     icon: initial?.icon ?? "🎓",
     prerequisites: (initial?.prerequisites ?? []).join(", "),
@@ -207,7 +226,11 @@ function DetailsForm({ courseId, initial }: { courseId?: string; initial?: Cours
     featured: initial?.featured ?? false,
   }));
   const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [thumbBusy, setThumbBusy] = useState(false);
+  const [thumbError, setThumbError] = useState<string | null>(null);
+  const savedTimer = useRef<number | null>(null);
 
   const levels = useMemo(
     () => roadmaps?.find((r) => r._id === form.roadmapId)?.levels ?? [],
@@ -233,6 +256,10 @@ function DetailsForm({ courseId, initial }: { courseId?: string; initial?: Cours
       levelId: form.levelId ? (form.levelId as never) : undefined,
       difficulty: form.difficulty as never,
       durationHours: Number(form.durationHours) || 0,
+      image: form.image || undefined,
+      imageStorageId: form.imageStorageId
+        ? (form.imageStorageId as never)
+        : undefined,
       gradient: form.gradient,
       icon: form.icon,
       prerequisites: form.prerequisites.split(",").map((s) => s.trim()).filter(Boolean),
@@ -240,12 +267,58 @@ function DetailsForm({ courseId, initial }: { courseId?: string; initial?: Cours
       featured: form.featured,
       published: false,
     })) as string;
-      if (!courseId) navigate(`/tutor/courses/${id}`, { replace: true });
+      setSaved(true);
+      if (savedTimer.current) window.clearTimeout(savedTimer.current);
+      savedTimer.current = window.setTimeout(() => setSaved(false), 2500);
+      if (!courseId) navigate(`/tutor/courses/${id}?step=lessons`, { replace: true });
+      else onSaved?.(id);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to save course.");
     } finally {
       setSaving(false);
     }
+  };
+
+  /** Upload a thumbnail image from the device into Convex file storage. */
+  const uploadThumbnail = async (file: File) => {
+    setThumbError(null);
+    if (!["image/jpeg", "image/png", "image/webp"].includes(file.type)) {
+      setThumbError("Pick a JPG, PNG or WEBP image.");
+      return;
+    }
+    if (file.size > MAX_CONVEX_UPLOAD_BYTES) {
+      setThumbError(
+        `That image is ${Math.round(file.size / 1024 / 1024)} MB — the limit is ${Math.round(MAX_CONVEX_UPLOAD_BYTES / 1024 / 1024)} MB.`,
+      );
+      return;
+    }
+    setThumbBusy(true);
+    try {
+      const { storageId } = await uploadFileToConvex(file, () => generateUploadUrl());
+      const url = await resolveUploadedFile({ storageId: storageId as never });
+      if (!url) throw new Error("The image couldn't be stored — please try again.");
+      // Free the previous uploaded thumbnail when replacing one.
+      const oldId = form.imageStorageId;
+      if (oldId && oldId !== storageId) {
+        void deleteFile({ storageId: oldId as never }).catch(() => {});
+      }
+      setForm((f) => ({ ...f, image: url, imageStorageId: storageId }));
+      toast.success("Thumbnail uploaded — save the course to apply it.");
+    } catch (err) {
+      setThumbError(
+        err instanceof Error ? err.message : "Upload failed — please try again.",
+      );
+    } finally {
+      setThumbBusy(false);
+      if (thumbInputRef.current) thumbInputRef.current.value = "";
+    }
+  };
+
+  const removeThumbnail = () => {
+    if (form.imageStorageId) {
+      void deleteFile({ storageId: form.imageStorageId as never }).catch(() => {});
+    }
+    setForm((f) => ({ ...f, image: "", imageStorageId: undefined }));
   };
 
   return (
@@ -266,6 +339,88 @@ function DetailsForm({ courseId, initial }: { courseId?: string; initial?: Cours
         <div className="space-y-2 lg:col-span-2">
           <Label>Long description *</Label>
           <Textarea value={form.longDescription} onChange={(e) => set("longDescription", e.target.value)} rows={4} placeholder="Full course overview…" className="border-white/10 bg-black/20" />
+        </div>
+        <div className="space-y-2 lg:col-span-2">
+          <Label>Course thumbnail</Label>
+          {form.image ? (
+            <div className="flex flex-wrap items-center gap-4 rounded-xl border border-white/10 bg-black/20 p-3">
+              <img
+                src={form.image}
+                alt="Course thumbnail"
+                className="h-20 w-32 rounded-lg border border-white/10 object-cover"
+              />
+              <div className="min-w-0 flex-1">
+                <p className="text-sm text-lime-300/90">✓ Thumbnail uploaded</p>
+                <p className="mt-0.5 text-xs text-muted-foreground">
+                  Shown on course cards and the course catalog.
+                </p>
+                <div className="mt-2 flex flex-wrap gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="gap-1.5 border-white/15"
+                    onClick={() => thumbInputRef.current?.click()}
+                    disabled={thumbBusy}
+                  >
+                    {thumbBusy ? (
+                      <Loader2 className="size-3.5 animate-spin" />
+                    ) : (
+                      <CloudUpload className="size-3.5" />
+                    )}
+                    Replace
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="gap-1.5 text-muted-foreground hover:text-rose-300"
+                    onClick={removeThumbnail}
+                  >
+                    <Trash2 className="size-3.5" /> Remove
+                  </Button>
+                </div>
+              </div>
+            </div>
+          ) : (
+            <div className="rounded-xl border border-dashed border-white/15 p-5 text-center">
+              <CloudUpload className="mx-auto size-6 text-lime-300" />
+              <p className="mt-2 text-sm font-medium">Add a thumbnail from your device</p>
+              <p className="mx-auto mt-1 max-w-md text-xs text-muted-foreground">
+                JPG, PNG or WEBP · up to{" "}
+                {Math.round(MAX_CONVEX_UPLOAD_BYTES / 1024 / 1024)} MB. Stored in
+                ForgeX file storage — no external service needed.
+              </p>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="mt-3 gap-1.5 border-lime-400/30 text-lime-300"
+                onClick={() => thumbInputRef.current?.click()}
+                disabled={thumbBusy}
+              >
+                {thumbBusy ? (
+                  <Loader2 className="size-3.5 animate-spin" />
+                ) : (
+                  <CloudUpload className="size-3.5" />
+                )}
+                {thumbBusy ? "Uploading…" : "Choose image from device"}
+              </Button>
+              {thumbError && (
+                <p className="mt-2 text-xs text-rose-300">{thumbError}</p>
+              )}
+            </div>
+          )}
+          <input
+            ref={thumbInputRef}
+            type="file"
+            accept="image/jpeg,image/png,image/webp"
+            className="hidden"
+            onChange={(e) => {
+              const f = e.target.files?.[0];
+              if (f) void uploadThumbnail(f);
+            }}
+          />
         </div>
         <div className="space-y-2">
           <Label>Category *</Label>
@@ -362,18 +517,29 @@ function DetailsForm({ courseId, initial }: { courseId?: string; initial?: Cours
         <p className="mt-4 rounded-xl border border-rose-400/25 bg-rose-400/8 p-3 text-sm text-rose-300">{error}</p>
       )}
 
-      <div className="mt-6 flex items-center gap-3">
+      <div className="mt-6 flex flex-wrap items-center gap-3">
         <Button
           onClick={() => void save()}
           disabled={saving || !form.title || !form.categoryId}
           className="gap-2 bg-lime-400 font-semibold text-black hover:bg-lime-300"
         >
-          {saving ? <Loader2 className="size-4 animate-spin" /> : <Save className="size-4" />}
-          {courseId ? "Save changes" : "Create course"}
+          {saving ? (
+            <Loader2 className="size-4 animate-spin" />
+          ) : saved ? (
+            <CheckCircle2 className="size-4" />
+          ) : (
+            <Save className="size-4" />
+          )}
+          {saving
+            ? "Saving…"
+            : saved
+              ? "✓ Saved"
+              : "Save & Continue →"}
         </Button>
         {!courseId && (
           <p className="text-xs text-muted-foreground">
-            Courses start as drafts. Submit for review once content is ready.
+            Courses start as drafts — you can keep building (lessons, quizzes,
+            assignments) and submit for review when ready.
           </p>
         )}
       </div>
@@ -1530,14 +1696,239 @@ function AssignmentsTab({ courseId }: { courseId: string }) {
 }
 
 // ---------------------------------------------------------------------------
+// Review & publish tab
+// ---------------------------------------------------------------------------
+function ReviewTab({
+  courseId,
+  course,
+  onPublished,
+}: {
+  courseId: string;
+  course: NonNullable<ReturnType<typeof useQuery<typeof api.tutor.myCourses>>>[number];
+  onPublished: () => void;
+}) {
+  const { user } = useAuth();
+  const navigate = useNavigate();
+  const lessons = useQuery(api.public.lessonsByCourse, { courseId: courseId as never });
+  const quizzes = useQuery(api.tutor.courseQuizzesFull, { courseId: courseId as never });
+  const assignments = useQuery(api.tutor.courseAssignmentsFull, {
+    courseId: courseId as never,
+  });
+  const upsertCourse = useMutation(api.tutor.upsertCourse);
+  const submitForReview = useMutation(api.tutor.submitCourseForReview);
+  const [busy, setBusy] = useState<"draft" | "publish" | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const lessonCount = lessons?.length ?? 0;
+  const quizCount = quizzes?.length ?? 0;
+  const assignmentCount = assignments?.length ?? 0;
+
+  const saveDraft = async () => {
+    if (!user) return;
+    setBusy("draft");
+    setError(null);
+    try {
+      await upsertCourse({
+        id: courseId as never,
+        title: course.title,
+        subtitle: course.subtitle ?? "",
+        description: course.description ?? "",
+        longDescription: course.longDescription ?? "",
+        categoryId: course.categoryId as never,
+        tutorId: user._id as never,
+        roadmapId: course.roadmapId ? (course.roadmapId as never) : undefined,
+        levelId: course.levelId ? (course.levelId as never) : undefined,
+        difficulty: course.difficulty as never,
+        durationHours: course.durationHours,
+        image: course.image ?? undefined,
+        imageStorageId: course.imageStorageId
+          ? (course.imageStorageId as never)
+          : undefined,
+        gradient: course.gradient ?? undefined,
+        icon: course.icon ?? undefined,
+        prerequisites: course.prerequisites ?? [],
+        skills: course.skills ?? [],
+        featured: course.featured,
+        published: false,
+      });
+      toast.success("✓ Draft saved — you can continue editing later.");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Couldn't save the draft.");
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const publish = async () => {
+    if (!user) return;
+    if (!course.title.trim() || !course.categoryId) {
+      setError("Add a course title and category before publishing.");
+      return;
+    }
+    setBusy("publish");
+    setError(null);
+    try {
+      if (user.role === "admin") {
+        await upsertCourse({
+          id: courseId as never,
+          title: course.title,
+          subtitle: course.subtitle ?? "",
+          description: course.description ?? "",
+          longDescription: course.longDescription ?? "",
+          categoryId: course.categoryId as never,
+          tutorId: user._id as never,
+          roadmapId: course.roadmapId ? (course.roadmapId as never) : undefined,
+          levelId: course.levelId ? (course.levelId as never) : undefined,
+          difficulty: course.difficulty as never,
+          durationHours: course.durationHours,
+          image: course.image ?? undefined,
+          imageStorageId: course.imageStorageId
+            ? (course.imageStorageId as never)
+            : undefined,
+          gradient: course.gradient ?? undefined,
+          icon: course.icon ?? undefined,
+          prerequisites: course.prerequisites ?? [],
+          skills: course.skills ?? [],
+          featured: course.featured,
+          published: true,
+        });
+        toast.success("Course published! 🎉");
+      } else {
+        await submitForReview({ courseId: courseId as never });
+        toast.success(
+          "Submitted for admin review — you'll be notified once it's approved.",
+        );
+      }
+      onPublished();
+      navigate("/tutor/courses");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Couldn't publish the course.");
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  return (
+    <div className="space-y-5">
+      <div className="rounded-2xl border border-white/10 bg-card p-6">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div className="min-w-0">
+            <h3 className="font-display text-xl font-bold">{course.title}</h3>
+            <p className="mt-1 line-clamp-2 text-sm text-muted-foreground">
+              {course.description || "No short description yet."}
+            </p>
+          </div>
+          <span className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-amber-400/30 bg-amber-400/10 px-3 py-1 text-xs font-semibold text-amber-300">
+            {course.status === "pending"
+              ? "Pending review"
+              : course.status === "approved" || course.published
+                ? "Published"
+                : "Draft"}
+          </span>
+        </div>
+
+        <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="rounded-xl border border-white/10 bg-black/20 p-4">
+            <PlayCircle className="size-5 text-lime-300" />
+            <p className="mt-2 font-display text-2xl font-bold">{lessonCount}</p>
+            <p className="text-xs text-muted-foreground">Lessons</p>
+          </div>
+          <div className="rounded-xl border border-white/10 bg-black/20 p-4">
+            <ListChecks className="size-5 text-lime-300" />
+            <p className="mt-2 font-display text-2xl font-bold">{quizCount}</p>
+            <p className="text-xs text-muted-foreground">Quizzes</p>
+          </div>
+          <div className="rounded-xl border border-white/10 bg-black/20 p-4">
+            <FileText className="size-5 text-amber-300" />
+            <p className="mt-2 font-display text-2xl font-bold">{assignmentCount}</p>
+            <p className="text-xs text-muted-foreground">Assignments</p>
+          </div>
+          <div className="rounded-xl border border-white/10 bg-black/20 p-4">
+            <Trophy className="size-5 text-lime-300" />
+            <p className="mt-2 font-display text-2xl font-bold">
+              {course.durationHours}h
+            </p>
+            <p className="text-xs text-muted-foreground">
+              {course.difficulty[0].toUpperCase() + course.difficulty.slice(1)}
+            </p>
+          </div>
+        </div>
+
+        {lessonCount === 0 && (
+          <p className="mt-4 rounded-xl border border-amber-400/20 bg-amber-400/8 p-3 text-xs text-amber-300">
+            This course has no lessons yet — add at least one lesson before
+            publishing so students have content to learn from.
+          </p>
+        )}
+
+        {error && (
+          <p className="mt-4 rounded-xl border border-rose-400/25 bg-rose-400/8 p-3 text-sm text-rose-300">
+            {error}
+          </p>
+        )}
+      </div>
+
+      <div className="flex flex-wrap items-center justify-end gap-3">
+        <Button
+          variant="outline"
+          className="gap-2 border-white/15"
+          disabled={busy !== null}
+          onClick={() => void saveDraft()}
+        >
+          {busy === "draft" ? (
+            <Loader2 className="size-4 animate-spin" />
+          ) : (
+            <Save className="size-4" />
+          )}
+          Save as Draft
+        </Button>
+        <Button
+          className="gap-2 bg-lime-400 font-semibold text-black hover:bg-lime-300"
+          disabled={busy !== null}
+          onClick={() => void publish()}
+        >
+          {busy === "publish" ? (
+            <Loader2 className="size-4 animate-spin" />
+          ) : (
+            <Rocket className="size-4" />
+          )}
+          {user?.role === "admin" ? "Publish Course" : "Submit for Review"}
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Page
 // ---------------------------------------------------------------------------
+const BUILDER_STEPS = [
+  { key: "details", label: "Course Information", icon: Sparkles },
+  { key: "lessons", label: "Lessons", icon: PlayCircle },
+  { key: "quizzes", label: "Quizzes", icon: ListChecks },
+  { key: "assignments", label: "Assignments", icon: FileText },
+  { key: "review", label: "Review & Publish", icon: Trophy },
+] as const;
+
+type BuilderStep = (typeof BUILDER_STEPS)[number]["key"];
+
 export default function CourseEditor() {
   const { id } = useParams();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const navigate = useNavigate();
   const isNew = id === "new";
   const courseId = isNew ? undefined : id;
   const courses = useQuery(api.tutor.myCourses);
   const course = courses?.find((c) => c._id === courseId);
+
+  const rawStep = searchParams.get("step") ?? "";
+  const step: BuilderStep = (BUILDER_STEPS as readonly { key: string }[]).some(
+    (s) => s.key === rawStep,
+  )
+    ? (rawStep as BuilderStep)
+    : "details";
+  const stepIndex = BUILDER_STEPS.findIndex((s) => s.key === step);
+  const goTo = (s: BuilderStep) => setSearchParams({ step: s });
 
   if (courseId && courses === undefined) {
     return (
@@ -1558,11 +1949,29 @@ export default function CourseEditor() {
     );
   }
 
+  // Content steps need a saved course — never a dead end, just a nudge.
+  if (!courseId && step !== "details") {
+    return (
+      <div className="rounded-2xl border border-white/10 bg-card p-10 text-center">
+        <p className="text-sm text-muted-foreground">
+          Save the course information first, then add lessons, quizzes and
+          assignments.
+        </p>
+        <Button
+          className="mt-4 gap-2 bg-lime-400 font-semibold text-black hover:bg-lime-300"
+          onClick={() => goTo("details")}
+        >
+          <ArrowLeft className="size-4" /> Back to Course Information
+        </Button>
+      </div>
+    );
+  }
+
   return (
-    <div className="space-y-8">
+    <div className="space-y-6">
       <PageHeader
         title={isNew ? "Create a course" : "Edit course"}
-        description={isNew ? "Set up the details first — content tabs unlock after saving." : course?.title}
+        description={course?.title ?? "Set up your course details first."}
         actions={
           <Link to="/tutor/courses">
             <Button variant="outline" size="sm" className="gap-1.5 border-white/15">
@@ -1572,31 +1981,108 @@ export default function CourseEditor() {
         }
       />
 
-      <DetailsForm key={courseId ?? "new"} courseId={courseId} initial={course ?? null} />
+      {/* Stepper */}
+      <div className="rounded-2xl border border-white/10 bg-card p-3">
+        <div className="flex items-center gap-1 overflow-x-auto pb-0.5">
+          {BUILDER_STEPS.map((s, i) => {
+            const Icon = s.icon;
+            const current = i === stepIndex;
+            const done = i < stepIndex;
+            return (
+              <button
+                key={s.key}
+                type="button"
+                onClick={() => done && goTo(s.key)}
+                disabled={!done}
+                className={cn(
+                  "flex shrink-0 items-center gap-2 rounded-xl px-3 py-2 text-xs font-semibold transition-colors",
+                  current
+                    ? "bg-lime-400/15 text-lime-300"
+                    : done
+                      ? "text-lime-300/70 hover:bg-white/5"
+                      : "text-muted-foreground",
+                )}
+              >
+                {done ? (
+                  <CheckCircle2 className="size-4" />
+                ) : (
+                  <span
+                    className={cn(
+                      "flex size-5 items-center justify-center rounded-full text-[10px] font-bold",
+                      current ? "bg-lime-400 text-black" : "bg-white/10",
+                    )}
+                  >
+                    {i + 1}
+                  </span>
+                )}
+                <Icon className="size-3.5" />
+                <span className="whitespace-nowrap">{s.label}</span>
+              </button>
+            );
+          })}
+        </div>
+      </div>
 
-      {courseId && course && (
-        <Tabs defaultValue="lessons">
-          <TabsList className="border-white/10 bg-card">
-            <TabsTrigger value="lessons" className="gap-1.5">
-              <PlayCircle className="size-4" /> Lessons
-            </TabsTrigger>
-            <TabsTrigger value="quizzes" className="gap-1.5">
-              <ListChecks className="size-4" /> Quizzes
-            </TabsTrigger>
-            <TabsTrigger value="assignments" className="gap-1.5">
-              <FileText className="size-4" /> Assignments
-            </TabsTrigger>
-          </TabsList>
-          <TabsContent value="lessons" className="mt-4">
-            <LessonsTab courseId={courseId} />
-          </TabsContent>
-          <TabsContent value="quizzes" className="mt-4">
-            <QuizzesTab courseId={courseId} />
-          </TabsContent>
-          <TabsContent value="assignments" className="mt-4">
-            <AssignmentsTab courseId={courseId} />
-          </TabsContent>
-        </Tabs>
+      {step === "details" && (
+        <DetailsForm
+          key={courseId ?? "new"}
+          courseId={courseId}
+          initial={course ?? null}
+          onSaved={(savedId) => navigate(`/tutor/courses/${savedId}?step=lessons`)}
+        />
+      )}
+
+      {courseId && course && step === "lessons" && (
+        <>
+          <LessonsTab courseId={courseId} />
+          <div className="flex items-center justify-between gap-3">
+            <Button variant="outline" className="gap-1.5 border-white/15" onClick={() => goTo("details")}>
+              <ArrowLeft className="size-3.5" /> Back
+            </Button>
+            <Button className="gap-2 bg-lime-400 font-semibold text-black hover:bg-lime-300" onClick={() => goTo("quizzes")}>
+              Save & Continue <ArrowRight className="size-4" />
+            </Button>
+          </div>
+        </>
+      )}
+
+      {courseId && course && step === "quizzes" && (
+        <>
+          <QuizzesTab courseId={courseId} />
+          <div className="flex items-center justify-between gap-3">
+            <Button variant="outline" className="gap-1.5 border-white/15" onClick={() => goTo("lessons")}>
+              <ArrowLeft className="size-3.5" /> Back
+            </Button>
+            <Button className="gap-2 bg-lime-400 font-semibold text-black hover:bg-lime-300" onClick={() => goTo("assignments")}>
+              Save & Continue <ArrowRight className="size-4" />
+            </Button>
+          </div>
+        </>
+      )}
+
+      {courseId && course && step === "assignments" && (
+        <>
+          <AssignmentsTab courseId={courseId} />
+          <div className="flex items-center justify-between gap-3">
+            <Button variant="outline" className="gap-1.5 border-white/15" onClick={() => goTo("quizzes")}>
+              <ArrowLeft className="size-3.5" /> Back
+            </Button>
+            <Button className="gap-2 bg-lime-400 font-semibold text-black hover:bg-lime-300" onClick={() => goTo("review")}>
+              Save & Continue <ArrowRight className="size-4" />
+            </Button>
+          </div>
+        </>
+      )}
+
+      {courseId && course && step === "review" && (
+        <>
+          <ReviewTab courseId={courseId} course={course} onPublished={() => {}} />
+          <div className="flex items-center justify-between gap-3">
+            <Button variant="outline" className="gap-1.5 border-white/15" onClick={() => goTo("assignments")}>
+              <ArrowLeft className="size-3.5" /> Back
+            </Button>
+          </div>
+        </>
       )}
     </div>
   );

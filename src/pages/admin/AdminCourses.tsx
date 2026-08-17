@@ -6,6 +6,8 @@ import { api } from "@/convex/_generated/api";
 import {
   Archive,
   ArchiveRestore,
+  ArrowLeft,
+  ArrowRight,
   BookOpen,
   CheckCircle2,
   Clock,
@@ -15,6 +17,8 @@ import {
   Loader2,
   Pencil,
   Plus,
+  Rocket,
+  Save,
   Trash2,
   XCircle,
 } from "lucide-react";
@@ -23,7 +27,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Tabs, TabsContent } from "@/components/ui/tabs";
 import { PageHeader } from "@/components/dash/PageHeader";
 import { Avatar } from "@/components/site/Avatar";
 import { ImageUploader, type UploadedImage } from "@/components/admin/ImageUploader";
@@ -36,6 +40,7 @@ import {
 } from "@/lib/convex-upload";
 import { timeAgo } from "@/lib/format";
 import { getAdminToken } from "@/lib/admin-session";
+import { cn } from "@/lib/utils";
 
 type CourseRow = FunctionReturnType<typeof api.admin.allCourses>[number];
 
@@ -50,6 +55,7 @@ const EMPTY_DRAFT = {
   difficulty: "beginner" as string,
   durationHours: 5,
   image: undefined as string | undefined,
+  imageStorageId: undefined as string | undefined,
   gradient: "",
   icon: "",
   prerequisites: "",
@@ -108,6 +114,53 @@ export default function AdminCourses() {
   const [lessonVideoBusy, setLessonVideoBusy] = useState(false);
   const [lessonVideoError, setLessonVideoError] = useState<string | null>(null);
   const lessonVideoInput = useRef<HTMLInputElement | null>(null);
+
+  // Course thumbnail upload from device (Convex file storage, admin token flow)
+  const [thumbBusy, setThumbBusy] = useState(false);
+  const [thumbError, setThumbError] = useState<string | null>(null);
+  const thumbInput = useRef<HTMLInputElement | null>(null);
+
+  const uploadCourseThumbnail = async (file: File) => {
+    setThumbError(null);
+    if (!["image/jpeg", "image/png", "image/webp"].includes(file.type)) {
+      setThumbError("Pick a JPG, PNG or WEBP image.");
+      return;
+    }
+    if (file.size > MAX_CONVEX_UPLOAD_BYTES) {
+      setThumbError(
+        `That image is ${Math.round(file.size / 1024 / 1024)} MB — the limit is ${Math.round(MAX_CONVEX_UPLOAD_BYTES / 1024 / 1024)} MB.`,
+      );
+      return;
+    }
+    if (!token) {
+      setThumbError("Admin session missing — reopen the admin panel.");
+      return;
+    }
+    setThumbBusy(true);
+    try {
+      const { storageId } = await uploadFileToConvex(file, () =>
+        adminGenerateUploadUrl({ token }),
+      );
+      const url = await adminResolveUploadUrl({
+        token,
+        storageId: storageId as never,
+      });
+      if (!url) throw new Error("The image couldn't be stored — please try again.");
+      setEditor((e) =>
+        e
+          ? { ...e, draft: { ...e.draft, image: url, imageStorageId: storageId } }
+          : e,
+      );
+      toast.success("Thumbnail uploaded — save the course to apply it.");
+    } catch (err) {
+      setThumbError(
+        err instanceof Error ? err.message : "Upload failed — please try again.",
+      );
+    } finally {
+      setThumbBusy(false);
+      if (thumbInput.current) thumbInput.current.value = "";
+    }
+  };
 
   const uploadLessonVideo = async (file: File) => {
     setLessonVideoError(null);
@@ -194,6 +247,7 @@ export default function AdminCourses() {
         difficulty: c.difficulty,
         durationHours: c.durationHours,
         image: c.image ?? undefined,
+        imageStorageId: (c as any).imageStorageId ?? undefined,
         gradient: c.gradient ?? "",
         icon: c.icon ?? "",
         prerequisites: (c.prerequisites ?? []).join(", "),
@@ -205,30 +259,81 @@ export default function AdminCourses() {
     setTab("details");
   };
 
-  const saveCourse = async () => {
+  /** Build the course mutation args from the current editor draft. */
+  const courseArgs = (published: boolean) => {
+    if (!editor) throw new Error("No course open");
+    return {
+      id: editor.draft.id ? (editor.draft.id as never) : undefined,
+      title: editor.draft.title,
+      subtitle: editor.draft.subtitle,
+      description: editor.draft.description,
+      longDescription: editor.draft.longDescription,
+      categoryId: editor.draft.categoryId as never,
+      tutorId: editor.draft.tutorId as never,
+      difficulty: editor.draft.difficulty as never,
+      durationHours: editor.draft.durationHours,
+      image: editor.draft.image || undefined,
+      imageStorageId: editor.draft.imageStorageId
+        ? (editor.draft.imageStorageId as never)
+        : undefined,
+      gradient: editor.draft.gradient || undefined,
+      icon: editor.draft.icon || undefined,
+      prerequisites: editor.draft.prerequisites.split(",").map((s) => s.trim()).filter(Boolean),
+      skills: editor.draft.skills.split(",").map((s) => s.trim()).filter(Boolean),
+      featured: editor.draft.featured,
+      published,
+      token,
+    };
+  };
+
+  /** Save the course and move to the next builder step without leaving. */
+  const saveCourseAndContinue = async () => {
     if (!editor || !editor.draft.title.trim()) return;
     setBusy(true);
     try {
-      await adminUpsertCourse({
-        id: editor.draft.id ? (editor.draft.id as never) : undefined,
-        title: editor.draft.title,
-        subtitle: editor.draft.subtitle,
-        description: editor.draft.description,
-        longDescription: editor.draft.longDescription,
-        categoryId: editor.draft.categoryId as never,
-        tutorId: editor.draft.tutorId as never,
-        difficulty: editor.draft.difficulty as never,
-        durationHours: editor.draft.durationHours,
-        image: editor.draft.image || undefined,
-        gradient: editor.draft.gradient || undefined,
-        icon: editor.draft.icon || undefined,
-        prerequisites: editor.draft.prerequisites.split(",").map((s) => s.trim()).filter(Boolean),
-        skills: editor.draft.skills.split(",").map((s) => s.trim()).filter(Boolean),
-        featured: editor.draft.featured,
-        published: editor.draft.published,
-        token,
-      });
+      const newId = (await adminUpsertCourse(courseArgs(editor.draft.published))) as string;
+      setEditor((e) =>
+        e
+          ? {
+              ...e,
+              course: { ...(e.course ?? {}), _id: newId as never } as CourseRow,
+            }
+          : e,
+      );
+      setTab("lessons");
+      toast.success("✓ Course saved — now add lessons.");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Couldn't save the course.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  /** Final step: keep the course as an unpublished draft. */
+  const saveAsDraft = async () => {
+    if (!editor) return;
+    setBusy(true);
+    try {
+      await adminUpsertCourse(courseArgs(false));
       setEditor(null);
+      toast.success("✓ Draft saved — you can continue editing later.");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Couldn't save the draft.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  /** Final step: publish the course. */
+  const publishFromEditor = async () => {
+    if (!editor || !editor.draft.title.trim()) return;
+    setBusy(true);
+    try {
+      await adminUpsertCourse(courseArgs(true));
+      setEditor(null);
+      toast.success("Course published! 🎉");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Couldn't publish the course.");
     } finally {
       setBusy(false);
     }
@@ -471,13 +576,40 @@ export default function AdminCourses() {
                 </DialogTitle>
               </DialogHeader>
               <Tabs value={tab} onValueChange={setTab}>
-                <TabsList className="grid w-full grid-cols-5">
-                  <TabsTrigger value="details">Details</TabsTrigger>
-                  <TabsTrigger value="lessons">Lessons</TabsTrigger>
-                  <TabsTrigger value="quizzes">Quizzes</TabsTrigger>
-                  <TabsTrigger value="assignments">Assignments</TabsTrigger>
-                  <TabsTrigger value="students">Students</TabsTrigger>
-                </TabsList>
+                <div className="flex flex-wrap items-center gap-1 rounded-xl border border-white/10 bg-black/20 p-1.5">
+                  {[
+                    { key: "details", label: "1. Details" },
+                    { key: "lessons", label: "2. Lessons" },
+                    { key: "quizzes", label: "3. Quizzes" },
+                    { key: "assignments", label: "4. Assignments" },
+                    { key: "students", label: "5. Students" },
+                    { key: "review", label: "6. Review & Publish" },
+                  ].map((s) => {
+                    const current = tab === s.key;
+                    return (
+                      <button
+                        key={s.key}
+                        type="button"
+                        onClick={() =>
+                          setTab(s.key)
+                        }
+                        className={cn(
+                          "rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors",
+                          current
+                            ? "bg-lime-400/15 text-lime-300"
+                            : s.key === "review" && editor?.course
+                              ? "text-lime-300/70 hover:bg-white/5"
+                              : "text-muted-foreground hover:text-foreground",
+                        )}
+                      >
+                        {s.key === "details" && editor?.course ? (
+                          <CheckCircle2 className="mr-1 inline size-3.5 text-lime-300" />
+                        ) : null}
+                        {s.label}
+                      </button>
+                    );
+                  })}
+                </div>
 
                 <TabsContent value="details" className="space-y-4 pt-4">
                   <div className="grid gap-4 sm:grid-cols-2">
@@ -530,9 +662,49 @@ export default function AdminCourses() {
                       <ImageUploader
                         value={editor.draft.image}
                         label="Upload thumbnail"
-                        onUploaded={(img: UploadedImage) => setEditor({ ...editor, draft: { ...editor.draft, image: img.secureUrl } })}
-                        onClear={() => setEditor({ ...editor, draft: { ...editor.draft, image: undefined } })}
+                        onUploaded={(img: UploadedImage) => setEditor({ ...editor, draft: { ...editor.draft, image: img.secureUrl, imageStorageId: undefined } })}
+                        onClear={() => setEditor({ ...editor, draft: { ...editor.draft, image: undefined, imageStorageId: undefined } })}
                       />
+                      <div className="flex flex-wrap items-center gap-2">
+                        <input
+                          ref={thumbInput}
+                          type="file"
+                          accept="image/jpeg,image/png,image/webp"
+                          className="hidden"
+                          onChange={(e) => {
+                            const f = e.target.files?.[0];
+                            if (f) void uploadCourseThumbnail(f);
+                          }}
+                        />
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          className="gap-1.5 border-lime-400/30 text-lime-300"
+                          onClick={() => thumbInput.current?.click()}
+                          disabled={thumbBusy}
+                        >
+                          {thumbBusy ? (
+                            <Loader2 className="size-3.5 animate-spin" />
+                          ) : (
+                            <CloudUpload className="size-3.5" />
+                          )}
+                          {thumbBusy
+                            ? "Uploading…"
+                            : "Upload thumbnail from device"}
+                        </Button>
+                        {editor.draft.image && (
+                          <span className="flex min-w-0 flex-1 items-center gap-1.5 truncate text-xs text-lime-300/90">
+                            <CheckCircle2 className="size-3.5 shrink-0" />
+                            <span className="truncate">Thumbnail set</span>
+                          </span>
+                        )}
+                        {thumbError && (
+                          <p className="w-full text-xs text-rose-300">
+                            {thumbError}
+                          </p>
+                        )}
+                      </div>
                     </div>
                     <div className="space-y-2">
                       <Label>Prerequisites (comma-separated)</Label>
@@ -553,10 +725,23 @@ export default function AdminCourses() {
                       </label>
                     </div>
                   </div>
-                  <Button onClick={() => void saveCourse()} disabled={busy || !editor.draft.title.trim()} className="w-full gap-2 bg-lime-400 font-semibold text-black hover:bg-lime-300">
-                    {busy ? <Loader2 className="size-4 animate-spin" /> : null}
-                    {editor.draft.id ? "Save changes" : "Create course"}
-                  </Button>
+                  <div className="flex items-center justify-between gap-3">
+                    <Button variant="outline" className="gap-1.5 border-white/15" onClick={() => setEditor(null)}>
+                      Cancel
+                    </Button>
+                    <Button
+                      onClick={() => void saveCourseAndContinue()}
+                      disabled={busy || !editor.draft.title.trim()}
+                      className="gap-2 bg-lime-400 font-semibold text-black hover:bg-lime-300"
+                    >
+                      {busy ? (
+                        <Loader2 className="size-4 animate-spin" />
+                      ) : (
+                        <CheckCircle2 className="size-4" />
+                      )}
+                      {busy ? "Saving…" : "Save & Continue →"}
+                    </Button>
+                  </div>
                 </TabsContent>
 
                 <TabsContent value="lessons" className="space-y-3 pt-4">
@@ -670,6 +855,14 @@ export default function AdminCourses() {
                       </div>
                     </>
                   )}
+                  <div className="flex items-center justify-between gap-3 border-t border-white/10 pt-4">
+                    <Button variant="outline" className="gap-1.5 border-white/15" onClick={() => setTab("details")}>
+                      <ArrowLeft className="size-3.5" /> Back
+                    </Button>
+                    <Button className="gap-2 bg-lime-400 font-semibold text-black hover:bg-lime-300" onClick={() => setTab("quizzes")}>
+                      Save & Continue <ArrowRight className="size-4" />
+                    </Button>
+                  </div>
                 </TabsContent>
 
                 <TabsContent value="quizzes" className="space-y-3 pt-4">
@@ -700,6 +893,14 @@ export default function AdminCourses() {
                         <Plus className="size-4" /> {quizDraft?.id ? "Save quiz" : "Add quiz"}
                       </Button>
                     </div>
+                  </div>
+                  <div className="flex items-center justify-between gap-3 border-t border-white/10 pt-4">
+                    <Button variant="outline" className="gap-1.5 border-white/15" onClick={() => setTab("lessons")}>
+                      <ArrowLeft className="size-3.5" /> Back
+                    </Button>
+                    <Button className="gap-2 bg-lime-400 font-semibold text-black hover:bg-lime-300" onClick={() => setTab("assignments")}>
+                      Save & Continue <ArrowRight className="size-4" />
+                    </Button>
                   </div>
                 </TabsContent>
 
@@ -740,6 +941,99 @@ export default function AdminCourses() {
                       ))}
                     </div>
                   )}
+                  <div className="flex items-center justify-between gap-3 border-t border-white/10 pt-4">
+                    <Button variant="outline" className="gap-1.5 border-white/15" onClick={() => setTab("assignments")}>
+                      <ArrowLeft className="size-3.5" /> Back
+                    </Button>
+                    <Button className="gap-2 bg-lime-400 font-semibold text-black hover:bg-lime-300" onClick={() => setTab("review")}>
+                      Save & Continue <ArrowRight className="size-4" />
+                    </Button>
+                  </div>
+                </TabsContent>
+
+                <TabsContent value="review" className="space-y-4 pt-4">
+                  {!editor.course ? (
+                    <p className="rounded-xl border border-dashed border-white/10 p-5 text-center text-sm text-muted-foreground">
+                      Save the course first, then review and publish it.
+                    </p>
+                  ) : (
+                    <>
+                      <div className="rounded-xl border border-white/10 bg-black/20 p-5">
+                        <div className="flex flex-wrap items-start justify-between gap-3">
+                          <div className="min-w-0">
+                            <h3 className="font-display text-lg font-bold">
+                              {editor.draft.title || "Untitled course"}
+                            </h3>
+                            <p className="mt-1 line-clamp-2 text-sm text-muted-foreground">
+                              {editor.draft.description || "No short description yet."}
+                            </p>
+                          </div>
+                          <span className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-amber-400/30 bg-amber-400/10 px-3 py-1 text-xs font-semibold text-amber-300">
+                            {editor.draft.published ? "Published" : "Draft"}
+                          </span>
+                        </div>
+                        <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
+                          <div className="rounded-lg border border-white/10 bg-card p-3">
+                            <p className="font-display text-2xl font-bold text-lime-300">
+                              {content?.lessons.length ?? 0}
+                            </p>
+                            <p className="text-xs text-muted-foreground">Lessons</p>
+                          </div>
+                          <div className="rounded-lg border border-white/10 bg-card p-3">
+                            <p className="font-display text-2xl font-bold text-lime-300">
+                              {content?.quizzes.length ?? 0}
+                            </p>
+                            <p className="text-xs text-muted-foreground">Quizzes</p>
+                          </div>
+                          <div className="rounded-lg border border-white/10 bg-card p-3">
+                            <p className="font-display text-2xl font-bold text-amber-300">
+                              {content?.assignments.length ?? 0}
+                            </p>
+                            <p className="text-xs text-muted-foreground">Assignments</p>
+                          </div>
+                          <div className="rounded-lg border border-white/10 bg-card p-3">
+                            <p className="font-display text-2xl font-bold text-lime-300">
+                              {editor.draft.durationHours}h
+                            </p>
+                            <p className="text-xs text-muted-foreground">Duration</p>
+                          </div>
+                        </div>
+                        {(content?.lessons.length ?? 0) === 0 && (
+                          <p className="mt-4 rounded-xl border border-amber-400/20 bg-amber-400/8 p-3 text-xs text-amber-300">
+                            No lessons yet — students will have nothing to learn
+                            from. Add at least one lesson before publishing.
+                          </p>
+                        )}
+                      </div>
+                      <div className="flex flex-wrap items-center justify-end gap-3">
+                        <Button
+                          variant="outline"
+                          className="gap-2 border-white/15"
+                          disabled={busy}
+                          onClick={() => void saveAsDraft()}
+                        >
+                          {busy ? (
+                            <Loader2 className="size-4 animate-spin" />
+                          ) : (
+                            <Save className="size-4" />
+                          )}
+                          Save as Draft
+                        </Button>
+                        <Button
+                          className="gap-2 bg-lime-400 font-semibold text-black hover:bg-lime-300"
+                          disabled={busy || !editor.draft.title.trim()}
+                          onClick={() => void publishFromEditor()}
+                        >
+                          {busy ? (
+                            <Loader2 className="size-4 animate-spin" />
+                          ) : (
+                            <Rocket className="size-4" />
+                          )}
+                          Publish Course
+                        </Button>
+                      </div>
+                    </>
+                  )}
                 </TabsContent>
 
                 <TabsContent value="assignments" className="space-y-3 pt-4">
@@ -772,6 +1066,14 @@ export default function AdminCourses() {
                         <Plus className="size-4" /> {assignDraft?.id ? "Save assignment" : "Add assignment"}
                       </Button>
                     </div>
+                  </div>
+                  <div className="flex items-center justify-between gap-3 border-t border-white/10 pt-4">
+                    <Button variant="outline" className="gap-1.5 border-white/15" onClick={() => setTab("quizzes")}>
+                      <ArrowLeft className="size-3.5" /> Back
+                    </Button>
+                    <Button className="gap-2 bg-lime-400 font-semibold text-black hover:bg-lime-300" onClick={() => setTab("students")}>
+                      Save & Continue <ArrowRight className="size-4" />
+                    </Button>
                   </div>
                 </TabsContent>
               </Tabs>
