@@ -115,7 +115,7 @@ const CAPACITY_STATE: Record<string, { label: string; cls: string }> = {
 export default function TutorOverview() {
   const analytics = useQuery(api.tutor.analyticsOverview);
   const pending = useQuery(api.tutor.pendingSubmissions);
-  const courses = useQuery(api.tutor.myCourses);
+  const courses = useQuery(api.tutor.myCourses, {});
 
   const counts = analytics?.counts;
   const cohorts = analytics?.cohorts ?? [];

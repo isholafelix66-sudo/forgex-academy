@@ -62,7 +62,7 @@ export function PrivateDocUploader({
       // storage id. The authoritative display URL is resolved server-side by
       // recordDocument below; never derive it from the upload endpoint.
       const { storageId } = await uploadFileToConvex(file, () =>
-        generateUploadUrl(),
+        generateUploadUrl({}),
       );
 
       const doc = await recordDocument({

@@ -294,7 +294,7 @@ function DetailsForm({
     }
     setThumbBusy(true);
     try {
-      const { storageId } = await uploadFileToConvex(file, () => generateUploadUrl());
+      const { storageId } = await uploadFileToConvex(file, () => generateUploadUrl({}));
       const url = await resolveUploadedFile({ storageId: storageId as never });
       if (!url) throw new Error("The image couldn't be stored — please try again.");
       // Free the previous uploaded thumbnail when replacing one.
@@ -855,7 +855,7 @@ function LessonsTab({ courseId }: { courseId: string }) {
     setUploading(true);
     setUploadError(null);
     try {
-      const { storageId } = await uploadFileToConvex(file, () => generateUploadUrl());
+      const { storageId } = await uploadFileToConvex(file, () => generateUploadUrl({}));
       const url = await resolveUploadedFile({ storageId: storageId as never });
       if (!url) throw new Error("The video couldn't be stored — please try again.");
       // Free the previous uploaded file when replacing one.
@@ -1918,7 +1918,7 @@ export default function CourseEditor() {
   const navigate = useNavigate();
   const isNew = id === "new";
   const courseId = isNew ? undefined : id;
-  const courses = useQuery(api.tutor.myCourses);
+  const courses = useQuery(api.tutor.myCourses, {});
   const course = courses?.find((c) => c._id === courseId);
 
   const rawStep = searchParams.get("step") ?? "";

@@ -31,6 +31,7 @@ import { DifficultyBadge } from "@/components/site/DifficultyBadge";
 import { Avatar } from "@/components/site/Avatar";
 import { Rating } from "@/components/site/Rating";
 import { StatusChip } from "@/pages/tutor/status";
+import { VideoPlayer } from "@/components/learn/VideoPlayer";
 import { getAdminToken } from "@/lib/admin-session";
 import { formatHours, formatDateShort } from "@/lib/format";
 import { cn } from "@/lib/utils";
@@ -58,6 +59,7 @@ export default function AdminCoursePreview() {
 
   const [note, setNote] = useState("");
   const [busy, setBusy] = useState<"approve" | "reject" | null>(null);
+  const [activeLessonId, setActiveLessonId] = useState<string | null>(null);
 
   const act = async (approve: boolean) => {
     if (!course || busy) return;
@@ -110,6 +112,13 @@ export default function AdminCoursePreview() {
   }
 
   const live = course.published && course.status === "approved";
+
+  // Lesson with a video, defaulting to the first one — lets the admin verify
+  // playback inline instead of only seeing a link out to YouTube.
+  const activeLesson =
+    course.lessons.find((l) => l._id === activeLessonId) ??
+    course.lessons.find((l) => l.videoUrl || l.muxPlaybackId) ??
+    null;
 
   return (
     <div className="space-y-6">
@@ -300,9 +309,37 @@ export default function AdminCoursePreview() {
               {course.lessons.length} lessons ·{" "}
               {course.lessons.reduce((s, l) => s + l.durationMinutes, 0)} min total
             </p>
+
+            {/* Inline player — verify the video actually plays before approving */}
+            {activeLesson && (
+              <div className="mt-5">
+                <div className="space-y-3">
+                  <p className="flex items-center gap-2 text-sm font-medium">
+                    <PlayCircle className="size-4 text-lime-300" />
+                    {activeLesson.title}
+                  </p>
+                  <VideoPlayer
+                    url={activeLesson.videoUrl}
+                    type={activeLesson.videoType}
+                    title={activeLesson.title}
+                    muxPlaybackId={activeLesson.muxPlaybackId}
+                    image={activeLesson.image}
+                  />
+                </div>
+              </div>
+            )}
+
             <div className="mt-5 space-y-3">
               {course.lessons.map((l, i) => (
-                <div key={l._id} className="flex items-center gap-4 rounded-xl border border-white/10 bg-card px-4 py-3.5">
+                <div
+                  key={l._id}
+                  className={cn(
+                    "flex items-center gap-4 rounded-xl border bg-card px-4 py-3.5",
+                    l._id === activeLesson?._id
+                      ? "border-lime-400/40"
+                      : "border-white/10",
+                  )}
+                >
                   <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-lime-400/12 text-sm font-bold text-lime-300">
                     {i + 1}
                   </span>
@@ -315,14 +352,25 @@ export default function AdminCoursePreview() {
                       {l.muxPlaybackId ? " · Mux video" : ""}
                     </p>
                   </div>
+                  {(l.videoUrl || l.muxPlaybackId) && (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => setActiveLessonId(l._id)}
+                      className="shrink-0 gap-1.5 border-lime-400/30 text-lime-300 hover:bg-lime-400/10"
+                    >
+                      <PlayCircle className="size-3.5" />
+                      Preview
+                    </Button>
+                  )}
                   {l.videoUrl && (
                     <a
                       href={l.videoUrl}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="shrink-0 text-xs text-lime-300 hover:underline"
+                      className="shrink-0 text-xs text-muted-foreground hover:text-lime-300 hover:underline"
                     >
-                      Watch
+                      Open
                     </a>
                   )}
                 </div>

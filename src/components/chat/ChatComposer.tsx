@@ -206,7 +206,7 @@ export function ChatComposer({
       const attachment = await uploadChatFile(
         file,
         "voice",
-        () => generateUploadUrl(),
+        () => generateUploadUrl({}),
         seconds,
       );
       await onSend({ body: "", attachment });
@@ -250,7 +250,7 @@ export function ChatComposer({
       const attachment = await uploadChatFile(
         pending.file,
         pending.kind,
-        () => generateUploadUrl(),
+        () => generateUploadUrl({}),
       );
       await onSend({ body: "", attachment });
       if (pending.previewUrl) URL.revokeObjectURL(pending.previewUrl);

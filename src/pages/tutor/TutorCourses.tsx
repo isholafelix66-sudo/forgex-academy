@@ -16,7 +16,7 @@ import { EmptyState } from "@/components/site/EmptyState";
 import { StatusChip } from "./status";
 
 export default function TutorCourses() {
-  const courses = useQuery(api.tutor.myCourses);
+  const courses = useQuery(api.tutor.myCourses, {});
   const submitCourseForReview = useMutation(api.tutor.submitCourseForReview);
   const deleteCourse = useMutation(api.tutor.deleteCourse);
 
