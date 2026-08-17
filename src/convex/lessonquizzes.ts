@@ -3,9 +3,11 @@ import { v } from "convex/values";
 import {
   checkRateLimit,
   notify,
+  requireAdminSession,
   requireUser,
   requireUserDoc,
   requireTutor,
+  requireTutorOrToken,
   requireTutorPreview,
 } from "./lib";
 import { questionValidator, type Question } from "./schema";
@@ -134,12 +136,22 @@ export const submitLessonQuiz = mutation({
 
 /** All lesson quizzes for a course (drafts included) with their lesson title. */
 export const courseLessonQuizzesFull = query({
-  args: { courseId: v.id("courses") },
-  handler: async (ctx, { courseId }) => {
-    const tutor = await requireTutorPreview(ctx);
-    if (!tutor) return [];
+  args: { courseId: v.id("courses"), token: v.optional(v.string()) },
+  handler: async (ctx, { courseId, token }) => {
+    let tutor = null;
+    if (token) {
+      await requireAdminSession(ctx, token);
+    } else {
+      tutor = await requireTutorPreview(ctx);
+      if (!tutor) return [];
+    }
     const course = await ctx.db.get(courseId);
-    if (!course || (course.tutorId !== tutor._id && tutor.role !== "admin")) {
+    if (!course) return [];
+    if (
+      !token &&
+      course.tutorId !== tutor!._id &&
+      tutor!.role !== "admin"
+    ) {
       throw new Error("Not your course.");
     }
     const quizzes = await ctx.db
@@ -170,12 +182,20 @@ export const upsertLessonQuiz = mutation({
     timeLimitMinutes: v.number(),
     questions: v.array(questionValidator),
     published: v.boolean(),
+    token: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
-    const tutor = await requireTutor(ctx);
-    await checkRateLimit(ctx, `tutor:${tutor._id}`, 20, 60 * 60 * 1000);
+    const { tutor, isPreview } = await requireTutorOrToken(ctx, args.token);
+    if (!isPreview) {
+      await checkRateLimit(ctx, `tutor:${tutor!._id}`, 20, 60 * 60 * 1000);
+    }
     const course = await ctx.db.get(args.courseId);
-    if (!course || (course.tutorId !== tutor._id && tutor.role !== "admin")) {
+    if (!course) throw new Error("Course not found.");
+    if (
+      !isPreview &&
+      course.tutorId !== tutor!._id &&
+      tutor!.role !== "admin"
+    ) {
       throw new Error("Not your course.");
     }
     const lesson = await ctx.db.get(args.lessonId);
@@ -202,7 +222,7 @@ export const upsertLessonQuiz = mutation({
     return await ctx.db.insert("lessonQuizzes", {
       courseId: args.courseId,
       lessonId: args.lessonId,
-      tutorId: tutor._id,
+      tutorId: course.tutorId,
       title: args.title,
       description: args.description,
       passPercent: pass,
@@ -215,11 +235,14 @@ export const upsertLessonQuiz = mutation({
 });
 
 export const deleteLessonQuiz = mutation({
-  args: { id: v.id("lessonQuizzes") },
-  handler: async (ctx, { id }) => {
-    const tutor = await requireTutor(ctx);
+  args: { id: v.id("lessonQuizzes"), token: v.optional(v.string()) },
+  handler: async (ctx, { id, token }) => {
+    const { tutor, isPreview } = await requireTutorOrToken(ctx, token);
     const quiz = await ctx.db.get(id);
-    if (!quiz || (quiz.tutorId !== tutor._id && tutor.role !== "admin")) {
+    if (
+      !quiz ||
+      (!isPreview && quiz.tutorId !== tutor!._id && tutor!.role !== "admin")
+    ) {
       throw new Error("Not your quiz.");
     }
     await ctx.db.delete(id);

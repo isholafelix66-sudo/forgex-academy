@@ -1,7 +1,16 @@
 import { mutation, query } from "./_generated/server";
 import { v } from "convex/values";
-import { checkRateLimit, hydrateCourse, publicUser, requireTutor, requireTutorPreview, slugify } from "./lib";
-import { difficultyValidator, questionValidator, resourceValidator } from "./schema";
+import {
+  checkRateLimit,
+  hydrateCourse,
+  publicUser,
+  requireAdminSession,
+  requireTutor,
+  requireTutorOrToken,
+  requireTutorPreview,
+  slugify,
+} from "./lib";
+import { difficultyValidator, questionValidator, resourceValidator, ROLES } from "./schema";
 
 // ---------------------------------------------------------------------------
 // Overview
@@ -9,10 +18,24 @@ import { difficultyValidator, questionValidator, resourceValidator } from "./sch
 
 
 export const myCourses = query({
-  args: {},
-  handler: async (ctx) => {
-    const tutor = await requireTutorPreview(ctx);
-    if (!tutor) return []; // admin session preview — no tutor identity
+  args: { token: v.optional(v.string()) },
+  handler: async (ctx, args) => {
+    let tutor = await requireTutorPreview(ctx);
+    if (!tutor) {
+      // Admin-session preview (no user account): act as the first verified
+      // tutor so the preview can create, list and reopen real courses.
+      if (args.token) {
+        await requireAdminSession(ctx, args.token);
+        const users = await ctx.db.query("users").collect();
+        tutor =
+          users.find((u) => u.role === ROLES.TUTOR && !!u.verified) ??
+          users.find((u) => u.role === ROLES.ADMIN) ??
+          null;
+        if (!tutor) return [];
+      } else {
+        return []; // plain admin session preview without token — no identity
+      }
+    }
     const courses = await ctx.db
       .query("courses")
       .withIndex("by_tutor", (q) => q.eq("tutorId", tutor._id))
@@ -175,7 +198,7 @@ export const upsertCourse = mutation({
     subtitle: v.string(),
     description: v.string(),
     longDescription: v.string(),
-    categoryId: v.id("categories"),
+    categoryId: v.optional(v.id("categories")),
     tutorId: v.id("users"),
     roadmapId: v.optional(v.id("roadmaps")),
     levelId: v.optional(v.id("roadmapLevels")),
@@ -190,15 +213,35 @@ export const upsertCourse = mutation({
     skills: v.array(v.string()),
     featured: v.boolean(),
     published: v.optional(v.boolean()),
+    // Admin-session preview (password gate, no account) can build courses too.
+    token: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
-    const tutor = await requireTutor(ctx);
-    // Abuse guard: max 20 course create/update writes per tutor per hour.
-    await checkRateLimit(ctx, `tutor:${tutor._id}`, 20, 60 * 60 * 1000);
-    if (args.tutorId !== tutor._id && tutor.role !== "admin") {
-      throw new Error("You can only create courses for yourself.");
+    const { tutor, isPreview } = await requireTutorOrToken(ctx, args.token);
+    if (!isPreview) {
+      // Abuse guard: max 20 course create/update writes per tutor per hour.
+      await checkRateLimit(ctx, `tutor:${tutor!._id}`, 20, 60 * 60 * 1000);
+      if (args.tutorId !== tutor!._id && tutor!.role !== "admin") {
+        throw new Error("You can only create courses for yourself.");
+      }
     }
-    const isAdmin = tutor.role === "admin";
+    // Category fallback — the builder must never dead-end on a missing pick;
+    // mandatory validation happens at publish time instead.
+    let categoryId = args.categoryId;
+    if (!categoryId) {
+      const first = await ctx.db.query("categories").first();
+      categoryId = first?._id;
+      if (!categoryId) {
+        categoryId = await ctx.db.insert("categories", {
+          name: "General",
+          slug: "general",
+          description: "Catch-all category for new courses.",
+          icon: "Sparkles",
+          color: "lime",
+        });
+      }
+    }
+    const isAdmin = isPreview ? true : tutor!.role === "admin";
 
     // Admins can publish directly; tutors always save as draft and must
     // submit for review before the course can go live.
@@ -228,7 +271,7 @@ export const upsertCourse = mutation({
         subtitle: args.subtitle,
         description: args.description,
         longDescription: args.longDescription,
-        categoryId: args.categoryId,
+        categoryId,
         tutorId: args.tutorId,
         roadmapId: args.roadmapId,
         levelId: args.levelId,
@@ -252,7 +295,7 @@ export const upsertCourse = mutation({
       subtitle: args.subtitle,
       description: args.description,
       longDescription: args.longDescription,
-      categoryId: args.categoryId,
+      categoryId,
       tutorId: args.tutorId,
       roadmapId: args.roadmapId,
       levelId: args.levelId,
@@ -277,11 +320,14 @@ export const upsertCourse = mutation({
 
 /** Tutor submits their course for admin review (goes live only if approved). */
 export const submitCourseForReview = mutation({
-  args: { courseId: v.id("courses") },
-  handler: async (ctx, { courseId }) => {
-    const tutor = await requireTutor(ctx);
+  args: { courseId: v.id("courses"), token: v.optional(v.string()) },
+  handler: async (ctx, { courseId, token }) => {
+    const { tutor, isPreview } = await requireTutorOrToken(ctx, token);
     const course = await ctx.db.get(courseId);
-    if (!course || (course.tutorId !== tutor._id && tutor.role !== "admin")) {
+    if (
+      !course ||
+      (!isPreview && course.tutorId !== tutor!._id && tutor!.role !== "admin")
+    ) {
       throw new Error("Not your course.");
     }
     await ctx.db.patch(courseId, {
@@ -294,11 +340,14 @@ export const submitCourseForReview = mutation({
 });
 
 export const deleteCourse = mutation({
-  args: { id: v.id("courses") },
-  handler: async (ctx, { id }) => {
-    const tutor = await requireTutor(ctx);
+  args: { id: v.id("courses"), token: v.optional(v.string()) },
+  handler: async (ctx, { id, token }) => {
+    const { tutor, isPreview } = await requireTutorOrToken(ctx, token);
     const course = await ctx.db.get(id);
-    if (!course || (course.tutorId !== tutor._id && tutor.role !== "admin")) {
+    if (
+      !course ||
+      (!isPreview && course.tutorId !== tutor!._id && tutor!.role !== "admin")
+    ) {
       throw new Error("Not your course.");
     }
     await ctx.db.delete(id);
@@ -333,10 +382,13 @@ export const upsertLesson = mutation({
     notes: v.string(),
     transcript: v.string(),
     resources: v.array(resourceValidator),
+    token: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
-    const tutor = await requireTutor(ctx);
-    await checkRateLimit(ctx, `tutor:${tutor._id}`, 20, 60 * 60 * 1000);
+    const { tutor, isPreview } = await requireTutorOrToken(ctx, args.token);
+    if (!isPreview) {
+      await checkRateLimit(ctx, `tutor:${tutor!._id}`, 20, 60 * 60 * 1000);
+    }
     // Direct device uploads: resolve the authoritative playback URL from
     // Convex storage server-side — never trust a client-derived URL.
     let videoUrl = args.videoUrl;
@@ -394,9 +446,9 @@ export const setLessonMux = mutation({
 });
 
 export const deleteLesson = mutation({
-  args: { id: v.id("lessons") },
-  handler: async (ctx, { id }) => {
-    await requireTutor(ctx);
+  args: { id: v.id("lessons"), token: v.optional(v.string()) },
+  handler: async (ctx, { id, token }) => {
+    await requireTutorOrToken(ctx, token);
     await ctx.db.delete(id);
     return true;
   },
@@ -407,10 +459,14 @@ export const deleteLesson = mutation({
 // ---------------------------------------------------------------------------
 
 export const courseQuizzesFull = query({
-  args: { courseId: v.string() },
-  handler: async (ctx, { courseId }) => {
-    const tutor = await requireTutorPreview(ctx);
-    if (!tutor) return [];
+  args: { courseId: v.string(), token: v.optional(v.string()) },
+  handler: async (ctx, { courseId, token }) => {
+    if (token) {
+      await requireAdminSession(ctx, token);
+    } else {
+      const tutor = await requireTutorPreview(ctx);
+      if (!tutor) return [];
+    }
     const quizzes = await ctx.db
       .query("quizzes")
       .withIndex("by_course", (q) => q.eq("courseId", courseId as never))
@@ -427,12 +483,20 @@ export const upsertQuiz = mutation({
     description: v.string(),
     timeLimitMinutes: v.number(),
     questions: v.array(questionValidator),
+    token: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
-    const tutor = await requireTutor(ctx);
-    await checkRateLimit(ctx, `tutor:${tutor._id}`, 20, 60 * 60 * 1000);
+    const { tutor, isPreview } = await requireTutorOrToken(ctx, args.token);
+    if (!isPreview) {
+      await checkRateLimit(ctx, `tutor:${tutor!._id}`, 20, 60 * 60 * 1000);
+    }
     const course = await ctx.db.get(args.courseId);
-    if (!course || (course.tutorId !== tutor._id && tutor.role !== "admin")) {
+    if (!course) throw new Error("Course not found.");
+    if (
+      !isPreview &&
+      course.tutorId !== tutor!._id &&
+      tutor!.role !== "admin"
+    ) {
       throw new Error("Not your course.");
     }
     if (args.id) {
@@ -446,7 +510,7 @@ export const upsertQuiz = mutation({
     }
     return await ctx.db.insert("quizzes", {
       courseId: args.courseId,
-      tutorId: tutor._id,
+      tutorId: course.tutorId,
       title: args.title,
       description: args.description,
       timeLimitMinutes: args.timeLimitMinutes,
@@ -457,11 +521,14 @@ export const upsertQuiz = mutation({
 });
 
 export const deleteQuiz = mutation({
-  args: { id: v.id("quizzes") },
-  handler: async (ctx, { id }) => {
-    const tutor = await requireTutor(ctx);
+  args: { id: v.id("quizzes"), token: v.optional(v.string()) },
+  handler: async (ctx, { id, token }) => {
+    const { tutor, isPreview } = await requireTutorOrToken(ctx, token);
     const quiz = await ctx.db.get(id);
-    if (!quiz || (quiz.tutorId !== tutor._id && tutor.role !== "admin")) {
+    if (
+      !quiz ||
+      (!isPreview && quiz.tutorId !== tutor!._id && tutor!.role !== "admin")
+    ) {
       throw new Error("Not your quiz.");
     }
     await ctx.db.delete(id);
@@ -474,10 +541,14 @@ export const deleteQuiz = mutation({
 // ---------------------------------------------------------------------------
 
 export const courseAssignmentsFull = query({
-  args: { courseId: v.string() },
-  handler: async (ctx, { courseId }) => {
-    const tutor = await requireTutorPreview(ctx);
-    if (!tutor) return [];
+  args: { courseId: v.string(), token: v.optional(v.string()) },
+  handler: async (ctx, { courseId, token }) => {
+    if (token) {
+      await requireAdminSession(ctx, token);
+    } else {
+      const tutor = await requireTutorPreview(ctx);
+      if (!tutor) return [];
+    }
     const docs = await ctx.db
       .query("assignments")
       .withIndex("by_course", (q) => q.eq("courseId", courseId as never))
@@ -496,12 +567,20 @@ export const upsertAssignment = mutation({
     deadline: v.optional(v.number()),
     maxScore: v.number(),
     files: v.array(resourceValidator),
+    token: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
-    const tutor = await requireTutor(ctx);
-    await checkRateLimit(ctx, `tutor:${tutor._id}`, 20, 60 * 60 * 1000);
+    const { tutor, isPreview } = await requireTutorOrToken(ctx, args.token);
+    if (!isPreview) {
+      await checkRateLimit(ctx, `tutor:${tutor!._id}`, 20, 60 * 60 * 1000);
+    }
     const course = await ctx.db.get(args.courseId);
-    if (!course || (course.tutorId !== tutor._id && tutor.role !== "admin")) {
+    if (!course) throw new Error("Course not found.");
+    if (
+      !isPreview &&
+      course.tutorId !== tutor!._id &&
+      tutor!.role !== "admin"
+    ) {
       throw new Error("Not your course.");
     }
     if (args.id) {
@@ -517,7 +596,7 @@ export const upsertAssignment = mutation({
     }
     return await ctx.db.insert("assignments", {
       courseId: args.courseId,
-      tutorId: tutor._id,
+      tutorId: course.tutorId,
       title: args.title,
       description: args.description,
       instructions: args.instructions,
@@ -530,9 +609,9 @@ export const upsertAssignment = mutation({
 });
 
 export const deleteAssignment = mutation({
-  args: { id: v.id("assignments") },
-  handler: async (ctx, { id }) => {
-    await requireTutor(ctx);
+  args: { id: v.id("assignments"), token: v.optional(v.string()) },
+  handler: async (ctx, { id, token }) => {
+    await requireTutorOrToken(ctx, token);
     await ctx.db.delete(id);
     return true;
   },

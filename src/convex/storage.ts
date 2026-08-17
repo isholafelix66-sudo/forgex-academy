@@ -12,10 +12,15 @@ import { checkRateLimit, requireAdminSession, requireUser } from "./lib";
  * mysteriously blocked mid-conversation.
  */
 export const generateUploadUrl = mutation({
-  args: {},
-  handler: async (ctx) => {
-    const userId = await requireUser(ctx);
-    await checkRateLimit(ctx, `upload:${userId}`, 60, 60 * 1000);
+  args: { token: v.optional(v.string()) },
+  handler: async (ctx, args) => {
+    if (args.token) {
+      // Admin-session preview (password gate, no account).
+      await requireAdminSession(ctx, args.token);
+    } else {
+      const userId = await requireUser(ctx);
+      await checkRateLimit(ctx, `upload:${userId}`, 60, 60 * 1000);
+    }
     return await ctx.storage.generateUploadUrl();
   },
 });
@@ -35,10 +40,14 @@ export const getStorageUrl = query({
  * client never derives a playback URL from the upload endpoint.
  */
 export const resolveUploadedFile = mutation({
-  args: { storageId: v.id("_storage") },
-  handler: async (ctx, { storageId }) => {
-    const userId = await requireUser(ctx);
-    await checkRateLimit(ctx, `upload:${userId}`, 60, 60 * 1000);
+  args: { storageId: v.id("_storage"), token: v.optional(v.string()) },
+  handler: async (ctx, { storageId, token }) => {
+    if (token) {
+      await requireAdminSession(ctx, token);
+    } else {
+      const userId = await requireUser(ctx);
+      await checkRateLimit(ctx, `upload:${userId}`, 60, 60 * 1000);
+    }
     return (await ctx.storage.getUrl(storageId)) ?? "";
   },
 });
@@ -71,10 +80,14 @@ export const adminResolveUploadUrl = mutation({
 
 /** Delete an orphaned file (e.g. when a course image is replaced). */
 export const deleteFile = mutation({
-  args: { storageId: v.id("_storage") },
-  handler: async (ctx, { storageId }) => {
-    const userId = await requireUser(ctx);
-    await checkRateLimit(ctx, `upload:${userId}`, 60, 60 * 1000);
+  args: { storageId: v.id("_storage"), token: v.optional(v.string()) },
+  handler: async (ctx, { storageId, token }) => {
+    if (token) {
+      await requireAdminSession(ctx, token);
+    } else {
+      const userId = await requireUser(ctx);
+      await checkRateLimit(ctx, `upload:${userId}`, 60, 60 * 1000);
+    }
     await ctx.storage.delete(storageId);
     return true;
   },

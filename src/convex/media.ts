@@ -2,6 +2,7 @@ import { mutation, query } from "./_generated/server";
 import { v } from "convex/values";
 import { getAuthUserId } from "@convex-dev/auth/server";
 import { requireAdminSession } from "./lib";
+import type { Id } from "./_generated/dataModel";
 
 /**
  * Mux video records (`mediaVideos`) — kept fully separate from the Cloudinary
@@ -28,15 +29,22 @@ export const recordVideo = mutation({
     playbackId: v.optional(v.string()),
     courseId: v.optional(v.id("courses")),
     lessonId: v.optional(v.id("lessons")),
+    token: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
-    const userId = await getAuthUserId(ctx);
-    if (userId === null) throw new Error("Sign in required.");
-    const user = await ctx.db.get(userId);
-    if (!user) throw new Error("Account not found.");
-    const isTutor = user.role === "tutor" && !!user.verified;
-    if (user.role !== "admin" && !isTutor) {
-      throw new Error("A verified tutor account is required to upload videos.");
+    let userId: Id<"users"> | null = null;
+    if (args.token) {
+      // Admin-session preview (password gate, no account).
+      await requireAdminSession(ctx, args.token);
+    } else {
+      userId = await getAuthUserId(ctx);
+      if (userId === null) throw new Error("Sign in required.");
+      const user = await ctx.db.get(userId);
+      if (!user) throw new Error("Account not found.");
+      const isTutor = user.role === "tutor" && !!user.verified;
+      if (user.role !== "admin" && !isTutor) {
+        throw new Error("A verified tutor account is required to upload videos.");
+      }
     }
 
     const existing = await ctx.db
@@ -62,7 +70,7 @@ export const recordVideo = mutation({
       playbackId: args.playbackId,
       courseId: args.courseId,
       lessonId: args.lessonId,
-      uploadedBy: userId,
+      uploadedBy: userId ?? undefined,
       createdAt: Date.now(),
     });
   },

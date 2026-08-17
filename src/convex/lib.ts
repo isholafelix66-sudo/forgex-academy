@@ -113,6 +113,24 @@ export async function requireTutorPreview(
 export const isAdminUser = (u: Doc<"users"> | null | undefined) =>
   u?.role === ROLES.ADMIN;
 
+/**
+ * Resolve the acting identity for tutor mutations. A signed-in verified
+ * tutor (or admin user) authenticates normally. An admin-session token
+ * (password gate — the tutor-dashboard preview, no account) is also
+ * accepted, so the preview can create and edit courses end-to-end.
+ * Returns `isPreview: true` with `tutor: null` for admin-token sessions.
+ */
+export async function requireTutorOrToken(
+  ctx: MutationCtx,
+  token?: string,
+): Promise<{ tutor: Doc<"users"> | null; isPreview: boolean }> {
+  if (token) {
+    await requireAdminSession(ctx, token);
+    return { tutor: null, isPreview: true };
+  }
+  return { tutor: await requireTutor(ctx), isPreview: false };
+}
+
 // ---------------------------------------------------------------------------
 // Password-only admin sessions (no user account required)
 // ---------------------------------------------------------------------------
