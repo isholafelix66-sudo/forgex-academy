@@ -240,52 +240,78 @@ function DetailsForm({
 
   const set = (k: string, v: unknown) => setForm((f) => ({ ...f, [k]: v }));
 
-  /** Save with the storage id; retries without it when the deployed backend
-   *  doesn't accept uploaded-file ids yet (the thumbnail URL is already
+  /** Save with the storage id; retries with reduced args when the deployed
+   *  backend rejects fields it doesn't know yet (the thumbnail URL is already
    *  resolved client-side, so the image survives the retry). */
   const save = async () => {
     setSaving(true);
     setError(null);
     try {
       if (!user) throw new Error("Sign in to create or edit courses.");
-      const attempt = (withStorageId: boolean) =>
-        upsertCourse({
-          id: courseId ? (courseId as never) : undefined,
-          title: form.title,
-          subtitle: form.subtitle,
-          description: form.description,
-          longDescription: form.longDescription,
-          categoryId: form.categoryId as never,
-          tutorId: user?._id as never,
-          roadmapId: form.roadmapId ? (form.roadmapId as never) : undefined,
-          levelId: form.levelId ? (form.levelId as never) : undefined,
-          difficulty: form.difficulty as never,
-          durationHours: Number(form.durationHours) || 0,
-          image: form.image || undefined,
-          imageStorageId:
-            withStorageId && form.imageStorageId
-              ? (form.imageStorageId as never)
-              : undefined,
-          gradient: form.gradient,
-          icon: form.icon,
-          prerequisites: form.prerequisites.split(",").map((s) => s.trim()).filter(Boolean),
-          skills: form.skills.split(",").map((s) => s.trim()).filter(Boolean),
-          featured: form.featured,
-          published: false,
-        }) as Promise<string>;
-      let id: string;
-      try {
-        id = await attempt(true);
-      } catch (err) {
-        if (form.imageStorageId && isValidationError(err)) {
-          id = await attempt(false);
-          // The URL is already stored — drop the id so later saves don't
-          // keep hitting the same rejection.
-          setForm((f) => ({ ...f, imageStorageId: undefined }));
-        } else {
-          throw err;
+      const baseArgs = (withStorageId: boolean) => ({
+        id: courseId ? (courseId as never) : undefined,
+        title: form.title,
+        subtitle: form.subtitle,
+        description: form.description,
+        longDescription: form.longDescription,
+        categoryId: form.categoryId as never,
+        tutorId: user?._id as never,
+        roadmapId: form.roadmapId ? (form.roadmapId as never) : undefined,
+        levelId: form.levelId ? (form.levelId as never) : undefined,
+        difficulty: form.difficulty as never,
+        durationHours: Number(form.durationHours) || 0,
+        image: form.image || undefined,
+        imageStorageId:
+          withStorageId && form.imageStorageId
+            ? (form.imageStorageId as never)
+            : undefined,
+        gradient: form.gradient,
+        icon: form.icon,
+        prerequisites: form.prerequisites.split(",").map((s) => s.trim()).filter(Boolean),
+        skills: form.skills.split(",").map((s) => s.trim()).filter(Boolean),
+        featured: form.featured,
+        published: false,
+      });
+      // Old backends reject unknown fields one layer at a time — fall back
+      // to the earliest contract that works instead of failing the save.
+      const attempts: (() => Promise<string>)[] = [
+        () => upsertCourse(baseArgs(true)) as Promise<string>,
+        () => upsertCourse(baseArgs(false)) as Promise<string>,
+        // Last resort: only the fields every backend version has always had.
+        () =>
+          upsertCourse({
+            id: courseId ? (courseId as never) : undefined,
+            title: form.title,
+            description: form.description,
+            categoryId: form.categoryId as never,
+            tutorId: user?._id as never,
+            difficulty: form.difficulty as never,
+            durationHours: Number(form.durationHours) || 0,
+            image: form.image || undefined,
+            gradient: form.gradient,
+            icon: form.icon,
+            prerequisites: form.prerequisites.split(",").map((s) => s.trim()).filter(Boolean),
+            skills: form.skills.split(",").map((s) => s.trim()).filter(Boolean),
+            featured: form.featured,
+            published: false,
+          }) as Promise<string>,
+      ];
+      let id: string | null = null;
+      for (let i = 0; i < attempts.length; i++) {
+        try {
+          id = await attempts[i]();
+          break;
+        } catch (err) {
+          const last = i === attempts.length - 1;
+          if (last || !isBackendRejection(err)) throw err;
+          if (i === 0) {
+            // The resolved URL is already stored — drop the id so later
+            // saves don't keep hitting the same rejection.
+            setForm((f) => ({ ...f, imageStorageId: undefined }));
+          }
         }
       }
+      if (!id) throw new Error("Couldn't save the course — please try again.");
       setSaved(true);
       if (savedTimer.current) window.clearTimeout(savedTimer.current);
       savedTimer.current = window.setTimeout(() => setSaved(false), 2500);

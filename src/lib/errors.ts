@@ -34,6 +34,24 @@ export function isValidationError(err: unknown): boolean {
 }
 
 /**
+ * True when the backend rejected the call in a way worth retrying with
+ * reduced arguments (unknown-field validation, missing functions, generic
+ * server errors). App-authored friendly errors — rate limits, auth
+ * failures, size limits, offline — return false so they surface immediately.
+ */
+export function isBackendRejection(err: unknown): boolean {
+  const raw =
+    err instanceof Error ? err.message : typeof err === "string" ? err : "";
+  if (!raw) return false;
+  return (
+    VALIDATION_RE.test(raw) ||
+    REQUEST_ID_RE.test(raw) ||
+    /Server Error/i.test(raw) ||
+    FUNCTION_NOT_FOUND_RE.test(raw)
+  );
+}
+
+/**
  * Map an unknown error to a presentable message. App-authored friendly
  * messages are returned as-is; backend internals are replaced with clean
  * fallbacks. Never call this with a hardcoded value — pass the real error so
