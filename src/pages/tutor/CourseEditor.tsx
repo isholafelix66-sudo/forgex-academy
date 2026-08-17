@@ -38,7 +38,7 @@ import { PageHeader } from "@/components/dash/PageHeader";
 import { useAuth } from "@/hooks/use-auth";
 import { cn } from "@/lib/utils";
 import { ImageUploader } from "@/components/media/ImageUploader";
-import { friendlyError, isValidationError } from "@/lib/errors";
+import { friendlyError, isBackendRejection, isValidationError } from "@/lib/errors";
 import {
   MAX_CONVEX_UPLOAD_BYTES,
   uploadFileToConvex,
@@ -282,7 +282,9 @@ function DetailsForm({
           upsertCourse({
             id: courseId ? (courseId as never) : undefined,
             title: form.title,
+            subtitle: form.subtitle,
             description: form.description,
+            longDescription: form.longDescription,
             categoryId: form.categoryId as never,
             tutorId: user?._id as never,
             difficulty: form.difficulty as never,
