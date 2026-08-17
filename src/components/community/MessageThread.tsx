@@ -34,6 +34,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { timeAgo } from "@/lib/format";
+import { senderBubbleClass, senderNameClass } from "@/lib/sender-colors";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -801,8 +802,16 @@ function MessageBubble({
     }
   };
 
+  const ownMessage =
+    message.mine && !isAdminPost && !message.isAnnouncement;
+
   return (
-    <div className="group flex gap-2.5 px-1">
+    <div
+      className={cn(
+        "group flex gap-2.5 px-1",
+        ownMessage && "flex-row-reverse",
+      )}
+    >
       {/* Sender avatar */}
       <div className="w-9 shrink-0">
         {isAdminPost ? (
@@ -814,13 +823,17 @@ function MessageBubble({
         )}
       </div>
 
-      <div className="min-w-0 flex-1">
+      <div className={cn("min-w-0 flex-1", ownMessage && "flex flex-col items-end")}>
         {/* Sender name + role + time */}
         <div className="mb-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5">
           <span
             className={cn(
               "text-sm font-semibold",
-              isAdminPost ? "text-amber-300" : message.mine ? "text-lime-300" : "text-foreground",
+              isAdminPost
+                ? "text-amber-300"
+                : message.mine
+                  ? "text-lime-300"
+                  : senderNameClass(message.senderId ?? message.sender._id),
             )}
           >
             {isAdminPost ? "🛡️ ForgeX Admin" : message.sender.name}
@@ -870,13 +883,16 @@ function MessageBubble({
           className={cn(
             voicePlayable ? "cursor-pointer" : undefined,
             "inline-block max-w-full select-none touch-manipulation rounded-2xl px-3.5 py-2 text-sm leading-relaxed",
-            message.mine && !isAdminPost && !message.isAnnouncement
-              ? "rounded-bl-sm bg-lime-400 text-black"
+            ownMessage
+              ? "rounded-br-sm bg-lime-400 text-black"
               : message.isAnnouncement
                 ? "rounded-tl-sm border border-amber-400/35 bg-amber-400/10 text-amber-50"
                 : isAdminPost
                   ? "rounded-tl-sm border border-amber-400/25 bg-amber-400/8 text-amber-50"
-                  : "rounded-tl-sm border border-white/10 bg-white/6 text-foreground",
+                  : cn(
+                      "rounded-tl-sm border",
+                      senderBubbleClass(message.senderId ?? message.sender._id),
+                    ),
           )}
         >
           {message.deleted ? (

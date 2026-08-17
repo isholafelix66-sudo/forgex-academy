@@ -4,6 +4,7 @@ import { timeAgo } from "@/lib/format";
 import { formatBytes } from "@/lib/media";
 import { formatVoiceDuration } from "@/lib/chat-media";
 import { SafeImage } from "@/components/site/SafeImage";
+import { senderBubbleClass } from "@/lib/sender-colors";
 import { VoicePlayer } from "./VoicePlayer";
 
 /** Shape of a message row as returned by the messages queries. */
@@ -187,7 +188,7 @@ export function ChatBubble({
           "max-w-[85%] rounded-2xl px-3.5 py-2 text-sm leading-relaxed",
           mine
             ? "rounded-br-sm bg-lime-400 text-black"
-            : "rounded-bl-sm border border-white/10 bg-white/8 text-foreground",
+            : cn("rounded-bl-sm border", senderBubbleClass(message.senderId)),
         )}
       >
         {hasAttachment && <ChatAttachmentView attachment={message} mine={mine} />}

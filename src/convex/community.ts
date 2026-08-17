@@ -876,6 +876,59 @@ export const communityUnreadCount = query({
   },
 });
 
+/** Latest UNREAD message per community the caller belongs to — powers the
+ *  real-time new-message chime/toast. Reading a community (markCommunityRead)
+ *  advances `lastReadAt`, which empties its row, so open rooms never alert
+ *  about messages the user is already looking at. */
+export const communityMessageAlerts = query({
+  args: {},
+  handler: async (ctx) => {
+    const userId = await getAuthUserId(ctx);
+    if (userId === null) return [];
+    const memberships = await ctx.db
+      .query("communityMembers")
+      .withIndex("by_user", (q) => q.eq("userId", userId))
+      .collect();
+    const rows = await Promise.all(
+      memberships
+        .filter((m) => m.status === "active")
+        .map(async (m) => {
+          const community = await ctx.db.get(m.communityId);
+          if (!community || community.status === "archived") return null;
+          const unread = (
+            await ctx.db
+              .query("communityMessages")
+              .withIndex("by_community", (q) => q.eq("communityId", m.communityId))
+              .collect()
+          )
+            .filter(
+              (x) =>
+                !x.deleted &&
+                !x.discussionId &&
+                x.createdAt > (m.lastReadAt ?? 0) &&
+                x.senderId !== userId &&
+                x.senderKind !== "system",
+            )
+            .sort((a, b) => b.createdAt - a.createdAt);
+          const last = unread[0];
+          if (!last) return null;
+          const sender = last.senderId ? await ctx.db.get(last.senderId) : null;
+          return {
+            communityId: m.communityId,
+            name: community.name,
+            lastMessageAt: last.createdAt,
+            lastSenderId: last.senderId ?? null,
+            lastSenderName:
+              sender?.name ??
+              (last.senderKind === "admin" ? "ForgeX Admin" : "Former member"),
+            lastPreview: messagePreview(last),
+          };
+        }),
+    );
+    return rows.filter((r): r is NonNullable<typeof r> => r !== null);
+  },
+});
+
 // ---------------------------------------------------------------------------
 // ---------------------------------------------------------------------------
 // Queries — tutor community management center (/tutor/communities)
