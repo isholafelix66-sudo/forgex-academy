@@ -14,6 +14,7 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { getAdminToken } from "@/lib/admin-session";
 import { uploadFileToConvex } from "@/lib/convex-upload";
+import { friendlyError } from "@/lib/errors";
 
 export type UploadedImage = {
   publicId: string;
@@ -211,7 +212,7 @@ export function ImageUploader({
         });
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Upload failed.");
+      setError(friendlyError(err, "Upload failed."));
     } finally {
       setBusy(false);
     }

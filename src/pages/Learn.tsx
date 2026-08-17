@@ -36,6 +36,7 @@ import { useAuth } from "@/hooks/use-auth";
 import { openChatWith } from "@/lib/chat-open";
 import { cn } from "@/lib/utils";
 import { formatHours } from "@/lib/format";
+import { friendlyError } from "@/lib/errors";
 
 const WATCH_GATE = 90;
 
@@ -183,7 +184,7 @@ export default function Learn() {
       await completeLesson({ lessonId: activeLesson._id as never });
       advanceAfterComplete(activeLesson._id);
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Could not complete the lesson.");
+      toast.error(friendlyError(err, "Could not complete the lesson."));
     } finally {
       setMarking(false);
     }

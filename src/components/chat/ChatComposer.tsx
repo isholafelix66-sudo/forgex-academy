@@ -24,6 +24,7 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 import { formatBytes } from "@/lib/media";
+import { friendlyError } from "@/lib/errors";
 import {
   formatVoiceDuration,
   uploadChatFile,
@@ -215,7 +216,7 @@ export function ChatComposer({
     } catch (err) {
       setUploadState(null);
       toast.error(
-        err instanceof Error ? err.message : "Could not send the voice message.",
+        friendlyError(err, "Could not send the voice message."),
       );
     } finally {
       setBusy(false);
@@ -260,7 +261,7 @@ export function ChatComposer({
     } catch (err) {
       setUploadState(null);
       toast.error(
-        err instanceof Error ? err.message : "Could not send the attachment.",
+        friendlyError(err, "Could not send the attachment."),
       );
     } finally {
       setBusy(false);
@@ -302,7 +303,7 @@ export function ChatComposer({
       inputRef.current?.focus();
     } catch (err) {
       toast.error(
-        err instanceof Error ? err.message : "Could not send the message.",
+        friendlyError(err, "Could not send the message."),
       );
     } finally {
       setBusy(false);

@@ -5,6 +5,7 @@ import { FileText, Loader2, Paperclip, Trash2, UploadCloud } from "lucide-react"
 import { Button } from "@/components/ui/button";
 import { formatBytes } from "@/lib/media";
 import { uploadFileToConvex } from "@/lib/convex-upload";
+import { friendlyError } from "@/lib/errors";
 
 export type PrivateDoc = {
   storageId: string;
@@ -86,7 +87,7 @@ export function PrivateDocUploader({
         mime: file.type,
       });
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Upload failed.");
+      setError(friendlyError(err, "Upload failed."));
     } finally {
       setBusy(false);
     }

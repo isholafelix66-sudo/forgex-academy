@@ -40,6 +40,7 @@ import {
 } from "@/lib/convex-upload";
 import { timeAgo } from "@/lib/format";
 import { getAdminToken } from "@/lib/admin-session";
+import { friendlyError, isValidationError } from "@/lib/errors";
 import { cn } from "@/lib/utils";
 
 type CourseRow = FunctionReturnType<typeof api.admin.allCourses>[number];
@@ -154,7 +155,7 @@ export default function AdminCourses() {
       toast.success("Thumbnail uploaded — save the course to apply it.");
     } catch (err) {
       setThumbError(
-        err instanceof Error ? err.message : "Upload failed — please try again.",
+        friendlyError(err, "Upload failed — please try again."),
       );
     } finally {
       setThumbBusy(false);
@@ -204,7 +205,7 @@ export default function AdminCourses() {
       toast.success("Video uploaded — it plays as an MP4 lesson video.");
     } catch (err) {
       setLessonVideoError(
-        err instanceof Error ? err.message : "Upload failed — please try again.",
+        friendlyError(err, "Upload failed — please try again."),
       );
     } finally {
       setLessonVideoBusy(false);
@@ -286,12 +287,38 @@ export default function AdminCourses() {
     };
   };
 
+  /** Save the course; retries without the uploaded-file id when the deployed
+   *  backend rejects it (the thumbnail URL is already resolved client-side,
+   *  so the image survives the retry). */
+  const saveCourse = async (published: boolean) => {
+    const attempt = (withStorageId: boolean) =>
+      adminUpsertCourse(
+        withStorageId
+          ? courseArgs(published)
+          : { ...courseArgs(published), imageStorageId: undefined },
+      );
+    try {
+      return await attempt(true);
+    } catch (err) {
+      if (editor?.draft.imageStorageId && isValidationError(err)) {
+        const newId = await attempt(false);
+        // The URL is already stored — drop the id so later saves don't keep
+        // hitting the same rejection.
+        setEditor((e) =>
+          e ? { ...e, draft: { ...e.draft, imageStorageId: undefined } } : e,
+        );
+        return newId;
+      }
+      throw err;
+    }
+  };
+
   /** Save the course and move to the next builder step without leaving. */
   const saveCourseAndContinue = async () => {
     if (!editor || !editor.draft.title.trim()) return;
     setBusy(true);
     try {
-      const newId = (await adminUpsertCourse(courseArgs(editor.draft.published))) as string;
+      const newId = (await saveCourse(editor.draft.published)) as string;
       setEditor((e) =>
         e
           ? {
@@ -303,7 +330,7 @@ export default function AdminCourses() {
       setTab("lessons");
       toast.success("✓ Course saved — now add lessons.");
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Couldn't save the course.");
+      toast.error(friendlyError(err, "Couldn't save the course."));
     } finally {
       setBusy(false);
     }
@@ -314,11 +341,11 @@ export default function AdminCourses() {
     if (!editor) return;
     setBusy(true);
     try {
-      await adminUpsertCourse(courseArgs(false));
+      await saveCourse(false);
       setEditor(null);
       toast.success("✓ Draft saved — you can continue editing later.");
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Couldn't save the draft.");
+      toast.error(friendlyError(err, "Couldn't save the draft."));
     } finally {
       setBusy(false);
     }
@@ -329,11 +356,11 @@ export default function AdminCourses() {
     if (!editor || !editor.draft.title.trim()) return;
     setBusy(true);
     try {
-      await adminUpsertCourse(courseArgs(true));
+      await saveCourse(true);
       setEditor(null);
       toast.success("Course published! 🎉");
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Couldn't publish the course.");
+      toast.error(friendlyError(err, "Couldn't publish the course."));
     } finally {
       setBusy(false);
     }

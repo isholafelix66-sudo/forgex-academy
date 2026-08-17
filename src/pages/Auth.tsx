@@ -26,6 +26,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { resolveRedirectAfterAuth } from "@/lib/auth-redirect";
+import { friendlyError } from "@/lib/errors";
 
 interface AuthProps {
   redirectAfterAuth?: string;
@@ -111,7 +112,7 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
     } catch (err) {
       console.error("Email sign-in error:", err);
       setError(
-        err instanceof Error ? err.message : "Failed to send code. Try again.",
+        friendlyError(err, "Failed to send code. Try again."),
       );
       setIsLoading(false);
     }

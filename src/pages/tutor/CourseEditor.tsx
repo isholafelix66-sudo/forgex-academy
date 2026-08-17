@@ -38,6 +38,7 @@ import { PageHeader } from "@/components/dash/PageHeader";
 import { useAuth } from "@/hooks/use-auth";
 import { cn } from "@/lib/utils";
 import { ImageUploader } from "@/components/media/ImageUploader";
+import { friendlyError, isValidationError } from "@/lib/errors";
 import {
   MAX_CONVEX_UPLOAD_BYTES,
   uploadFileToConvex,
@@ -239,41 +240,59 @@ function DetailsForm({
 
   const set = (k: string, v: unknown) => setForm((f) => ({ ...f, [k]: v }));
 
+  /** Save with the storage id; retries without it when the deployed backend
+   *  doesn't accept uploaded-file ids yet (the thumbnail URL is already
+   *  resolved client-side, so the image survives the retry). */
   const save = async () => {
     setSaving(true);
     setError(null);
     try {
       if (!user) throw new Error("Sign in to create or edit courses.");
-      const id = (await upsertCourse({
-      id: courseId ? (courseId as never) : undefined,
-      title: form.title,
-      subtitle: form.subtitle,
-      description: form.description,
-      longDescription: form.longDescription,
-      categoryId: form.categoryId as never,
-      tutorId: user?._id as never,
-      roadmapId: form.roadmapId ? (form.roadmapId as never) : undefined,
-      levelId: form.levelId ? (form.levelId as never) : undefined,
-      difficulty: form.difficulty as never,
-      durationHours: Number(form.durationHours) || 0,
-      image: form.image || undefined,
-      imageStorageId: form.imageStorageId
-        ? (form.imageStorageId as never)
-        : undefined,
-      gradient: form.gradient,
-      icon: form.icon,
-      prerequisites: form.prerequisites.split(",").map((s) => s.trim()).filter(Boolean),
-      skills: form.skills.split(",").map((s) => s.trim()).filter(Boolean),
-      featured: form.featured,
-      published: false,
-    })) as string;
+      const attempt = (withStorageId: boolean) =>
+        upsertCourse({
+          id: courseId ? (courseId as never) : undefined,
+          title: form.title,
+          subtitle: form.subtitle,
+          description: form.description,
+          longDescription: form.longDescription,
+          categoryId: form.categoryId as never,
+          tutorId: user?._id as never,
+          roadmapId: form.roadmapId ? (form.roadmapId as never) : undefined,
+          levelId: form.levelId ? (form.levelId as never) : undefined,
+          difficulty: form.difficulty as never,
+          durationHours: Number(form.durationHours) || 0,
+          image: form.image || undefined,
+          imageStorageId:
+            withStorageId && form.imageStorageId
+              ? (form.imageStorageId as never)
+              : undefined,
+          gradient: form.gradient,
+          icon: form.icon,
+          prerequisites: form.prerequisites.split(",").map((s) => s.trim()).filter(Boolean),
+          skills: form.skills.split(",").map((s) => s.trim()).filter(Boolean),
+          featured: form.featured,
+          published: false,
+        }) as Promise<string>;
+      let id: string;
+      try {
+        id = await attempt(true);
+      } catch (err) {
+        if (form.imageStorageId && isValidationError(err)) {
+          id = await attempt(false);
+          // The URL is already stored — drop the id so later saves don't
+          // keep hitting the same rejection.
+          setForm((f) => ({ ...f, imageStorageId: undefined }));
+        } else {
+          throw err;
+        }
+      }
       setSaved(true);
       if (savedTimer.current) window.clearTimeout(savedTimer.current);
       savedTimer.current = window.setTimeout(() => setSaved(false), 2500);
       if (!courseId) navigate(`/tutor/courses/${id}?step=lessons`, { replace: true });
       else onSaved?.(id);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to save course.");
+      setError(friendlyError(err, "Couldn't save the course — please try again."));
     } finally {
       setSaving(false);
     }
@@ -306,7 +325,7 @@ function DetailsForm({
       toast.success("Thumbnail uploaded — save the course to apply it.");
     } catch (err) {
       setThumbError(
-        err instanceof Error ? err.message : "Upload failed — please try again.",
+        friendlyError(err, "Upload failed — please try again."),
       );
     } finally {
       setThumbBusy(false);
@@ -723,7 +742,7 @@ function LessonsTab({ courseId }: { courseId: string }) {
       setUploadId(res.uploadId);
     } catch (err) {
       setUploadError(
-        err instanceof Error ? err.message : "Could not start the upload.",
+        friendlyError(err, "Could not start the upload."),
       );
     } finally {
       setUploading(false);
@@ -871,7 +890,7 @@ function LessonsTab({ courseId }: { courseId: string }) {
       toast.success("Video uploaded — it plays as an MP4 lesson video.");
     } catch (err) {
       setUploadError(
-        err instanceof Error ? err.message : "Upload failed — please try again.",
+        friendlyError(err, "Upload failed — please try again."),
       );
     } finally {
       setUploading(false);
@@ -882,26 +901,44 @@ function LessonsTab({ courseId }: { courseId: string }) {
   const saveLesson = async () => {
     if (!draft || !draft.title) return;
     setSaving(true);
-    await upsertLesson({
-      id: draft.id ? (draft.id as never) : undefined,
-      courseId: courseId as never,
-      title: draft.title,
-      order: draft.order,
-      durationMinutes: Number(draft.durationMinutes) || 0,
-      videoUrl: draft.videoUrl || undefined,
-      videoType: draft.videoType,
-      image: draft.image || undefined,
-      muxAssetId: draft.muxAssetId,
-      muxPlaybackId: draft.muxPlaybackId,
-      videoStorageId: draft.videoStorageId
-        ? (draft.videoStorageId as never)
-        : undefined,
-      notes: draft.notes,
-      transcript: draft.transcript,
-      resources: draft.resources.filter((r) => r.name && r.url),
-    });
-    setSaving(false);
-    setDraft(null);
+    try {
+      const attempt = (withStorageId: boolean) =>
+        upsertLesson({
+          id: draft.id ? (draft.id as never) : undefined,
+          courseId: courseId as never,
+          title: draft.title,
+          order: draft.order,
+          durationMinutes: Number(draft.durationMinutes) || 0,
+          videoUrl: draft.videoUrl || undefined,
+          videoType: draft.videoType,
+          image: draft.image || undefined,
+          muxAssetId: draft.muxAssetId,
+          muxPlaybackId: draft.muxPlaybackId,
+          videoStorageId:
+            withStorageId && draft.videoStorageId
+              ? (draft.videoStorageId as never)
+              : undefined,
+          notes: draft.notes,
+          transcript: draft.transcript,
+          resources: draft.resources.filter((r) => r.name && r.url),
+        });
+      try {
+        await attempt(true);
+      } catch (err) {
+        // Stale backends reject the file id — the resolved URL is already in
+        // the draft, so retrying without the id still saves the video.
+        if (draft.videoStorageId && isValidationError(err)) {
+          await attempt(false);
+        } else {
+          throw err;
+        }
+      }
+      setDraft(null);
+    } catch (err) {
+      toast.error(friendlyError(err, "Could not save the lesson."));
+    } finally {
+      setSaving(false);
+    }
   };
 
   const existingQuizForDraft =
@@ -965,7 +1002,7 @@ function LessonsTab({ courseId }: { courseId: string }) {
       toast.success(quizDraft.id ? "Quiz updated" : "Quiz added to the lesson");
       setQuizDraft(null);
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Could not save the quiz.");
+      toast.error(friendlyError(err, "Could not save the quiz."));
     }
     setQuizSaving(false);
   };
@@ -975,7 +1012,7 @@ function LessonsTab({ courseId }: { courseId: string }) {
       await deleteLessonQuiz({ id: id as never });
       toast.success("Quiz removed");
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Could not remove the quiz.");
+      toast.error(friendlyError(err, "Could not remove the quiz."));
     }
   };
 
@@ -1009,9 +1046,7 @@ function LessonsTab({ courseId }: { courseId: string }) {
       toast.success(`Generated ${res.questions.length} suggested questions from the ${res.source}.`);
     } catch (err) {
       toast.error(
-        err instanceof Error
-          ? err.message
-          : "Question generation failed — is AI configured?",
+        friendlyError(err, "Question generation failed — is AI configured?"),
       );
     }
     setQuizGenerating(false);
@@ -1038,7 +1073,7 @@ function LessonsTab({ courseId }: { courseId: string }) {
       setDraft((d) => (d ? { ...d, transcript: res.text } : d));
       toast.success("Transcript generated — review it below, then save the lesson.");
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Transcription failed.");
+      toast.error(friendlyError(err, "Transcription failed."));
     }
     setTranscribing(false);
   };
@@ -1723,37 +1758,54 @@ function ReviewTab({
   const quizCount = quizzes?.length ?? 0;
   const assignmentCount = assignments?.length ?? 0;
 
+  // Re-save the course with the thumbnail id; retries without it when the
+  // deployed backend rejects uploaded-file ids (the URL is already stored).
+  const attemptSave = async (published: boolean, withStorageId: boolean) =>
+    upsertCourse({
+      id: courseId as never,
+      title: course.title,
+      subtitle: course.subtitle ?? "",
+      description: course.description ?? "",
+      longDescription: course.longDescription ?? "",
+      categoryId: course.categoryId as never,
+      tutorId: user?._id as never,
+      roadmapId: course.roadmapId ? (course.roadmapId as never) : undefined,
+      levelId: course.levelId ? (course.levelId as never) : undefined,
+      difficulty: course.difficulty as never,
+      durationHours: course.durationHours,
+      image: course.image ?? undefined,
+      imageStorageId:
+        withStorageId && course.imageStorageId
+          ? (course.imageStorageId as never)
+          : undefined,
+      gradient: course.gradient ?? undefined,
+      icon: course.icon ?? undefined,
+      prerequisites: course.prerequisites ?? [],
+      skills: course.skills ?? [],
+      featured: course.featured,
+      published,
+    });
+  const saveWithRetry = async (published: boolean) => {
+    try {
+      await attemptSave(published, true);
+    } catch (err) {
+      if (course.imageStorageId && isValidationError(err)) {
+        await attemptSave(published, false);
+      } else {
+        throw err;
+      }
+    }
+  };
+
   const saveDraft = async () => {
     if (!user) return;
     setBusy("draft");
     setError(null);
     try {
-      await upsertCourse({
-        id: courseId as never,
-        title: course.title,
-        subtitle: course.subtitle ?? "",
-        description: course.description ?? "",
-        longDescription: course.longDescription ?? "",
-        categoryId: course.categoryId as never,
-        tutorId: user._id as never,
-        roadmapId: course.roadmapId ? (course.roadmapId as never) : undefined,
-        levelId: course.levelId ? (course.levelId as never) : undefined,
-        difficulty: course.difficulty as never,
-        durationHours: course.durationHours,
-        image: course.image ?? undefined,
-        imageStorageId: course.imageStorageId
-          ? (course.imageStorageId as never)
-          : undefined,
-        gradient: course.gradient ?? undefined,
-        icon: course.icon ?? undefined,
-        prerequisites: course.prerequisites ?? [],
-        skills: course.skills ?? [],
-        featured: course.featured,
-        published: false,
-      });
+      await saveWithRetry(false);
       toast.success("✓ Draft saved — you can continue editing later.");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Couldn't save the draft.");
+      setError(friendlyError(err, "Couldn't save the draft."));
     } finally {
       setBusy(null);
     }
@@ -1769,29 +1821,7 @@ function ReviewTab({
     setError(null);
     try {
       if (user.role === "admin") {
-        await upsertCourse({
-          id: courseId as never,
-          title: course.title,
-          subtitle: course.subtitle ?? "",
-          description: course.description ?? "",
-          longDescription: course.longDescription ?? "",
-          categoryId: course.categoryId as never,
-          tutorId: user._id as never,
-          roadmapId: course.roadmapId ? (course.roadmapId as never) : undefined,
-          levelId: course.levelId ? (course.levelId as never) : undefined,
-          difficulty: course.difficulty as never,
-          durationHours: course.durationHours,
-          image: course.image ?? undefined,
-          imageStorageId: course.imageStorageId
-            ? (course.imageStorageId as never)
-            : undefined,
-          gradient: course.gradient ?? undefined,
-          icon: course.icon ?? undefined,
-          prerequisites: course.prerequisites ?? [],
-          skills: course.skills ?? [],
-          featured: course.featured,
-          published: true,
-        });
+        await saveWithRetry(true);
         toast.success("Course published! 🎉");
       } else {
         await submitForReview({ courseId: courseId as never });
@@ -1802,7 +1832,7 @@ function ReviewTab({
       onPublished();
       navigate("/tutor/courses");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Couldn't publish the course.");
+      setError(friendlyError(err, "Couldn't publish the course."));
     } finally {
       setBusy(null);
     }

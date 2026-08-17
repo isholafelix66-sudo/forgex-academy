@@ -9,6 +9,7 @@ import {
   UploadCloud,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { friendlyError } from "@/lib/errors";
 
 export type UploadedVideo = {
   publicId: string;
@@ -126,7 +127,7 @@ export function VideoUploader({
         bytes: result.bytes,
       });
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Upload failed.");
+      setError(friendlyError(err, "Upload failed."));
     } finally {
       setBusy(false);
     }
