@@ -118,6 +118,8 @@ const schema = defineSchema(
       // Public tutor page slug — e.g. /tutor/david-ogunleye. Assigned when
       // a tutor application is approved/verified; unique per user.
       slug: v.optional(v.string()),
+      // Team Workspace — links to the user's team membership record.
+      teamMemberId: v.optional(v.id("teamMemberships")),
     })
       .index("email", ["email"])
       .index("by_slug", ["slug"]),
@@ -1078,6 +1080,133 @@ const schema = defineSchema(
       .index("by_community", ["communityId"])
       .index("by_conversation", ["conversationId"])
       .index("by_user", ["userId"]),
+
+    // -----------------------------------------------------------------------
+    // Team Workspace
+    // -----------------------------------------------------------------------
+    teams: defineTable({
+      name: v.string(),
+      slug: v.string(),
+      description: v.string(),
+      leadUserId: v.optional(v.id("users")),
+      memberCount: v.number(),
+      activeWorkCount: v.number(),
+      status: v.union(
+        v.literal("active"),
+        v.literal("disabled"),
+      ),
+      createdAt: v.number(),
+    })
+      .index("by_slug", ["slug"]),
+
+    teamApplications: defineTable({
+      userId: v.id("users"),
+      name: v.string(),
+      email: v.string(),
+      phone: v.optional(v.string()),
+      skill: v.string(),
+      preferredTeamId: v.optional(v.id("teams")),
+      introduction: v.string(),
+      status: v.union(
+        v.literal("pending"),
+        v.literal("approved"),
+        v.literal("rejected"),
+      ),
+      reviewedBy: v.optional(v.id("users")),
+      reviewedAt: v.optional(v.number()),
+      reviewNote: v.optional(v.string()),
+      createdAt: v.number(),
+    })
+      .index("by_user", ["userId"])
+      .index("by_status", ["status"]),
+
+    teamMemberships: defineTable({
+      userId: v.id("users"),
+      teamId: v.id("teams"),
+      role: v.union(
+        v.literal("teamLead"),
+        v.literal("teamMember"),
+      ),
+      status: v.union(
+        v.literal("active"),
+        v.literal("deactivated"),
+      ),
+      joinedAt: v.number(),
+    })
+      .index("by_user", ["userId"])
+      .index("by_team", ["teamId"]),
+
+    workItems: defineTable({
+      title: v.string(),
+      description: v.string(),
+      teamId: v.id("teams"),
+      courseId: v.optional(v.id("courses")),
+      assignedTo: v.optional(v.id("users")),
+      createdBy: v.id("users"),
+      priority: v.union(
+        v.literal("low"),
+        v.literal("medium"),
+        v.literal("high"),
+        v.literal("urgent"),
+      ),
+      status: v.union(
+        v.literal("todo"),
+        v.literal("in_progress"),
+        v.literal("in_review"),
+        v.literal("completed"),
+      ),
+      deadline: v.optional(v.number()),
+      commentCount: v.number(),
+      createdAt: v.number(),
+      updatedAt: v.number(),
+    })
+      .index("by_team", ["teamId"])
+      .index("by_assignee", ["assignedTo"])
+      .index("by_course", ["courseId"]),
+
+    workComments: defineTable({
+      workItemId: v.id("workItems"),
+      userId: v.id("users"),
+      content: v.string(),
+      createdAt: v.number(),
+    })
+      .index("by_workItem", ["workItemId", "createdAt"]),
+
+    teamReviews: defineTable({
+      courseId: v.id("courses"),
+      teamId: v.id("teams"),
+      userId: v.id("users"),
+      section: v.union(
+        v.literal("lessons"),
+        v.literal("quizzes"),
+        v.literal("resources"),
+        v.literal("objectives"),
+        v.literal("general"),
+      ),
+      decision: v.union(
+        v.literal("approved"),
+        v.literal("revision_required"),
+        v.literal("pending"),
+      ),
+      note: v.optional(v.string()),
+      createdAt: v.number(),
+      updatedAt: v.number(),
+    })
+      .index("by_course", ["courseId"])
+      .index("by_team", ["teamId"]),
+
+    teamActivity: defineTable({
+      userId: v.id("users"),
+      teamId: v.optional(v.id("teams")),
+      action: v.string(),
+      targetType: v.optional(v.string()),
+      targetId: v.optional(v.string()),
+      targetLabel: v.optional(v.string()),
+      details: v.optional(v.string()),
+      createdAt: v.number(),
+    })
+      .index("by_team", ["teamId", "createdAt"])
+      .index("by_user", ["userId", "createdAt"]),
   },
   {
     schemaValidation: false,

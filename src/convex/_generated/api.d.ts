@@ -40,6 +40,7 @@ import type * as seed from "../seed.js";
 import type * as storage from "../storage.js";
 import type * as stories from "../stories.js";
 import type * as submissions from "../submissions.js";
+import type * as team from "../team.js";
 import type * as tutor from "../tutor.js";
 import type * as tutorSupport from "../tutorSupport.js";
 import type * as users from "../users.js";
@@ -83,6 +84,7 @@ declare const fullApi: ApiFromModules<{
   storage: typeof storage;
   stories: typeof stories;
   submissions: typeof submissions;
+  team: typeof team;
   tutor: typeof tutor;
   tutorSupport: typeof tutorSupport;
   users: typeof users;
