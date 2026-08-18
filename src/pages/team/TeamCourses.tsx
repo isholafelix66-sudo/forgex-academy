@@ -5,8 +5,8 @@ import { Link } from "react-router";
 import { motion } from "framer-motion";
 
 export default function TeamCourses() {
-  // Use the admin's course list (which works for published courses)
-  const courses = useQuery(api.courses.listPublished);
+  // Public published courses list
+  const courses = useQuery(api.public.coursesList, {});
 
   return (
     <div className="space-y-6">
