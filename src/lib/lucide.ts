@@ -171,6 +171,7 @@ export { default as User } from "lucide-react/dist/esm/icons/user.js";
 export { default as UserCog } from "lucide-react/dist/esm/icons/user-cog.js";
 export { default as UserMinus } from "lucide-react/dist/esm/icons/user-minus.js";
 export { default as UserCheck } from "lucide-react/dist/esm/icons/user-check.js";
+export { default as UserX } from "lucide-react/dist/esm/icons/user-x.js";
 export { default as UserCircle } from "lucide-react/dist/esm/icons/user-circle.js";
 export { default as UserPlus } from "lucide-react/dist/esm/icons/user-plus.js";
 export { default as Users } from "lucide-react/dist/esm/icons/users.js";

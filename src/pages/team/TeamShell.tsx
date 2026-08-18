@@ -1,6 +1,7 @@
 import { useParams } from "react-router";
 import { useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
+import { useTeamAuth } from "@/hooks/use-team-auth";
 import {
   LayoutDashboard,
   ClipboardList,
@@ -142,10 +143,9 @@ function getNavSections(teamType: string, basePath: string) {
 
 export default function TeamShell() {
   const { teamSlug } = useParams<{ teamSlug: string }>();
-  const myTeam = useQuery(api.team.getMyTeam);
+  const { teamMember } = useTeamAuth();
 
-  const team = myTeam?.team as any;
-  const teamName = team?.name ?? "Team";
+  const teamName = teamMember?.team?.name ?? teamMember?.name ?? "Team";
 
   const basePath = `/team/${teamSlug}`;
   const teamType = getTeamType(teamSlug);

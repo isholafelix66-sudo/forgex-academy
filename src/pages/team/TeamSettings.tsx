@@ -1,19 +1,30 @@
-import { useQuery } from "convex/react";
-import { api } from "@/convex/_generated/api";
-import { useAuth } from "@/hooks/use-auth";
-import { Link } from "react-router";
-import { Loader2, Settings, LogOut } from "lucide-react";
+import { useTeamAuth } from "@/hooks/use-team-auth";
+import { Loader2, Settings, LogOut, AlertTriangle } from "lucide-react";
+import { useState } from "react";
 
 export default function TeamSettings() {
-  const { user, signOut } = useAuth();
-  const myTeam = useQuery(api.team.getMyTeam);
-  const team = myTeam?.team as any;
-  const membership = myTeam?.membership as any;
+  const { teamMember, isLoading, logout } = useTeamAuth();
+  const [signingOut, setSigningOut] = useState(false);
 
   const handleSignOut = async () => {
-    await signOut();
-    window.location.href = "/team";
+    setSigningOut(true);
+    try {
+      await logout();
+    } catch (err) {
+      console.error("Sign out failed:", err);
+    } finally {
+      setSigningOut(false);
+      window.location.href = "/team";
+    }
   };
+
+  if (isLoading) {
+    return (
+      <div className="flex justify-center py-10">
+        <Loader2 className="size-5 animate-spin text-lime-400" />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -24,45 +35,44 @@ export default function TeamSettings() {
 
       <div className="rounded-2xl border border-white/5 bg-card p-6 space-y-4">
         <h3 className="text-sm font-semibold text-white/80">Account</h3>
-        <div className="space-y-2">
-          <Link
-            to="/dashboard/settings"
-            className="flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm text-white/60 transition-colors hover:bg-white/5 hover:text-white"
-          >
-            General Account Settings
-          </Link>
-          <Link
-            to="/dashboard/profile"
-            className="flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm text-white/60 transition-colors hover:bg-white/5 hover:text-white"
-          >
-            Student Profile
-          </Link>
-        </div>
-      </div>
-
-      <div className="rounded-2xl border border-white/5 bg-card p-6 space-y-4">
-        <h3 className="text-sm font-semibold text-white/80">Team</h3>        {team && (
-          <div className="text-sm text-white/40">
+        {teamMember && (
+          <div className="space-y-1 text-sm text-white/60">
             <p>
-              Team: <span className="text-white/70">{team.name}</span>
+              Name: <span className="text-white/80">{teamMember.name}</span>
             </p>
             <p>
-              Role: {" "}
-              <span className="text-white/70">
-                {membership?.role === "teamLead" ? "Team Lead" : "Member"}
-              </span>
+              Email: <span className="text-white/80">{teamMember.email}</span>
+            </p>
+            <p>
+              Team ID: <span className="font-mono text-lime-400">{teamMember.teamId}</span>
+            </p>
+            <p>
+              Department: <span className="text-white/80">{teamMember.team?.name ?? "N/A"}</span>
             </p>
           </div>
         )}
       </div>
 
-      <div className="rounded-2xl border border-white/5 bg-card p-6">
+      <div className="rounded-2xl border border-white/5 bg-card p-6 space-y-4">
+        <h3 className="flex items-center gap-2 text-sm font-semibold text-white/80">
+          <AlertTriangle className="size-4 text-amber-400" />
+          Danger Zone
+        </h3>
+        <p className="text-xs text-white/40">
+          Signing out will end your team session. You'll need your Team ID and
+          password to sign back in.
+        </p>
         <button
           onClick={handleSignOut}
-          className="flex items-center gap-2 rounded-xl px-3 py-2.5 text-sm text-red-400 transition-colors hover:bg-red-500/10"
+          disabled={signingOut}
+          className="flex items-center gap-2 rounded-xl border border-rose-400/30 bg-rose-400/10 px-4 py-2.5 text-sm font-medium text-rose-300 transition-colors hover:bg-rose-400/20 disabled:opacity-50"
         >
-          <LogOut className="size-4" />
-          Sign out of Team Workspace
+          {signingOut ? (
+            <Loader2 className="size-4 animate-spin" />
+          ) : (
+            <LogOut className="size-4" />
+          )}
+          Sign Out
         </button>
       </div>
     </div>

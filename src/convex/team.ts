@@ -187,12 +187,15 @@ export const reviewApplication = mutation({
     if (args.decision === "approved" && args.teamId) {
       const membershipId = await ctx.db.insert("teamMemberships", {
         userId: app.userId,
+        teamAccountId: app.teamAccountId,
         teamId: args.teamId,
         role: args.role ?? "teamMember",
         status: "active",
         joinedAt: Date.now(),
       });
-      await ctx.db.patch(app.userId, { teamMemberId: membershipId });
+      if (app.userId) {
+        await ctx.db.patch(app.userId, { teamMemberId: membershipId });
+      }
       const team = await ctx.db.get(args.teamId);
       if (team) {
         await ctx.db.patch(args.teamId, {
@@ -223,8 +226,9 @@ export const listTeamMembers = query({
       .collect();
     const members = [];
     for (const m of memberships) {
-      const u = await ctx.db.get(m.userId);
-      members.push({ ...m, user: u });
+      const u = m.userId ? await ctx.db.get(m.userId) : null;
+      const acct = m.teamAccountId ? await ctx.db.get(m.teamAccountId) : null;
+      members.push({ ...m, user: u, teamAccount: acct });
     }
     return members;
   },

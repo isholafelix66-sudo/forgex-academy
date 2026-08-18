@@ -1100,13 +1100,15 @@ const schema = defineSchema(
       .index("by_slug", ["slug"]),
 
     teamApplications: defineTable({
-      userId: v.id("users"),
+      userId: v.optional(v.id("users")),
+      teamAccountId: v.optional(v.id("teamAccounts")),
       name: v.string(),
       email: v.string(),
       phone: v.optional(v.string()),
       skill: v.string(),
       preferredTeamId: v.optional(v.id("teams")),
       introduction: v.string(),
+      password: v.optional(v.string()),
       status: v.union(
         v.literal("pending"),
         v.literal("approved"),
@@ -1118,10 +1120,12 @@ const schema = defineSchema(
       createdAt: v.number(),
     })
       .index("by_user", ["userId"])
+      .index("by_team_account", ["teamAccountId"])
       .index("by_status", ["status"]),
 
     teamMemberships: defineTable({
-      userId: v.id("users"),
+      userId: v.optional(v.id("users")),
+      teamAccountId: v.optional(v.id("teamAccounts")),
       teamId: v.id("teams"),
       role: v.union(
         v.literal("teamLead"),
@@ -1134,7 +1138,64 @@ const schema = defineSchema(
       joinedAt: v.number(),
     })
       .index("by_user", ["userId"])
+      .index("by_team_account", ["teamAccountId"])
       .index("by_team", ["teamId"]),
+
+    // Independent Team Auth Tables (no Academy dependency)
+    teamAccounts: defineTable({
+      teamId: v.string(),
+      name: v.string(),
+      email: v.string(),
+      phone: v.optional(v.string()),
+      skill: v.string(),
+      introduction: v.string(),
+      passwordHash: v.string(),
+      teamSlug: v.optional(v.string()),
+      role: v.union(
+        v.literal("teamMember"),
+        v.literal("teamLead"),
+        v.literal("admin"),
+      ),
+      status: v.union(
+        v.literal("active"),
+        v.literal("suspended"),
+        v.literal("pending"),
+      ),
+      mustChangePassword: v.boolean(),
+      lastLoginAt: v.optional(v.number()),
+      createdAt: v.number(),
+    })
+      .index("by_team_id", ["teamId"])
+      .index("by_email", ["email"])
+      .index("by_status", ["status"]),
+
+    teamSessions: defineTable({
+      teamAccountId: v.id("teamAccounts"),
+      token: v.string(),
+      expiresAt: v.number(),
+      createdAt: v.number(),
+    })
+      .index("by_token", ["token"])
+      .index("by_account", ["teamAccountId"]),
+
+    teamPasswordRecovery: defineTable({
+      teamAccountId: v.id("teamAccounts"),
+      teamId: v.string(),
+      name: v.string(),
+      email: v.string(),
+      reason: v.string(),
+      status: v.union(
+        v.literal("pending"),
+        v.literal("approved"),
+        v.literal("rejected"),
+      ),
+      reviewedBy: v.optional(v.id("users")),
+      reviewedAt: v.optional(v.number()),
+      newTempPassword: v.optional(v.string()),
+      createdAt: v.number(),
+    })
+      .index("by_status", ["status"])
+      .index("by_team_account", ["teamAccountId"]),
 
     workItems: defineTable({
       title: v.string(),

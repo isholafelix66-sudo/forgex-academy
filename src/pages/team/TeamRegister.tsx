@@ -1,10 +1,8 @@
 import { useState } from "react";
 import { Link } from "react-router";
-import { useMutation, useQuery } from "convex/react";
+import { useMutation } from "convex/react";
 import { api } from "@/convex/_generated/api";
-import { useAuth } from "@/hooks/use-auth";
-import { friendlyError } from "@/lib/errors";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion } from "framer-motion";
 import {
   ArrowLeft,
   CheckCircle2,
@@ -12,20 +10,15 @@ import {
   Send,
   Users,
   AlertCircle,
+  Copy,
+  KeyRound,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 
 export default function TeamRegister() {
-  const { isAuthenticated, isLoading: authLoading } = useAuth();
-
-  // Use 'skip' when not authenticated to avoid unauthenticated queries
-  const teams = useQuery(
-    api.team.listAllTeams,
-    !authLoading && isAuthenticated ? {} : "skip",
-  );
-  const submitApp = useMutation(api.team.submitApplication);
+  const submitApp = useMutation(api.teamAuth.registerTeamAccount);
 
   const [form, setForm] = useState({
     name: "",
@@ -37,7 +30,11 @@ export default function TeamRegister() {
   });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [submitted, setSubmitted] = useState(false);
+  const [credentials, setCredentials] = useState<{
+    teamId: string;
+    password: string;
+  } | null>(null);
+  const [copied, setCopied] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -51,60 +48,108 @@ export default function TeamRegister() {
     setSaving(true);
     setError(null);
     try {
-      await submitApp({
+      const result = await submitApp({
         name: form.name.trim(),
         email: form.email.trim(),
         phone: form.phone.trim() || undefined,
         skill: form.skill.trim(),
-        preferredTeamId: form.preferredTeamId
-          ? (form.preferredTeamId as any)
-          : undefined,
+        preferredTeamId: form.preferredTeamId || undefined,
         introduction: form.introduction.trim(),
       });
-      setSubmitted(true);
+      setCredentials({ teamId: result.teamId, password: result.password });
     } catch (err) {
       setError(
-        friendlyError(err, "Could not submit application. Please try again."),
+        err instanceof Error
+          ? err.message
+          : "Could not create account. Please try again.",
       );
     } finally {
       setSaving(false);
     }
   };
 
-  if (submitted) {
+  const copyCredentials = () => {
+    if (!credentials) return;
+    navigator.clipboard.writeText(
+      `Team ID: ${credentials.teamId}\nPassword: ${credentials.password}`,
+    );
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  // Show credentials after successful registration
+  if (credentials) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center px-6">
         <motion.div
           initial={{ opacity: 0, scale: 0.95 }}
           animate={{ opacity: 1, scale: 1 }}
-          className="w-full max-w-md rounded-3xl border border-white/10 bg-card p-8 text-center"
+          className="w-full max-w-lg rounded-3xl border border-white/10 bg-card p-8 text-center"
         >
           <div className="mx-auto mb-5 flex size-16 items-center justify-center rounded-2xl bg-green-500/10">
             <CheckCircle2 className="size-8 text-green-400" />
           </div>
           <h1 className="font-display text-2xl font-bold text-white">
-            Application Submitted
+            Account Created Successfully
           </h1>
           <p className="mt-3 text-sm leading-relaxed text-white/50">
-            Your application has been submitted successfully. An administrator
-            will review your application before you can access the ForgeX Team
-            Workspace.
+            Your team account has been created and is pending admin approval.
+            Save your credentials below — you will need them to log in.
           </p>
-          <p className="mt-2 text-xs text-white/30">
-            You&rsquo;ll be notified once your application is reviewed.
-          </p>
-          <div className="mt-8 flex flex-col gap-3">
-            <Link to="/team">
+
+          {/* Credentials display */}
+          <div className="mt-6 rounded-2xl border border-lime-400/20 bg-lime-400/5 p-5 text-left">
+            <div className="mb-3 flex items-center gap-2 text-sm font-semibold text-lime-400">
+              <KeyRound className="size-4" />
+              Your Team Credentials
+            </div>
+            <div className="space-y-3">
+              <div>
+                <p className="text-xs font-medium text-white/40">Team ID</p>
+                <p className="font-mono text-lg font-bold text-white">
+                  {credentials.teamId}
+                </p>
+              </div>
+              <div>
+                <p className="text-xs font-medium text-white/40">Password</p>
+                <p className="font-mono text-lg font-bold text-lime-300">
+                  {credentials.password}
+                </p>
+              </div>
+            </div>
+            <button
+              onClick={copyCredentials}
+              className="mt-4 flex w-full items-center justify-center gap-2 rounded-xl border border-white/10 bg-white/5 py-2.5 text-sm font-medium text-white/70 transition-colors hover:bg-white/10"
+            >
+              {copied ? (
+                <>
+                  <CheckCircle2 className="size-4 text-green-400" /> Copied!
+                </>
+              ) : (
+                <>
+                  <Copy className="size-4" /> Copy Credentials
+                </>
+              )}
+            </button>
+          </div>
+
+          <div className="mt-4 rounded-xl border border-amber-500/20 bg-amber-500/5 p-3 text-xs text-amber-300/80">
+            ⚠️ Save these credentials now. Your password will not be shown again.
+            An admin must approve your account before you can log in.
+          </div>
+
+          <div className="mt-6 flex flex-col gap-3">
+            <Link to="/team/login">
               <Button className="w-full bg-lime-400 text-black hover:bg-lime-300">
-                Back to Team Entry
+                Go to Team Sign In
               </Button>
             </Link>
-            <Link to="/dashboard">
+            <Link to="/team">
               <Button
                 variant="outline"
                 className="w-full border-white/10 text-white/60"
               >
-                Go to Student Dashboard
+                Back to Team Entry
               </Button>
             </Link>
           </div>
@@ -134,7 +179,10 @@ export default function TeamRegister() {
       </header>
 
       <main className="mx-auto max-w-2xl px-6 py-12">
-        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+        >
           <div className="mb-8 text-center">
             <div className="mx-auto mb-4 flex size-14 items-center justify-center rounded-2xl border border-lime-400/20 bg-lime-400/5">
               <Users className="size-7 text-lime-400" />
@@ -143,33 +191,9 @@ export default function TeamRegister() {
               Create Team Account
             </h1>
             <p className="mt-2 text-sm text-white/40">
-              Apply to join the ForgeX team. An admin will review your
-              application before granting access.
+              Apply to join the ForgeX team. No Academy account needed.
             </p>
           </div>
-
-          {!authLoading && !isAuthenticated && (
-            <div className="mb-6 rounded-xl border border-amber-500/20 bg-amber-500/5 p-4">
-              <div className="flex items-start gap-3">
-                <AlertCircle className="mt-0.5 size-4 shrink-0 text-amber-400" />
-                <div>
-                  <p className="text-sm font-medium text-amber-300">
-                    Sign in required
-                  </p>
-                  <p className="mt-1 text-xs text-amber-300/60">
-                    You need a ForgeX Academy account to apply.{" "}
-                    <Link
-                      to="/auth?returnTo=/team/register"
-                      className="underline hover:text-amber-200"
-                    >
-                      Sign in or create one first
-                    </Link>
-                    .
-                  </p>
-                </div>
-              </div>
-            </div>
-          )}
 
           <form onSubmit={handleSubmit} className="space-y-5">
             <div className="rounded-2xl border border-white/5 bg-card p-6 space-y-4">
@@ -207,7 +231,8 @@ export default function TeamRegister() {
               </div>
               <div>
                 <label className="mb-1.5 block text-xs font-medium text-white/50">
-                  Phone Number (optional)
+                  Phone Number{" "}
+                  <span className="text-white/30">(optional)</span>
                 </label>
                 <Input
                   value={form.phone}
@@ -240,30 +265,6 @@ export default function TeamRegister() {
               </div>
               <div>
                 <label className="mb-1.5 block text-xs font-medium text-white/50">
-                  Preferred Team
-                </label>
-                <select
-                  value={form.preferredTeamId}
-                  onChange={(e) =>
-                    setForm((f) => ({
-                      ...f,
-                      preferredTeamId: e.target.value,
-                    }))
-                  }
-                  className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-white"
-                >
-                  <option value="">No preference</option>
-                  {teams
-                    ?.filter((t: any) => t.status === "active")
-                    .map((t: any) => (
-                      <option key={t._id} value={t._id}>
-                        {t.name}
-                      </option>
-                    ))}
-                </select>
-              </div>
-              <div>
-                <label className="mb-1.5 block text-xs font-medium text-white/50">
                   Short Introduction *
                 </label>
                 <Textarea
@@ -282,18 +283,11 @@ export default function TeamRegister() {
               </div>
             </div>
 
-            <AnimatePresence>
-              {error && (
-                <motion.div
-                  initial={{ opacity: 0, height: 0 }}
-                  animate={{ opacity: 1, height: "auto" }}
-                  exit={{ opacity: 0, height: 0 }}
-                  className="rounded-xl bg-red-500/10 px-4 py-3 text-sm text-red-400"
-                >
-                  {error}
-                </motion.div>
-              )}
-            </AnimatePresence>
+            {error && (
+              <div className="rounded-xl bg-red-500/10 px-4 py-3 text-sm text-red-400">
+                {error}
+              </div>
+            )}
 
             <Button
               type="submit"
@@ -311,7 +305,7 @@ export default function TeamRegister() {
               ) : (
                 <Send className="mr-2 size-4" />
               )}
-              Submit Application
+              Create Team Account
             </Button>
 
             <p className="text-center text-xs text-white/30">

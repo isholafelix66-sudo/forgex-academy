@@ -6,6 +6,7 @@ import { Toaster } from "@/components/ui/sonner";
 import { RequireAuth } from "@/components/RequireAuth";
 import { RequireTutor } from "@/components/RequireRole";
 import { RequireTeam } from "@/components/RequireTeam";
+import { RequireTeamAuth } from "@/components/RequireTeamAuth";
 import { VlyToolbar } from "../vly-toolbar-readonly.tsx";
 import { ConvexAuthProvider } from "@convex-dev/auth/react";
 import { ConvexReactClient } from "convex/react";
@@ -109,6 +110,7 @@ const TeamContentSubmissions = lazy(() => import("./pages/team/TeamContentSubmis
 const TeamTestimonials = lazy(() => import("./pages/team/TeamTestimonials.tsx"));
 const TeamSupportCases = lazy(() => import("./pages/team/TeamSupportCases.tsx"));
 const TeamTutorProfiles = lazy(() => import("./pages/team/TeamTutorProfiles.tsx"));
+const TeamForgotPassword = lazy(() => import("./pages/team/TeamForgotPassword.tsx"));
 
 // ---------------------------------------------------------------------------
 // Admin dashboard
@@ -132,7 +134,7 @@ const AdminProfile = lazy(() => import("./pages/admin/AdminProfile.tsx"));
 const AdminChat = lazy(() => import("./pages/admin/AdminChat.tsx"));
 const AdminInbox = lazy(() => import("./pages/admin/AdminInbox.tsx"));
 const AdminCoursePreview = lazy(() => import("./pages/admin/AdminCoursePreview.tsx"));
-const AdminTeamManagement = lazy(() => import("./pages/admin/AdminTeams.tsx"));
+const AdminTeamManagement = lazy(() => import("./pages/admin/AdminTeamManagement.tsx"));
 
 // Communication & Community module (admin moderation)
 const AdminCommunication = lazy(() => import("./pages/admin/AdminCommunication.tsx"));
@@ -626,7 +628,8 @@ createRoot(document.getElementById("root")!).render(
               <Route path="/team" element={<TeamEntry />} />
               <Route path="/team/register" element={<TeamRegister />} />
               <Route path="/team/login" element={<TeamLogin />} />
-              <Route path="/team/:teamSlug" element={<RequireTeam><TeamShell /></RequireTeam>}>
+              <Route path="/team/forgot-password" element={<TeamForgotPassword />} />
+              <Route path="/team/:teamSlug" element={<RequireTeamAuth><TeamShell /></RequireTeamAuth>}>
                 <Route index element={<TeamOverview />} />
                 <Route path="work" element={<TeamWork />} />
                 <Route path="courses" element={<TeamCourses />} />
