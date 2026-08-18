@@ -1,32 +1,47 @@
-import { useEffect } from "react";
-import { Link, Navigate, Outlet, useLocation } from "react-router";
+import { Link, useParams } from "react-router";
 import { useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
-import { useAuth } from "@/hooks/use-auth";
-import { Loader2 } from "lucide-react";
+import {
+  LayoutDashboard,
+  ListTodo,
+  BookOpen,
+  MessageSquare,
+  Activity,
+  UserCircle,
+  Settings,
+  Users,
+} from "lucide-react";
+import { AppShell } from "@/components/dash/AppShell";
 
 export default function TeamShell() {
-  const { user, isAuthenticated, isLoading: authLoading } = useAuth();
+  const { teamSlug } = useParams<{ teamSlug: string }>();
   const myTeam = useQuery(api.team.getMyTeam);
-  const location = useLocation();
 
-  if (authLoading || myTeam === undefined) {
-    return (
-      <div className="flex min-h-screen items-center justify-center bg-background">
-        <Loader2 className="size-6 animate-spin text-lime-400" />
-      </div>
-    );
-  }
+  const team = myTeam?.team as any;
+  const teamName = team?.name ?? "Team";
 
-  if (!isAuthenticated) {
-    const returnTo = encodeURIComponent(location.pathname);
-    return <Navigate to={`/auth?returnTo=${returnTo}`} replace />;
-  }
+  const basePath = `/team/${teamSlug}`;
 
-  // Non-admin users must be active team members
-  if (user?.role !== "admin" && (!myTeam?.team || myTeam.membership?.status !== "active")) {
-    return <Navigate to="/team" replace />;
-  }
+  const sections = [
+    {
+      label: "Workspace",
+      items: [
+        { to: basePath, label: "Overview", icon: <LayoutDashboard className="size-4" />, end: true },
+        { to: `${basePath}/work`, label: "Work", icon: <ListTodo className="size-4" /> },
+        { to: `${basePath}/courses`, label: "Courses", icon: <BookOpen className="size-4" /> },
+        { to: `${basePath}/reviews`, label: "Reviews", icon: <MessageSquare className="size-4" /> },
+        { to: `${basePath}/activity`, label: "Activity", icon: <Activity className="size-4" /> },
+      ],
+    },
+    {
+      label: "Team",
+      items: [
+        { to: `${basePath}/members`, label: "Members", icon: <Users className="size-4" /> },
+        { to: `${basePath}/profile`, label: "Profile", icon: <UserCircle className="size-4" /> },
+        { to: `${basePath}/settings`, label: "Settings", icon: <Settings className="size-4" /> },
+      ],
+    },
+  ];
 
-  return <Outlet />;
+  return <AppShell sections={sections} title={`${teamName} Workspace`} />;
 }

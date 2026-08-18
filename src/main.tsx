@@ -5,6 +5,7 @@ import { captureException, setSentryUser } from "@/lib/sentry";
 import { Toaster } from "@/components/ui/sonner";
 import { RequireAuth } from "@/components/RequireAuth";
 import { RequireTutor } from "@/components/RequireRole";
+import { RequireTeam } from "@/components/RequireTeam";
 import { VlyToolbar } from "../vly-toolbar-readonly.tsx";
 import { ConvexAuthProvider } from "@convex-dev/auth/react";
 import { ConvexReactClient } from "convex/react";
@@ -87,6 +88,22 @@ const TutorSettings = lazy(() => import("./pages/tutor/TutorSettings.tsx"));
 const TutorPage = lazy(() => import("./pages/TutorPage.tsx"));
 
 // ---------------------------------------------------------------------------
+// Team Workspace
+// ---------------------------------------------------------------------------
+const TeamEntry = lazy(() => import("./pages/team/TeamEntry.tsx"));
+const TeamRegister = lazy(() => import("./pages/team/TeamRegister.tsx"));
+const TeamLogin = lazy(() => import("./pages/team/TeamLogin.tsx"));
+const TeamShell = lazy(() => import("./pages/team/TeamShell.tsx"));
+const TeamOverview = lazy(() => import("./pages/team/TeamOverview.tsx"));
+const TeamWork = lazy(() => import("./pages/team/TeamWork.tsx"));
+const TeamCourses = lazy(() => import("./pages/team/TeamCourses.tsx"));
+const TeamReviews = lazy(() => import("./pages/team/TeamReviews.tsx"));
+const TeamActivity = lazy(() => import("./pages/team/TeamActivity.tsx"));
+const TeamMembers = lazy(() => import("./pages/team/TeamMembers.tsx"));
+const TeamProfile = lazy(() => import("./pages/team/TeamProfile.tsx"));
+const TeamSettings = lazy(() => import("./pages/team/TeamSettings.tsx"));
+
+// ---------------------------------------------------------------------------
 // Admin dashboard
 // ---------------------------------------------------------------------------
 const AdminShell = lazy(() => import("./pages/admin/AdminShell.tsx"));
@@ -108,6 +125,7 @@ const AdminProfile = lazy(() => import("./pages/admin/AdminProfile.tsx"));
 const AdminChat = lazy(() => import("./pages/admin/AdminChat.tsx"));
 const AdminInbox = lazy(() => import("./pages/admin/AdminInbox.tsx"));
 const AdminCoursePreview = lazy(() => import("./pages/admin/AdminCoursePreview.tsx"));
+const AdminTeamManagement = lazy(() => import("./pages/admin/AdminTeams.tsx"));
 
 // Communication & Community module (admin moderation)
 const AdminCommunication = lazy(() => import("./pages/admin/AdminCommunication.tsx"));
@@ -597,6 +615,21 @@ createRoot(document.getElementById("root")!).render(
                   this dynamic segment, so the dashboard keeps working. */}
               <Route path="/tutor/:slug" element={<TutorPage />} />
 
+              {/* Team Workspace — internal entry point */}
+              <Route path="/team" element={<TeamEntry />} />
+              <Route path="/team/register" element={<TeamRegister />} />
+              <Route path="/team/login" element={<TeamLogin />} />
+              <Route path="/team/:teamSlug" element={<RequireTeam><TeamShell /></RequireTeam>}>
+                <Route index element={<TeamOverview />} />
+                <Route path="work" element={<TeamWork />} />
+                <Route path="courses" element={<TeamCourses />} />
+                <Route path="reviews" element={<TeamReviews />} />
+                <Route path="activity" element={<TeamActivity />} />
+                <Route path="members" element={<TeamMembers />} />
+                <Route path="profile" element={<TeamProfile />} />
+                <Route path="settings" element={<TeamSettings />} />
+              </Route>
+
               {/* Admin dashboard — password-gated only, no user account needed */}
               <Route path="/admin" element={<AdminShell />}>
                 <Route index element={<AdminOverview />} />
@@ -625,6 +658,7 @@ createRoot(document.getElementById("root")!).render(
                 <Route path="communication/dms/:id" element={<AdminDMDetail />} />
                 <Route path="communication/reports" element={<AdminReports />} />
                 <Route path="communication/audit" element={<AdminCommAudit />} />
+                <Route path="teams" element={<AdminTeamManagement />} />
               </Route>
 
               <Route path="*" element={<NotFound />} />

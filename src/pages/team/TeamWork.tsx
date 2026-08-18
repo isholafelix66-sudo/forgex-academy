@@ -1,110 +1,86 @@
 import { useState } from "react";
+import { useParams } from "react-router";
 import { useMutation, useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
-import { useAuth } from "@/hooks/use-auth";
 import { friendlyError } from "@/lib/errors";
+import { motion, AnimatePresence } from "framer-motion";
+import {
+  Loader2,
+  Plus,
+  ListTodo,
+  Clock,
+  CheckCircle2,
+  AlertCircle,
+  MessageSquare,
+  Calendar,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import {
-  ArrowLeft,
-  ChevronDown,
-  Clock,
-  Filter,
-  Loader2,
-  MessageSquare,
-  Plus,
-  Send,
-} from "lucide-react";
-import { motion, AnimatePresence } from "framer-motion";
 
-const STATUSES = [
-  { value: "todo", label: "To Do" },
-  { value: "in_progress", label: "In Progress" },
-  { value: "in_review", label: "In Review" },
-  { value: "completed", label: "Completed" },
-] as const;
-
-const PRIORITIES = ["low", "medium", "high", "urgent"] as const;
-
-const PRIORITY_COLORS: Record<string, string> = {
-  urgent: "text-red-400 bg-red-500/10",
-  high: "text-orange-400 bg-orange-500/10",
-  medium: "text-yellow-400 bg-yellow-500/10",
-  low: "text-green-400 bg-green-500/10",
+const STATUS_TABS = ["all", "todo", "in_progress", "in_review", "completed"] as const;
+const STATUS_LABELS: Record<string, string> = {
+  all: "All",
+  todo: "To Do",
+  in_progress: "In Progress",
+  in_review: "In Review",
+  completed: "Completed",
 };
-
-const STATUS_COLORS: Record<string, string> = {
-  todo: "text-white/60 bg-white/5",
-  in_progress: "text-blue-400 bg-blue-500/10",
-  in_review: "text-yellow-400 bg-yellow-500/10",
-  completed: "text-green-400 bg-green-500/10",
+const PRIORITY_COLORS: Record<string, string> = {
+  low: "bg-blue-500/10 text-blue-400",
+  medium: "bg-amber-500/10 text-amber-400",
+  high: "bg-orange-500/10 text-orange-400",
+  urgent: "bg-red-500/10 text-red-400",
 };
 
 export default function TeamWork() {
-  const { user } = useAuth();
+  const { teamSlug } = useParams<{ teamSlug: string }>();
   const myTeam = useQuery(api.team.getMyTeam);
-  const team = myTeam?.team;
-  const workItems = useQuery(
-    api.team.getTeamWorkItems,
-    team ? { teamId: team._id } : "skip"
-  );
+  const team = myTeam?.team as any;
   const members = useQuery(
     api.team.listTeamMembers,
-    team ? { teamId: team._id } : "skip"
+    team ? { teamId: team._id } : "skip",
   );
-  const createWorkItem = useMutation(api.team.createWorkItem);
-  const updateWorkItem = useMutation(api.team.updateWorkItem);
-  const addComment = useMutation(api.team.addWorkComment);
+  const workItems = useQuery(
+    api.team.getTeamWorkItems,
+    team ? { teamId: team._id } : "skip",
+  );
+  const createItem = useMutation(api.team.createWorkItem);
+  const updateItem = useMutation(api.team.updateWorkItem);
 
+  const [tab, setTab] = useState<(typeof STATUS_TABS)[number]>("all");
   const [showCreate, setShowCreate] = useState(false);
-  const [filter, setFilter] = useState<string>("all");
-  const [expandedId, setExpandedId] = useState<string | null>(null);
-  const [newComment, setNewComment] = useState("");
-
   const [form, setForm] = useState({
     title: "",
     description: "",
-    priority: "medium" as string,
     assignedTo: "",
+    priority: "medium" as string,
     deadline: "",
   });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  if (!team || workItems === undefined) {
-    return (
-      <div className="flex items-center justify-center py-20">
-        <Loader2 className="size-6 animate-spin text-lime-400" />
-      </div>
-    );
-  }
-
-  const filtered =
-    filter === "all"
-      ? workItems
-      : workItems.filter((i) => i.status === filter);
+  const filteredItems =
+    tab === "all" ? workItems : workItems?.filter((i: any) => i.status === tab);
 
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!form.title.trim()) return;
+    if (!team || !form.title.trim()) return;
     setSaving(true);
     setError(null);
     try {
-      await createWorkItem({
+      await createItem({
         teamId: team._id,
         title: form.title.trim(),
         description: form.description.trim(),
+        assignedTo: form.assignedTo ? (form.assignedTo as any) : undefined,
         priority: form.priority as any,
-        assignedTo: form.assignedTo || undefined,
-        deadline: form.deadline
-          ? new Date(form.deadline).getTime()
-          : undefined,
+        deadline: form.deadline ? new Date(form.deadline).getTime() : undefined,
       });
-      setForm({ title: "", description: "", priority: "medium", assignedTo: "", deadline: "" });
+      setForm({ title: "", description: "", assignedTo: "", priority: "medium", deadline: "" });
       setShowCreate(false);
     } catch (err) {
-      setError(friendlyError(err, "Could not create work item."));
+      setError(friendlyError(err, "Could not create task."));
     } finally {
       setSaving(false);
     }
@@ -112,68 +88,28 @@ export default function TeamWork() {
 
   const handleStatusChange = async (itemId: string, newStatus: string) => {
     try {
-      await updateWorkItem({ workItemId: itemId as any, status: newStatus as any });
+      await updateItem({ workItemId: itemId as any, status: newStatus as any });
     } catch (err) {
-      console.error(err);
-    }
-  };
-
-  const handleAddComment = async (itemId: string) => {
-    if (!newComment.trim()) return;
-    try {
-      await addComment({ workItemId: itemId as any, content: newComment.trim() });
-      setNewComment("");
-    } catch (err) {
-      console.error(err);
+      setError(friendlyError(err, "Could not update status."));
     }
   };
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h1 className="text-xl font-bold text-white">Work Items</h1>
-          <p className="mt-0.5 text-sm text-white/50">
-            {workItems.length} total items
-          </p>
-        </div>
+      <div className="flex items-center justify-between">
+        <h2 className="font-display text-lg font-bold text-white">
+          Work Items
+        </h2>
         <Button
           onClick={() => setShowCreate(!showCreate)}
-          className="gap-2 bg-gradient-to-r from-lime-400 to-emerald-500 text-black hover:brightness-110"
+          className="gap-1.5 bg-lime-500 text-black hover:brightness-110"
+          size="sm"
         >
-          <Plus className="size-4" />
-          New Work Item
+          <Plus className="size-3.5" /> New Task
         </Button>
       </div>
 
-      {/* Filter */}
-      <div className="flex flex-wrap gap-2">
-        <button
-          onClick={() => setFilter("all")}
-          className={`rounded-lg px-3 py-1.5 text-xs font-medium transition-colors ${
-            filter === "all"
-              ? "bg-lime-500/10 text-lime-400"
-              : "text-white/50 hover:bg-white/5"
-          }`}
-        >
-          All ({workItems.length})
-        </button>
-        {STATUSES.map((s) => (
-          <button
-            key={s.value}
-            onClick={() => setFilter(s.value)}
-            className={`rounded-lg px-3 py-1.5 text-xs font-medium transition-colors ${
-              filter === s.value
-                ? "bg-lime-500/10 text-lime-400"
-                : "text-white/50 hover:bg-white/5"
-            }`}
-          >
-            {s.label} ({workItems.filter((i) => i.status === s.value).length})
-          </button>
-        ))}
-      </div>
-
-      {/* Create form */}
+      {/* Create Form */}
       <AnimatePresence>
         {showCreate && (
           <motion.form
@@ -183,14 +119,12 @@ export default function TeamWork() {
             className="overflow-hidden rounded-2xl border border-white/5 bg-card p-5"
             onSubmit={handleCreate}
           >
-            <h3 className="mb-4 text-sm font-semibold text-white">
-              New Work Item
-            </h3>
+            <h3 className="mb-3 text-sm font-semibold text-white">New Task</h3>
             <div className="space-y-3">
               <Input
                 value={form.title}
                 onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))}
-                placeholder="Title"
+                placeholder="Task title"
                 className="border-white/10 bg-white/5 text-white placeholder:text-white/30"
                 required
               />
@@ -201,29 +135,28 @@ export default function TeamWork() {
                 rows={2}
                 className="border-white/10 bg-white/5 text-white placeholder:text-white/30"
               />
-              <div className="grid grid-cols-2 gap-3 md:grid-cols-3">
-                <select
-                  value={form.priority}
-                  onChange={(e) => setForm((f) => ({ ...f, priority: e.target.value }))}
-                  className="rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-white"
-                >
-                  {PRIORITIES.map((p) => (
-                    <option key={p} value={p}>
-                      {p}
-                    </option>
-                  ))}
-                </select>
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
                 <select
                   value={form.assignedTo}
                   onChange={(e) => setForm((f) => ({ ...f, assignedTo: e.target.value }))}
                   className="rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-white"
                 >
                   <option value="">Unassigned</option>
-                  {members?.map((m) => (
+                  {members?.map((m: any) => (
                     <option key={m.userId} value={m.userId}>
-                      {m.user?.name || "Unknown"}
+                      {m.user?.name ?? "Unknown"}
                     </option>
                   ))}
+                </select>
+                <select
+                  value={form.priority}
+                  onChange={(e) => setForm((f) => ({ ...f, priority: e.target.value }))}
+                  className="rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-white"
+                >
+                  <option value="low">Low</option>
+                  <option value="medium">Medium</option>
+                  <option value="high">High</option>
+                  <option value="urgent">Urgent</option>
                 </select>
                 <Input
                   type="date"
@@ -238,22 +171,10 @@ export default function TeamWork() {
                 </p>
               )}
               <div className="flex gap-2">
-                <Button
-                  type="submit"
-                  disabled={saving}
-                  size="sm"
-                  className="gap-1.5 bg-lime-500 text-black hover:brightness-110"
-                >
-                  {saving ? <Loader2 className="size-3 animate-spin" /> : <Plus className="size-3" />}
-                  Create
+                <Button type="submit" size="sm" disabled={saving} className="bg-lime-500 text-black">
+                  {saving ? <Loader2 className="size-3 animate-spin" /> : "Create"}
                 </Button>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => setShowCreate(false)}
-                  className="text-white/50"
-                >
+                <Button type="button" variant="ghost" size="sm" onClick={() => setShowCreate(false)} className="text-white/50">
                   Cancel
                 </Button>
               </div>
@@ -262,166 +183,93 @@ export default function TeamWork() {
         )}
       </AnimatePresence>
 
+      {/* Status Tabs */}
+      <div className="flex gap-2 overflow-x-auto">
+        {STATUS_TABS.map((s) => (
+          <button
+            key={s}
+            onClick={() => setTab(s)}
+            className={`whitespace-nowrap rounded-lg px-3 py-1.5 text-xs font-medium transition-colors ${
+              tab === s
+                ? "bg-lime-500/10 text-lime-400"
+                : "text-white/40 hover:bg-white/5"
+            }`}
+          >
+            {STATUS_LABELS[s]}
+            {s !== "all" && workItems && (
+              <span className="ml-1.5 text-[10px] opacity-60">
+                {workItems.filter((i: any) => i.status === s).length}
+              </span>
+            )}
+          </button>
+        ))}
+      </div>
+
       {/* Items */}
-      <div className="space-y-3">
-        {filtered.length === 0 ? (
-          <div className="rounded-2xl border border-white/5 bg-card p-10 text-center">
-            <p className="text-sm text-white/40">
-              {filter === "all"
-                ? "No work items yet."
-                : `No items with status "${filter.replace(/_/g, " ")}".`}
-            </p>
-          </div>
-        ) : (
-          filtered.map((item) => (
-            <div
+      {!workItems ? (
+        <div className="flex justify-center py-10">
+          <Loader2 className="size-5 animate-spin text-lime-400" />
+        </div>
+      ) : filteredItems?.length === 0 ? (
+        <div className="rounded-2xl border border-white/5 bg-card p-8 text-center">
+          <ListTodo className="mx-auto size-8 text-white/20" />
+          <p className="mt-3 text-sm text-white/40">No tasks found.</p>
+        </div>
+      ) : (
+        <div className="space-y-3">
+          {filteredItems?.map((item: any) => (
+            <motion.div
               key={item._id}
-              className="rounded-xl border border-white/5 bg-card"
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="rounded-xl border border-white/5 bg-card p-4 transition-colors hover:border-white/10"
             >
-              <div className="flex items-start justify-between gap-4 p-4">
+              <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0 flex-1">
-                  <p className="font-medium text-white/90">{item.title}</p>
+                  <div className="flex items-center gap-2">
+                    <h4 className="font-medium text-white">{item.title}</h4>
+                    <span className={`rounded-md px-1.5 py-0.5 text-[10px] font-medium ${PRIORITY_COLORS[item.priority]}`}>
+                      {item.priority}
+                    </span>
+                  </div>
                   {item.description && (
-                    <p className="mt-1 line-clamp-2 text-sm text-white/50">
+                    <p className="mt-1 line-clamp-2 text-xs text-white/40">
                       {item.description}
                     </p>
                   )}
-                  <div className="mt-2 flex flex-wrap items-center gap-2">
-                    <span
-                      className={`rounded-md px-2 py-0.5 text-[10px] font-medium ${PRIORITY_COLORS[item.priority] || ""}`}
-                    >
-                      {item.priority}
-                    </span>
-                    <span
-                      className={`rounded-md px-2 py-0.5 text-[10px] font-medium ${STATUS_COLORS[item.status] || ""}`}
-                    >
-                      {item.status.replace(/_/g, " ")}
-                    </span>
+                  <div className="mt-2 flex items-center gap-3 text-[11px] text-white/30">
                     {item.assignee && (
-                      <span className="text-xs text-white/40">
-                        → {item.assignee.name}
-                      </span>
+                      <span>👤 {item.assignee.name ?? "Unknown"}</span>
                     )}
                     {item.deadline && (
-                      <span className="text-xs text-white/30">
-                        Due {new Date(item.deadline).toLocaleDateString()}
+                      <span className="flex items-center gap-1">
+                        <Calendar className="size-3" />
+                        {new Date(item.deadline).toLocaleDateString()}
+                      </span>
+                    )}
+                    {item.commentCount > 0 && (
+                      <span className="flex items-center gap-1">
+                        <MessageSquare className="size-3" />
+                        {item.commentCount}
                       </span>
                     )}
                   </div>
                 </div>
-                <div className="flex items-center gap-2">
-                  <select
-                    value={item.status}
-                    onChange={(e) =>
-                      handleStatusChange(item._id, e.target.value)
-                    }
-                    className="rounded-lg border border-white/10 bg-white/5 px-2 py-1 text-xs text-white"
-                  >
-                    {STATUSES.map((s) => (
-                      <option key={s.value} value={s.value}>
-                        {s.label}
-                      </option>
-                    ))}
-                  </select>
-                  <button
-                    onClick={() =>
-                      setExpandedId(expandedId === item._id ? null : item._id)
-                    }
-                    className="rounded-lg p-1.5 text-white/40 hover:bg-white/5"
-                  >
-                    <MessageSquare className="size-4" />
-                  </button>
-                </div>
+                <select
+                  value={item.status}
+                  onChange={(e) => handleStatusChange(item._id, e.target.value)}
+                  className="shrink-0 rounded-lg border border-white/10 bg-white/5 px-2 py-1 text-[11px] text-white"
+                >
+                  <option value="todo">To Do</option>
+                  <option value="in_progress">In Progress</option>
+                  <option value="in_review">In Review</option>
+                  <option value="completed">Completed</option>
+                </select>
               </div>
-
-              {/* Comments section */}
-              {expandedId === item._id && (
-                <div className="border-t border-white/5 px-4 py-3">
-                  <WorkComments
-                    workItemId={item._id}
-                    teamId={team._id}
-                  />
-                </div>
-              )}
-            </div>
-          ))
-        )}
-      </div>
-    </div>
-  );
-}
-
-function WorkComments({
-  workItemId,
-  teamId,
-}: {
-  workItemId: string;
-  teamId: string;
-}) {
-  const comments = useQuery(api.team.getWorkItemComments, {
-    workItemId: workItemId as any,
-  });
-  const addComment = useMutation(api.team.addWorkComment);
-  const [text, setText] = useState("");
-  const [sending, setSending] = useState(false);
-
-  const handleSend = async () => {
-    if (!text.trim() || sending) return;
-    setSending(true);
-    try {
-      await addComment({ workItemId: workItemId as any, content: text.trim() });
-      setText("");
-    } catch (err) {
-      console.error(err);
-    } finally {
-      setSending(false);
-    }
-  };
-
-  return (
-    <div className="space-y-3">
-      {comments === undefined ? (
-        <Loader2 className="size-4 animate-spin text-lime-400" />
-      ) : comments.length === 0 ? (
-        <p className="text-xs text-white/40">No comments yet.</p>
-      ) : (
-        <div className="space-y-2">
-          {comments.map((c) => (
-            <div key={c._id} className="flex items-start gap-2">
-              <div className="mt-0.5 size-5 shrink-0 rounded-full bg-white/10" />
-              <div>
-                <p className="text-xs text-white/80">
-                  <span className="font-medium">{c.user?.name || "Unknown"}</span>{" "}
-                  <span className="text-white/30">
-                    {new Date(c.createdAt).toLocaleTimeString([], {
-                      hour: "2-digit",
-                      minute: "2-digit",
-                    })}
-                  </span>
-                </p>
-                <p className="text-xs text-white/60">{c.content}</p>
-              </div>
-            </div>
+            </motion.div>
           ))}
         </div>
       )}
-      <div className="flex gap-2">
-        <Input
-          value={text}
-          onChange={(e) => setText(e.target.value)}
-          onKeyDown={(e) => e.key === "Enter" && handleSend()}
-          placeholder="Add a comment..."
-          className="border-white/10 bg-white/5 text-xs text-white placeholder:text-white/30"
-        />
-        <Button
-          size="sm"
-          onClick={handleSend}
-          disabled={!text.trim() || sending}
-          className="bg-lime-500 text-black hover:brightness-110"
-        >
-          <Send className="size-3" />
-        </Button>
-      </div>
     </div>
   );
 }
