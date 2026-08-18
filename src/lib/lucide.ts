@@ -24,6 +24,7 @@ export { default as ArrowDown } from "lucide-react/dist/esm/icons/arrow-down.js"
 export { default as ArrowLeft } from "lucide-react/dist/esm/icons/arrow-left.js";
 export { default as ArrowRight } from "lucide-react/dist/esm/icons/arrow-right.js";
 export { default as ArrowUp } from "lucide-react/dist/esm/icons/arrow-up.js";
+export { default as ArrowUpCircle } from "lucide-react/dist/esm/icons/arrow-up-circle.js";
 export { default as ArrowUpRight } from "lucide-react/dist/esm/icons/arrow-up-right.js";
 export { default as AtSign } from "lucide-react/dist/esm/icons/at-sign.js";
 export { default as Award } from "lucide-react/dist/esm/icons/award.js";
@@ -39,6 +40,7 @@ export { default as Bot } from "lucide-react/dist/esm/icons/bot.js";
 export { default as Braces } from "lucide-react/dist/esm/icons/braces.js";
 export { default as Briefcase } from "lucide-react/dist/esm/icons/briefcase.js";
 export { default as Bug } from "lucide-react/dist/esm/icons/bug.js";
+export { default as Calendar } from "lucide-react/dist/esm/icons/calendar.js";
 export { default as CalendarClock } from "lucide-react/dist/esm/icons/calendar-clock.js";
 export { default as CalendarDays } from "lucide-react/dist/esm/icons/calendar-days.js";
 export { default as Camera } from "lucide-react/dist/esm/icons/camera.js";
@@ -96,6 +98,7 @@ export { default as LayoutDashboard } from "lucide-react/dist/esm/icons/layout-d
 export { default as LifeBuoy } from "lucide-react/dist/esm/icons/life-buoy.js";
 export { default as Link2 } from "lucide-react/dist/esm/icons/link-2.js";
 export { default as ListChecks } from "lucide-react/dist/esm/icons/list-checks.js";
+export { default as ListTodo } from "lucide-react/dist/esm/icons/list-todo.js";
 export { default as ListOrdered } from "lucide-react/dist/esm/icons/list-ordered.js";
 export { default as Loader2 } from "lucide-react/dist/esm/icons/loader-2.js";
 export { default as Loader2Icon } from "lucide-react/dist/esm/icons/loader-2.js";
