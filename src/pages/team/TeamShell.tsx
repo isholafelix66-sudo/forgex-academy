@@ -17,9 +17,6 @@ import {
   HeartHandshake,
   Headphones,
   AlertTriangle,
-  ClipboardList,
-  Wrench,
-  Eye,
 } from "lucide-react";
 import { AppShell } from "@/components/dash/AppShell";
 

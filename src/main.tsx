@@ -632,7 +632,8 @@ createRoot(document.getElementById("root")!).render(
                 <Route path="courses" element={<TeamCourses />} />
                 <Route path="reviews" element={<TeamReviews />} />
                 <Route path="activity" element={<TeamActivity />} />
-                <Route path="members" element={<TeamMembers />} />                <Route path="profile" element={<TeamProfile />} />
+                <Route path="members" element={<TeamMembers />} />
+                <Route path="profile" element={<TeamProfile />} />
                 <Route path="settings" element={<TeamSettings />} />
                 {/* Academic Team */}
                 <Route path="tutors" element={<TeamTutors />} />
