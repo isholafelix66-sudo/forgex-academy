@@ -19,7 +19,7 @@ import { Input } from "@/components/ui/input";
 export default function TeamLogin() {
   const { isAuthenticated, isLoading: authLoading, login } = useTeamAuth();
   const [searchParams] = useSearchParams();
-  const returnTo = searchParams.get("returnTo") || "/team/dashboard";
+  const returnTo = searchParams.get("returnTo") || "";
 
   const teamLogin = useMutation(api.teamAuth.teamLogin);
 
@@ -35,9 +35,10 @@ export default function TeamLogin() {
 
   const changePassword = useMutation(api.teamAuth.teamChangePassword);
 
-  // If already authenticated, redirect to dashboard
-  if (!authLoading && isAuthenticated) {
-    return <Navigate to={returnTo} replace />;
+  // If already authenticated, redirect to team workspace or saved return path
+  if (!authLoading && isAuthenticated && teamMember) {
+    const dest = returnTo || (teamMember.teamSlug ? `/team/${teamMember.teamSlug}` : "/team");
+    return <Navigate to={dest} replace />;
   }
 
   const handleLogin = async (e: React.FormEvent) => {
@@ -56,6 +57,9 @@ export default function TeamLogin() {
         setMustChange(true);
       } else {
         login(result.token);
+        // Redirect to team workspace
+        const dest = result.teamSlug ? `/team/${result.teamSlug}` : "/team";
+        window.location.href = dest;
       }
     } catch (err) {
       setError(
