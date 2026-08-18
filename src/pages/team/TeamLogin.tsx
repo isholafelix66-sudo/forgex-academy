@@ -17,7 +17,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 
 export default function TeamLogin() {
-  const { isAuthenticated, isLoading: authLoading, login } = useTeamAuth();
+  const { isAuthenticated, isLoading: authLoading, login, teamMember } =
+    useTeamAuth();
   const [searchParams] = useSearchParams();
   const returnTo = searchParams.get("returnTo") || "";
 
@@ -35,9 +36,13 @@ export default function TeamLogin() {
 
   const changePassword = useMutation(api.teamAuth.teamChangePassword);
 
-  // If already authenticated, redirect to team workspace or saved return path
-  if (!authLoading && isAuthenticated && teamMember) {
-    const dest = returnTo || (teamMember.teamSlug ? `/team/${teamMember.teamSlug}` : "/team");
+  // If already authenticated, redirect to team workspace
+  if (!authLoading && isAuthenticated) {
+    const dest =
+      returnTo ||
+      (teamMember?.team?.slug
+        ? `/team/${teamMember.team.slug}`
+        : "/team");
     return <Navigate to={dest} replace />;
   }
 
@@ -52,13 +57,13 @@ export default function TeamLogin() {
         password,
       });
       if (result.mustChangePassword) {
-        // Store token and show change password form
         login(result.token);
         setMustChange(true);
       } else {
         login(result.token);
-        // Redirect to team workspace
-        const dest = result.teamSlug ? `/team/${result.teamSlug}` : "/team";
+        const dest = result.teamSlug
+          ? `/team/${result.teamSlug}`
+          : "/team";
         window.location.href = dest;
       }
     } catch (err) {
@@ -81,7 +86,6 @@ export default function TeamLogin() {
         currentPassword: password,
         newPassword: newPassword.trim(),
       });
-      // Force re-login with new password
       window.location.reload();
     } catch (err) {
       setChangeError(
@@ -94,10 +98,9 @@ export default function TeamLogin() {
     }
   };
 
-  // Must change password screen
   if (mustChange) {
     return (
-      <div className="min-h-screen bg-background flex items-center justify-center px-6">
+      <div className="flex min-h-screen items-center justify-center bg-background px-6">
         <motion.div
           initial={{ opacity: 0, scale: 0.95 }}
           animate={{ opacity: 1, scale: 1 }}
@@ -114,7 +117,6 @@ export default function TeamLogin() {
               You must create a new password before continuing.
             </p>
           </div>
-
           <form onSubmit={handleChangePassword} className="space-y-4">
             <div>
               <label className="mb-1.5 block text-xs font-medium text-white/50">
@@ -130,13 +132,11 @@ export default function TeamLogin() {
                 required
               />
             </div>
-
             {changeError && (
               <p className="rounded-xl bg-red-500/10 px-4 py-2.5 text-sm text-red-400">
                 {changeError}
               </p>
             )}
-
             <Button
               type="submit"
               disabled={changeSaving || newPassword.length < 8}
@@ -156,13 +156,12 @@ export default function TeamLogin() {
   }
 
   return (
-    <div className="min-h-screen bg-background flex items-center justify-center px-6">
+    <div className="flex min-h-screen items-center justify-center bg-background px-6">
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         className="w-full max-w-md"
       >
-        {/* Back link */}
         <Link
           to="/team"
           className="mb-6 inline-flex items-center gap-2 text-sm text-white/40 transition-colors hover:text-white"
@@ -170,7 +169,6 @@ export default function TeamLogin() {
           <ArrowLeft className="size-4" />
           Back to Team Entry
         </Link>
-
         <div className="rounded-3xl border border-white/10 bg-card p-8">
           <div className="mb-6 text-center">
             <div className="mx-auto mb-4 flex size-14 items-center justify-center rounded-2xl border border-lime-400/20 bg-lime-400/5">
@@ -183,7 +181,6 @@ export default function TeamLogin() {
               Sign in with your Team ID and password.
             </p>
           </div>
-
           <form onSubmit={handleLogin} className="space-y-4">
             <div>
               <label className="mb-1.5 block text-xs font-medium text-white/50">
@@ -197,7 +194,6 @@ export default function TeamLogin() {
                 required
               />
             </div>
-
             <div>
               <label className="mb-1.5 block text-xs font-medium text-white/50">
                 Password
@@ -224,14 +220,12 @@ export default function TeamLogin() {
                 </button>
               </div>
             </div>
-
             {error && (
               <div className="flex items-start gap-2 rounded-xl bg-red-500/10 px-4 py-3 text-sm text-red-400">
                 <AlertCircle className="mt-0.5 size-4 shrink-0" />
                 {error}
               </div>
             )}
-
             <Button
               type="submit"
               disabled={saving || !teamId.trim() || !password.trim()}
@@ -245,7 +239,6 @@ export default function TeamLogin() {
               Sign In
             </Button>
           </form>
-
           <div className="mt-6 flex flex-col items-center gap-3 text-sm">
             <Link
               to="/team/forgot-password"

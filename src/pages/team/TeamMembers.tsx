@@ -1,16 +1,14 @@
-import { useParams } from "react-router";
 import { useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
+import { useTeamAuth } from "@/hooks/use-team-auth";
 import { Loader2, Users } from "lucide-react";
 import { Avatar } from "@/components/site/Avatar";
 
 export default function TeamMembers() {
-  const { teamSlug } = useParams<{ teamSlug: string }>();
-  const myTeam = useQuery(api.team.getMyTeam);
-  const team = myTeam?.team as any;
+  const { token } = useTeamAuth();
   const members = useQuery(
-    api.team.listTeamMembers,
-    team ? { teamId: team._id } : "skip",
+    api.teamAuthWorkspace.listTeamMembers,
+    token ? { token } : "skip",
   );
 
   return (
@@ -37,15 +35,17 @@ export default function TeamMembers() {
               className="flex items-center gap-4 rounded-xl border border-white/5 bg-card p-4 transition-colors hover:border-white/10"
             >
               <Avatar
-                name={m.user?.name ?? "Unknown"}
+                name={m.teamAccount?.name ?? m.user?.name ?? "Unknown"}
                 image={m.user?.image}
                 className="size-11"
               />
               <div className="min-w-0 flex-1">
                 <p className="truncate font-medium text-white">
-                  {m.user?.name ?? "Unknown"}
+                  {m.teamAccount?.name ?? m.user?.name ?? "Unknown"}
                 </p>
-                <p className="text-xs text-white/40">{m.user?.email}</p>
+                <p className="text-xs text-white/40">
+                  {m.teamAccount?.email ?? m.user?.email}
+                </p>
               </div>
               <span
                 className={`shrink-0 rounded-md px-2 py-0.5 text-[10px] font-medium ${

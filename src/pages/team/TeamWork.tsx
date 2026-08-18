@@ -1,18 +1,15 @@
 import { useState } from "react";
-import { useParams } from "react-router";
 import { useMutation, useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
+import { useTeamAuth } from "@/hooks/use-team-auth";
 import { friendlyError } from "@/lib/errors";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Loader2,
   Plus,
   ClipboardList,
-  Clock,
-  CheckCircle2,
-  AlertCircle,
-  MessageSquare,
   CalendarDays,
+  MessageSquare,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -34,19 +31,17 @@ const PRIORITY_COLORS: Record<string, string> = {
 };
 
 export default function TeamWork() {
-  const { teamSlug } = useParams<{ teamSlug: string }>();
-  const myTeam = useQuery(api.team.getMyTeam);
-  const team = myTeam?.team as any;
+  const { token } = useTeamAuth();
   const members = useQuery(
-    api.team.listTeamMembers,
-    team ? { teamId: team._id } : "skip",
+    api.teamAuthWorkspace.listTeamMembers,
+    token ? { token } : "skip",
   );
   const workItems = useQuery(
-    api.team.getTeamWorkItems,
-    team ? { teamId: team._id } : "skip",
+    api.teamAuthWorkspace.getTeamWorkItems,
+    token ? { token } : "skip",
   );
-  const createItem = useMutation(api.team.createWorkItem);
-  const updateItem = useMutation(api.team.updateWorkItem);
+  const createItem = useMutation(api.teamAuthWorkspace.createWorkItem);
+  const updateItem = useMutation(api.teamAuthWorkspace.updateWorkItem);
 
   const [tab, setTab] = useState<(typeof STATUS_TABS)[number]>("all");
   const [showCreate, setShowCreate] = useState(false);
@@ -65,12 +60,12 @@ export default function TeamWork() {
 
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!team || !form.title.trim()) return;
+    if (!token || !form.title.trim()) return;
     setSaving(true);
     setError(null);
     try {
       await createItem({
-        teamId: team._id,
+        token,
         title: form.title.trim(),
         description: form.description.trim(),
         assignedTo: form.assignedTo ? (form.assignedTo as any) : undefined,
@@ -87,8 +82,9 @@ export default function TeamWork() {
   };
 
   const handleStatusChange = async (itemId: string, newStatus: string) => {
+    if (!token) return;
     try {
-      await updateItem({ workItemId: itemId as any, status: newStatus as any });
+      await updateItem({ token, workItemId: itemId as any, status: newStatus as any });
     } catch (err) {
       setError(friendlyError(err, "Could not update status."));
     }
@@ -97,9 +93,7 @@ export default function TeamWork() {
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <h2 className="font-display text-lg font-bold text-white">
-          Work Items
-        </h2>
+        <h2 className="font-display text-lg font-bold text-white">Work Items</h2>
         <Button
           onClick={() => setShowCreate(!showCreate)}
           className="gap-1.5 bg-lime-500 text-black hover:brightness-110"
@@ -109,7 +103,6 @@ export default function TeamWork() {
         </Button>
       </div>
 
-      {/* Create Form */}
       <AnimatePresence>
         {showCreate && (
           <motion.form
@@ -143,8 +136,8 @@ export default function TeamWork() {
                 >
                   <option value="">Unassigned</option>
                   {members?.map((m: any) => (
-                    <option key={m.userId} value={m.userId}>
-                      {m.user?.name ?? "Unknown"}
+                    <option key={m.userId ?? m.teamAccountId} value={m.userId ?? ""}>
+                      {m.teamAccount?.name ?? m.user?.name ?? "Unknown"}
                     </option>
                   ))}
                 </select>
@@ -183,7 +176,6 @@ export default function TeamWork() {
         )}
       </AnimatePresence>
 
-      {/* Status Tabs */}
       <div className="flex gap-2 overflow-x-auto">
         {STATUS_TABS.map((s) => (
           <button
@@ -205,7 +197,6 @@ export default function TeamWork() {
         ))}
       </div>
 
-      {/* Items */}
       {!workItems ? (
         <div className="flex justify-center py-10">
           <Loader2 className="size-5 animate-spin text-lime-400" />

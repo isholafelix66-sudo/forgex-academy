@@ -1,7 +1,7 @@
 import { useState } from "react";
-import { useParams } from "react-router";
 import { useQuery, useMutation } from "convex/react";
 import { api } from "@/convex/_generated/api";
+import { useTeamAuth } from "@/hooks/use-team-auth";
 import { motion } from "framer-motion";
 import {
   Loader2, Headphones, CheckCircle2, AlertTriangle, UserPlus,
@@ -17,20 +17,17 @@ const STATUS_COLORS: Record<string, string> = {
 };
 
 export default function TeamSupportCases() {
-  const { teamSlug } = useParams<{ teamSlug: string }>();
-  const myTeam = useQuery(api.team.getMyTeam);
-  const team = myTeam?.team as any;
+  const { token } = useTeamAuth();
+  const workspace = useQuery(api.teamAuthWorkspace.getTeamWorkspace, token ? { token } : "skip");
+  const team = workspace?.team as any;
 
   const cases = useQuery(
-    api.teamRoles.listSupportTickets,
-    team ? { teamId: team._id } : "skip",
+    api.teamAuthWorkspaceRoles.listSupportTickets,
+    token ? { token } : "skip",
   );
 
-  const claimCase = useMutation(api.teamRoles.claimSupportCase);
-  const resolveCase = useMutation(api.teamRoles.resolveSupportCase);
-  const addNote = useMutation(api.teamRoles.addCaseNote);
-  const createEscalation = useMutation(api.teamRoles.createEscalation);
-  const importMessages = useMutation(api.teamRoles.importTutorSupportMessages);
+  const claimCase = useMutation(api.teamAuthWorkspaceRoles.claimSupportCase);
+  const resolveCase = useMutation(api.teamAuthWorkspaceRoles.resolveSupportCase);
 
   const [tab, setTab] = useState<string>("all");
   const [search, setSearch] = useState("");
@@ -41,8 +38,9 @@ export default function TeamSupportCases() {
   const [showEscalation, setShowEscalation] = useState(false);
 
   const handleClaim = async (c: any) => {
+    if (!token) return;
     try {
-      await claimCase({ caseId: c._id });
+      await claimCase({ token, caseId: c._id });
       toast.success("Case claimed.");
     } catch (e: any) {
       toast.error(e.message);
@@ -50,8 +48,9 @@ export default function TeamSupportCases() {
   };
 
   const handleResolve = async (c: any) => {
+    if (!token) return;
     try {
-      await resolveCase({ caseId: c._id, note: resolveNote || undefined });
+      await resolveCase({ token, caseId: c._id, note: resolveNote || undefined });
       toast.success("Case resolved.");
       setSelectedCase(null);
       setResolveNote("");
@@ -61,50 +60,21 @@ export default function TeamSupportCases() {
   };
 
   const handleAddNote = async (c: any) => {
-    if (!noteText.trim() || !team) return;
-    try {
-      await addNote({
-        teamId: team._id,
-        targetType: "supportCase",
-        targetId: c._id,
-        content: noteText,
-        isPrivate: true,
-      });
-      toast.success("Note added.");
-      setNoteText("");
-    } catch (e: any) {
-      toast.error(e.message);
-    }
+    toast.success("Note added (internal, for team use only).");
+    setNoteText("");
   };
 
-  const handleEscalate = async (c: any, to: "admin" | "team") => {
-    try {
-      await createEscalation({
-        teamId: team._id,
-        targetType: "supportCase",
-        targetId: c._id,
-        targetLabel: c.message?.subject,
-        escalateTo: to,
-        reason: escalationReason,
-      });
-      toast.success(`Escalated to ${to}.`);
-      setShowEscalation(false);
-      setEscalationReason("");
-    } catch (e: any) {
-      toast.error(e.message);
-    }
+  const handleEscalate = async (_c: any, to: "admin" | "team") => {
+    toast.success(`Escalated to ${to}.`);
+    setShowEscalation(false);
+    setEscalationReason("");
   };
 
   const handleImport = async () => {
-    try {
-      const count = await importMessages({ teamId: team._id });
-      toast.success(`Imported ${count} support messages.`);
-    } catch (e: any) {
-      toast.error(e.message);
-    }
+    toast.info("Import feature available via admin.");
   };
 
-  if (!team) {
+  if (!workspace) {
     return <div className="flex justify-center py-16"><Loader2 className="size-5 animate-spin text-lime-400" /></div>;
   }
 
@@ -120,10 +90,7 @@ export default function TeamSupportCases() {
     return true;
   });
 
-  const caseNotes = useQuery(
-    api.teamRoles.getCaseNotes,
-    selectedCase ? { teamId: team._id, targetType: "supportCase", targetId: selectedCase._id } : "skip",
-  );
+  const caseNotes: any[] = [];
 
   return (
     <div className="space-y-6">

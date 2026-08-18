@@ -1,6 +1,6 @@
-import { useParams } from "react-router";
 import { useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
+import { useTeamAuth } from "@/hooks/use-team-auth";
 import { motion } from "framer-motion";
 import {
   Loader2,
@@ -12,21 +12,25 @@ import {
 } from "lucide-react";
 
 export default function TeamOverview() {
-  const { teamSlug } = useParams<{ teamSlug: string }>();
-  const myTeam = useQuery(api.team.getMyTeam);
-  const team = myTeam?.team as any;
-  const user = myTeam?.user as any;
+  const { token } = useTeamAuth();
 
+  const workspace = useQuery(
+    api.teamAuthWorkspace.getTeamWorkspace,
+    token ? { token } : "skip",
+  );
   const workItems = useQuery(
-    api.team.getTeamWorkItems,
-    team ? { teamId: team._id } : "skip",
+    api.teamAuthWorkspace.getTeamWorkItems,
+    token ? { token } : "skip",
   );
   const activity = useQuery(
-    api.team.getTeamActivity,
-    team ? { teamId: team._id, limit: 10 } : "skip",
+    api.teamAuthWorkspace.getTeamActivity,
+    token ? { token, limit: 10 } : "skip",
   );
 
-  if (!team) {
+  const team = workspace?.team as any;
+  const account = workspace?.account as any;
+
+  if (!workspace) {
     return (
       <div className="flex justify-center py-16">
         <Loader2 className="size-5 animate-spin text-lime-400" />
@@ -35,9 +39,14 @@ export default function TeamOverview() {
   }
 
   const todoItems = workItems?.filter((i: any) => i.status === "todo") ?? [];
-  const inProgressItems = workItems?.filter((i: any) => i.status === "in_progress") ?? [];
-  const completedItems = workItems?.filter((i: any) => i.status === "completed") ?? [];
-  const urgentItems = workItems?.filter((i: any) => i.priority === "urgent" && i.status !== "completed") ?? [];
+  const inProgressItems =
+    workItems?.filter((i: any) => i.status === "in_progress") ?? [];
+  const completedItems =
+    workItems?.filter((i: any) => i.status === "completed") ?? [];
+  const urgentItems =
+    workItems?.filter(
+      (i: any) => i.priority === "urgent" && i.status !== "completed",
+    ) ?? [];
 
   const stats = [
     {
@@ -79,10 +88,11 @@ export default function TeamOverview() {
         className="rounded-2xl border border-lime-400/15 bg-gradient-to-br from-lime-400/5 to-transparent p-6"
       >
         <h2 className="font-display text-xl font-bold text-white">
-          Welcome, {user?.name ?? "Team Member"} 👋
+          Welcome, {account?.name ?? "Team Member"} 👋
         </h2>
         <p className="mt-1 text-sm text-white/50">
-          {team.description || `You're part of the ${team.name}. Here's your workspace overview.`}
+          {team?.description ||
+            `You're part of the ${team?.name ?? "team"}. Here's your workspace overview.`}
         </p>
       </motion.div>
 

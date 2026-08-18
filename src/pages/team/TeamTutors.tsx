@@ -1,7 +1,7 @@
 import { useState } from "react";
-import { useParams } from "react-router";
 import { useQuery, useMutation } from "convex/react";
 import { api } from "@/convex/_generated/api";
+import { useTeamAuth } from "@/hooks/use-team-auth";
 import { motion } from "framer-motion";
 import {
   Loader2,
@@ -27,30 +27,32 @@ const STATUS_COLORS: Record<string, string> = {
 };
 
 export default function TeamTutors() {
-  const { teamSlug } = useParams<{ teamSlug: string }>();
-  const myTeam = useQuery(api.team.getMyTeam);
-  const team = myTeam?.team as any;
+  const { token } = useTeamAuth();
+  const [teamId, setTeamId] = useState<string | null>(null);
+  // Get team ID from workspace
+  const workspace = useQuery(api.teamAuthWorkspace.getTeamWorkspace, token ? { token } : "skip");
+  const team = workspace?.team as any;
   const [tab, setTab] = useState<string>("all");
   const [search, setSearch] = useState("");
   const [selectedApp, setSelectedApp] = useState<any>(null);
   const [reviewNote, setReviewNote] = useState("");
 
   const applications = useQuery(
-    api.teamRoles.listAllTutorApplications,
-    team ? { teamId: team._id } : "skip",
+    api.teamAuthWorkspaceRoles.listAllTutorApplications,
+    token ? { token } : "skip",
   );
 
-  const reviewMutation = useMutation(api.teamRoles.reviewTutorApplication);
+  const reviewMutation = useMutation(api.teamAuthWorkspaceRoles.reviewTutorApplication);
   const reviewHistory = useQuery(
     api.teamRoles.getTutorReviewHistory,
     selectedApp ? { applicationId: selectedApp._id } : "skip",
   );
 
   const handleReview = async (app: any, status: string) => {
-    if (!team) return;
+    if (!token) return;
     try {
       await reviewMutation({
-        teamId: team._id,
+        token,
         applicationId: app._id,
         status: status as any,
         note: reviewNote || undefined,
@@ -63,7 +65,7 @@ export default function TeamTutors() {
     }
   };
 
-  if (!team) {
+  if (!workspace) {
     return (
       <div className="flex justify-center py-16">
         <Loader2 className="size-5 animate-spin text-lime-400" />

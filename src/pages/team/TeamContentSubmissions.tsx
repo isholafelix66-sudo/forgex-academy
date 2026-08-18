@@ -1,7 +1,7 @@
 import { useState } from "react";
-import { useParams } from "react-router";
 import { useQuery, useMutation } from "convex/react";
 import { api } from "@/convex/_generated/api";
+import { useTeamAuth } from "@/hooks/use-team-auth";
 import { motion } from "framer-motion";
 import { Loader2, FileCheck, Plus, Send } from "lucide-react";
 import { toast } from "sonner";
@@ -13,16 +13,16 @@ const TYPE_COLORS: Record<string, string> = {
 };
 
 export default function TeamContentSubmissions() {
-  const { teamSlug } = useParams<{ teamSlug: string }>();
-  const myTeam = useQuery(api.team.getMyTeam);
-  const team = myTeam?.team as any;
+  const { token } = useTeamAuth();
+  const workspace = useQuery(api.teamAuthWorkspace.getTeamWorkspace, token ? { token } : "skip");
+  const team = workspace?.team as any;
 
   const submissions = useQuery(
-    api.teamRoles.listContentSubmissions,
-    team ? { teamId: team._id } : "skip",
+    api.teamAuthWorkspaceRoles.listContentSubmissions,
+    token ? { token } : "skip",
   );
 
-  const createSubmission = useMutation(api.teamRoles.createContentSubmission);
+  const createSubmission = useMutation(api.teamAuthWorkspaceRoles.createContentSubmission);
 
   const [showForm, setShowForm] = useState(false);
   const [type, setType] = useState<"testimonial" | "resource" | "content-edit">("content-edit");
@@ -32,11 +32,11 @@ export default function TeamContentSubmissions() {
   const [saving, setSaving] = useState(false);
 
   const handleSave = async () => {
-    if (!team || !title.trim() || !content.trim()) return;
+    if (!token || !title.trim() || !content.trim()) return;
     setSaving(true);
     try {
       await createSubmission({
-        teamId: team._id, type, title, description, content,
+        token, type, title, description, content,
       });
       toast.success("Content submitted for admin review.");
       setShowForm(false); setTitle(""); setDescription(""); setContent("");
@@ -47,7 +47,7 @@ export default function TeamContentSubmissions() {
     }
   };
 
-  if (!team) {
+  if (!workspace) {
     return <div className="flex justify-center py-16"><Loader2 className="size-5 animate-spin text-lime-400" /></div>;
   }
 

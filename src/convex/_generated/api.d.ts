@@ -42,6 +42,8 @@ import type * as stories from "../stories.js";
 import type * as submissions from "../submissions.js";
 import type * as team from "../team.js";
 import type * as teamAuth from "../teamAuth.js";
+import type * as teamAuthWorkspace from "../teamAuthWorkspace.js";
+import type * as teamAuthWorkspaceRoles from "../teamAuthWorkspaceRoles.js";
 import type * as teamRoles from "../teamRoles.js";
 import type * as tutor from "../tutor.js";
 import type * as tutorSupport from "../tutorSupport.js";
@@ -88,6 +90,8 @@ declare const fullApi: ApiFromModules<{
   submissions: typeof submissions;
   team: typeof team;
   teamAuth: typeof teamAuth;
+  teamAuthWorkspace: typeof teamAuthWorkspace;
+  teamAuthWorkspaceRoles: typeof teamAuthWorkspaceRoles;
   teamRoles: typeof teamRoles;
   tutor: typeof tutor;
   tutorSupport: typeof tutorSupport;

@@ -1,15 +1,13 @@
-import { useParams } from "react-router";
 import { useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
+import { useTeamAuth } from "@/hooks/use-team-auth";
 import { Loader2, Activity } from "lucide-react";
 
 export default function TeamActivity() {
-  const { teamSlug } = useParams<{ teamSlug: string }>();
-  const myTeam = useQuery(api.team.getMyTeam);
-  const team = myTeam?.team as any;
+  const { token } = useTeamAuth();
   const activity = useQuery(
-    api.team.getTeamActivity,
-    team ? { teamId: team._id, limit: 50 } : "skip",
+    api.teamAuthWorkspace.getTeamActivity,
+    token ? { token, limit: 50 } : "skip",
   );
 
   return (
