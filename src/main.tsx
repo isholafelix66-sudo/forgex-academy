@@ -102,6 +102,13 @@ const TeamActivity = lazy(() => import("./pages/team/TeamActivity.tsx"));
 const TeamMembers = lazy(() => import("./pages/team/TeamMembers.tsx"));
 const TeamProfile = lazy(() => import("./pages/team/TeamProfile.tsx"));
 const TeamSettings = lazy(() => import("./pages/team/TeamSettings.tsx"));
+const TeamTutors = lazy(() => import("./pages/team/TeamTutors.tsx"));
+const TeamAITools = lazy(() => import("./pages/team/TeamAITools.tsx"));
+const TeamPrompts = lazy(() => import("./pages/team/TeamPrompts.tsx"));
+const TeamContentSubmissions = lazy(() => import("./pages/team/TeamContentSubmissions.tsx"));
+const TeamTestimonials = lazy(() => import("./pages/team/TeamTestimonials.tsx"));
+const TeamSupportCases = lazy(() => import("./pages/team/TeamSupportCases.tsx"));
+const TeamTutorProfiles = lazy(() => import("./pages/team/TeamTutorProfiles.tsx"));
 
 // ---------------------------------------------------------------------------
 // Admin dashboard
@@ -625,12 +632,26 @@ createRoot(document.getElementById("root")!).render(
                 <Route path="courses" element={<TeamCourses />} />
                 <Route path="reviews" element={<TeamReviews />} />
                 <Route path="activity" element={<TeamActivity />} />
-                <Route path="members" element={<TeamMembers />} />
-                <Route path="profile" element={<TeamProfile />} />
+                <Route path="members" element={<TeamMembers />} />                <Route path="profile" element={<TeamProfile />} />
                 <Route path="settings" element={<TeamSettings />} />
+                {/* Academic Team */}
+                <Route path="tutors" element={<TeamTutors />} />
+                {/* Content Team */}
+                <Route path="submissions" element={<TeamContentSubmissions />} />
+                <Route path="testimonials" element={<TeamTestimonials />} />
+                {/* AI Team */}
+                <Route path="ai-tools" element={<TeamAITools />} />
+                <Route path="prompts" element={<TeamPrompts />} />
+                {/* Student Experience + Tutor Support */}
+                <Route path="support" element={<TeamSupportCases />} />
+                <Route path="cases" element={<TeamSupportCases />} />
+                <Route path="feedback" element={<TeamTestimonials />} />
+                <Route path="escalations" element={<TeamSupportCases />} />
+                <Route path="tutor-profiles" element={<TeamTutorProfiles />} />
               </Route>
 
-              {/* Admin dashboard — password-gated only, no user account needed */}
+
+{/* Admin dashboard — password-gated only, no user account needed */}
               <Route path="/admin" element={<AdminShell />}>
                 <Route index element={<AdminOverview />} />
                 <Route path="users" element={<AdminUsers />} />

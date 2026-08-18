@@ -1207,6 +1207,167 @@ const schema = defineSchema(
     })
       .index("by_team", ["teamId", "createdAt"])
       .index("by_user", ["userId", "createdAt"]),
+
+    // -----------------------------------------------------------------
+    // Team Workspace — Role-specific tables
+    // -----------------------------------------------------------------
+
+    /** Internal case notes — usable by any team for any target. */
+    teamCaseNotes: defineTable({
+      teamId: v.id("teams"),
+      userId: v.id("users"),
+      targetType: v.string(),
+      targetId: v.string(),
+      targetLabel: v.optional(v.string()),
+      content: v.string(),
+      isPrivate: v.boolean(),
+      createdAt: v.number(),
+      updatedAt: v.number(),
+    })
+      .index("by_team", ["teamId", "createdAt"])
+      .index("by_target", ["targetType", "targetId"]),
+
+    /** Academic Team — tutor application reviews. */
+    teamTutorReviews: defineTable({
+      applicationId: v.id("tutorApplications"),
+      teamId: v.id("teams"),
+      userId: v.id("users"),
+      status: v.union(
+        v.literal("reviewing"),
+        v.literal("approved"),
+        v.literal("revision_required"),
+        v.literal("rejected"),
+      ),
+      note: v.optional(v.string()),
+      createdAt: v.number(),
+      updatedAt: v.number(),
+    })
+      .index("by_application", ["applicationId"])
+      .index("by_team", ["teamId"]),
+
+    /** Content Team — content submissions for Admin approval. */
+    teamContentSubmissions: defineTable({
+      teamId: v.id("teams"),
+      userId: v.id("users"),
+      type: v.union(
+        v.literal("testimonial"),
+        v.literal("resource"),
+        v.literal("content-edit"),
+      ),
+      title: v.string(),
+      description: v.string(),
+      content: v.string(),
+      targetId: v.optional(v.string()),
+      status: v.union(
+        v.literal("pending"),
+        v.literal("approved"),
+        v.literal("rejected"),
+      ),
+      adminNote: v.optional(v.string()),
+      createdAt: v.number(),
+      updatedAt: v.number(),
+    })
+      .index("by_team", ["teamId", "createdAt"])
+      .index("by_status", ["status"]),
+
+    /** AI Team — AI tool submissions for Admin approval. */
+    teamAiToolDrafts: defineTable({
+      teamId: v.id("teams"),
+      userId: v.id("users"),
+      title: v.string(),
+      description: v.string(),
+      category: v.string(),
+      url: v.string(),
+      pricingType: v.union(
+        v.literal("free"),
+        v.literal("freemium"),
+        v.literal("paid"),
+      ),
+      status: v.union(
+        v.literal("draft"),
+        v.literal("submitted"),
+        v.literal("approved"),
+        v.literal("rejected"),
+      ),
+      adminNote: v.optional(v.string()),
+      createdAt: v.number(),
+      updatedAt: v.number(),
+    })
+      .index("by_team", ["teamId", "createdAt"])
+      .index("by_status", ["status"]),
+
+    /** AI Team — prompt submissions for Admin approval. */
+    teamPromptDrafts: defineTable({
+      teamId: v.id("teams"),
+      userId: v.id("users"),
+      title: v.string(),
+      description: v.string(),
+      category: v.string(),
+      template: v.string(),
+      status: v.union(
+        v.literal("draft"),
+        v.literal("submitted"),
+        v.literal("approved"),
+        v.literal("rejected"),
+      ),
+      adminNote: v.optional(v.string()),
+      createdAt: v.number(),
+      updatedAt: v.number(),
+    })
+      .index("by_team", ["teamId", "createdAt"])
+      .index("by_status", ["status"]),
+
+    /** Support cases — wraps tutorSupportMessages with team assignment. */
+    teamSupportCases: defineTable({
+      teamId: v.id("teams"),
+      supportMessageId: v.id("tutorSupportMessages"),
+      assignedTo: v.optional(v.id("users")),
+      status: v.union(
+        v.literal("open"),
+        v.literal("in_progress"),
+        v.literal("escalated"),
+        v.literal("resolved"),
+      ),
+      escalationTeamId: v.optional(v.id("teams")),
+      escalationNote: v.optional(v.string()),
+      createdAt: v.number(),
+      updatedAt: v.number(),
+    })
+      .index("by_team", ["teamId", "createdAt"])
+      .index("by_status", ["status"])
+      .index("by_support", ["supportMessageId"]),
+
+    /** Escalation records — to Admin or other teams. */
+    teamEscalations: defineTable({
+      teamId: v.id("teams"),
+      userId: v.id("users"),
+      targetType: v.string(),
+      targetId: v.string(),
+      targetLabel: v.optional(v.string()),
+      escalateTo: v.union(v.literal("admin"), v.literal("team")),
+      escalateToTeamId: v.optional(v.id("teams")),
+      reason: v.string(),
+      status: v.union(
+        v.literal("pending"),
+        v.literal("acknowledged"),
+        v.literal("resolved"),
+      ),
+      adminResponse: v.optional(v.string()),
+      createdAt: v.number(),
+      updatedAt: v.number(),
+    })
+      .index("by_team", ["teamId", "createdAt"])
+      .index("by_status", ["status"]),
+
+    /** Activity history for support cases — tracks who handled what. */
+    teamCaseHistory: defineTable({
+      caseId: v.id("teamSupportCases"),
+      userId: v.id("users"),
+      action: v.string(),
+      details: v.optional(v.string()),
+      createdAt: v.number(),
+    })
+      .index("by_case", ["caseId", "createdAt"]),
   },
   {
     schemaValidation: false,
