@@ -1,6 +1,6 @@
 import { Link } from "react-router";
 import { motion } from "framer-motion";
-import { Users, ArrowRight, Shield, Zap } from "lucide-react";
+import { Users, ArrowRight, ShieldCheck, Sparkles } from "lucide-react";
 
 export default function TeamEntry() {
   return (
@@ -84,7 +84,7 @@ export default function TeamEntry() {
         >
           {[
             {
-              icon: Shield,
+              icon: ShieldCheck,
               title: "Admin Approval",
               desc: "Every team member is verified by an administrator before gaining access to the workspace.",
             },
@@ -94,7 +94,7 @@ export default function TeamEntry() {
               desc: "Work together on courses, content, and student experience — each team has its own dedicated workspace.",
             },
             {
-              icon: Zap,
+              icon: Sparkles,
               title: "Focused Modules",
               desc: "Access only the tools and pages your team needs — Academic, Content, AI, Student Experience, and more.",
             },
