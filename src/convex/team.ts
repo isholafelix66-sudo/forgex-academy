@@ -6,6 +6,16 @@ import { requireUser } from "./lib";
 // Helpers
 // ---------------------------------------------------------------------------
 
+/** Validate an admin session token — returns true if the token is valid. */
+async function requireAdminToken(ctx: any, token: string) {
+  const session = await ctx.db
+    .query("adminSessions")
+    .filter((q: any) => q.eq(q.field("token"), token))
+    .first();
+  if (!session) throw new Error("Invalid admin session.");
+  return true;
+}
+
 /** Fetch the full user document (not just the Id). */
 async function getUserDoc(ctx: any) {
   const userId = await requireUser(ctx);
@@ -52,8 +62,7 @@ export const createTeam = mutation({
     token: v.string(),
   },
   handler: async (ctx, args) => {
-    const user = await getUserDoc(ctx);
-    if (user.role !== "admin") throw new Error("Admin only.");
+    await requireAdminToken(ctx, args.token);
     const existing = await ctx.db
       .query("teams")
       .withIndex("by_slug", (q) => q.eq("slug", args.slug))
@@ -82,8 +91,7 @@ export const updateTeam = mutation({
     token: v.string(),
   },
   handler: async (ctx, args) => {
-    const user = await getUserDoc(ctx);
-    if (user.role !== "admin") throw new Error("Admin only.");
+    await requireAdminToken(ctx, args.token);
     const patch: Record<string, any> = {};
     if (args.name !== undefined) patch.name = args.name;
     if (args.description !== undefined) patch.description = args.description;
@@ -132,10 +140,9 @@ export const submitApplication = mutation({
 });
 
 export const listPendingApplications = query({
-  args: {},
-  handler: async (ctx) => {
-    const user = await getUserDoc(ctx);
-    if (user.role !== "admin") throw new Error("Admin only.");
+  args: { token: v.string() },
+  handler: async (ctx, args) => {
+    await requireAdminToken(ctx, args.token);
     return await ctx.db
       .query("teamApplications")
       .withIndex("by_status", (q) => q.eq("status", "pending"))
@@ -145,10 +152,9 @@ export const listPendingApplications = query({
 });
 
 export const listAllApplications = query({
-  args: {},
-  handler: async (ctx) => {
-    const user = await getUserDoc(ctx);
-    if (user.role !== "admin") throw new Error("Admin only.");
+  args: { token: v.string() },
+  handler: async (ctx, args) => {
+    await requireAdminToken(ctx, args.token);
     return await ctx.db.query("teamApplications").order("desc").collect();
   },
 });
@@ -165,8 +171,7 @@ export const reviewApplication = mutation({
     token: v.string(),
   },
   handler: async (ctx, args) => {
-    const admin = await getUserDoc(ctx);
-    if (admin.role !== "admin") throw new Error("Admin only.");
+    await requireAdminToken(ctx, args.token);
     const app = await ctx.db.get(args.applicationId);
     if (!app) throw new Error("Application not found.");
     if (app.status !== "pending") throw new Error("Already reviewed.");
@@ -174,7 +179,7 @@ export const reviewApplication = mutation({
     // Update application status
     await ctx.db.patch(args.applicationId, {
       status: args.decision,
-      reviewedBy: admin._id,
+      reviewedBy: undefined,
       reviewedAt: Date.now(),
       reviewNote: args.reviewNote,
     });
@@ -205,10 +210,11 @@ export const reviewApplication = mutation({
 // ---------------------------------------------------------------------------
 
 export const listTeamMembers = query({
-  args: { teamId: v.id("teams") },
+  args: { teamId: v.id("teams"), token: v.optional(v.string()) },
   handler: async (ctx, args) => {
-    const user = await getUserDoc(ctx);
-    if (user.role !== "admin") {
+    if (args.token) {
+      await requireAdminToken(ctx, args.token);
+    } else {
       await requireTeamAccess(ctx, args.teamId);
     }
     const memberships = await ctx.db
@@ -237,8 +243,7 @@ export const deactivateMember = mutation({
     token: v.string(),
   },
   handler: async (ctx, args) => {
-    const admin = await getUserDoc(ctx);
-    if (admin.role !== "admin") throw new Error("Admin only.");
+    await requireAdminToken(ctx, args.token);
     const membership = await ctx.db.get(args.membershipId);
     if (!membership) throw new Error("Membership not found.");
     await ctx.db.patch(args.membershipId, { status: "deactivated" });
@@ -263,8 +268,7 @@ export const changeMemberTeam = mutation({
     token: v.string(),
   },
   handler: async (ctx, args) => {
-    const admin = await getUserDoc(ctx);
-    if (admin.role !== "admin") throw new Error("Admin only.");
+    await requireAdminToken(ctx, args.token);
     const membership = await ctx.db.get(args.membershipId);
     if (!membership) throw new Error("Membership not found.");
     const oldTeam = await ctx.db.get(membership.teamId);
@@ -631,10 +635,9 @@ export const getTeamCourseReviewSummary = query({
 // ---------------------------------------------------------------------------
 
 export const getAllTeamActivity = query({
-  args: { limit: v.optional(v.number()) },
-  handler: async (ctx) => {
-    const user = await getUserDoc(ctx);
-    if (user.role !== "admin") throw new Error("Admin only.");
+  args: { token: v.string(), limit: v.optional(v.number()) },
+  handler: async (ctx, args) => {
+    await requireAdminToken(ctx, args.token);
     const activities = await ctx.db
       .query("teamActivity")
       .order("desc")
