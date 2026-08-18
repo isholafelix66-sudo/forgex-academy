@@ -5,7 +5,7 @@ import { api } from "@/convex/_generated/api";
 import { motion } from "framer-motion";
 import {
   Loader2, Headphones, CheckCircle2, AlertTriangle, UserPlus,
-  ArrowUpCircle, MessageSquare, Search, Clock, User,
+  ArrowUp, MessageSquare, Search, Clock, User,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -230,7 +230,7 @@ export default function TeamSupportCases() {
                     <CheckCircle2 className="size-4" /> Resolve
                   </button>
                   <button onClick={() => setShowEscalation(true)} className="flex items-center gap-1.5 rounded-xl bg-rose-500/20 px-4 py-2 text-sm font-medium text-rose-300 hover:bg-rose-500/30">
-                    <ArrowUpCircle className="size-4" /> Escalate
+                    <ArrowUp className="size-4" /> Escalate
                   </button>
                 </>
               )}

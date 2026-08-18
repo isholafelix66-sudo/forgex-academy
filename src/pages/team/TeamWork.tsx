@@ -7,12 +7,12 @@ import { motion, AnimatePresence } from "framer-motion";
 import {
   Loader2,
   Plus,
-  ListTodo,
+  ClipboardList,
   Clock,
   CheckCircle2,
   AlertCircle,
   MessageSquare,
-  Calendar,
+  CalendarDays,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -212,7 +212,7 @@ export default function TeamWork() {
         </div>
       ) : filteredItems?.length === 0 ? (
         <div className="rounded-2xl border border-white/5 bg-card p-8 text-center">
-          <ListTodo className="mx-auto size-8 text-white/20" />
+          <ClipboardList className="mx-auto size-8 text-white/20" />
           <p className="mt-3 text-sm text-white/40">No tasks found.</p>
         </div>
       ) : (
@@ -243,7 +243,7 @@ export default function TeamWork() {
                     )}
                     {item.deadline && (
                       <span className="flex items-center gap-1">
-                        <Calendar className="size-3" />
+                        <CalendarDays className="size-3" />
                         {new Date(item.deadline).toLocaleDateString()}
                       </span>
                     )}

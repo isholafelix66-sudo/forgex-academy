@@ -4,7 +4,7 @@ import { api } from "@/convex/_generated/api";
 import { motion } from "framer-motion";
 import {
   Loader2,
-  ListTodo,
+  ClipboardList,
   CheckCircle2,
   Clock,
   AlertCircle,
@@ -64,7 +64,7 @@ export default function TeamOverview() {
     {
       label: "Urgent",
       value: urgentItems.length,
-      icon: <ListTodo className="size-5" />,
+      icon: <ClipboardList className="size-5" />,
       color: "text-red-400",
       bg: "bg-red-400/10",
     },
