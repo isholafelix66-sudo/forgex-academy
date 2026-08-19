@@ -35,8 +35,7 @@ if (
           "/opt/homebrew/bin/node",
         ]
       : [execPath];
-  const run = (bin: string) =>
-    spawnSync(bin, ["--max-old-space-size=768", ...process.argv.slice(1)], {
+  const run = (bin: string) =>      spawnSync(bin, ["--max-old-space-size=1024", ...process.argv.slice(1)], {
       stdio: "inherit",
       env: {
         ...process.env,

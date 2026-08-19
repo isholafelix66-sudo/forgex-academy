@@ -9,8 +9,6 @@ import { RequireTeam } from "@/components/RequireTeam";
 import { RequireTeamAuth } from "@/components/RequireTeamAuth";
 import { VlyToolbar } from "../vly-toolbar-readonly.tsx";
 import { ConvexAuthProvider } from "@convex-dev/auth/react";
-import { ClerkProvider, useAuth as useClerkAuth } from "@clerk/react";
-import { ConvexProviderWithClerk } from "convex/react-clerk";
 import { ConvexReactClient } from "convex/react";
 import React, { StrictMode, useEffect, lazy, Suspense, useState } from "react";
 import { RefreshCw } from "lucide-react";
@@ -427,18 +425,52 @@ try {
   // Ignore — team portal will show an error state
 }
 
+/**
+ * Lazy-loaded Clerk wrapper — dynamically imports @clerk/react and
+ * convex/react-clerk so these heavy packages are only loaded when a
+ * user actually navigates to a Team Portal route. This keeps the
+ * main bundle free of Clerk overhead and prevents OOM during build.
+ */
+const LazyTeamAuthWrapper = lazy(() =>
+  Promise.all([
+    import("@clerk/react"),
+    import("convex/react-clerk"),
+  ]).then(([clerkMod, convexClerkMod]) => {
+    const ClerkProviderInner = clerkMod.ClerkProvider;
+    const ConvexProviderWithClerkInner = convexClerkMod.ConvexProviderWithClerk;
+    const useClerkAuthInner = clerkMod.useAuth;
+
+    return {
+      default: function TeamAuthWrapperInner({
+        children,
+      }: {
+        children: React.ReactNode;
+      }) {
+        if (!teamConvex) return <>{children}</>;
+        return (
+          <ClerkProviderInner
+            publishableKey={
+              (import.meta.env.VITE_CLERK_PUBLISHABLE_KEY as string) || ""
+            }
+          >
+            <ConvexProviderWithClerkInner
+              client={teamConvex}
+              useAuth={useClerkAuthInner}
+            >
+              {children}
+            </ConvexProviderWithClerkInner>
+          </ClerkProviderInner>
+        );
+      },
+    };
+  }),
+);
+
 function TeamAuthWrapper({ children }: { children: React.ReactNode }) {
-  if (!teamConvex) return <>{children}</>;
   return (
-    <ClerkProvider
-      publishableKey={
-        (import.meta.env.VITE_CLERK_PUBLISHABLE_KEY as string) || ""
-      }
-    >
-      <ConvexProviderWithClerk client={teamConvex} useAuth={useClerkAuth}>
-        {children}
-      </ConvexProviderWithClerk>
-    </ClerkProvider>
+    <Suspense fallback={<RouteLoading />}>
+      <LazyTeamAuthWrapper>{children}</LazyTeamAuthWrapper>
+    </Suspense>
   );
 }
 const convexUrl =
