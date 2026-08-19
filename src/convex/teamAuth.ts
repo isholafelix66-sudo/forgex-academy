@@ -2,7 +2,7 @@ import { v } from "convex/values";
 import { query, mutation } from "./_generated/server";
 
 // ---------------------------------------------------------------------------
-// Password hashing (pure JS SHA-256 — no crypto.subtle dependency)
+// Password hashing (pure JS — no Web Crypto dependency)
 // ---------------------------------------------------------------------------
 
 /** Generate N random hex chars using Math.random (no Web Crypto dependency). */
@@ -81,28 +81,29 @@ export const TEAM_CATEGORIES = [
 ] as const;
 
 // ---------------------------------------------------------------------------
-// Helpers
+// Helpers — ALL async, ALL awaited at call sites
 // ---------------------------------------------------------------------------
 
-function getTeamAccountFromToken(ctx: any, token: string) {
-  const session = ctx.db
+async function getTeamAccountFromToken(ctx: any, token: string) {
+  if (!token) return null;
+  const session = await ctx.db
     .query("teamSessions")
     .withIndex("by_token", (q: any) => q.eq("token", token))
     .unique();
   if (!session) return null;
   if (session.expiresAt < Date.now()) {
-    ctx.db.delete(session._id);
+    await ctx.db.delete(session._id);
     return null;
   }
-  const account = ctx.db.get(session.teamAccountId);
+  const account = await ctx.db.get(session.teamAccountId);
   if (!account || account.status !== "active") return null;
   return { account, session };
 }
 
 /** Create a session token for a team account. */
-function createSession(ctx: any, teamAccountId: string): string {
+async function createSession(ctx: any, teamAccountId: string): Promise<string> {
   const token = randomHex(32);
-  ctx.db.insert("teamSessions", {
+  await ctx.db.insert("teamSessions", {
     teamAccountId: teamAccountId as any,
     token,
     expiresAt: Date.now() + 7 * 24 * 60 * 60 * 1000, // 7 days
@@ -112,14 +113,14 @@ function createSession(ctx: any, teamAccountId: string): string {
 }
 
 /** Ensure the 5 team categories exist in the database. */
-function ensureTeamsExist(ctx: any): void {
+async function ensureTeamsExist(ctx: any): Promise<void> {
   for (const cat of TEAM_CATEGORIES) {
-    const existing = ctx.db
+    const existing = await ctx.db
       .query("teams")
       .withIndex("by_slug", (q: any) => q.eq("slug", cat.slug))
       .unique();
     if (!existing) {
-      ctx.db.insert("teams", {
+      await ctx.db.insert("teams", {
         name: cat.name,
         slug: cat.slug,
         description: cat.description,
@@ -143,7 +144,7 @@ export const registerTeamAccount = mutation({
     email: v.string(),
     phone: v.optional(v.string()),
     skill: v.string(),
-    teamCategory: v.string(), // slug: "academic" | "tutor-support" | "student-support" | "content" | "ai"
+    teamCategory: v.string(),
     introduction: v.string(),
   },
   handler: async (ctx, args) => {
@@ -154,7 +155,7 @@ export const registerTeamAccount = mutation({
     }
 
     // Ensure the 5 team categories exist
-    ensureTeamsExist(ctx);
+    await ensureTeamsExist(ctx);
 
     // Check if email already exists
     const existing = await ctx.db
@@ -254,7 +255,7 @@ export const teamLogin = mutation({
     await ctx.db.patch(account._id, { lastLoginAt: Date.now() });
 
     // Create session
-    const token = createSession(ctx, account._id);
+    const token = await createSession(ctx, account._id);
 
     return {
       token,
@@ -272,7 +273,7 @@ export const getTeamSession = query({
   args: { token: v.string() },
   handler: async (ctx, args) => {
     if (!args.token) return null;
-    const result = getTeamAccountFromToken(ctx, args.token);
+    const result = await getTeamAccountFromToken(ctx, args.token);
     if (!result) return null;
     const { account } = result;
     // Get membership
@@ -332,7 +333,7 @@ export const teamChangePassword = mutation({
     newPassword: v.string(),
   },
   handler: async (ctx, args) => {
-    const result = getTeamAccountFromToken(ctx, args.token);
+    const result = await getTeamAccountFromToken(ctx, args.token);
     if (!result) throw new Error("Not authenticated.");
 
     const valid = verifyPasswordSync(
