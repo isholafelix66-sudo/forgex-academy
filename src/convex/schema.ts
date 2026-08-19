@@ -1150,6 +1150,7 @@ const schema = defineSchema(
       skill: v.string(),
       introduction: v.string(),
       passwordHash: v.string(),
+      clerkId: v.optional(v.string()),
       teamSlug: v.optional(v.string()),
       role: v.union(
         v.literal("teamMember"),

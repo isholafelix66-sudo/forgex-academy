@@ -1,46 +1,24 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Link, Navigate, useSearchParams, useNavigate } from "react-router";
+import { SignIn, useAuth } from "@clerk/react";
 import { useMutation } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import { useTeamAuth } from "@/hooks/use-team-auth";
 import { motion } from "framer-motion";
-import {
-  ArrowLeft,
-  Loader2,
-  Lock,
-  KeyRound,
-  AlertCircle,
-  Eye,
-  EyeOff,
-} from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { ArrowLeft, Loader2, Lock } from "lucide-react";
 
 export default function TeamLogin() {
-  const { isAuthenticated, isLoading: authLoading, login, token, teamMember } =
-    useTeamAuth();
+  const { isAuthenticated, isLoading: authLoading, teamMember } = useTeamAuth();
+  const { isSignedIn, isLoaded: clerkLoaded } = useAuth();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const returnTo = searchParams.get("returnTo") || "";
 
-  const teamLogin = useMutation(api.teamAuth.teamLogin);
+  const clerkTeamLogin = useMutation(api.teamAuth.clerkAuthTeamLogin);
+  const [bridging, setBridging] = useState(false);
+  const [bridgeError, setBridgeError] = useState<string | null>(null);
 
-  const [teamId, setTeamId] = useState("");
-  const [password, setPassword] = useState("");
-  const [showPassword, setShowPassword] = useState(false);
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [mustChange, setMustChange] = useState(false);
-  const [newPassword, setNewPassword] = useState("");
-  const [changeSaving, setChangeSaving] = useState(false);
-  const [changeError, setChangeError] = useState<string | null>(null);
-  const [loginResult, setLoginResult] = useState<{
-    teamSlug?: string;
-  } | null>(null);
-
-  const changePassword = useMutation(api.teamAuth.teamChangePassword);
-
-  // If already authenticated, redirect to team workspace
+  // If already authenticated via team session, redirect to workspace
   if (!authLoading && isAuthenticated) {
     const dest =
       returnTo ||
@@ -50,119 +28,113 @@ export default function TeamLogin() {
     return <Navigate to={dest} replace />;
   }
 
-  const handleLogin = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!teamId.trim() || !password.trim()) return;
-    setSaving(true);
-    setError(null);
-    try {
-      const result = await teamLogin({
-        teamId: teamId.trim().toUpperCase(),
-        password,
+  // After Clerk sign-in, bridge to team session
+  useEffect(() => {
+    if (!clerkLoaded || !isSignedIn || bridging || authLoading) return;
+    if (isAuthenticated) return; // Already have a team session
+
+    setBridging(true);
+    setBridgeError(null);
+    clerkTeamLogin({})
+      .then((result) => {
+        // Team session created — the useTeamAuth hook will pick up the token
+        // and re-render, triggering the redirect above
+        if (result?.teamSlug) {
+          const dest = returnTo || `/team/${result.teamSlug}`;
+          navigate(dest, { replace: true });
+        }
+      })
+      .catch((err) => {
+        const msg = err?.message || "Could not access team workspace.";
+        if (msg.includes("No team account found")) {
+          setBridgeError(
+            "No team account found for this email. Please apply to join a team first.",
+          );
+        } else if (msg.includes("pending admin approval")) {
+          setBridgeError("Your team account is pending admin approval.");
+        } else if (msg.includes("suspended")) {
+          setBridgeError("Your team account has been suspended.");
+        } else {
+          setBridgeError(msg);
+        }
+      })
+      .finally(() => {
+        setBridging(false);
       });
-      // Store token (updates useTeamAuth state)
-      login(result.token);
-      setLoginResult({ teamSlug: result.teamSlug });
+  }, [
+    clerkLoaded,
+    isSignedIn,
+    bridging,
+    authLoading,
+    isAuthenticated,
+    clerkTeamLogin,
+    navigate,
+    returnTo,
+  ]);
 
-      if (result.mustChangePassword) {
-        setMustChange(true);
-      } else {
-        // Navigate to team dashboard without full page reload
-        const dest = result.teamSlug
-          ? `/team/${result.teamSlug}`
-          : "/team";
-        navigate(dest, { replace: true });
-      }
-    } catch (err) {
-      setError(
-        err instanceof Error ? err.message : "Login failed. Please try again.",
-      );
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const handleChangePassword = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!newPassword.trim() || newPassword.length < 8 || !token) return;
-    setChangeSaving(true);
-    setChangeError(null);
-    try {
-      await changePassword({
-        token,
-        currentPassword: password,
-        newPassword: newPassword.trim(),
-      });
-      // Password changed — navigate to team dashboard
-      const dest = loginResult?.teamSlug
-        ? `/team/${loginResult.teamSlug}`
-        : teamMember?.team?.slug
-          ? `/team/${teamMember.team.slug}`
-          : "/team";
-      navigate(dest, { replace: true });
-    } catch (err) {
-      setChangeError(
-        err instanceof Error
-          ? err.message
-          : "Could not change password. Please try again.",
-      );
-    } finally {
-      setChangeSaving(false);
-    }
-  };
-
-  if (mustChange) {
+  // Show bridging state
+  if (bridging) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-background px-6">
         <motion.div
-          initial={{ opacity: 0, scale: 0.95 }}
-          animate={{ opacity: 1, scale: 1 }}
-          className="w-full max-w-md rounded-3xl border border-white/10 bg-card p-8"
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="w-full max-w-md text-center"
         >
-          <div className="mb-6 text-center">
-            <div className="mx-auto mb-4 flex size-14 items-center justify-center rounded-2xl border border-amber-400/20 bg-amber-400/5">
-              <KeyRound className="size-7 text-amber-400" />
-            </div>
-            <h1 className="font-display text-2xl font-bold text-white">
-              Create New Password
-            </h1>
-            <p className="mt-2 text-sm text-white/40">
-              You must create a new password before continuing.
+          <div className="rounded-3xl border border-white/10 bg-card p-8">
+            <Loader2 className="mx-auto size-8 animate-spin text-lime-400" />
+            <p className="mt-4 text-sm text-white/60">
+              Connecting to your team workspace…
             </p>
           </div>
-          <form onSubmit={handleChangePassword} className="space-y-4">
-            <div>
-              <label className="mb-1.5 block text-xs font-medium text-white/50">
-                New Password
-              </label>
-              <Input
-                type="password"
-                value={newPassword}
-                onChange={(e) => setNewPassword(e.target.value)}
-                placeholder="At least 8 characters"
-                className="border-white/10 bg-white/5 text-white placeholder:text-white/30"
-                minLength={8}
-                required
-              />
+        </motion.div>
+      </div>
+    );
+  }
+
+  // Show bridge error (e.g., no team account for this email)
+  if (bridgeError) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-background px-6">
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="w-full max-w-md"
+        >
+          <Link
+            to="/team"
+            className="mb-6 inline-flex items-center gap-2 text-sm text-white/40 transition-colors hover:text-white"
+          >
+            <ArrowLeft className="size-4" />
+            Back to Team Entry
+          </Link>
+          <div className="rounded-3xl border border-white/10 bg-card p-8">
+            <div className="mx-auto mb-4 flex size-14 items-center justify-center rounded-2xl border border-red-400/20 bg-red-400/5">
+              <Lock className="size-7 text-red-400" />
             </div>
-            {changeError && (
-              <p className="rounded-xl bg-red-500/10 px-4 py-2.5 text-sm text-red-400">
-                {changeError}
-              </p>
-            )}
-            <Button
-              type="submit"
-              disabled={changeSaving || newPassword.length < 8 || !token}
-              className="w-full bg-lime-400 text-black hover:bg-lime-300"
-            >
-              {changeSaving ? (
-                <Loader2 className="mr-2 size-4 animate-spin" />
-              ) : (
-                <KeyRound className="mr-2 size-4" />
-              )}
-              Set New Password
-            </Button>
-          </form>
+            <h1 className="font-display text-2xl font-bold text-white">
+              Access Denied
+            </h1>
+            <p className="mt-3 text-sm text-white/50">{bridgeError}</p>
+            <div className="mt-6 flex flex-col gap-3">
+              <Link
+                to="/team/register"
+                className="inline-flex items-center justify-center rounded-xl bg-lime-400 px-5 py-2.5 text-sm font-semibold text-black transition-colors hover:bg-lime-300"
+              >
+                Apply to Join a Team
+              </Link>
+              <button
+                onClick={() => {
+                  setBridgeError(null);
+                  // Sign out of Clerk so they can try a different account
+                  window.location.href = "/team/login";
+                }}
+                className="text-sm text-white/40 hover:text-white"
+              >
+                Try a different account
+              </button>
+            </div>
+          </div>
         </motion.div>
       </div>
     );
@@ -191,67 +163,39 @@ export default function TeamLogin() {
               Team Sign In
             </h1>
             <p className="mt-2 text-sm text-white/40">
-              Sign in with your Team ID and password.
+              Sign in with your email to access your team workspace.
             </p>
           </div>
-          <form onSubmit={handleLogin} className="space-y-4">
-            <div>
-              <label className="mb-1.5 block text-xs font-medium text-white/50">
-                Team ID
-              </label>
-              <Input
-                value={teamId}
-                onChange={(e) => setTeamId(e.target.value)}
-                placeholder="e.g. FX-A1B2C3"
-                className="border-white/10 bg-white/5 font-mono text-white placeholder:text-white/30"
-                required
-              />
-            </div>
-            <div>
-              <label className="mb-1.5 block text-xs font-medium text-white/50">
-                Password
-              </label>
-              <div className="relative">
-                <Input
-                  type={showPassword ? "text" : "password"}
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  placeholder="Enter your password"
-                  className="border-white/10 bg-white/5 pr-10 text-white placeholder:text-white/30"
-                  required
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-white/30 hover:text-white/60"
-                >
-                  {showPassword ? (
-                    <EyeOff className="size-4" />
-                  ) : (
-                    <Eye className="size-4" />
-                  )}
-                </button>
-              </div>
-            </div>
-            {error && (
-              <div className="flex items-start gap-2 rounded-xl bg-red-500/10 px-4 py-3 text-sm text-red-400">
-                <AlertCircle className="mt-0.5 size-4 shrink-0" />
-                {error}
-              </div>
-            )}
-            <Button
-              type="submit"
-              disabled={saving || !teamId.trim() || !password.trim()}
-              className="w-full bg-lime-400 text-black hover:bg-lime-300"
-            >
-              {saving ? (
-                <Loader2 className="mr-2 size-4 animate-spin" />
-              ) : (
-                <Lock className="mr-2 size-4" />
-              )}
-              Sign In
-            </Button>
-          </form>
+
+          {/* Clerk Sign-In component — handles all auth (email, password, OTP, etc.) */}
+          <div className="clerk-team-auth [&>.cl-rootBox]:!bg-transparent [&>.cl-card]:!bg-transparent [&>.cl-card]:!shadow-none [&>.cl-card]:!border-none [&>.cl-headerTitle]:!text-white [&>.cl-headerSubtitle]:!text-white/40 [&>.cl-formButtonPrimary]:!bg-lime-400 [&>.cl-formButtonPrimary]:!text-black [&>.cl-formButtonPrimary:hover]:!bg-lime-300 [&>.cl-footerActionLink]:!text-lime-300 [&>.cl-dividerLine]:!bg-white/10 [&>.cl-dividerText]:!text-white/40 [&>.cl-formFieldInput]:!bg-white/5 [&>.cl-formFieldInput]:!border-white/10 [&>.cl-formFieldInput]:!text-white [&>.cl-formFieldLabel]:!text-white/50 [&>.cl-socialButtonsBlockButton]:!border-white/10 [&>.cl-socialButtonsBlockButton]:!bg-white/5 [&>.cl-socialButtonsBlockButtonText]:!text-white">
+            <SignIn
+              routing="path"
+              path="/team/login"
+              fallbackRedirectUrl={returnTo || "/team"}
+              appearance={{
+                elements: {
+                  rootBox: "w-full",
+                  card: "w-full bg-transparent shadow-none border-none",
+                  headerTitle: "text-white font-display text-lg font-bold",
+                  headerSubtitle: "text-white/40 text-sm",
+                  formButtonPrimary:
+                    "bg-lime-400 text-black hover:bg-lime-300 font-semibold !shadow-none",
+                  formFieldInput:
+                    "bg-white/5 border-white/10 text-white",
+                  formFieldLabel: "text-white/50 text-sm font-medium",
+                  footerActionLink: "text-lime-300 hover:text-lime-200",
+                  dividerLine: "bg-white/10",
+                  dividerText: "text-white/40",
+                  socialButtonsBlockButton:
+                    "border-white/10 bg-white/5 text-white hover:bg-white/10",
+                  socialButtonsBlockButtonText: "text-white font-medium",
+                  identityPreviewEditButton: "text-lime-300",
+                },
+              }}
+            />
+          </div>
+
           <div className="mt-6 flex flex-col items-center gap-3 text-sm">
             <Link
               to="/team/forgot-password"

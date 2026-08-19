@@ -4,7 +4,7 @@ import { useTeamAuth } from "@/hooks/use-team-auth";
 /**
  * Guard for team dashboard routes. Completely independent from Academy auth.
  * Redirects unauthenticated team users to /team/login.
- * Uses a simple boolean flag to avoid redirect loops.
+ * Uses Clerk for authentication — no redirect loops.
  */
 export function RequireTeamAuth({
   children,
@@ -14,6 +14,7 @@ export function RequireTeamAuth({
   const { isAuthenticated, isLoading } = useTeamAuth();
   const location = useLocation();
 
+  // Show loading while auth state is resolving (Clerk + team session)
   if (isLoading) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-background">
@@ -28,7 +29,7 @@ export function RequireTeamAuth({
   }
 
   if (!isAuthenticated) {
-    // Only redirect if we're not already on the login page
+    // Never redirect if already on the login page — prevents loops
     if (location.pathname === "/team/login") {
       return <>{children}</>;
     }

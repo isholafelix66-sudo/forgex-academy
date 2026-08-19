@@ -620,3 +620,71 @@ export const getTeamCategories = query({
     return TEAM_CATEGORIES;
   },
 });
+
+// ---------------------------------------------------------------------------
+// Clerk-based team authentication
+// ---------------------------------------------------------------------------
+
+/**
+ * Resolve a Clerk-authenticated user to a team account.
+ * Called after Clerk sign-in to bridge Clerk auth → existing team account.
+ * Returns a session token that the existing workspace functions accept.
+ */
+export const clerkAuthTeamLogin = mutation({
+  args: {},
+  handler: async (ctx) => {
+    try {
+      const identity = await ctx.auth.getUserIdentity();
+      if (!identity) {
+        throw new Error("Not authenticated. Please sign in first.");
+      }
+
+      // Find team account by email (Clerk email → team account email)
+      const email = (identity.email ?? "").toLowerCase().trim();
+      if (!email) {
+        throw new Error("No email found on your account. Please contact support.");
+      }
+
+      let account = await ctx.db
+        .query("teamAccounts")
+        .withIndex("by_email", (q) => q.eq("email", email))
+        .unique();
+
+      if (!account) {
+        throw new Error(
+          "No team account found for this email. Please apply to join a team first.",
+        );
+      }
+
+      if (account.status === "pending") {
+        throw new Error("Your account is pending admin approval. Please wait for activation.");
+      }
+
+      if (account.status === "suspended") {
+        throw new Error("Your account has been suspended. Please contact the administrator.");
+      }
+
+      // Map Clerk ID to team account for future lookups
+      if (!account.clerkId) {
+        await ctx.db.patch(account._id, { clerkId: identity.subject });
+      }
+
+      // Create a session token (same format as existing system)
+      const token = await createSession(ctx, account._id);
+
+      await ctx.db.patch(account._id, { lastLoginAt: Date.now() });
+
+      return {
+        token,
+        teamId: account.teamId,
+        name: account.name,
+        role: account.role,
+        teamSlug: account.teamSlug,
+        mustChangePassword: account.mustChangePassword,
+      };
+    } catch (err) {
+      if (err instanceof Error) throw err;
+      throw new Error("Team authentication failed. Please try again.");
+    }
+  },
+});
