@@ -1,24 +1,152 @@
-import { Suspense } from "react";
-import { SignIn } from "@clerk/react";
+import { Suspense, useEffect, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router";
+import { useMutation } from "convex/react";
+import { api } from "@/convex/_generated/api";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import {
+  InputOTP,
+  InputOTPGroup,
+  InputOTPSlot,
+} from "@/components/ui/input-otp";
+import { useAuth } from "@/hooks/use-auth";
 import { PublicNav } from "@/components/site/PublicNav";
 import { Footer } from "@/components/site/Footer";
 import { BackgroundFX } from "@/components/site/PageShell";
 import logo from "@/assets/logo.svg";
-import { Flame } from "lucide-react";
+import {
+  ArrowLeft,
+  ArrowRight,
+  Flame,
+  KeyRound,
+  Loader2,
+  Mail,
+  ShieldCheck,
+  UserPlus,
+} from "lucide-react";
 import { resolveRedirectAfterAuth } from "@/lib/auth-redirect";
+import { friendlyError } from "@/lib/errors";
 
 interface AuthProps {
   redirectAfterAuth?: string;
 }
 
+type Mode = "signin" | "signup" | "reset";
+
 function Auth({ redirectAfterAuth }: AuthProps = {}) {
+  const { isLoading: authLoading, isAuthenticated, user, signIn } = useAuth();
+  const initializeUser = useMutation(api.users.initializeUser);
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const redirect = resolveRedirectAfterAuth(
     searchParams.get("returnTo"),
     redirectAfterAuth,
   );
+
+  // Signing up through the Become-a-Tutor flow creates a TUTOR account
+  // (pending verification), never a student account. The account's role is
+  // the source of truth everywhere else, so it must be right from day one.
+  const intendedRole =
+    redirect.startsWith("/become-tutor") ? ("tutor" as const) : undefined;
+
+  const initialMode: Mode =
+    searchParams.get("mode") === "signup" ? "signup" : "signin";
+  const [mode, setMode] = useState<Mode>(initialMode);
+  const [email, setEmail] = useState("");
+  const [name, setName] = useState("");
+  const [step, setStep] = useState<"form" | "code">("form");
+  const [otp, setOtp] = useState("");
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [info, setInfo] = useState<string | null>(null);
+
+  // Onboarding: once signed in, initialize the account (role + name). The
+  // role is assigned once and never overwritten, so a tutor account stays a
+  // tutor account no matter how often they sign in afterwards.
+  useEffect(() => {
+    if (!authLoading && isAuthenticated && user && !user.onboarded) {
+      const pendingName = sessionStorage.getItem("fx-pending-name") ?? undefined;
+      void initializeUser({ name: pendingName, intendedRole }).catch(() => {});
+      sessionStorage.removeItem("fx-pending-name");
+    }
+  }, [authLoading, isAuthenticated, user, initializeUser, intendedRole]);
+
+  // Role-aware landing after sign-in. The account's role is the source of
+  // truth: a tutor ALWAYS goes to the tutor dashboard (the verification gate
+  // shows its own screen until an admin verifies), an admin to the admin
+  // area, and only students land on the student dashboard. A tutor account
+  // is never pushed into the student portal.
+  useEffect(() => {
+    if (!authLoading && isAuthenticated) {
+      const role = user?.role;
+      const dest =
+        role === "tutor"
+          ? "/tutor"
+          : role === "admin"
+            ? "/admin"
+            : redirect;
+      navigate(dest);
+    }
+  }, [authLoading, isAuthenticated, navigate, redirect, user]);
+
+  const sendCode = async (e?: React.FormEvent) => {
+    e?.preventDefault();
+    setIsLoading(true);
+    setError(null);
+    setInfo(null);
+    try {
+      const formData = new FormData();
+      formData.set("email", email);
+      if (mode === "signup" && name.trim()) {
+        sessionStorage.setItem("fx-pending-name", name.trim());
+      }
+      await signIn("email-otp", formData);
+      setStep("code");
+      setInfo(
+        mode === "reset"
+          ? "If that email has an account, a recovery code is on its way."
+          : `We sent a 6-digit code to ${email}.`,
+      );
+      setIsLoading(false);
+    } catch (err) {
+      console.error("Email sign-in error:", err);
+      setError(
+        friendlyError(err, "Failed to send code. Try again."),
+      );
+      setIsLoading(false);
+    }
+  };
+
+  const verifyCode = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsLoading(true);
+    setError(null);
+    try {
+      const formData = new FormData();
+      formData.set("email", email);
+      formData.set("code", otp);
+      await signIn("email-otp", formData);
+      // navigation happens via the auth effect above
+    } catch (err) {
+      console.error("OTP verification error:", err);
+      setError("That code isn't right. Double-check and try again.");
+      setOtp("");
+      setIsLoading(false);
+    }
+  };
+
+  const resetFlow = () => {
+    setMode("reset");
+    setStep("form");
+    setError(null);
+  };
+
+  const switchMode = (m: Mode) => {
+    setMode(m);
+    setStep("form");
+    setError(null);
+    setOtp("");
+  };
 
   return (
     <div className="relative flex min-h-screen flex-col">
@@ -33,39 +161,196 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
               className="mx-auto size-14 rounded-2xl shadow-lg"
             />
             <h1 className="font-display mt-4 text-2xl font-bold tracking-tight">
-              Welcome to ForgeX Academy
+              {mode === "signup"
+                ? "Create your free account"
+                : mode === "reset"
+                  ? "Reset access to your account"
+                  : "Welcome back"}
             </h1>
             <p className="mt-1.5 text-sm text-muted-foreground">
-              Sign in to continue your learning path, or create a free account.
+              {mode === "signup"
+                ? "Start learning, building and earning certificates."
+                : mode === "reset"
+                  ? "We'll email you a code to regain access."
+                  : "Sign in to continue your learning path."}
             </p>
           </div>
 
-          <div className="clerk-auth-wrapper rounded-3xl border border-white/10 bg-card p-6 shadow-2xl sm:p-8 [&>.cl-rootBox]:!bg-transparent [&>.cl-card]:!bg-transparent [&>.cl-card]:!shadow-none [&>.cl-card]:!border-none [&>.cl-headerTitle]:!text-foreground [&>.cl-headerSubtitle]:!text-muted-foreground [&>.cl-formButtonPrimary]:!bg-lime-400 [&>.cl-formButtonPrimary]:!text-black [&>.cl-formButtonPrimary:hover]:!bg-lime-300 [&>.cl-footerActionLink]:!text-lime-300 [&>.cl-dividerLine]:!bg-white/10 [&>.cl-dividerText]:!text-muted-foreground [&>.cl-formFieldInput]:!bg-black/20 [&>.cl-formFieldInput]:!border-white/10 [&>.cl-formFieldLabel]:!text-foreground">
-            <SignIn
-              routing="path"
-              path="/auth"
-              fallbackRedirectUrl={redirect}
-              appearance={{
-                elements: {
-                  rootBox: "w-full",
-                  card: "w-full bg-transparent shadow-none border-none",
-                  headerTitle: "text-foreground font-display text-lg font-bold",
-                  headerSubtitle: "text-muted-foreground text-sm",
-                  formButtonPrimary:
-                    "bg-lime-400 text-black hover:bg-lime-300 font-semibold !shadow-none",
-                  formFieldInput:
-                    "bg-black/20 border-white/10 text-foreground",
-                  formFieldLabel: "text-foreground text-sm font-medium",
-                  footerActionLink: "text-lime-300 hover:text-lime-200",
-                  dividerLine: "bg-white/10",
-                  dividerText: "text-muted-foreground",
-                  socialButtonsBlockButton:
-                    "border-white/10 bg-black/20 text-foreground hover:bg-white/5",
-                  socialButtonsBlockButtonText: "text-foreground font-medium",
-                  identityPreviewEditButton: "text-lime-300",
-                },
-              }}
-            />
+          <div className="rounded-3xl border border-white/10 bg-card p-6 shadow-2xl sm:p-8">
+            {step === "form" ? (
+              <form onSubmit={sendCode} className="space-y-4">
+                {mode === "signup" && (
+                  <div>
+                    <label className="mb-1.5 block text-sm font-medium">Full name</label>
+                    <div className="relative">
+                      <UserPlus className="absolute left-3.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+                      <Input
+                        value={name}
+                        onChange={(e) => setName(e.target.value)}
+                        placeholder="Ada Lovelace"
+                        className="h-11 border-white/10 bg-black/20 pl-10"
+                      />
+                    </div>
+                  </div>
+                )}
+                <div>
+                  <label className="mb-1.5 block text-sm font-medium">Email address</label>
+                  <div className="relative">
+                    <Mail className="absolute left-3.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+                    <Input
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                      placeholder="name@example.com"
+                      type="email"
+                      required
+                      className="h-11 border-white/10 bg-black/20 pl-10"
+                    />
+                  </div>
+                </div>
+
+                {error && (
+                  <p className="rounded-xl border border-rose-400/25 bg-rose-400/8 p-3 text-sm text-rose-300">
+                    {error}
+                  </p>
+                )}
+
+                <Button
+                  type="submit"
+                  disabled={isLoading || !email}
+                  className="w-full gap-2 bg-lime-400 font-semibold text-black hover:bg-lime-300 glow-lime-soft"
+                >
+                  {isLoading ? (
+                    <Loader2 className="size-4 animate-spin" />
+                  ) : (
+                    <>
+                      {mode === "signup" ? "Create account" : "Send me a code"}
+                      <ArrowRight className="size-4" />
+                    </>
+                  )}
+                </Button>
+
+                {mode === "reset" ? (
+                  <button
+                    type="button"
+                    onClick={() => switchMode("signin")}
+                    className="flex w-full items-center justify-center gap-1.5 text-sm text-muted-foreground hover:text-lime-300"
+                  >
+                    <ArrowLeft className="size-3.5" /> Back to sign in
+                  </button>
+                ) : (
+                  <div className="flex items-center justify-between text-sm">
+                    {mode === "signin" ? (
+                      <button
+                        type="button"
+                        onClick={() => switchMode("signup")}
+                        className="font-medium text-lime-300 hover:underline"
+                      >
+                        New here? Sign up
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => switchMode("signin")}
+                        className="font-medium text-lime-300 hover:underline"
+                      >
+                        Already have an account?
+                      </button>
+                    )}
+                  </div>
+                )}
+
+                {mode !== "reset" && (
+                  <button
+                    type="button"
+                    onClick={resetFlow}
+                    className="flex w-full items-center justify-center gap-1.5 text-xs text-muted-foreground hover:text-lime-300"
+                  >
+                    <KeyRound className="size-3" /> Forgot your password? Reset access
+                  </button>
+                )}
+              </form>
+            ) : (
+              <form onSubmit={verifyCode} className="space-y-4">
+                <div className="rounded-2xl border border-lime-400/25 bg-lime-400/8 p-4 text-center">
+                  <ShieldCheck className="mx-auto size-6 text-lime-300" />
+                  <p className="mt-2 text-sm font-medium">
+                    {mode === "signup"
+                      ? "Verify your email"
+                      : mode === "reset"
+                        ? "Account recovery"
+                        : "Check your email"}
+                  </p>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    {info ?? `Enter the 6-digit code sent to ${email}`}
+                  </p>
+                </div>
+
+                <input type="hidden" name="email" value={email} />
+                <input type="hidden" name="code" value={otp} />
+
+                <div className="flex justify-center py-2">
+                  <InputOTP
+                    value={otp}
+                    onChange={setOtp}
+                    maxLength={6}
+                    disabled={isLoading}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" && otp.length === 6 && !isLoading) {
+                        (e.target as HTMLElement).closest("form")?.requestSubmit();
+                      }
+                    }}
+                  >
+                    <InputOTPGroup>
+                      {Array.from({ length: 6 }).map((_, i) => (
+                        <InputOTPSlot key={i} index={i} />
+                      ))}
+                    </InputOTPGroup>
+                  </InputOTP>
+                </div>
+
+                {error && (
+                  <p className="rounded-xl border border-rose-400/25 bg-rose-400/8 p-3 text-center text-sm text-rose-300">
+                    {error}
+                  </p>
+                )}
+
+                <Button
+                  type="submit"
+                  disabled={isLoading || otp.length !== 6}
+                  className="w-full gap-2 bg-lime-400 font-semibold text-black hover:bg-lime-300"
+                >
+                  {isLoading ? (
+                    <Loader2 className="size-4 animate-spin" />
+                  ) : (
+                    <>
+                      Verify & continue <ArrowRight className="size-4" />
+                    </>
+                  )}
+                </Button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setStep("form");
+                    setError(null);
+                    setOtp("");
+                  }}
+                  className="w-full text-center text-sm text-muted-foreground hover:text-lime-300"
+                >
+                  Use a different email
+                </button>
+                <p className="text-center text-xs text-muted-foreground">
+                  Didn't receive it?{" "}
+                  <button
+                    type="button"
+                    onClick={() => void sendCode()}
+                    className="font-medium text-lime-300 hover:underline"
+                  >
+                    Resend code
+                  </button>
+                </p>
+              </form>
+            )}
           </div>
 
           <p className="mt-4 flex items-center justify-center gap-1.5 text-xs text-muted-foreground">
