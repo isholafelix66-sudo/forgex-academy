@@ -44,8 +44,7 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
             <SignIn
               routing="path"
               path="/auth"
-              afterSignInUrl={redirect}
-              afterSignUpUrl={redirect}
+              fallbackRedirectUrl={redirect}
               appearance={{
                 elements: {
                   rootBox: "w-full",

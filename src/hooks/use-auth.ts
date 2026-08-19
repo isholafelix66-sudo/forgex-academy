@@ -1,11 +1,11 @@
 import { api } from "@/convex/_generated/api";
 import { useConvexAuth, useQuery } from "convex/react";
-import { useAuth as useClerkAuth, useSignIn, useSignOut } from "@clerk/react";
+import { useClerk } from "@clerk/react";
 
 export function useAuth() {
   const { isLoading: isAuthLoading, isAuthenticated } = useConvexAuth();
   const user = useQuery(api.users.currentUser);
-  const { signOut: clerkSignOut } = useSignOut();
+  const clerk = useClerk();
 
   // Derive isLoading directly from the dependencies instead of managing separate state
   const isLoading = isAuthLoading || user === undefined;
@@ -24,6 +24,6 @@ export function useAuth() {
     isAuthenticated,
     user,
     signIn,
-    signOut: clerkSignOut,
+    signOut: () => clerk.signOut(),
   };
 }
