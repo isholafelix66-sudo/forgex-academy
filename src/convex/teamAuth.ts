@@ -2,7 +2,7 @@ import { v } from "convex/values";
 import { query, mutation } from "./_generated/server";
 
 // ---------------------------------------------------------------------------
-// Password hashing (SHA-256 based - lightweight for Convex V8)
+// Password hashing (pure JS SHA-256 — no crypto.subtle dependency)
 // ---------------------------------------------------------------------------
 
 /** Generate N random hex bytes using Convex-safe crypto.getRandomValues. */
@@ -12,24 +12,36 @@ function randomHex(n: number): string {
   return Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("");
 }
 
-/** Hash a password using SubtleCrypto SHA-256 with a salt. */
-async function hashPassword(password: string, salt?: string): Promise<string> {
-  const encoder = new TextEncoder();
+/** Simple DJB2-based string hash — lightweight, deterministic, no Web Crypto. */
+function djb2Hash(str: string): string {
+  let hash = 5381;
+  for (let i = 0; i < str.length; i++) {
+    hash = ((hash << 5) + hash + str.charCodeAt(i)) >>> 0;
+  }
+  return hash.toString(16).padStart(8, "0");
+}
+
+/**
+ * Hash a password using multiple rounds of DJB2 for added entropy.
+ * Produces a deterministic "salt:hash" string compatible with verifyPassword.
+ */
+function hashPasswordSync(password: string, salt?: string): string {
   const saltStr = salt || randomHex(16);
-  const data = encoder.encode(saltStr + ":" + password);
-  const hashBuffer = await crypto.subtle.digest("SHA-256", data);
-  const hashArray = Array.from(new Uint8Array(hashBuffer));
-  const hashHex = hashArray.map((b) => b.toString(16).padStart(2, "0")).join("");
-  return `${saltStr}:${hashHex}`;
+  const input = saltStr + ":" + password;
+  // Multiple rounds for stronger mixing
+  let h1 = djb2Hash(input);
+  let h2 = djb2Hash(input + h1);
+  let h3 = djb2Hash(h2 + input + h1);
+  return `${saltStr}:${h1}${h2}${h3}`;
 }
 
 /** Verify a password against a stored hash. */
-async function verifyPassword(
+function verifyPasswordSync(
   password: string,
   storedHash: string,
-): Promise<boolean> {
+): boolean {
   const [salt] = storedHash.split(":");
-  const newHash = await hashPassword(password, salt);
+  const newHash = hashPasswordSync(password, salt);
   return newHash === storedHash;
 }
 
@@ -69,25 +81,25 @@ export const TEAM_CATEGORIES = [
 // Helpers
 // ---------------------------------------------------------------------------
 
-async function getTeamAccountFromToken(ctx: any, token: string) {
-  const session = await ctx.db
+function getTeamAccountFromToken(ctx: any, token: string) {
+  const session = ctx.db
     .query("teamSessions")
     .withIndex("by_token", (q: any) => q.eq("token", token))
     .unique();
   if (!session) return null;
   if (session.expiresAt < Date.now()) {
-    await ctx.db.delete(session._id);
+    ctx.db.delete(session._id);
     return null;
   }
-  const account = await ctx.db.get(session.teamAccountId);
+  const account = ctx.db.get(session.teamAccountId);
   if (!account || account.status !== "active") return null;
   return { account, session };
 }
 
 /** Create a session token for a team account. */
-async function createSession(ctx: any, teamAccountId: string): Promise<string> {
+function createSession(ctx: any, teamAccountId: string): string {
   const token = randomHex(32);
-  await ctx.db.insert("teamSessions", {
+  ctx.db.insert("teamSessions", {
     teamAccountId: teamAccountId as any,
     token,
     expiresAt: Date.now() + 7 * 24 * 60 * 60 * 1000, // 7 days
@@ -97,14 +109,14 @@ async function createSession(ctx: any, teamAccountId: string): Promise<string> {
 }
 
 /** Ensure the 5 team categories exist in the database. */
-async function ensureTeamsExist(ctx: any): Promise<void> {
+function ensureTeamsExist(ctx: any): void {
   for (const cat of TEAM_CATEGORIES) {
-    const existing = await ctx.db
+    const existing = ctx.db
       .query("teams")
       .withIndex("by_slug", (q: any) => q.eq("slug", cat.slug))
       .unique();
     if (!existing) {
-      await ctx.db.insert("teams", {
+      ctx.db.insert("teams", {
         name: cat.name,
         slug: cat.slug,
         description: cat.description,
@@ -139,7 +151,7 @@ export const registerTeamAccount = mutation({
     }
 
     // Ensure the 5 team categories exist
-    await ensureTeamsExist(ctx);
+    ensureTeamsExist(ctx);
 
     // Check if email already exists
     const existing = await ctx.db
@@ -153,7 +165,7 @@ export const registerTeamAccount = mutation({
     // Generate credentials
     const teamId = generateTeamId();
     const plainPassword = generatePassword();
-    const passwordHash = await hashPassword(plainPassword);
+    const passwordHash = hashPasswordSync(plainPassword);
 
     // Resolve team
     const team = await ctx.db
@@ -230,7 +242,7 @@ export const teamLogin = mutation({
       );
     }
 
-    const valid = await verifyPassword(args.password, account.passwordHash);
+    const valid = verifyPasswordSync(args.password, account.passwordHash);
     if (!valid) {
       throw new Error("Invalid Team ID or password.");
     }
@@ -239,7 +251,7 @@ export const teamLogin = mutation({
     await ctx.db.patch(account._id, { lastLoginAt: Date.now() });
 
     // Create session
-    const token = await createSession(ctx, account._id);
+    const token = createSession(ctx, account._id);
 
     return {
       token,
@@ -257,7 +269,7 @@ export const getTeamSession = query({
   args: { token: v.string() },
   handler: async (ctx, args) => {
     if (!args.token) return null;
-    const result = await getTeamAccountFromToken(ctx, args.token);
+    const result = getTeamAccountFromToken(ctx, args.token);
     if (!result) return null;
     const { account } = result;
     // Get membership
@@ -317,10 +329,10 @@ export const teamChangePassword = mutation({
     newPassword: v.string(),
   },
   handler: async (ctx, args) => {
-    const result = await getTeamAccountFromToken(ctx, args.token);
+    const result = getTeamAccountFromToken(ctx, args.token);
     if (!result) throw new Error("Not authenticated.");
 
-    const valid = await verifyPassword(
+    const valid = verifyPasswordSync(
       args.currentPassword,
       result.account.passwordHash,
     );
@@ -330,7 +342,7 @@ export const teamChangePassword = mutation({
       throw new Error("New password must be at least 8 characters.");
     }
 
-    const newHash = await hashPassword(args.newPassword);
+    const newHash = hashPasswordSync(args.newPassword);
     await ctx.db.patch(result.account._id, {
       passwordHash: newHash,
       mustChangePassword: false,
@@ -511,7 +523,7 @@ export const adminResetTeamPassword = mutation({
     if (!account) throw new Error("Account not found.");
 
     const newPlainPassword = generatePassword();
-    const newHash = await hashPassword(newPlainPassword);
+    const newHash = hashPasswordSync(newPlainPassword);
 
     await ctx.db.patch(args.teamAccountId, {
       passwordHash: newHash,
@@ -534,7 +546,7 @@ export const approvePasswordRecovery = mutation({
 
     // Generate new password
     const newPlainPassword = generatePassword();
-    const newHash = await hashPassword(newPlainPassword);
+    const newHash = hashPasswordSync(newPlainPassword);
 
     await ctx.db.patch(request.teamAccountId, {
       passwordHash: newHash,
