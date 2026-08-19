@@ -2,13 +2,20 @@ import { v } from "convex/values";
 import { query, mutation } from "./_generated/server";
 
 // ---------------------------------------------------------------------------
-// Password hashing (SHA-256 based - lightweight for Convex)
+// Password hashing (SHA-256 based - lightweight for Convex V8)
 // ---------------------------------------------------------------------------
+
+/** Generate N random hex bytes using Convex-safe crypto.getRandomValues. */
+function randomHex(n: number): string {
+  const bytes = new Uint8Array(n);
+  crypto.getRandomValues(bytes);
+  return Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("");
+}
 
 /** Hash a password using SubtleCrypto SHA-256 with a salt. */
 async function hashPassword(password: string, salt?: string): Promise<string> {
   const encoder = new TextEncoder();
-  const saltStr = salt || crypto.randomUUID().slice(0, 16);
+  const saltStr = salt || randomHex(16);
   const data = encoder.encode(saltStr + ":" + password);
   const hashBuffer = await crypto.subtle.digest("SHA-256", data);
   const hashArray = Array.from(new Uint8Array(hashBuffer));
@@ -47,6 +54,18 @@ function generatePassword(): string {
 }
 
 // ---------------------------------------------------------------------------
+// Team categories
+// ---------------------------------------------------------------------------
+
+export const TEAM_CATEGORIES = [
+  { name: "Academic Team", slug: "academic", description: "Academic operations and quality oversight." },
+  { name: "Tutor Support Team", slug: "tutor-support", description: "Tutor assistance and onboarding support." },
+  { name: "Student Support Team", slug: "student-support", description: "Student assistance and support services." },
+  { name: "Content Team", slug: "content", description: "Content creation, management and publishing." },
+  { name: "AI Team", slug: "ai", description: "AI tools, workflows, resources and AI operations." },
+] as const;
+
+// ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
 
@@ -67,7 +86,7 @@ async function getTeamAccountFromToken(ctx: any, token: string) {
 
 /** Create a session token for a team account. */
 async function createSession(ctx: any, teamAccountId: string): Promise<string> {
-  const token = crypto.randomUUID();
+  const token = randomHex(32);
   await ctx.db.insert("teamSessions", {
     teamAccountId: teamAccountId as any,
     token,
@@ -75,6 +94,27 @@ async function createSession(ctx: any, teamAccountId: string): Promise<string> {
     createdAt: Date.now(),
   });
   return token;
+}
+
+/** Ensure the 5 team categories exist in the database. */
+async function ensureTeamsExist(ctx: any): Promise<void> {
+  for (const cat of TEAM_CATEGORIES) {
+    const existing = await ctx.db
+      .query("teams")
+      .withIndex("by_slug", (q: any) => q.eq("slug", cat.slug))
+      .unique();
+    if (!existing) {
+      await ctx.db.insert("teams", {
+        name: cat.name,
+        slug: cat.slug,
+        description: cat.description,
+        memberCount: 0,
+        activeWorkCount: 0,
+        status: "active",
+        createdAt: Date.now(),
+      });
+    }
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -88,14 +128,23 @@ export const registerTeamAccount = mutation({
     email: v.string(),
     phone: v.optional(v.string()),
     skill: v.string(),
-    preferredTeamId: v.optional(v.string()),
+    teamCategory: v.string(), // slug: "academic" | "tutor-support" | "student-support" | "content" | "ai"
     introduction: v.string(),
   },
   handler: async (ctx, args) => {
+    // Validate team category
+    const validSlugs: string[] = TEAM_CATEGORIES.map((c) => c.slug);
+    if (!validSlugs.includes(args.teamCategory)) {
+      throw new Error("Invalid team category. Please select a valid team.");
+    }
+
+    // Ensure the 5 team categories exist
+    await ensureTeamsExist(ctx);
+
     // Check if email already exists
     const existing = await ctx.db
       .query("teamAccounts")
-      .withIndex("by_email", (q) => q.eq("email", args.email.toLowerCase()))
+      .withIndex("by_email", (q) => q.eq("email", args.email.toLowerCase().trim()))
       .unique();
     if (existing) {
       throw new Error("An account with this email already exists.");
@@ -106,6 +155,12 @@ export const registerTeamAccount = mutation({
     const plainPassword = generatePassword();
     const passwordHash = await hashPassword(plainPassword);
 
+    // Resolve team
+    const team = await ctx.db
+      .query("teams")
+      .withIndex("by_slug", (q) => q.eq("slug", args.teamCategory))
+      .unique();
+
     // Create team account (pending status until admin approves)
     const accountId = await ctx.db.insert("teamAccounts", {
       teamId,
@@ -115,7 +170,7 @@ export const registerTeamAccount = mutation({
       skill: args.skill.trim(),
       introduction: args.introduction.trim(),
       passwordHash,
-      teamSlug: undefined,
+      teamSlug: args.teamCategory,
       role: "teamMember",
       status: "pending",
       mustChangePassword: true,
@@ -129,7 +184,7 @@ export const registerTeamAccount = mutation({
       email: args.email.toLowerCase().trim(),
       phone: args.phone?.trim(),
       skill: args.skill.trim(),
-      preferredTeamId: args.preferredTeamId as any,
+      preferredTeamId: team?._id as any,
       introduction: args.introduction.trim(),
       password: passwordHash,
       status: "pending",
@@ -140,6 +195,7 @@ export const registerTeamAccount = mutation({
       teamId,
       password: plainPassword,
       accountId,
+      teamCategory: args.teamCategory,
     };
   },
 });
@@ -311,7 +367,7 @@ export const teamRequestPasswordRecovery = mutation({
         q.eq("teamAccountId", account._id),
       )
       .collect();
-    const pending = existing.find((r) => r.status === "pending");
+    const pending = existing.find((r: any) => r.status === "pending");
     if (pending) {
       throw new Error(
         "You already have a pending recovery request. Please wait for admin review.",
@@ -387,17 +443,26 @@ export const approveTeamApplication = mutation({
       .unique();
 
     if (team && app.teamAccountId) {
-      await ctx.db.insert("teamMemberships", {
-        teamAccountId: app.teamAccountId,
-        teamId: team._id,
-        role: args.role,
-        status: "active",
-        joinedAt: Date.now(),
-      });
-      // Update team member count
-      await ctx.db.patch(team._id, {
-        memberCount: team.memberCount + 1,
-      });
+      // Check for existing membership
+      const existingMembership = await ctx.db
+        .query("teamMemberships")
+        .withIndex("by_team_account", (q) =>
+          q.eq("teamAccountId", app.teamAccountId!),
+        )
+        .unique();
+      if (!existingMembership) {
+        await ctx.db.insert("teamMemberships", {
+          teamAccountId: app.teamAccountId,
+          teamId: team._id,
+          role: args.role,
+          status: "active",
+          joinedAt: Date.now(),
+        });
+        // Update team member count
+        await ctx.db.patch(team._id, {
+          memberCount: team.memberCount + 1,
+        });
+      }
     }
 
     // Update application status
@@ -558,5 +623,13 @@ export const createTeam = mutation({
       status: "active",
       createdAt: Date.now(),
     });
+  },
+});
+
+/** Public: get available team categories. */
+export const getTeamCategories = query({
+  args: {},
+  handler: async () => {
+    return TEAM_CATEGORIES;
   },
 });

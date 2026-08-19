@@ -1,10 +1,10 @@
-import { useEffect } from "react";
 import { Navigate, useLocation } from "react-router";
 import { useTeamAuth } from "@/hooks/use-team-auth";
 
 /**
  * Guard for team dashboard routes. Completely independent from Academy auth.
  * Redirects unauthenticated team users to /team/login.
+ * Uses a simple boolean flag to avoid redirect loops.
  */
 export function RequireTeamAuth({
   children,
@@ -28,6 +28,10 @@ export function RequireTeamAuth({
   }
 
   if (!isAuthenticated) {
+    // Only redirect if we're not already on the login page
+    if (location.pathname === "/team/login") {
+      return <>{children}</>;
+    }
     return (
       <Navigate
         to={`/team/login?returnTo=${encodeURIComponent(location.pathname)}`}

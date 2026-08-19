@@ -9,13 +9,21 @@ import {
   Loader2,
   Send,
   Users,
-  AlertCircle,
   Copy,
   KeyRound,
+  ChevronDown,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+
+const TEAM_OPTIONS = [
+  { slug: "academic", label: "Academic Team", desc: "Academic operations and quality" },
+  { slug: "tutor-support", label: "Tutor Support Team", desc: "Tutor assistance and onboarding" },
+  { slug: "student-support", label: "Student Support Team", desc: "Student assistance and support" },
+  { slug: "content", label: "Content Team", desc: "Content creation and publishing" },
+  { slug: "ai", label: "AI Team", desc: "AI tools and resources" },
+] as const;
 
 export default function TeamRegister() {
   const submitApp = useMutation(api.teamAuth.registerTeamAccount);
@@ -25,7 +33,7 @@ export default function TeamRegister() {
     email: "",
     phone: "",
     skill: "",
-    preferredTeamId: "",
+    teamCategory: "",
     introduction: "",
   });
   const [saving, setSaving] = useState(false);
@@ -33,8 +41,11 @@ export default function TeamRegister() {
   const [credentials, setCredentials] = useState<{
     teamId: string;
     password: string;
+    teamCategory: string;
   } | null>(null);
   const [copied, setCopied] = useState(false);
+
+  const selectedTeam = TEAM_OPTIONS.find((t) => t.slug === form.teamCategory);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -42,9 +53,11 @@ export default function TeamRegister() {
       !form.name.trim() ||
       !form.email.trim() ||
       !form.skill.trim() ||
-      !form.introduction.trim()
-    )
+      !form.introduction.trim() ||
+      !form.teamCategory
+    ) {
       return;
+    }
     setSaving(true);
     setError(null);
     try {
@@ -53,10 +66,14 @@ export default function TeamRegister() {
         email: form.email.trim(),
         phone: form.phone.trim() || undefined,
         skill: form.skill.trim(),
-        preferredTeamId: form.preferredTeamId || undefined,
+        teamCategory: form.teamCategory,
         introduction: form.introduction.trim(),
       });
-      setCredentials({ teamId: result.teamId, password: result.password });
+      setCredentials({
+        teamId: result.teamId,
+        password: result.password,
+        teamCategory: result.teamCategory,
+      });
     } catch (err) {
       setError(
         err instanceof Error
@@ -77,8 +94,8 @@ export default function TeamRegister() {
     setTimeout(() => setCopied(false), 2000);
   };
 
-  // Show credentials after successful registration
   if (credentials) {
+    const teamLabel = TEAM_OPTIONS.find((t) => t.slug === credentials.teamCategory)?.label ?? credentials.teamCategory;
     return (
       <div className="min-h-screen bg-background flex items-center justify-center px-6">
         <motion.div
@@ -93,11 +110,10 @@ export default function TeamRegister() {
             Account Created Successfully
           </h1>
           <p className="mt-3 text-sm leading-relaxed text-white/50">
-            Your team account has been created and is pending admin approval.
+            Your {teamLabel} account has been created and is pending admin approval.
             Save your credentials below — you will need them to log in.
           </p>
 
-          {/* Credentials display */}
           <div className="mt-6 rounded-2xl border border-lime-400/20 bg-lime-400/5 p-5 text-left">
             <div className="mb-3 flex items-center gap-2 text-sm font-semibold text-lime-400">
               <KeyRound className="size-4" />
@@ -114,6 +130,12 @@ export default function TeamRegister() {
                 <p className="text-xs font-medium text-white/40">Password</p>
                 <p className="font-mono text-lg font-bold text-lime-300">
                   {credentials.password}
+                </p>
+              </div>
+              <div>
+                <p className="text-xs font-medium text-white/40">Team</p>
+                <p className="text-sm font-semibold text-white">
+                  {teamLabel}
                 </p>
               </div>
             </div>
@@ -160,7 +182,6 @@ export default function TeamRegister() {
 
   return (
     <div className="min-h-screen bg-background">
-      {/* Header */}
       <header className="border-b border-white/5 bg-black/40 backdrop-blur-xl">
         <div className="mx-auto flex max-w-3xl items-center justify-between px-6 py-4">
           <Link
@@ -247,7 +268,43 @@ export default function TeamRegister() {
 
             <div className="rounded-2xl border border-white/5 bg-card p-6 space-y-4">
               <h2 className="text-sm font-semibold text-white/80">
-                Team Preferences
+                Team Selection
+              </h2>
+              <div>
+                <label className="mb-1.5 block text-xs font-medium text-white/50">
+                  Select Your Team *
+                </label>
+                <div className="relative">
+                  <select
+                    value={form.teamCategory}
+                    onChange={(e) =>
+                      setForm((f) => ({ ...f, teamCategory: e.target.value }))
+                    }
+                    className="w-full appearance-none rounded-xl border border-white/10 bg-white/5 px-4 py-3 pr-10 text-sm text-white placeholder:text-white/30 focus:border-lime-400/40 focus:outline-none focus:ring-1 focus:ring-lime-400/20"
+                    required
+                  >
+                    <option value="" className="bg-card text-white/40">
+                      Choose a team...
+                    </option>
+                    {TEAM_OPTIONS.map((t) => (
+                      <option key={t.slug} value={t.slug} className="bg-card text-white">
+                        {t.label} — {t.desc}
+                      </option>
+                    ))}
+                  </select>
+                  <ChevronDown className="pointer-events-none absolute right-3 top-1/2 size-4 -translate-y-1/2 text-white/40" />
+                </div>
+                {selectedTeam && (
+                  <p className="mt-2 text-xs text-white/30">
+                    {selectedTeam.desc}
+                  </p>
+                )}
+              </div>
+            </div>
+
+            <div className="rounded-2xl border border-white/5 bg-card p-6 space-y-4">
+              <h2 className="text-sm font-semibold text-white/80">
+                Your Skills
               </h2>
               <div>
                 <label className="mb-1.5 block text-xs font-medium text-white/50">
@@ -296,7 +353,8 @@ export default function TeamRegister() {
                 !form.name.trim() ||
                 !form.email.trim() ||
                 !form.skill.trim() ||
-                !form.introduction.trim()
+                !form.introduction.trim() ||
+                !form.teamCategory
               }
               className="w-full bg-lime-400 text-black hover:bg-lime-300"
             >

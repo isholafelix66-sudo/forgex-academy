@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useQuery, useMutation } from "convex/react";
 import { api } from "@/convex/_generated/api";
 
@@ -20,18 +20,22 @@ function clearToken() {
 }
 
 export function useTeamAuth() {
-  const [token, setToken] = useState<string>(getStoredToken);
+  const [token, setToken] = useState<string>("");
   const [initialized, setInitialized] = useState(false);
+  const mountedRef = useRef(true);
+
+  // Read from localStorage only once, after mount
+  useEffect(() => {
+    setToken(getStoredToken());
+    setInitialized(true);
+    return () => { mountedRef.current = false; };
+  }, []);
 
   const session = useQuery(
     api.teamAuth.getTeamSession,
-    token ? { token } : "skip",
+    token && initialized ? { token } : "skip",
   );
   const logoutMutation = useMutation(api.teamAuth.teamLogout);
-
-  useEffect(() => {
-    setInitialized(true);
-  }, []);
 
   const login = useCallback((newToken: string) => {
     storeToken(newToken);
@@ -39,18 +43,19 @@ export function useTeamAuth() {
   }, []);
 
   const logout = useCallback(async () => {
-    if (token) {
+    const currentToken = token;
+    clearToken();
+    setToken("");
+    if (currentToken) {
       try {
-        await logoutMutation({ token });
+        await logoutMutation({ token: currentToken });
       } catch {
         // Ignore errors on logout
       }
     }
-    clearToken();
-    setToken("");
   }, [token, logoutMutation]);
 
-  const isAuthenticated = initialized && !!token && !!session;
+  const isAuthenticated = initialized && !!token && !!session && session !== undefined;
   const isLoading = !initialized || (!!token && session === undefined);
   const teamMember = session ?? null;
 

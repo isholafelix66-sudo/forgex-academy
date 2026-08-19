@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Link, Navigate, useSearchParams } from "react-router";
+import { Link, Navigate, useSearchParams, useNavigate } from "react-router";
 import { useMutation } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import { useTeamAuth } from "@/hooks/use-team-auth";
@@ -19,6 +19,7 @@ import { Input } from "@/components/ui/input";
 export default function TeamLogin() {
   const { isAuthenticated, isLoading: authLoading, login, teamMember } =
     useTeamAuth();
+  const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const returnTo = searchParams.get("returnTo") || "";
 
@@ -56,15 +57,18 @@ export default function TeamLogin() {
         teamId: teamId.trim().toUpperCase(),
         password,
       });
+      // Store token in state (updates useTeamAuth)
+      login(result.token);
+
       if (result.mustChangePassword) {
-        login(result.token);
         setMustChange(true);
       } else {
-        login(result.token);
+        // Navigate without full page reload
         const dest = result.teamSlug
           ? `/team/${result.teamSlug}`
           : "/team";
-        window.location.href = dest;
+        // Small delay to let the auth state update
+        setTimeout(() => navigate(dest, { replace: true }), 100);
       }
     } catch (err) {
       setError(
@@ -86,7 +90,13 @@ export default function TeamLogin() {
         currentPassword: password,
         newPassword: newPassword.trim(),
       });
-      window.location.reload();
+      // Password changed, navigate to team dashboard
+      setMustChange(false);
+      // Force re-check of session
+      const dest = teamMember?.team?.slug
+        ? `/team/${teamMember.team.slug}`
+        : "/team";
+      navigate(dest, { replace: true });
     } catch (err) {
       setChangeError(
         err instanceof Error
