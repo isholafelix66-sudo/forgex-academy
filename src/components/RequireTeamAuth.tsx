@@ -1,20 +1,22 @@
-import { Navigate, useLocation } from "react-router";
+import { Navigate, useLocation, useParams } from "react-router";
 import { useTeamAuth } from "@/hooks/use-team-auth";
 
 /**
- * Guard for team dashboard routes. Completely independent from Academy auth.
- * Redirects unauthenticated team users to /team/login.
- * Uses Clerk for authentication — no redirect loops.
+ * Guard for team dashboard routes.
+ * Verifies the user has a valid team session AND is accessing their own team's route.
+ * Redirects unauthenticated users to /team/login.
+ * Redirects users accessing wrong team routes to their own workspace.
  */
 export function RequireTeamAuth({
   children,
 }: {
   children: React.ReactNode;
 }) {
-  const { isAuthenticated, isLoading } = useTeamAuth();
+  const { isAuthenticated, isLoading, teamMember } = useTeamAuth();
   const location = useLocation();
+  const { teamSlug } = useParams<{ teamSlug: string }>();
 
-  // Show loading while auth state is resolving (Clerk + team session)
+  // Show loading while auth state is resolving
   if (isLoading) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-background">
@@ -39,6 +41,17 @@ export function RequireTeamAuth({
         replace
       />
     );
+  }
+
+  // Role-based routing: ensure user is accessing their own team's route
+  if (teamSlug && teamMember?.teamSlug && teamSlug !== teamMember.teamSlug) {
+    // User is trying to access another team's workspace — redirect to their own
+    return <Navigate to={`/team/${teamMember.teamSlug}`} replace />;
+  }
+
+  // If no teamSlug in URL (shouldn't happen for protected routes), redirect to their workspace
+  if (!teamSlug && teamMember?.teamSlug) {
+    return <Navigate to={`/team/${teamMember.teamSlug}`} replace />;
   }
 
   return <>{children}</>;

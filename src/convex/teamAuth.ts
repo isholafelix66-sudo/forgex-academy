@@ -622,69 +622,110 @@ export const getTeamCategories = query({
 });
 
 // ---------------------------------------------------------------------------
-// Clerk-based team authentication
+// Admin credential management
 // ---------------------------------------------------------------------------
 
-/**
- * Resolve a Clerk-authenticated user to a team account.
- * Called after Clerk sign-in to bridge Clerk auth → existing team account.
- * Returns a session token that the existing workspace functions accept.
- */
-export const clerkAuthTeamLogin = mutation({
-  args: {},
-  handler: async (ctx) => {
-    try {
-      const identity = await ctx.auth.getUserIdentity();
-      if (!identity) {
-        throw new Error("Not authenticated. Please sign in first.");
-      }
+/** Admin creates a new team member with credentials. */
+export const adminCreateTeamAccount = mutation({
+  args: {
+    name: v.string(),
+    teamId: v.string(),
+    teamSlug: v.string(),
+    role: v.union(v.literal("teamMember"), v.literal("teamLead"), v.literal("admin")),
+    password: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const normalizedId = args.teamId.toUpperCase().trim();
+    if (normalizedId.length < 3) throw new Error("Team ID must be at least 3 characters.");
+    if (args.password.length < 6) throw new Error("Password must be at least 6 characters.");
 
-      // Find team account by email (Clerk email → team account email)
-      const email = (identity.email ?? "").toLowerCase().trim();
-      if (!email) {
-        throw new Error("No email found on your account. Please contact support.");
-      }
-
-      let account = await ctx.db
-        .query("teamAccounts")
-        .withIndex("by_email", (q) => q.eq("email", email))
-        .unique();
-
-      if (!account) {
-        throw new Error(
-          "No team account found for this email. Please apply to join a team first.",
-        );
-      }
-
-      if (account.status === "pending") {
-        throw new Error("Your account is pending admin approval. Please wait for activation.");
-      }
-
-      if (account.status === "suspended") {
-        throw new Error("Your account has been suspended. Please contact the administrator.");
-      }
-
-      // Map Clerk ID to team account for future lookups
-      if (!account.clerkId) {
-        await ctx.db.patch(account._id, { clerkId: identity.subject });
-      }
-
-      // Create a session token (same format as existing system)
-      const token = await createSession(ctx, account._id);
-
-      await ctx.db.patch(account._id, { lastLoginAt: Date.now() });
-
-      return {
-        token,
-        teamId: account.teamId,
-        name: account.name,
-        role: account.role,
-        teamSlug: account.teamSlug,
-        mustChangePassword: account.mustChangePassword,
-      };
-    } catch (err) {
-      if (err instanceof Error) throw err;
-      throw new Error("Team authentication failed. Please try again.");
+    const validSlugs = TEAM_CATEGORIES.map((c) => c.slug);
+    if (!validSlugs.includes(args.teamSlug)) {
+      throw new Error("Invalid team slug.");
     }
+
+    // Check for duplicate Team ID
+    const existing = await ctx.db
+      .query("teamAccounts")
+      .withIndex("by_team_id", (q) => q.eq("teamId", normalizedId))
+      .unique();
+    if (existing) throw new Error("A team member with that ID already exists.");
+
+    const passwordHash = hashPassword(args.password);
+
+    const accountId = await ctx.db.insert("teamAccounts", {
+      teamId: normalizedId,
+      name: args.name.trim(),
+      email: `${normalizedId.toLowerCase()}@forgex.team`,
+      skill: "team",
+      introduction: args.name.trim(),
+      passwordHash,
+      teamSlug: args.teamSlug,
+      role: args.role,
+      status: "active",
+      mustChangePassword: false,
+      createdAt: Date.now(),
+    });
+
+    return { accountId, teamId: normalizedId };
+  },
+});
+
+/** Admin deletes a team member account. */
+export const adminDeleteTeamAccount = mutation({
+  args: { teamAccountId: v.id("teamAccounts") },
+  handler: async (ctx, args) => {
+    const account = await ctx.db.get(args.teamAccountId);
+    if (!account) throw new Error("Account not found.");
+
+    // Delete associated sessions
+    const sessions = await ctx.db
+      .query("teamSessions")
+      .withIndex("by_account", (q) => q.eq("teamAccountId", args.teamAccountId))
+      .collect();
+    for (const s of sessions) {
+      await ctx.db.delete(s._id);
+    }
+
+    // Delete associated membership
+    const membership = await ctx.db
+      .query("teamMemberships")
+      .withIndex("by_team_account", (q) => q.eq("teamAccountId", args.teamAccountId))
+      .unique();
+    if (membership) {
+      await ctx.db.delete(membership._id);
+    }
+
+    await ctx.db.delete(args.teamAccountId);
+    return true;
+  },
+});
+
+/** Admin sets a new password for a team member. */
+export const adminSetTeamPassword = mutation({
+  args: {
+    teamAccountId: v.id("teamAccounts"),
+    newPassword: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const account = await ctx.db.get(args.teamAccountId);
+    if (!account) throw new Error("Account not found.");
+    if (args.newPassword.length < 6) throw new Error("Password must be at least 6 characters.");
+
+    const newHash = hashPassword(args.newPassword);
+    await ctx.db.patch(args.teamAccountId, {
+      passwordHash: newHash,
+      mustChangePassword: false,
+    });
+
+    return true;
+  },
+});
+
+/** List team categories for admin dropdowns. */
+export const listTeamCategories = query({
+  args: {},
+  handler: async () => {
+    return TEAM_CATEGORIES;
   },
 });

@@ -406,73 +406,6 @@ function RouteBoundary({ children }: { children: React.ReactNode }) {
 // screen — the URL is public by design and already shipped in the client
 // bundle. VITE_CONVEX_URL (when set) always wins over this fallback.
 const DEFAULT_CONVEX_URL = "https://hidden-poodle-567.convex.cloud";
-
-// ---------------------------------------------------------------------------
-// Team Portal Clerk auth wrapper — only wraps Team Portal routes.
-// Provides ClerkProvider + ConvexProviderWithClerk so team components can
-// use Clerk's useAuth() hook. The rest of the app uses Convex Auth.
-// ---------------------------------------------------------------------------
-const TEAM_CONVEX_URL =
-  (import.meta.env.VITE_CONVEX_URL as string | undefined)?.trim() ||
-  DEFAULT_CONVEX_URL;
-
-let teamConvex: ConvexReactClient | null = null;
-try {
-  if (TEAM_CONVEX_URL) {
-    teamConvex = new ConvexReactClient(TEAM_CONVEX_URL);
-  }
-} catch {
-  // Ignore — team portal will show an error state
-}
-
-/**
- * Lazy-loaded Clerk wrapper — dynamically imports @clerk/react and
- * convex/react-clerk so these heavy packages are only loaded when a
- * user actually navigates to a Team Portal route. This keeps the
- * main bundle free of Clerk overhead and prevents OOM during build.
- */
-const LazyTeamAuthWrapper = lazy(() =>
-  Promise.all([
-    import("@clerk/react"),
-    import("convex/react-clerk"),
-  ]).then(([clerkMod, convexClerkMod]) => {
-    const ClerkProviderInner = clerkMod.ClerkProvider;
-    const ConvexProviderWithClerkInner = convexClerkMod.ConvexProviderWithClerk;
-    const useClerkAuthInner = clerkMod.useAuth;
-
-    return {
-      default: function TeamAuthWrapperInner({
-        children,
-      }: {
-        children: React.ReactNode;
-      }) {
-        if (!teamConvex) return <>{children}</>;
-        return (
-          <ClerkProviderInner
-            publishableKey={
-              (import.meta.env.VITE_CLERK_PUBLISHABLE_KEY as string) || ""
-            }
-          >
-            <ConvexProviderWithClerkInner
-              client={teamConvex}
-              useAuth={useClerkAuthInner}
-            >
-              {children}
-            </ConvexProviderWithClerkInner>
-          </ClerkProviderInner>
-        );
-      },
-    };
-  }),
-);
-
-function TeamAuthWrapper({ children }: { children: React.ReactNode }) {
-  return (
-    <Suspense fallback={<RouteLoading />}>
-      <LazyTeamAuthWrapper>{children}</LazyTeamAuthWrapper>
-    </Suspense>
-  );
-}
 const convexUrl =
   (import.meta.env.VITE_CONVEX_URL as string | undefined)?.trim() ||
   DEFAULT_CONVEX_URL;
@@ -693,12 +626,10 @@ createRoot(document.getElementById("root")!).render(
                   this dynamic segment, so the dashboard keeps working. */}
               <Route path="/tutor/:slug" element={<TutorPage />} />
 
-              {/* Team Workspace — internal entry point (Clerk auth) */}
-              <Route path="/team" element={<TeamAuthWrapper><TeamEntry /></TeamAuthWrapper>} />
-              <Route path="/team/register" element={<TeamAuthWrapper><TeamRegister /></TeamAuthWrapper>} />
-              <Route path="/team/login" element={<TeamAuthWrapper><TeamLogin /></TeamAuthWrapper>} />
-              <Route path="/team/forgot-password" element={<TeamAuthWrapper><TeamForgotPassword /></TeamAuthWrapper>} />
-              <Route path="/team/:teamSlug" element={<TeamAuthWrapper><RequireTeamAuth><TeamShell /></RequireTeamAuth></TeamAuthWrapper>}>
+              {/* Team Workspace — credential-based auth (no Clerk) */}
+              <Route path="/team" element={<TeamEntry />} />
+              <Route path="/team/login" element={<TeamLogin />} />
+              <Route path="/team/:teamSlug" element={<RequireTeamAuth><TeamShell /></RequireTeamAuth>}>
                 <Route index element={<TeamOverview />} />
                 <Route path="work" element={<TeamWork />} />
                 <Route path="courses" element={<TeamCourses />} />

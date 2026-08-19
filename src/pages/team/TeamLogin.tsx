@@ -1,144 +1,61 @@
-import { useEffect, useState } from "react";
-import { Link, Navigate, useSearchParams, useNavigate } from "react-router";
-import { SignIn, useAuth } from "@clerk/react";
-import { useMutation } from "convex/react";
-import { api } from "@/convex/_generated/api";
+import { useState } from "react";
+import { Link, Navigate, useSearchParams } from "react-router";
 import { useTeamAuth } from "@/hooks/use-team-auth";
 import { motion } from "framer-motion";
-import { ArrowLeft, Loader2, Lock } from "lucide-react";
+import { ArrowLeft, Loader2, Lock, User } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 
 export default function TeamLogin() {
-  const { isAuthenticated, isLoading: authLoading, teamMember } = useTeamAuth();
-  const { isSignedIn, isLoaded: clerkLoaded } = useAuth();
-  const navigate = useNavigate();
+  const { isAuthenticated, isLoading: authLoading, teamMember, login } = useTeamAuth();
   const [searchParams] = useSearchParams();
   const returnTo = searchParams.get("returnTo") || "";
 
-  const clerkTeamLogin = useMutation(api.teamAuth.clerkAuthTeamLogin);
-  const [bridging, setBridging] = useState(false);
-  const [bridgeError, setBridgeError] = useState<string | null>(null);
+  const [teamId, setTeamId] = useState("");
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
 
-  // If already authenticated via team session, redirect to workspace
+  // If already authenticated, redirect to workspace
   if (!authLoading && isAuthenticated) {
     const dest =
       returnTo ||
-      (teamMember?.team?.slug
-        ? `/team/${teamMember.team.slug}`
-        : "/team");
+      (teamMember?.teamSlug ? `/team/${teamMember.teamSlug}` : "/team");
     return <Navigate to={dest} replace />;
   }
 
-  // After Clerk sign-in, bridge to team session
-  useEffect(() => {
-    if (!clerkLoaded || !isSignedIn || bridging || authLoading) return;
-    if (isAuthenticated) return; // Already have a team session
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError(null);
+    setSubmitting(true);
 
-    setBridging(true);
-    setBridgeError(null);
-    clerkTeamLogin({})
-      .then((result) => {
-        // Team session created — the useTeamAuth hook will pick up the token
-        // and re-render, triggering the redirect above
-        if (result?.teamSlug) {
-          const dest = returnTo || `/team/${result.teamSlug}`;
-          navigate(dest, { replace: true });
-        }
-      })
-      .catch((err) => {
-        const msg = err?.message || "Could not access team workspace.";
-        if (msg.includes("No team account found")) {
-          setBridgeError(
-            "No team account found for this email. Please apply to join a team first.",
-          );
-        } else if (msg.includes("pending admin approval")) {
-          setBridgeError("Your team account is pending admin approval.");
-        } else if (msg.includes("suspended")) {
-          setBridgeError("Your team account has been suspended.");
-        } else {
-          setBridgeError(msg);
-        }
-      })
-      .finally(() => {
-        setBridging(false);
-      });
-  }, [
-    clerkLoaded,
-    isSignedIn,
-    bridging,
-    authLoading,
-    isAuthenticated,
-    clerkTeamLogin,
-    navigate,
-    returnTo,
-  ]);
+    try {
+      const result = await login(teamId.trim(), password);
 
-  // Show bridging state
-  if (bridging) {
-    return (
-      <div className="flex min-h-screen items-center justify-center bg-background px-6">
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="w-full max-w-md text-center"
-        >
-          <div className="rounded-3xl border border-white/10 bg-card p-8">
-            <Loader2 className="mx-auto size-8 animate-spin text-lime-400" />
-            <p className="mt-4 text-sm text-white/60">
-              Connecting to your team workspace…
-            </p>
-          </div>
-        </motion.div>
-      </div>
-    );
-  }
-
-  // Show bridge error (e.g., no team account for this email)
-  if (bridgeError) {
-    return (
-      <div className="flex min-h-screen items-center justify-center bg-background px-6">
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="w-full max-w-md"
-        >
-          <Link
-            to="/team"
-            className="mb-6 inline-flex items-center gap-2 text-sm text-white/40 transition-colors hover:text-white"
-          >
-            <ArrowLeft className="size-4" />
-            Back to Team Entry
-          </Link>
-          <div className="rounded-3xl border border-white/10 bg-card p-8">
-            <div className="mx-auto mb-4 flex size-14 items-center justify-center rounded-2xl border border-red-400/20 bg-red-400/5">
-              <Lock className="size-7 text-red-400" />
-            </div>
-            <h1 className="font-display text-2xl font-bold text-white">
-              Access Denied
-            </h1>
-            <p className="mt-3 text-sm text-white/50">{bridgeError}</p>
-            <div className="mt-6 flex flex-col gap-3">
-              <Link
-                to="/team/register"
-                className="inline-flex items-center justify-center rounded-xl bg-lime-400 px-5 py-2.5 text-sm font-semibold text-black transition-colors hover:bg-lime-300"
-              >
-                Apply to Join a Team
-              </Link>
-              <button
-                onClick={() => {
-                  setBridgeError(null);
-                  // Sign out of Clerk so they can try a different account
-                  window.location.href = "/team/login";
-                }}
-                className="text-sm text-white/40 hover:text-white"
-              >
-                Try a different account
-              </button>
-            </div>
-          </div>
-        </motion.div>
-      </div>
-    );
-  }
+      if (result?.token) {
+        // Login successful — the isAuthenticated redirect above will fire
+        // and send the user to the correct workspace based on teamSlug
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "";
+      if (
+        msg.includes("Invalid Team ID") ||
+        msg.includes("password")
+      ) {
+        setError("Invalid Team ID or password.");
+      } else if (msg.includes("pending")) {
+        setError("Your account is pending admin approval. Please wait for activation.");
+      } else if (msg.includes("suspended") || msg.includes("deactivated")) {
+        setError("This Team account has been deactivated. Please contact the Admin.");
+      } else if (msg.includes("reset")) {
+        setError("Your password needs to be reset. Please contact the Admin.");
+      } else {
+        setError("We couldn't sign you in right now. Please try again.");
+      }
+    } finally {
+      setSubmitting(false);
+    }
+  };
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-background px-6">
@@ -148,12 +65,13 @@ export default function TeamLogin() {
         className="w-full max-w-md"
       >
         <Link
-          to="/team"
+          to="/"
           className="mb-6 inline-flex items-center gap-2 text-sm text-white/40 transition-colors hover:text-white"
         >
           <ArrowLeft className="size-4" />
-          Back to Team Entry
+          Back to ForgeX
         </Link>
+
         <div className="rounded-3xl border border-white/10 bg-card p-8">
           <div className="mb-6 text-center">
             <div className="mx-auto mb-4 flex size-14 items-center justify-center rounded-2xl border border-lime-400/20 bg-lime-400/5">
@@ -163,56 +81,70 @@ export default function TeamLogin() {
               Team Sign In
             </h1>
             <p className="mt-2 text-sm text-white/40">
-              Sign in with your email to access your team workspace.
+              Enter your Team Member ID and password.
             </p>
           </div>
 
-          {/* Clerk Sign-In component — handles all auth (email, password, OTP, etc.) */}
-          <div className="clerk-team-auth [&>.cl-rootBox]:!bg-transparent [&>.cl-card]:!bg-transparent [&>.cl-card]:!shadow-none [&>.cl-card]:!border-none [&>.cl-headerTitle]:!text-white [&>.cl-headerSubtitle]:!text-white/40 [&>.cl-formButtonPrimary]:!bg-lime-400 [&>.cl-formButtonPrimary]:!text-black [&>.cl-formButtonPrimary:hover]:!bg-lime-300 [&>.cl-footerActionLink]:!text-lime-300 [&>.cl-dividerLine]:!bg-white/10 [&>.cl-dividerText]:!text-white/40 [&>.cl-formFieldInput]:!bg-white/5 [&>.cl-formFieldInput]:!border-white/10 [&>.cl-formFieldInput]:!text-white [&>.cl-formFieldLabel]:!text-white/50 [&>.cl-socialButtonsBlockButton]:!border-white/10 [&>.cl-socialButtonsBlockButton]:!bg-white/5 [&>.cl-socialButtonsBlockButtonText]:!text-white">
-            <SignIn
-              routing="path"
-              path="/team/login"
-              fallbackRedirectUrl={returnTo || "/team"}
-              appearance={{
-                elements: {
-                  rootBox: "w-full",
-                  card: "w-full bg-transparent shadow-none border-none",
-                  headerTitle: "text-white font-display text-lg font-bold",
-                  headerSubtitle: "text-white/40 text-sm",
-                  formButtonPrimary:
-                    "bg-lime-400 text-black hover:bg-lime-300 font-semibold !shadow-none",
-                  formFieldInput:
-                    "bg-white/5 border-white/10 text-white",
-                  formFieldLabel: "text-white/50 text-sm font-medium",
-                  footerActionLink: "text-lime-300 hover:text-lime-200",
-                  dividerLine: "bg-white/10",
-                  dividerText: "text-white/40",
-                  socialButtonsBlockButton:
-                    "border-white/10 bg-white/5 text-white hover:bg-white/10",
-                  socialButtonsBlockButtonText: "text-white font-medium",
-                  identityPreviewEditButton: "text-lime-300",
-                },
-              }}
-            />
-          </div>
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <div>
+              <label className="mb-1.5 block text-sm font-medium text-white/60">
+                Team Member ID
+              </label>
+              <div className="relative">
+                <User className="absolute left-3.5 top-1/2 size-4 -translate-y-1/2 text-white/30" />
+                <Input
+                  value={teamId}
+                  onChange={(e) => setTeamId(e.target.value)}
+                  placeholder="e.g. CONTENT-001"
+                  className="h-11 border-white/10 bg-white/5 pl-10 text-white uppercase placeholder:text-white/20"
+                  autoComplete="username"
+                  autoFocus
+                  required
+                />
+              </div>
+            </div>
 
-          <div className="mt-6 flex flex-col items-center gap-3 text-sm">
-            <Link
-              to="/team/forgot-password"
-              className="text-white/40 hover:text-lime-300"
+            <div>
+              <label className="mb-1.5 block text-sm font-medium text-white/60">
+                Password
+              </label>
+              <div className="relative">
+                <Lock className="absolute left-3.5 top-1/2 size-4 -translate-y-1/2 text-white/30" />
+                <Input
+                  type="password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder="Enter your password"
+                  className="h-11 border-white/10 bg-white/5 pl-10 text-white placeholder:text-white/20"
+                  autoComplete="current-password"
+                  required
+                />
+              </div>
+            </div>
+
+            {error && (
+              <div className="rounded-xl border border-red-400/25 bg-red-400/8 p-3 text-sm text-red-300">
+                {error}
+              </div>
+            )}
+
+            <Button
+              type="submit"
+              disabled={submitting || !teamId.trim() || !password}
+              className="w-full gap-2 bg-lime-400 font-semibold text-black hover:bg-lime-300"
             >
-              Forgot your password?
-            </Link>
-            <p className="text-white/30">
-              Don&apos;t have an account?{" "}
-              <Link
-                to="/team/register"
-                className="text-lime-400/80 hover:text-lime-300"
-              >
-                Apply here
-              </Link>
-            </p>
-          </div>
+              {submitting ? (
+                <Loader2 className="size-4 animate-spin" />
+              ) : (
+                "Login to Team Workspace"
+              )}
+            </Button>
+          </form>
+
+          <p className="mt-6 text-center text-xs text-white/30">
+            Contact your Admin if you need credentials or have forgotten your
+            password.
+          </p>
         </div>
       </motion.div>
     </div>
