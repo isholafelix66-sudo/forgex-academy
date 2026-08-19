@@ -19,15 +19,9 @@ export default function TeamEntry() {
           <div className="flex gap-3">
             <Link
               to="/team/login"
-              className="rounded-xl border border-white/10 px-5 py-2 text-sm font-medium text-white/70 transition-colors hover:border-lime-400/40 hover:text-white"
-            >
-              Sign In
-            </Link>
-            <Link
-              to="/team/register"
               className="rounded-xl bg-lime-400 px-5 py-2 text-sm font-semibold text-black transition-colors hover:bg-lime-300"
             >
-              Join Team
+              Team Sign In
             </Link>
           </div>
         </div>
@@ -53,24 +47,17 @@ export default function TeamEntry() {
           </h1>
 
           <p className="mx-auto mt-6 max-w-2xl text-lg text-white/50 leading-relaxed">
-            Your internal workspace for contributing to ForgeX Academy. Join a
-            team, collaborate on courses, review content, and help shape the
-            future of learning.
+            Your internal workspace for contributing to ForgeX Academy. Team
+            credentials are managed by the administrator.
           </p>
 
           <div className="mt-10 flex flex-col items-center justify-center gap-4 sm:flex-row">
             <Link
-              to="/team/register"
+              to="/team/login"
               className="group inline-flex items-center gap-2 rounded-2xl bg-lime-400 px-8 py-3.5 text-sm font-bold text-black transition-all hover:bg-lime-300 hover:shadow-lg hover:shadow-lime-400/20"
             >
-              Create Team Account
-              <ArrowRight className="size-4 transition-transform group-hover:translate-x-0.5" />
-            </Link>
-            <Link
-              to="/team/login"
-              className="inline-flex items-center gap-2 rounded-2xl border border-white/10 px-8 py-3.5 text-sm font-medium text-white/70 transition-colors hover:border-lime-400/40 hover:text-white"
-            >
               Team Sign In
+              <ArrowRight className="size-4 transition-transform group-hover:translate-x-0.5" />
             </Link>
           </div>
         </motion.div>
@@ -85,8 +72,8 @@ export default function TeamEntry() {
           {[
             {
               icon: ShieldCheck,
-              title: "Admin Approval",
-              desc: "Every team member is verified by an administrator before gaining access to the workspace.",
+              title: "Admin-Managed Access",
+              desc: "Team credentials are created by the administrator. Only authorized members can sign in.",
             },
             {
               icon: Users,

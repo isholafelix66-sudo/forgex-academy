@@ -39,7 +39,7 @@ export default function AdminTeamManagement() {
   const applications = useQuery(api.teamAuth.listAllTeamApplications);
   const accounts = useQuery(api.teamAuth.listAllTeamAccounts);
   const recoveryRequests = useQuery(api.teamAuth.listPendingRecoveryRequests);
-  const teams = useQuery(api.teamAuth.listAllTeamAccounts); // reuse teams list
+  const teams = useQuery(api.teamAuth.getTeamCategories);
 
   const approveApp = useMutation(api.teamAuth.approveTeamApplication);
   const rejectApp = useMutation(api.teamAuth.rejectTeamApplication);
@@ -47,6 +47,18 @@ export default function AdminTeamManagement() {
   const toggleStatus = useMutation(api.teamAuth.toggleTeamAccountStatus);
   const approveRecovery = useMutation(api.teamAuth.approvePasswordRecovery);
   const rejectRecovery = useMutation(api.teamAuth.rejectPasswordRecovery);
+  const createTeamAccount = useMutation(api.teamAuth.adminCreateTeamAccount);
+  const deleteTeamAccount = useMutation(api.teamAuth.adminDeleteTeamAccount);
+
+  // Create form state
+  const [showCreate, setShowCreate] = useState(false);
+  const [createName, setCreateName] = useState("");
+  const [createTeamId, setCreateTeamId] = useState("");
+  const [createSlug, setCreateSlug] = useState("");
+  const [createRole, setCreateRole] = useState<"teamMember" | "teamLead" | "admin">("teamMember");
+  const [createPassword, setCreatePassword] = useState("");
+  const [createError, setCreateError] = useState<string | null>(null);
+  const [createdCreds, setCreatedCreds] = useState<{ teamId: string; password: string } | null>(null);
 
   const handleApprove = async (appId: string) => {
     if (!approveTeamSlug.trim()) return;
@@ -142,6 +154,47 @@ export default function AdminTeamManagement() {
     }
   };
 
+  const handleCreateAccount = async () => {
+    setCreateError(null);
+    if (!createName.trim() || !createTeamId.trim() || !createSlug || !createPassword.trim()) {
+      setCreateError("All fields are required.");
+      return;
+    }
+    setBusy("create");
+    try {
+      await createTeamAccount({
+        name: createName.trim(),
+        teamId: createTeamId.trim(),
+        teamSlug: createSlug,
+        role: createRole,
+        password: createPassword.trim(),
+      });
+      setCreatedCreds({ teamId: createTeamId.trim().toUpperCase(), password: createPassword.trim() });
+      setCreateName("");
+      setCreateTeamId("");
+      setCreateSlug("");
+      setCreateRole("teamMember");
+      setCreatePassword("");
+      setShowCreate(false);
+    } catch (err) {
+      setCreateError(err instanceof Error ? err.message : "Failed to create account");
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const handleDeleteAccount = async (accountId: string) => {
+    if (!confirm("Are you sure you want to delete this team member? This cannot be undone.")) return;
+    setBusy(accountId);
+    try {
+      await deleteTeamAccount({ teamAccountId: accountId as any });
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "Failed to delete");
+    } finally {
+      setBusy(null);
+    }
+  };
+
   const filteredApps = applications?.filter(
     (a) =>
       a.name.toLowerCase().includes(search.toLowerCase()) ||
@@ -154,6 +207,8 @@ export default function AdminTeamManagement() {
       a.teamId.toLowerCase().includes(search.toLowerCase()),
   );
 
+  type Tab = "applications" | "members" | "recovery" | "teams" | "create";
+
   const tabs: { key: Tab; label: string; count?: number }[] = [
     {
       key: "applications",
@@ -161,6 +216,7 @@ export default function AdminTeamManagement() {
       count: applications?.filter((a) => a.status === "pending").length,
     },
     { key: "members", label: "Team Members", count: accounts?.length },
+    { key: "create", label: "+ Create Member" },
     {
       key: "recovery",
       label: "Password Recovery",
@@ -522,6 +578,82 @@ export default function AdminTeamManagement() {
               </div>
             ))
           )}
+        </div>
+      )}
+
+      {/* Create Member Tab */}
+      {tab === "create" && (
+        <div className="rounded-2xl border border-white/5 bg-card p-6">
+          <h3 className="font-display text-lg font-bold text-white">Create Team Member</h3>
+          <p className="mt-1 text-sm text-white/40">
+            Create credentials for a new team member. They will use these to sign in to the Team Portal.
+          </p>
+          <div className="mt-6 grid gap-4 sm:grid-cols-2">
+            <div>
+              <label className="mb-1 block text-xs font-medium text-white/50">Name</label>
+              <Input
+                value={createName}
+                onChange={(e) => setCreateName(e.target.value)}
+                placeholder="e.g. John Doe"
+                className="border-white/10 bg-white/5 text-white"
+              />
+            </div>
+            <div>
+              <label className="mb-1 block text-xs font-medium text-white/50">Team Member ID</label>
+              <Input
+                value={createTeamId}
+                onChange={(e) => setCreateTeamId(e.target.value)}
+                placeholder="e.g. CONTENT-001"
+                className="border-white/10 bg-white/5 font-mono uppercase text-white"
+              />
+            </div>
+            <div>
+              <label className="mb-1 block text-xs font-medium text-white/50">Team</label>
+              <select
+                value={createSlug}
+                onChange={(e) => setCreateSlug(e.target.value)}
+                className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-white"
+              >
+                <option value="">Select a team...</option>
+                {teams?.map((t) => (
+                  <option key={t.slug} value={t.slug}>{t.name}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="mb-1 block text-xs font-medium text-white/50">Role</label>
+              <select
+                value={createRole}
+                onChange={(e) => setCreateRole(e.target.value as any)}
+                className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-white"
+              >
+                <option value="teamMember">Team Member</option>
+                <option value="teamLead">Team Lead</option>
+                <option value="admin">Admin</option>
+              </select>
+            </div>
+            <div>
+              <label className="mb-1 block text-xs font-medium text-white/50">Password</label>
+              <Input
+                type="text"
+                value={createPassword}
+                onChange={(e) => setCreatePassword(e.target.value)}
+                placeholder="Minimum 6 characters"
+                className="border-white/10 bg-white/5 font-mono text-white"
+              />
+            </div>
+          </div>
+          {createError && (
+            <p className="mt-3 text-sm text-red-400">{createError}</p>
+          )}
+          <Button
+            onClick={handleCreateAccount}
+            disabled={busy === "create" || !createName.trim() || !createTeamId.trim() || !createSlug || !createPassword.trim()}
+            className="mt-4 gap-2 bg-lime-400 text-black hover:bg-lime-300"
+          >
+            {busy === "create" ? <Loader2 className="size-4 animate-spin" /> : <UserCheck className="size-4" />}
+            Create Team Member
+          </Button>
         </div>
       )}
 

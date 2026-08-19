@@ -639,7 +639,7 @@ export const adminCreateTeamAccount = mutation({
     if (normalizedId.length < 3) throw new Error("Team ID must be at least 3 characters.");
     if (args.password.length < 6) throw new Error("Password must be at least 6 characters.");
 
-    const validSlugs = TEAM_CATEGORIES.map((c) => c.slug);
+    const validSlugs = TEAM_CATEGORIES.map((c) => c.slug) as string[];
     if (!validSlugs.includes(args.teamSlug)) {
       throw new Error("Invalid team slug.");
     }
