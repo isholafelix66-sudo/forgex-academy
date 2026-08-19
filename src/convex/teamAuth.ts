@@ -5,11 +5,14 @@ import { query, mutation } from "./_generated/server";
 // Password hashing (pure JS SHA-256 — no crypto.subtle dependency)
 // ---------------------------------------------------------------------------
 
-/** Generate N random hex bytes using Convex-safe crypto.getRandomValues. */
+/** Generate N random hex chars using Math.random (no Web Crypto dependency). */
 function randomHex(n: number): string {
-  const bytes = new Uint8Array(n);
-  crypto.getRandomValues(bytes);
-  return Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("");
+  const chars = "0123456789abcdef";
+  let result = "";
+  for (let i = 0; i < n; i++) {
+    result += chars.charAt(Math.floor(Math.random() * chars.length));
+  }
+  return result;
 }
 
 /** Simple DJB2-based string hash — lightweight, deterministic, no Web Crypto. */
