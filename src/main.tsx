@@ -8,7 +8,8 @@ import { RequireTutor } from "@/components/RequireRole";
 import { RequireTeam } from "@/components/RequireTeam";
 import { RequireTeamAuth } from "@/components/RequireTeamAuth";
 import { VlyToolbar } from "../vly-toolbar-readonly.tsx";
-import { ConvexAuthProvider } from "@convex-dev/auth/react";
+import { ClerkProvider, useAuth as useClerkAuth } from "@clerk/react";
+import { ConvexProviderWithClerk } from "convex/react-clerk";
 import { ConvexReactClient } from "convex/react";
 import React, { StrictMode, useEffect, lazy, Suspense, useState } from "react";
 import { RefreshCw } from "lucide-react";
@@ -521,7 +522,8 @@ createRoot(document.getElementById("root")!).render(
           <ToolbarErrorBoundary>
             <VlyToolbar />
           </ToolbarErrorBoundary>
-          <ConvexAuthProvider client={convex}>
+          <ClerkProvider publishableKey={import.meta.env.VITE_CLERK_PUBLISHABLE_KEY as string}>
+            <ConvexProviderWithClerk client={convex} useAuth={useClerkAuth}>
         <SentryUserSync />
         {/* WhatsApp-style floating chat — global, signed-in users only.
             Lazy-loaded so it (and its data queries) never block first paint
@@ -692,7 +694,8 @@ createRoot(document.getElementById("root")!).render(
           </Suspense>
         </BrowserRouter>
             <Toaster />
-          </ConvexAuthProvider>
+          </ConvexProviderWithClerk>
+          </ClerkProvider>
         </>
       ) : (
         <BootMessage />
