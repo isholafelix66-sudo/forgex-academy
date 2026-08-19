@@ -17,7 +17,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 
 export default function TeamLogin() {
-  const { isAuthenticated, isLoading: authLoading, login, teamMember } =
+  const { isAuthenticated, isLoading: authLoading, login, token, teamMember } =
     useTeamAuth();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
@@ -34,6 +34,9 @@ export default function TeamLogin() {
   const [newPassword, setNewPassword] = useState("");
   const [changeSaving, setChangeSaving] = useState(false);
   const [changeError, setChangeError] = useState<string | null>(null);
+  const [loginResult, setLoginResult] = useState<{
+    teamSlug?: string;
+  } | null>(null);
 
   const changePassword = useMutation(api.teamAuth.teamChangePassword);
 
@@ -57,18 +60,18 @@ export default function TeamLogin() {
         teamId: teamId.trim().toUpperCase(),
         password,
       });
-      // Store token in state (updates useTeamAuth)
+      // Store token (updates useTeamAuth state)
       login(result.token);
+      setLoginResult({ teamSlug: result.teamSlug });
 
       if (result.mustChangePassword) {
         setMustChange(true);
       } else {
-        // Navigate without full page reload
+        // Navigate to team dashboard without full page reload
         const dest = result.teamSlug
           ? `/team/${result.teamSlug}`
           : "/team";
-        // Small delay to let the auth state update
-        setTimeout(() => navigate(dest, { replace: true }), 100);
+        navigate(dest, { replace: true });
       }
     } catch (err) {
       setError(
@@ -81,21 +84,21 @@ export default function TeamLogin() {
 
   const handleChangePassword = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newPassword.trim() || newPassword.length < 8) return;
+    if (!newPassword.trim() || newPassword.length < 8 || !token) return;
     setChangeSaving(true);
     setChangeError(null);
     try {
       await changePassword({
-        token: "",
+        token,
         currentPassword: password,
         newPassword: newPassword.trim(),
       });
-      // Password changed, navigate to team dashboard
-      setMustChange(false);
-      // Force re-check of session
-      const dest = teamMember?.team?.slug
-        ? `/team/${teamMember.team.slug}`
-        : "/team";
+      // Password changed — navigate to team dashboard
+      const dest = loginResult?.teamSlug
+        ? `/team/${loginResult.teamSlug}`
+        : teamMember?.team?.slug
+          ? `/team/${teamMember.team.slug}`
+          : "/team";
       navigate(dest, { replace: true });
     } catch (err) {
       setChangeError(
@@ -149,7 +152,7 @@ export default function TeamLogin() {
             )}
             <Button
               type="submit"
-              disabled={changeSaving || newPassword.length < 8}
+              disabled={changeSaving || newPassword.length < 8 || !token}
               className="w-full bg-lime-400 text-black hover:bg-lime-300"
             >
               {changeSaving ? (

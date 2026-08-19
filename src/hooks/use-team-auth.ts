@@ -6,17 +6,29 @@ const TOKEN_KEY = "forgex_team_session";
 
 function getStoredToken(): string {
   if (typeof window === "undefined") return "";
-  return localStorage.getItem(TOKEN_KEY) || "";
+  try {
+    return localStorage.getItem(TOKEN_KEY) || "";
+  } catch {
+    return "";
+  }
 }
 
 function storeToken(token: string) {
   if (typeof window === "undefined") return;
-  localStorage.setItem(TOKEN_KEY, token);
+  try {
+    localStorage.setItem(TOKEN_KEY, token);
+  } catch {
+    // Ignore storage errors
+  }
 }
 
 function clearToken() {
   if (typeof window === "undefined") return;
-  localStorage.removeItem(TOKEN_KEY);
+  try {
+    localStorage.removeItem(TOKEN_KEY);
+  } catch {
+    // Ignore storage errors
+  }
 }
 
 export function useTeamAuth() {
@@ -24,11 +36,13 @@ export function useTeamAuth() {
   const [initialized, setInitialized] = useState(false);
   const mountedRef = useRef(true);
 
-  // Read from localStorage only once, after mount
+  // Read from localStorage only once, after mount (client-only)
   useEffect(() => {
     setToken(getStoredToken());
     setInitialized(true);
-    return () => { mountedRef.current = false; };
+    return () => {
+      mountedRef.current = false;
+    };
   }, []);
 
   const session = useQuery(
@@ -50,13 +64,16 @@ export function useTeamAuth() {
       try {
         await logoutMutation({ token: currentToken });
       } catch {
-        // Ignore errors on logout
+        // Ignore errors on logout — token is already cleared locally
       }
     }
   }, [token, logoutMutation]);
 
-  const isAuthenticated = initialized && !!token && !!session && session !== undefined;
-  const isLoading = !initialized || (!!token && session === undefined);
+  // Session is "loaded" once we either have data or the query resolved to null
+  const isAuthenticated =
+    initialized && !!token && session !== undefined && session !== null;
+  const isLoading =
+    !initialized || (!!token && session === undefined);
   const teamMember = session ?? null;
 
   return {

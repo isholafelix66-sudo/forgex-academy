@@ -1,30 +1,17 @@
-import { useEffect } from "react";
-import { Link, useNavigate } from "react-router";
+import { Link } from "react-router";
 import { motion } from "framer-motion";
-import { useQuery } from "convex/react";
-import { api } from "@/convex/_generated/api";
-import { useAuth } from "@/hooks/use-auth";
 import { Button } from "@/components/ui/button";
 import { ArrowRight, Lock, Shield, Users, Zap } from "lucide-react";
 
 const TEAMS = [
   "Academic Team",
+  "Tutor Support Team",
+  "Student Support Team",
   "Content Team",
   "AI Team",
-  "Student Experience Team",
 ];
 
 export default function TeamLanding() {
-  const { isAuthenticated } = useAuth();
-  const myTeam = useQuery(api.team.getMyTeam);
-  const navigate = useNavigate();
-
-  useEffect(() => {
-    if (myTeam?.team) {
-      navigate(`/team/${(myTeam.team as any).slug}`, { replace: true });
-    }
-  }, [myTeam, navigate]);
-
   return (
     <div className="min-h-screen bg-background">
       <header className="border-b border-white/5 bg-card/80 backdrop-blur-lg">
@@ -34,11 +21,9 @@ export default function TeamLanding() {
             <span className="text-sm font-semibold text-white">ForgeX Academy</span>
           </Link>
           <div className="flex items-center gap-3">
-            {isAuthenticated && (
-              <Link to="/auth">
-                <Button variant="ghost" size="sm" className="text-white/60 hover:text-white">Main Site</Button>
-              </Link>
-            )}
+            <Link to="/team/login">
+              <Button variant="ghost" size="sm" className="text-white/60 hover:text-white">Sign In</Button>
+            </Link>
           </div>
         </div>
       </header>
@@ -64,19 +49,11 @@ export default function TeamLanding() {
           </motion.p>
 
           <motion.div className="flex flex-col items-center justify-center gap-4 sm:flex-row" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5, delay: 0.3 }}>
-            {isAuthenticated ? (
-              <Link to="/team/create">
-                <Button size="lg" className="gap-2 bg-gradient-to-r from-lime-400 to-emerald-500 font-semibold text-black hover:brightness-110">
-                  Apply for Team Access <ArrowRight className="size-4" />
-                </Button>
-              </Link>
-            ) : (
-              <Link to="/auth?returnTo=/team/create">
-                <Button size="lg" className="gap-2 bg-gradient-to-r from-lime-400 to-emerald-500 font-semibold text-black hover:brightness-110">
-                  Create Team Account <ArrowRight className="size-4" />
-                </Button>
-              </Link>
-            )}
+            <Link to="/team/register">
+              <Button size="lg" className="gap-2 bg-gradient-to-r from-lime-400 to-emerald-500 font-semibold text-black hover:brightness-110">
+                Create Team Account <ArrowRight className="size-4" />
+              </Button>
+            </Link>
             <Link to="/team/login">
               <Button size="lg" variant="outline" className="gap-2 border-white/15 text-white hover:bg-white/5">
                 <Lock className="size-4" /> Team Sign In
