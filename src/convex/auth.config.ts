@@ -29,5 +29,13 @@ export default {
       applicationID: "vly-convex",
       algorithm: "RS256",
     },
+    // Clerk JWT provider — validates tokens issued by Clerk for Team Portal
+    // authentication. CLERK_JWT_ISSUER_DOMAIN must be set on the Convex
+    // Dashboard (Settings → Environment Variables) to your Clerk Frontend
+    // API URL, e.g. "https://dominant-cod-5180.clerk.accounts.dev".
+    {
+      domain: process.env.CLERK_JWT_ISSUER_DOMAIN!,
+      applicationID: "clerk",
+    },
   ],
 } satisfies AuthConfig;
