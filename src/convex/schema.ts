@@ -1204,7 +1204,8 @@ const schema = defineSchema(
       teamId: v.id("teams"),
       courseId: v.optional(v.id("courses")),
       assignedTo: v.optional(v.id("users")),
-      createdBy: v.id("users"),
+      createdBy: v.optional(v.id("users")),
+      teamAccountId: v.optional(v.string()), // for Hub accounts without users records
       priority: v.union(
         v.literal("low"),
         v.literal("medium"),
@@ -1228,7 +1229,8 @@ const schema = defineSchema(
 
     workComments: defineTable({
       workItemId: v.id("workItems"),
-      userId: v.id("users"),
+      userId: v.optional(v.id("users")),
+      teamAccountId: v.optional(v.string()), // for Hub accounts
       content: v.string(),
       createdAt: v.number(),
     })
@@ -1258,7 +1260,8 @@ const schema = defineSchema(
       .index("by_team", ["teamId"]),
 
     teamActivity: defineTable({
-      userId: v.id("users"),
+      userId: v.optional(v.id("users")),
+      teamAccountId: v.optional(v.string()), // for Hub accounts
       teamId: v.optional(v.id("teams")),
       action: v.string(),
       targetType: v.optional(v.string()),
@@ -1304,7 +1307,7 @@ const schema = defineSchema(
     /** Internal case notes — usable by any team for any target. */
     teamCaseNotes: defineTable({
       teamId: v.id("teams"),
-      userId: v.id("users"),
+      userId: v.optional(v.id("users")),
       targetType: v.string(),
       targetId: v.string(),
       targetLabel: v.optional(v.string()),
@@ -1320,7 +1323,7 @@ const schema = defineSchema(
     teamTutorReviews: defineTable({
       applicationId: v.id("tutorApplications"),
       teamId: v.id("teams"),
-      userId: v.id("users"),
+      userId: v.optional(v.id("users")),
       status: v.union(
         v.literal("reviewing"),
         v.literal("approved"),
@@ -1337,7 +1340,7 @@ const schema = defineSchema(
     /** Content Team — content submissions for Admin approval. */
     teamContentSubmissions: defineTable({
       teamId: v.id("teams"),
-      userId: v.id("users"),
+      userId: v.optional(v.id("users")),
       type: v.union(
         v.literal("testimonial"),
         v.literal("resource"),
@@ -1362,7 +1365,7 @@ const schema = defineSchema(
     /** AI Team — AI tool submissions for Admin approval. */
     teamAiToolDrafts: defineTable({
       teamId: v.id("teams"),
-      userId: v.id("users"),
+      userId: v.optional(v.id("users")),
       title: v.string(),
       description: v.string(),
       category: v.string(),
@@ -1388,7 +1391,7 @@ const schema = defineSchema(
     /** AI Team — prompt submissions for Admin approval. */
     teamPromptDrafts: defineTable({
       teamId: v.id("teams"),
-      userId: v.id("users"),
+      userId: v.optional(v.id("users")),
       title: v.string(),
       description: v.string(),
       category: v.string(),
@@ -1429,7 +1432,7 @@ const schema = defineSchema(
     /** Escalation records — to Admin or other teams. */
     teamEscalations: defineTable({
       teamId: v.id("teams"),
-      userId: v.id("users"),
+      userId: v.optional(v.id("users")),
       targetType: v.string(),
       targetId: v.string(),
       targetLabel: v.optional(v.string()),
@@ -1451,7 +1454,7 @@ const schema = defineSchema(
     /** Activity history for support cases — tracks who handled what. */
     teamCaseHistory: defineTable({
       caseId: v.id("teamSupportCases"),
-      userId: v.id("users"),
+      userId: v.optional(v.id("users")),
       action: v.string(),
       details: v.optional(v.string()),
       createdAt: v.number(),

@@ -336,7 +336,7 @@ export const getTeamWorkItems = query({
       const assignee = item.assignedTo
         ? await ctx.db.get(item.assignedTo)
         : null;
-      const creator = await ctx.db.get(item.createdBy);
+      const creator = item.createdBy ? await ctx.db.get(item.createdBy) : null;
       enriched.push({ ...item, assignee, creator });
     }
     return enriched;
@@ -355,7 +355,7 @@ export const getWorkItemComments = query({
       .collect();
     const enriched = [];
     for (const c of comments) {
-      const u = await ctx.db.get(c.userId);
+      const u = c.userId ? await ctx.db.get(c.userId) : null;
       enriched.push({ ...c, user: u });
     }
     return enriched;
@@ -376,7 +376,7 @@ export const getTeamActivity = query({
       .take(args.limit ?? 30);
     const enriched = [];
     for (const a of activities) {
-      const u = await ctx.db.get(a.userId);
+      const u = a.userId ? await ctx.db.get(a.userId) : null;
       enriched.push({ ...a, user: u });
     }
     return enriched;
@@ -648,7 +648,7 @@ export const getAllTeamActivity = query({
       .take(100);
     const enriched = [];
     for (const a of activities) {
-      const u = await ctx.db.get(a.userId);
+      const u = a.userId ? await ctx.db.get(a.userId) : null;
       enriched.push({ ...a, user: u });
     }
     return enriched;

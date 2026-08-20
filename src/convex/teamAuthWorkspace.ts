@@ -255,7 +255,7 @@ export const getTeamActivity = query({
       for (const a of activities) {
         let u = null;
         try {
-          u = await ctx.db.get(a.userId);
+          if (a.userId) u = await ctx.db.get(a.userId);
         } catch { /* ignore — hub account */ }
         enriched.push({ ...a, user: u });
       }
@@ -283,7 +283,7 @@ export const getWorkItemComments = query({
       for (const c of comments) {
         let u = null;
         try {
-          u = await ctx.db.get(c.userId);
+          if (c.userId) u = await ctx.db.get(c.userId);
         } catch { /* ignore */ }
         enriched.push({ ...c, user: u });
       }

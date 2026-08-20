@@ -234,7 +234,7 @@ export const listContentSubmissions = query({
     const enriched = [];
     for (const s of subs) {
       let u = null;
-      try { u = await ctx.db.get(s.userId); } catch { /* ignore */ }
+      try { if (s.userId) u = await ctx.db.get(s.userId); } catch { /* ignore */ }
       enriched.push({ ...s, user: u });
     }
     return enriched;
@@ -293,7 +293,7 @@ export const listAiToolDrafts = query({
       .collect();
     const enriched = [];
     for (const d of drafts) {
-      const u = await ctx.db.get(d.userId);
+      const u = d.userId ? await ctx.db.get(d.userId) : null;
       enriched.push({ ...d, user: u });
     }
     return enriched;
@@ -352,7 +352,7 @@ export const listPromptDrafts = query({
       .collect();
     const enriched = [];
     for (const d of drafts) {
-      const u = await ctx.db.get(d.userId);
+      const u = d.userId ? await ctx.db.get(d.userId) : null;
       enriched.push({ ...d, user: u });
     }
     return enriched;
@@ -486,7 +486,7 @@ export const listEscalations = query({
     const enriched = [];
     for (const e of esc) {
       let u = null;
-      try { u = await ctx.db.get(e.userId); } catch { /* ignore */ }
+      try { if (e.userId) u = await ctx.db.get(e.userId); } catch { /* ignore */ }
       enriched.push({ ...e, user: u });
     }
     return enriched;

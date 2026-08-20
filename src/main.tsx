@@ -134,9 +134,6 @@ const TutorPage = lazy(() => import("./pages/TutorPage.tsx"));
 // ---------------------------------------------------------------------------
 const TeamHub = lazy(() => import("./pages/team/TeamHub.tsx"));
 const TeamPassword = lazy(() => import("./pages/team/TeamPassword.tsx"));
-const TeamEntry = lazy(() => import("./pages/team/TeamEntry.tsx"));
-const TeamRegister = lazy(() => import("./pages/team/TeamRegister.tsx"));
-const TeamLogin = lazy(() => import("./pages/team/TeamLogin.tsx"));
 const TeamShell = lazy(() => import("./pages/team/TeamShell.tsx"));
 const TeamOverview = lazy(() => import("./pages/team/TeamOverview.tsx"));
 const TeamWork = lazy(() => import("./pages/team/TeamWork.tsx"));
@@ -153,7 +150,7 @@ const TeamContentSubmissions = lazy(() => import("./pages/team/TeamContentSubmis
 const TeamTestimonials = lazy(() => import("./pages/team/TeamTestimonials.tsx"));
 const TeamSupportCases = lazy(() => import("./pages/team/TeamSupportCases.tsx"));
 const TeamTutorProfiles = lazy(() => import("./pages/team/TeamTutorProfiles.tsx"));
-const TeamForgotPassword = lazy(() => import("./pages/team/TeamForgotPassword.tsx"));
+
 
 // ---------------------------------------------------------------------------
 // Admin dashboard

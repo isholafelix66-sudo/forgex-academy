@@ -95,7 +95,7 @@ export const getCaseNotes = query({
       .collect();
     const enriched = [];
     for (const n of notes) {
-      const u = await ctx.db.get(n.userId);
+      const u = n.userId ? await ctx.db.get(n.userId) : null;
       enriched.push({ ...n, user: u });
     }
     return enriched.sort((a, b) => b.createdAt - a.createdAt);
@@ -198,8 +198,8 @@ export const getTutorReviewHistory = query({
       .collect();
     const enriched = [];
     for (const r of reviews) {
-      const u = await ctx.db.get(r.userId);
-      const team = await ctx.db.get(r.teamId);
+      const u = r.userId ? await ctx.db.get(r.userId) : null;
+      const team = r.teamId ? await ctx.db.get(r.teamId) : null;
       enriched.push({ ...r, user: u, team });
     }
     return enriched.sort((a, b) => b.createdAt - a.createdAt);
@@ -265,7 +265,7 @@ export const listContentSubmissions = query({
       .collect();
     const enriched = [];
     for (const s of subs) {
-      const u = await ctx.db.get(s.userId);
+      const u = s.userId ? await ctx.db.get(s.userId) : null;
       enriched.push({ ...s, user: u });
     }
     return enriched;
@@ -316,7 +316,7 @@ export const listAiToolDrafts = query({
       .collect();
     const enriched = [];
     for (const d of drafts) {
-      const u = await ctx.db.get(d.userId);
+      const u = d.userId ? await ctx.db.get(d.userId) : null;
       enriched.push({ ...d, user: u });
     }
     return enriched;
@@ -393,7 +393,7 @@ export const listPromptDrafts = query({
       .collect();
     const enriched = [];
     for (const d of drafts) {
-      const u = await ctx.db.get(d.userId);
+      const u = d.userId ? await ctx.db.get(d.userId) : null;
       enriched.push({ ...d, user: u });
     }
     return enriched;
@@ -580,7 +580,7 @@ export const listEscalations = query({
       .collect();
     const enriched = [];
     for (const e of esc) {
-      const u = await ctx.db.get(e.userId);
+      const u = e.userId ? await ctx.db.get(e.userId) : null;
       enriched.push({ ...e, user: u });
     }
     return enriched;
