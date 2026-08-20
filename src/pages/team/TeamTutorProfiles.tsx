@@ -1,17 +1,20 @@
-import { useParams } from "react-router";
 import { useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
+import { useTeamAuth } from "@/hooks/use-team-auth";
 import { motion } from "framer-motion";
 import { Loader2, Users, BookOpen, CheckCircle2, Clock, ExternalLink } from "lucide-react";
 
 export default function TeamTutorProfiles() {
-  const { teamSlug } = useParams<{ teamSlug: string }>();
-  const myTeam = useQuery(api.team.getMyTeam);
-  const team = myTeam?.team as any;
+  const { token } = useTeamAuth();
+  const workspace = useQuery(
+    api.teamAuthWorkspace.getTeamWorkspace,
+    token ? { token } : "skip",
+  );
+  const team = workspace?.team as any;
 
   const tutors = useQuery(
-    api.teamRoles.listTutorProfiles,
-    team ? { teamId: team._id } : "skip",
+    api.teamAuthWorkspaceRoles.listTutorProfiles,
+    token ? { token } : "skip",
   );
 
   if (!team) {

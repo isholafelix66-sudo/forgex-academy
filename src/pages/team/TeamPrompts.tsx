@@ -1,23 +1,25 @@
 import { useState } from "react";
-import { useParams } from "react-router";
 import { useQuery, useMutation } from "convex/react";
 import { api } from "@/convex/_generated/api";
+import { useTeamAuth } from "@/hooks/use-team-auth";
 import { motion } from "framer-motion";
 import { Loader2, Palette, Plus, Send, Edit2 } from "lucide-react";
 import { toast } from "sonner";
 
 export default function TeamPrompts() {
-  const { teamSlug } = useParams<{ teamSlug: string }>();
-  const myTeam = useQuery(api.team.getMyTeam);
-  const team = myTeam?.team as any;
+  const { token } = useTeamAuth();
+  const workspace = useQuery(
+    api.teamAuthWorkspace.getTeamWorkspace,
+    token ? { token } : "skip",
+  );
+  const team = workspace?.team as any;
 
   const drafts = useQuery(
-    api.teamRoles.listPromptDrafts,
-    team ? { teamId: team._id } : "skip",
+    api.teamAuthWorkspaceRoles.listPromptDrafts,
+    token ? { token } : "skip",
   );
 
-  const createDraft = useMutation(api.teamRoles.createPromptDraft);
-  const updateDraft = useMutation(api.teamRoles.updateAiToolDraft);
+  const createDraft = useMutation(api.teamAuthWorkspaceRoles.createPromptDraft);
 
   const [showForm, setShowForm] = useState(false);
   const [title, setTitle] = useState("");
@@ -27,10 +29,10 @@ export default function TeamPrompts() {
   const [saving, setSaving] = useState(false);
 
   const handleSave = async () => {
-    if (!team || !title.trim() || !template.trim()) return;
+    if (!token || !title.trim() || !template.trim()) return;
     setSaving(true);
     try {
-      await createDraft({ teamId: team._id, title, description, category, template });
+      await createDraft({ token, title, description, category, template });
       toast.success("Prompt draft created.");
       setShowForm(false); setTitle(""); setDescription(""); setCategory(""); setTemplate("");
     } catch (e: any) { toast.error(e.message); }

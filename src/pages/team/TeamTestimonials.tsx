@@ -1,18 +1,23 @@
 import { useState } from "react";
-import { useParams } from "react-router";
 import { useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
+import { useTeamAuth } from "@/hooks/use-team-auth";
 import { motion } from "framer-motion";
 import { Loader2, MessageSquare, CheckCircle2, XCircle, Clock } from "lucide-react";
 
 export default function TeamTestimonials() {
-  const { teamSlug } = useParams<{ teamSlug: string }>();
-  const myTeam = useQuery(api.team.getMyTeam);
-  const team = myTeam?.team as any;
+  const { token } = useTeamAuth();
+  const workspace = useQuery(
+    api.teamAuthWorkspace.getTeamWorkspace,
+    token ? { token } : "skip",
+  );
+  const team = workspace?.team as any;
 
   const stories = useQuery(api.public.siteContentAll);
-  // Fetch student stories for review - reuse the existing stories query
-  const allStories = useQuery(api.team.getTeamWorkItems, team ? { teamId: team._id } : "skip");
+  const allStories = useQuery(
+    api.teamAuthWorkspace.getTeamWorkItems,
+    token ? { token } : "skip",
+  );
 
   const [tab, setTab] = useState<"all" | "pending" | "approved">("all");
 

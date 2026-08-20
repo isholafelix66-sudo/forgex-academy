@@ -1,10 +1,15 @@
 import { Loader2 } from "lucide-react";
 import { useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
+import { useTeamAuth } from "@/hooks/use-team-auth";
 
 export default function TeamResources() {
-  const myTeam = useQuery(api.team.getMyTeam);
-  const team = myTeam?.team;
+  const { token } = useTeamAuth();
+  const workspace = useQuery(
+    api.teamAuthWorkspace.getTeamWorkspace,
+    token ? { token } : "skip",
+  );
+  const team = workspace?.team;
 
   if (!team) {
     return (

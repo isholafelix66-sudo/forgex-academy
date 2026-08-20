@@ -43,10 +43,6 @@ export default function TeamTutors() {
   );
 
   const reviewMutation = useMutation(api.teamAuthWorkspaceRoles.reviewTutorApplication);
-  const reviewHistory = useQuery(
-    api.teamRoles.getTutorReviewHistory,
-    selectedApp ? { applicationId: selectedApp._id } : "skip",
-  );
 
   const handleReview = async (app: any, status: string) => {
     if (!token) return;
@@ -215,21 +211,7 @@ export default function TeamTutors() {
               )}
             </div>
 
-            {/* Review History */}
-            {reviewHistory && reviewHistory.length > 0 && (
-              <div className="mt-5 border-t border-white/5 pt-4">
-                <h4 className="text-xs font-semibold uppercase tracking-wider text-white/40">Review History</h4>
-                <div className="mt-2 space-y-2">
-                  {reviewHistory.map((r: any) => (
-                    <div key={r._id} className="rounded-lg bg-white/[0.02] p-3 text-xs text-white/50">
-                      <span className="font-medium text-white/70">{r.user?.name}</span> ({r.team?.name}) — {r.status.replace(/_/g, " ")}
-                      {r.note && <p className="mt-1 text-white/40">{r.note}</p>}
-                      <span className="text-white/20">{new Date(r.createdAt).toLocaleString()}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
+
 
             {/* Review Note */}
             <div className="mt-4">

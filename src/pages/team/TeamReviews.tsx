@@ -1,10 +1,15 @@
 import { useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
+import { useTeamAuth } from "@/hooks/use-team-auth";
 import { Loader2, MessageSquare } from "lucide-react";
 
 export default function TeamReviews() {
-  const myTeam = useQuery(api.team.getMyTeam);
-  const team = myTeam?.team;
+  const { token } = useTeamAuth();
+  const workspace = useQuery(
+    api.teamAuthWorkspace.getTeamWorkspace,
+    token ? { token } : "skip",
+  );
+  const team = workspace?.team;
 
   // Show a placeholder for now — reviews require a courseId context
   return (
