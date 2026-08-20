@@ -681,23 +681,6 @@ createRoot(document.getElementById("root")!).render(
                 <Route index element={<AcademicOverview />} />
                 <Route path="settings" element={<TeamSettings />} />
               </Route>
-              {/* Workspace-specific overviews */}
-              <Route path="/team/academic" element={<RequireTeamAuth><TeamDashboardShell /></RequireTeamAuth>}>
-                <Route index element={<AcademicOverview />} />
-                <Route path="settings" element={<TeamSettings />} />
-              </Route>
-              <Route path="/team/ai-support" element={<RequireTeamAuth><TeamDashboardShell /></RequireTeamAuth>}>
-                <Route index element={<AISupportOverview />} />
-                <Route path="settings" element={<TeamSettings />} />
-              </Route>
-              <Route path="/team/tutor-support" element={<RequireTeamAuth><TeamDashboardShell /></RequireTeamAuth>}>
-                <Route index element={<TutorSupportOverview />} />
-                <Route path="settings" element={<TeamSettings />} />
-              </Route>
-              <Route path="/team/student-support" element={<RequireTeamAuth><TeamDashboardShell /></RequireTeamAuth>}>
-                <Route index element={<StudentSupportOverview />} />
-                <Route path="settings" element={<TeamSettings />} />
-              </Route>
 
 
 {/* Admin dashboard — password-gated only, no user account needed */}

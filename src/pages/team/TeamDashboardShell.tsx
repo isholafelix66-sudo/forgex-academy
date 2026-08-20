@@ -1,7 +1,6 @@
-import { useParams, Outlet, NavLink, Link } from "react-router";
+import { useParams, NavLink, Link } from "react-router";
 import { useTeamWorkspace } from "@/hooks/use-team-workspace";
 import { Navigate } from "react-router";
-import { motion } from "framer-motion";
 import {
   LayoutDashboard,
   Settings,
@@ -12,7 +11,7 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { useState, useEffect } from "react";
+import { useState, useEffect, lazy, Suspense } from "react";
 
 const WORKSPACE_LABELS: Record<string, string> = {
   academic: "Academic Support",
@@ -21,10 +20,27 @@ const WORKSPACE_LABELS: Record<string, string> = {
   "student-support": "Student Support",
 };
 
+// Lazy-load workspace-specific overviews
+const AcademicOverview = lazy(() => import("./AcademicOverview"));
+const AISupportOverview = lazy(() => import("./AISupportOverview"));
+const TutorSupportOverview = lazy(() => import("./TutorSupportOverview"));
+const StudentSupportOverview = lazy(() => import("./StudentSupportOverview"));
+const TeamSettings = lazy(() => import("./TeamSettings"));
+
+function WorkspaceOverview({ slug }: { slug: string }) {
+  switch (slug) {
+    case "ai-support": return <AISupportOverview />;
+    case "tutor-support": return <TutorSupportOverview />;
+    case "student-support": return <StudentSupportOverview />;
+    default: return <AcademicOverview />;
+  }
+}
+
 export default function TeamDashboardShell() {
   const { teamSlug } = useParams<{ teamSlug: string }>();
   const { isUnlocked, isLoading, lock, workspace } = useTeamWorkspace(teamSlug || "");
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [activeTab, setActiveTab] = useState<"overview" | "settings">("overview");
 
   useEffect(() => { setMobileOpen(false); }, [teamSlug]);
 
@@ -44,8 +60,8 @@ export default function TeamDashboardShell() {
   const workspaceName = workspace?.workspaceName || WORKSPACE_LABELS[teamSlug] || "Team";
 
   const navItems = [
-    { to: basePath, label: "Overview", icon: <LayoutDashboard className="size-4" />, end: true },
-    { to: `${basePath}/settings`, label: "Settings", icon: <Settings className="size-4" /> },
+    { key: "overview" as const, label: "Overview", icon: <LayoutDashboard className="size-4" /> },
+    { key: "settings" as const, label: "Settings", icon: <Settings className="size-4" /> },
   ];
 
   const handleLock = () => {
@@ -62,22 +78,19 @@ export default function TeamDashboardShell() {
       </div>
       <nav className="flex-1 space-y-1 p-3">
         {navItems.map((item) => (
-          <NavLink
-            key={item.to}
-            to={item.to}
-            end={item.end}
-            className={({ isActive }) =>
-              cn(
-                "flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-colors",
-                isActive
-                  ? "bg-lime-400/12 text-lime-300"
-                  : "text-muted-foreground hover:bg-white/5 hover:text-foreground",
-              )
-            }
+          <button
+            key={item.key}
+            onClick={() => setActiveTab(item.key)}
+            className={cn(
+              "flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-colors",
+              activeTab === item.key
+                ? "bg-lime-400/12 text-lime-300"
+                : "text-muted-foreground hover:bg-white/5 hover:text-foreground",
+            )}
           >
             <span className="shrink-0">{item.icon}</span>
             <span>{item.label}</span>
-          </NavLink>
+          </button>
         ))}
       </nav>
       <div className="border-t border-white/8 p-3">
@@ -125,7 +138,13 @@ export default function TeamDashboardShell() {
         </header>
         <main className="flex-1 px-4 py-6 lg:px-8">
           <div className="mx-auto max-w-5xl">
-            <Outlet />
+            <Suspense fallback={<div className="flex justify-center py-16"><Loader2 className="size-5 animate-spin text-lime-400" /></div>}>
+              {activeTab === "overview" ? (
+                <WorkspaceOverview slug={teamSlug} />
+              ) : (
+                <TeamSettings />
+              )}
+            </Suspense>
           </div>
         </main>
       </div>
