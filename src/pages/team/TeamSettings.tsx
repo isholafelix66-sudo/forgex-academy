@@ -5,11 +5,11 @@ import { LogOut } from "lucide-react";
 
 export default function TeamSettings() {
   const { teamSlug } = useParams<{ teamSlug: string }>();
-  const { lock } = useTeamWorkspace(teamSlug || "");
+  const { logout } = useTeamWorkspace(teamSlug || "");
   const navigate = useNavigate();
 
   const handleLock = () => {
-    lock();
+    logout();
     navigate("/team");
   };
 

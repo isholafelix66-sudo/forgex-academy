@@ -5,7 +5,6 @@ import { captureException, setSentryUser } from "@/lib/sentry";
 import { Toaster } from "@/components/ui/sonner";
 import { RequireAuth } from "@/components/RequireAuth";
 import { RequireTutor } from "@/components/RequireRole";
-import { RequireTeam } from "@/components/RequireTeam";
 import { RequireTeamAuth } from "@/components/RequireTeamAuth";
 import { VlyToolbar } from "../vly-toolbar-readonly.tsx";
 import { ConvexAuthProvider } from "@convex-dev/auth/react";
@@ -165,7 +164,6 @@ const AdminChat = lazy(() => import("./pages/admin/AdminChat.tsx"));
 const AdminInbox = lazy(() => import("./pages/admin/AdminInbox.tsx"));
 const AdminCoursePreview = lazy(() => import("./pages/admin/AdminCoursePreview.tsx"));
 const AdminTeamManagement = lazy(() => import("./pages/admin/AdminTeamManagement.tsx"));
-const AdminTeamAccess = lazy(() => import("./pages/admin/AdminTeamAccess.tsx"));
 
 // Communication & Community module (admin moderation)
 const AdminCommunication = lazy(() => import("./pages/admin/AdminCommunication.tsx"));
@@ -712,7 +710,6 @@ createRoot(document.getElementById("root")!).render(
                 <Route path="communication/reports" element={<AdminReports />} />
                 <Route path="communication/audit" element={<AdminCommAudit />} />
                 <Route path="teams" element={<AdminTeamManagement />} />
-                <Route path="team-access" element={<AdminTeamAccess />} />
               </Route>
 
               <Route path="*" element={<NotFound />} />

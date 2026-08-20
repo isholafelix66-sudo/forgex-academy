@@ -8,9 +8,9 @@ import { Loader2 } from "lucide-react";
  */
 export function RequireTeamAuth({ children }: { children: React.ReactNode }) {
   const { teamSlug } = useParams<{ teamSlug: string }>();
-  const { isUnlocked, isLoading } = useTeamWorkspace(teamSlug || "");
+  const { unlocked, loading } = useTeamWorkspace(teamSlug || "");
 
-  if (isLoading) {
+  if (loading) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-background">
         <div className="flex flex-col items-center gap-3">
@@ -21,7 +21,7 @@ export function RequireTeamAuth({ children }: { children: React.ReactNode }) {
     );
   }
 
-  if (!isUnlocked) {
+  if (!unlocked) {
     return <Navigate to={`/team/access/${teamSlug || ""}`} replace />;
   }
 
