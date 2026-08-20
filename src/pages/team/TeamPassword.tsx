@@ -1,6 +1,6 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { useParams, Link, Navigate } from "react-router";
-import { useQuery } from "convex/react";
+import { useQuery, useMutation } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import { motion } from "framer-motion";
 import { ArrowLeft, Loader2, Lock, Eye, EyeOff } from "lucide-react";
@@ -20,6 +20,12 @@ export default function TeamPassword() {
   const { teamSlug } = useParams<{ teamSlug: string }>();
   const { isAuthenticated, isLoading: authLoading, teamSlug: activeTeam, login } = useTeamHubAuth();
   const teams = useQuery(api.teamAccess.listTeams);
+  const seedMutation = useMutation(api.teamAccess.seedTeamAccess);
+
+  // Ensure team access records are seeded (for direct-link visits)
+  useEffect(() => {
+    seedMutation();
+  }, [seedMutation]);
 
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);

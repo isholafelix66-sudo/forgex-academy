@@ -107,6 +107,10 @@ export function useTeamHubAuth() {
     }
   }, [token, logoutMutation]);
 
+  // useQuery returns undefined while loading, null for no-result, or the data.
+  // If the query throws at runtime (e.g. table missing), Convex returns
+  // undefined — we treat that as "still loading" and after a short window the
+  // page falls back to the password screen.
   const session = useQuery(
     api.teamAccess.getSession,
     token && initialized ? { token } : "skip",

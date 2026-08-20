@@ -34,12 +34,11 @@ async function resolveTeamToken(ctx: any, token: string) {
       .unique();
     if (!access || !access.isActive) return null;
 
-    // Find the teams record for this slug
+    // Find the teams record for this slug (non-fatal — may not exist yet if seedTeamAccess hasn't run)
     const team = await ctx.db
       .query("teams")
       .withIndex("by_slug", (q: any) => q.eq("slug", hubSession.teamSlug))
       .unique();
-    if (!team) return null;
 
     // Create a virtual account object compatible with workspace functions
     const account = {
@@ -125,21 +124,8 @@ async function resolveTeamContext(ctx: any, account: any, membership: any, team:
       .withIndex("by_slug", (q: any) => q.eq("slug", account.teamSlug))
       .unique();
     if (teamBySlug) return { teamId: teamBySlug._id, team: teamBySlug };
-    // Auto-create the team record if it doesn't exist yet
-    const catInfo = TEAM_SLUG_MAP[account.teamSlug];
-    if (catInfo) {
-      const newId = await ctx.db.insert("teams", {
-        name: catInfo.name,
-        slug: account.teamSlug,
-        description: catInfo.description,
-        memberCount: 0,
-        activeWorkCount: 0,
-        status: "active",
-        createdAt: Date.now(),
-      });
-      const newTeam = await ctx.db.get(newId);
-      return { teamId: newId, team: newTeam };
-    }
+    // Note: teams records must be created by seedTeamAccess mutation,
+    // not by queries (which are read-only in Convex).
   }
   return { teamId: null, team: null };
 }
@@ -317,7 +303,7 @@ export const createWorkItem = mutation({
     const now = Date.now();
     // Use a safe createdBy — Hub accounts don't have users records,
     // so we store null and rely on the team context for attribution.
-    const safeCreatorId = (account as any).userId || null;
+    const safeCreatorId = (account as any).userId ?? undefined;
     const id = await ctx.db.insert("workItems", {
       title: args.title,
       description: args.description,
@@ -397,7 +383,7 @@ export const updateWorkItem = mutation({
     const statusLabel = args.status
       ? args.status.replace(/_/g, " ")
       : "updated";
-    const safeUserId = (account as any).userId || null;
+    const safeUserId = (account as any).userId ?? undefined;
     try {
       await ctx.db.insert("teamActivity", {
         userId: safeUserId,
@@ -427,7 +413,7 @@ export const addWorkComment = mutation({
     if (!item) throw new Error("Work item not found.");
 
     const now = Date.now();
-    const safeUserId = (account as any).userId || null;
+    const safeUserId = (account as any).userId ?? undefined;
     try {
       await ctx.db.insert("workComments", {
         workItemId: args.workItemId,

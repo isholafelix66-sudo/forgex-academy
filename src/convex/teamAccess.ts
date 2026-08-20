@@ -62,21 +62,26 @@ const INITIAL_PASSWORDS: Record<string, string> = {
 
 async function getSessionFromToken(ctx: any, token: string) {
   if (!token) return null;
-  const session = await ctx.db
-    .query("teamAccessSessions")
-    .withIndex("by_token", (q: any) => q.eq("token", token))
-    .unique();
-  if (!session) return null;
-  if (session.expiresAt < Date.now()) {
-    await ctx.db.delete(session._id);
+  try {
+    const session = await ctx.db
+      .query("teamAccessSessions")
+      .withIndex("by_token", (q: any) => q.eq("token", token))
+      .unique();
+    if (!session) return null;
+    if (session.expiresAt < Date.now()) {
+      try { await ctx.db.delete(session._id); } catch { /* ignore */ }
+      return null;
+    }
+    const access = await ctx.db
+      .query("teamAccess")
+      .withIndex("by_slug", (q: any) => q.eq("teamSlug", session.teamSlug))
+      .unique();
+    if (!access || !access.isActive) return null;
+    return { session, access };
+  } catch {
+    // If query fails (table missing, index missing, etc.), treat as no session
     return null;
   }
-  const access = await ctx.db
-    .query("teamAccess")
-    .withIndex("by_slug", (q: any) => q.eq("teamSlug", session.teamSlug))
-    .unique();
-  if (!access || !access.isActive) return null;
-  return { session, access };
 }
 
 // ---------------------------------------------------------------------------
@@ -148,12 +153,16 @@ export const seedTeamAccess = mutation({
 export const listTeams = query({
   args: {},
   handler: async (ctx) => {
-    const all = await ctx.db.query("teamAccess").collect();
-    return all.map((t) => ({
-      slug: t.teamSlug,
-      name: t.teamName,
-      isActive: t.isActive,
-    }));
+    try {
+      const all = await ctx.db.query("teamAccess").collect();
+      return all.map((t) => ({
+        slug: t.teamSlug,
+        name: t.teamName,
+        isActive: t.isActive,
+      }));
+    } catch {
+      return [];
+    }
   },
 });
 
@@ -220,11 +229,13 @@ export const logout = mutation({
   args: { token: v.string() },
   handler: async (ctx, args) => {
     if (!args.token) return true;
-    const session = await ctx.db
-      .query("teamAccessSessions")
-      .withIndex("by_token", (q) => q.eq("token", args.token))
-      .unique();
-    if (session) await ctx.db.delete(session._id);
+    try {
+      const session = await ctx.db
+        .query("teamAccessSessions")
+        .withIndex("by_token", (q) => q.eq("token", args.token))
+        .unique();
+      if (session) await ctx.db.delete(session._id);
+    } catch { /* ignore */ }
     return true;
   },
 });
