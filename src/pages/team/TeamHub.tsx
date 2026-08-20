@@ -1,163 +1,78 @@
 import { Link } from "react-router";
-import { useEffect } from "react";
-import { useQuery, useMutation } from "convex/react";
-import { api } from "@/convex/_generated/api";
 import { motion } from "framer-motion";
-import {
-  GraduationCap,
-  Headphones,
-  HeartHandshake,
-  FileText,
-  Bot,
-  ArrowRight,
-  Loader2,
-  Lock,
-} from "lucide-react";
-import logo from "@/assets/logo.svg";
+import { Lock, BookOpen, Bot, GraduationCap, HeartHandshake, ArrowRight } from "lucide-react";
 
-const TEAM_ICONS: Record<string, React.ReactNode> = {
-  academic: <GraduationCap className="size-7" />,
-  "tutor-support": <Headphones className="size-7" />,
-  "student-support": <HeartHandshake className="size-7" />,
-  content: <FileText className="size-7" />,
-  "ai-prompts": <Bot className="size-7" />,
-};
-
-const TEAM_COLORS: Record<string, string> = {
-  academic: "from-blue-400/20 to-blue-600/10",
-  "tutor-support": "from-amber-400/20 to-amber-600/10",
-  "student-support": "from-emerald-400/20 to-emerald-600/10",
-  content: "from-purple-400/20 to-purple-600/10",
-  "ai-prompts": "from-lime-400/20 to-lime-600/10",
-};
-
-const TEAM_DESCRIPTIONS: Record<string, string> = {
-  academic: "Academic operations, academic quality, and learning support.",
-  "tutor-support": "Tutor-related support, onboarding, and tutor issues.",
-  "student-support":
-    "Student-facing support, student issues, and student experience.",
-  content: "Content creation, learning materials, and content operations.",
-  "ai-prompts":
-    "AI Hub, prompt resources, AI-related tools, and prompt-library operations.",
-};
+const WORKSPACES = [
+  { slug: "academic", name: "Academic Support", description: "Academic operations, course quality, and learning support.", icon: BookOpen, color: "from-blue-400/10 to-blue-600/5" },
+  { slug: "ai-support", name: "AI Support", description: "AI Hub, prompt resources, and AI-related tools.", icon: Bot, color: "from-purple-400/10 to-purple-600/5" },
+  { slug: "tutor-support", name: "Tutor Support", description: "Tutor-related support, onboarding, and tutor issues.", icon: GraduationCap, color: "from-amber-400/10 to-amber-600/5" },
+  { slug: "student-support", name: "Student Support", description: "Student-facing support, issues, and student experience.", icon: HeartHandshake, color: "from-lime-400/10 to-lime-600/5" },
+];
 
 export default function TeamHub() {
-  const teams = useQuery(api.teamAccess.listTeams);
-  const seedMutation = useMutation(api.teamAccess.seedTeamAccess);
-
-  // Seed team access on first load (idempotent)
-  useEffect(() => {
-    seedMutation();
-  }, [seedMutation]);
-
   return (
-    <div className="min-h-screen bg-background">
+    <div className="flex min-h-screen flex-col bg-background">
       {/* Header */}
-      <header className="border-b border-white/5 bg-black/40 backdrop-blur-xl">
-        <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-4">
-          <Link to="/" className="flex items-center gap-2.5">
-            <img src={logo} alt="ForgeX" className="size-8 rounded-lg" />
-            <span className="font-display text-sm font-bold tracking-wide text-white">
-              ForgeX Academy
-            </span>
-          </Link>
-          <Link
-            to="/"
-            className="rounded-xl border border-white/10 px-4 py-2 text-sm font-medium text-white/50 transition-colors hover:border-lime-400/40 hover:text-lime-300"
-          >
-            Back to Home
+      <header className="border-b border-white/5 px-6 py-5">
+        <div className="mx-auto flex max-w-5xl items-center justify-between">
+          <h1 className="font-display text-xl font-bold text-white">
+            ForgeX<span className="text-lime-400"> Team</span>
+          </h1>
+          <Link to="/" className="text-sm text-white/40 transition-colors hover:text-white/70">
+            Back to site
           </Link>
         </div>
       </header>
 
-      {/* Hero */}
-      <main className="mx-auto max-w-5xl px-6 py-16 md:py-24">
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.5 }}
-          className="text-center"
-        >
-          <div className="mx-auto mb-6 flex size-16 items-center justify-center rounded-2xl border border-lime-400/20 bg-lime-400/5">
-            <Lock className="size-8 text-lime-400" />
-          </div>
-          <h1 className="font-display text-3xl font-bold text-white md:text-5xl">
-            Team Hub
-          </h1>
-          <p className="mx-auto mt-4 max-w-xl text-base text-white/40">
-            Select your team to access its workspace. Each team is protected by
-            its own password.
-          </p>
-        </motion.div>
-
-        {/* Team Cards */}
-        <div className="mt-12 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
-          {(teams ?? []).map((team, i) => (
-            <motion.div
-              key={team.slug}
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.4, delay: 0.05 * i }}
-            >
-              <Link
-                to={
-                  team.isActive
-                    ? `/team/access/${team.slug}`
-                    : "#"
-                }
-                className={`group flex h-full flex-col rounded-2xl border border-white/5 bg-card p-6 transition-all ${
-                  team.isActive
-                    ? "hover:border-lime-400/25 hover:shadow-lg hover:shadow-lime-400/5"
-                    : "cursor-not-allowed opacity-50"
-                }`}
-              >
-                <div
-                  className={`mb-4 flex size-12 items-center justify-center rounded-xl bg-gradient-to-br ${
-                    TEAM_COLORS[team.slug] || "from-white/10 to-white/5"
-                  } text-lime-300`}
-                >
-                  {TEAM_ICONS[team.slug] || (
-                    <Lock className="size-6" />
-                  )}
-                </div>
-                <h3 className="font-display text-base font-bold text-white">
-                  {team.name}
-                </h3>
-                <p className="mt-2 flex-1 text-sm leading-relaxed text-white/40">
-                  {TEAM_DESCRIPTIONS[team.slug] || ""}
-                </p>
-                <div className="mt-5 flex items-center justify-between">
-                  {team.isActive ? (
-                    <>
-                      <span className="text-xs font-medium text-lime-400">
-                        Enter Team
-                      </span>
-                      <ArrowRight className="size-4 text-lime-400 transition-transform group-hover:translate-x-0.5" />
-                    </>
-                  ) : (
-                    <span className="text-xs font-medium text-red-400/60">
-                      Unavailable
-                    </span>
-                  )}
-                </div>
-              </Link>
-            </motion.div>
-          ))}
-
-          {teams === undefined && (
-            <div className="col-span-full flex justify-center py-16">
-              <Loader2 className="size-6 animate-spin text-lime-400" />
+      {/* Content */}
+      <main className="flex flex-1 items-center justify-center px-6 py-16">
+        <div className="mx-auto w-full max-w-3xl">
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="mb-12 text-center"
+          >
+            <div className="mx-auto mb-4 flex size-14 items-center justify-center rounded-2xl border border-lime-400/20 bg-lime-400/5">
+              <Lock className="size-7 text-lime-400" />
             </div>
-          )}
+            <h2 className="font-display text-3xl font-bold text-white">Team Workspace</h2>
+            <p className="mt-3 text-sm text-white/50">Select your workspace and enter the password to continue.</p>
+          </motion.div>
+
+          <div className="grid gap-4 sm:grid-cols-2">
+            {WORKSPACES.map((ws, i) => {
+              const Icon = ws.icon;
+              return (
+                <motion.div
+                  key={ws.slug}
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 0.08 * i }}
+                >
+                  <Link
+                    to={`/team/access/${ws.slug}`}
+                    className={`group block rounded-2xl border border-white/5 bg-gradient-to-br ${ws.color} p-6 transition-all hover:border-white/10 hover:scale-[1.02]`}
+                  >
+                    <div className="mb-4 flex items-center gap-3">
+                      <div className="flex size-10 items-center justify-center rounded-xl bg-white/5">
+                        <Icon className="size-5 text-white/60" />
+                      </div>
+                      <div className="flex-1">
+                        <h3 className="font-display text-sm font-bold text-white">{ws.name}</h3>
+                      </div>
+                      <Lock className="size-4 text-white/20" />
+                    </div>
+                    <p className="mb-4 text-xs text-white/40">{ws.description}</p>
+                    <div className="flex items-center gap-1.5 text-xs font-medium text-lime-400/70 transition-colors group-hover:text-lime-400">
+                      Open Workspace <ArrowRight className="size-3.5" />
+                    </div>
+                  </Link>
+                </motion.div>
+              );
+            })}
+          </div>
         </div>
       </main>
-
-      {/* Footer */}
-      <footer className="border-t border-white/5 py-8">
-        <div className="mx-auto max-w-6xl px-6 text-center text-xs text-white/30">
-          &copy; {new Date().getFullYear()} ForgeX Academy — Team Hub
-        </div>
-      </footer>
     </div>
   );
 }

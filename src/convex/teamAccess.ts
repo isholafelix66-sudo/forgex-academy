@@ -2,7 +2,7 @@ import { v } from "convex/values";
 import { query, mutation } from "./_generated/server";
 
 // ---------------------------------------------------------------------------
-// Password hashing — same DJB2 multi-round as teamAuth.ts
+// Password hashing (DJB2 multi-round)
 // ---------------------------------------------------------------------------
 
 function randomHex(n: number): string {
@@ -36,108 +36,123 @@ function verifyPassword(password: string, storedHash: string): boolean {
 }
 
 // ---------------------------------------------------------------------------
-// Default teams
+// 4 Workspaces
 // ---------------------------------------------------------------------------
 
-const DEFAULT_TEAMS = [
-  { slug: "academic", name: "Academic Team", description: "Academic operations, academic quality, and learning support." },
-  { slug: "tutor-support", name: "Tutor Support", description: "Tutor-related support and tutor issues." },
-  { slug: "student-support", name: "Student Support", description: "Student-facing support, student issues, and student experience." },
-  { slug: "content", name: "Content Team", description: "Content, learning materials, and content-related operations." },
-  { slug: "ai-prompts", name: "AI & Prompt Team", description: "AI Hub, prompt resources, AI-related tools, and prompt-library operations." },
+export const WORKSPACES = [
+  { slug: "academic", name: "Academic Support", description: "Academic operations, course quality, and learning support.", icon: "BookOpen", initialPassword: "ACADEMIC001" },
+  { slug: "ai-support", name: "AI Support", description: "AI Hub, prompt resources, and AI-related tools.", icon: "Bot", initialPassword: "AI001" },
+  { slug: "tutor-support", name: "Tutor Support", description: "Tutor-related support, onboarding, and tutor issues.", icon: "GraduationCap", initialPassword: "TUTOR00Y" },
+  { slug: "student-support", name: "Student Support", description: "Student-facing support, issues, and student experience.", icon: "HeartHandshake", initialPassword: "STUDENT001" },
 ] as const;
 
-// Initial passwords (seeded once, then only admin can change)
-const INITIAL_PASSWORDS: Record<string, string> = {
-  "academic": "ACADEMIC001",
-  "tutor-support": "TUTOR001",
-  "student-support": "STUDENT001",
-  "content": "CONTENT001",
-  "ai-prompts": "AIPROMPT001",
-};
-
 // ---------------------------------------------------------------------------
-// Helpers
+// Public: List workspaces
 // ---------------------------------------------------------------------------
 
-async function getSessionFromToken(ctx: any, token: string) {
-  if (!token) return null;
-  try {
-    const session = await ctx.db
-      .query("teamAccessSessions")
-      .withIndex("by_token", (q: any) => q.eq("token", token))
-      .unique();
-    if (!session) return null;
-    if (session.expiresAt < Date.now()) {
-      try { await ctx.db.delete(session._id); } catch { /* ignore */ }
-      return null;
-    }
-    const access = await ctx.db
+export const listWorkspaces = query({
+  args: {},
+  handler: async () => {
+    return WORKSPACES.map((w) => ({ slug: w.slug, name: w.name, description: w.description, icon: w.icon, isActive: true }));
+  },
+});
+
+// ---------------------------------------------------------------------------
+// Verify workspace password → returns a signed token
+// ---------------------------------------------------------------------------
+
+export const verifyWorkspacePassword = mutation({
+  args: { workspaceSlug: v.string(), password: v.string() },
+  handler: async (ctx, args) => {
+    const ws = WORKSPACES.find((w) => w.slug === args.workspaceSlug);
+    if (!ws) throw new Error("Workspace not found.");
+
+    let access = await ctx.db
       .query("teamAccess")
-      .withIndex("by_slug", (q: any) => q.eq("teamSlug", session.teamSlug))
+      .withIndex("by_slug", (q) => q.eq("teamSlug", args.workspaceSlug))
       .unique();
-    if (!access || !access.isActive) return null;
-    return { session, access };
-  } catch {
-    // If query fails (table missing, index missing, etc.), treat as no session
-    return null;
-  }
-}
 
-// ---------------------------------------------------------------------------
-// Seed initial team access records (idempotent)
-// ---------------------------------------------------------------------------
-
-/** Ensure the `teams` table has a matching record for every teamAccess
- *  row. The workspace queries (teamAuthWorkspace, teamAuthWorkspaceRoles)
- *  need a `teams` doc to resolve teamId. This runs idempotently. */
-async function ensureTeamsExist(ctx: any): Promise<void> {
-  for (const team of DEFAULT_TEAMS) {
-    try {
-      const existing = await ctx.db
-        .query("teams")
-        .withIndex("by_slug", (q: any) => q.eq("slug", team.slug))
+    if (!access) {
+      await ctx.db.insert("teamAccess", {
+        teamSlug: ws.slug, teamName: ws.name, passwordHash: hashPassword(ws.initialPassword),
+        isActive: true, createdAt: Date.now(), updatedAt: Date.now(),
+      });
+      access = await ctx.db
+        .query("teamAccess")
+        .withIndex("by_slug", (q) => q.eq("teamSlug", args.workspaceSlug))
         .unique();
-      if (!existing) {
-        await ctx.db.insert("teams", {
-          name: team.name,
-          slug: team.slug,
-          description: team.description,
-          memberCount: 0,
-          activeWorkCount: 0,
-          status: "active",
-          createdAt: Date.now(),
-        });
-      }
-    } catch {
-      // Ignore — team may already exist
+      if (!access || !access.isActive) throw new Error("This workspace is currently unavailable.");
+      if (!verifyPassword(args.password, access.passwordHash)) throw new Error("Incorrect password. Please try again.");
+    } else {
+      if (!access.isActive) throw new Error("This workspace is currently unavailable.");
+      if (!verifyPassword(args.password, access.passwordHash)) throw new Error("Incorrect password. Please try again.");
     }
-  }
-}
 
-export const seedTeamAccess = mutation({
+    const token = `${args.workspaceSlug}:${randomHex(24)}:${Date.now() + 30 * 24 * 60 * 60 * 1000}`;
+    return { token, workspaceSlug: args.workspaceSlug, workspaceName: ws.name };
+  },
+});
+
+// ---------------------------------------------------------------------------
+// Validate workspace token
+// ---------------------------------------------------------------------------
+
+export const validateWorkspaceToken = query({
+  args: { token: v.string(), workspaceSlug: v.string() },
+  handler: async (ctx, args) => {
+    if (!args.token || !args.workspaceSlug) return null;
+    try {
+      const parts = args.token.split(":");
+      if (parts.length !== 3) return null;
+      const [tokenSlug, , expiryStr] = parts;
+      const expiry = parseInt(expiryStr, 10);
+      if (tokenSlug !== args.workspaceSlug) return null;
+      if (isNaN(expiry) || Date.now() > expiry) return null;
+      const access = await ctx.db.query("teamAccess").withIndex("by_slug", (q) => q.eq("teamSlug", args.workspaceSlug)).unique();
+      if (!access || !access.isActive) return null;
+      const ws = WORKSPACES.find((w) => w.slug === args.workspaceSlug);
+      if (!ws) return null;
+      return { workspaceSlug: args.workspaceSlug, workspaceName: ws.name };
+    } catch { return null; }
+  },
+});
+
+// ---------------------------------------------------------------------------
+// Admin functions
+// ---------------------------------------------------------------------------
+
+export const adminListWorkspaces = query({
   args: {},
   handler: async (ctx) => {
-    // First, ensure all teams have matching records in the `teams` table
-    // so that workspace queries can resolve teamId.
-    await ensureTeamsExist(ctx);
+    const results = [];
+    for (const ws of WORKSPACES) {
+      const access = await ctx.db.query("teamAccess").withIndex("by_slug", (q) => q.eq("teamSlug", ws.slug)).unique();
+      results.push({ slug: ws.slug, name: ws.name, description: ws.description, icon: ws.icon, isActive: access?.isActive ?? false, hasPassword: !!access?.passwordHash, updatedAt: access?.updatedAt, teamSlug: ws.slug, teamName: ws.name });
+    }
+    return results;
+  },
+});
 
+export const adminChangeWorkspacePassword = mutation({
+  args: { workspaceSlug: v.string(), newPassword: v.string() },
+  handler: async (ctx, args) => {
+    if (args.newPassword.length < 4) throw new Error("Password must be at least 4 characters.");
+    const access = await ctx.db.query("teamAccess").withIndex("by_slug", (q) => q.eq("teamSlug", args.workspaceSlug)).unique();
+    if (!access) throw new Error("Workspace not found.");
+    await ctx.db.patch(access._id, { passwordHash: hashPassword(args.newPassword), updatedAt: Date.now() });
+    return true;
+  },
+});
+
+
+export const seedWorkspaces = mutation({
+  args: {},
+  handler: async (ctx) => {
     let seeded = 0;
-    for (const team of DEFAULT_TEAMS) {
-      const existing = await ctx.db
-        .query("teamAccess")
-        .withIndex("by_slug", (q) => q.eq("teamSlug", team.slug))
-        .unique();
+    for (const ws of WORKSPACES) {
+      const existing = await ctx.db.query("teamAccess").withIndex("by_slug", (q) => q.eq("teamSlug", ws.slug)).unique();
       if (!existing) {
-        const pw = INITIAL_PASSWORDS[team.slug] || "CHANGEME001";
-        await ctx.db.insert("teamAccess", {
-          teamSlug: team.slug,
-          teamName: team.name,
-          passwordHash: hashPassword(pw),
-          isActive: true,
-          createdAt: Date.now(),
-          updatedAt: Date.now(),
-        });
+        await ctx.db.insert("teamAccess", { teamSlug: ws.slug, teamName: ws.name, passwordHash: hashPassword(ws.initialPassword), isActive: true, createdAt: Date.now(), updatedAt: Date.now() });
         seeded++;
       }
     }
@@ -146,187 +161,85 @@ export const seedTeamAccess = mutation({
 });
 
 // ---------------------------------------------------------------------------
-// Public queries
+// Backward-compat aliases — old frontend files reference these
 // ---------------------------------------------------------------------------
 
-/** List all teams for the Team Hub (public — no auth needed). */
-export const listTeams = query({
-  args: {},
-  handler: async (ctx) => {
-    try {
-      const all = await ctx.db.query("teamAccess").collect();
-      return all.map((t) => ({
-        slug: t.teamSlug,
-        name: t.teamName,
-        isActive: t.isActive,
-      }));
-    } catch {
-      return [];
-    }
-  },
-});
+/** @deprecated Use listWorkspaces */
+export const listTeams = listWorkspaces;
 
-/** Verify a password against a team and create a session. */
+/** @deprecated Use seedWorkspaces */
+export const seedTeamAccess = seedWorkspaces;
+
+/** @deprecated Use verifyWorkspacePassword. Accepts teamSlug for backward compat. */
 export const verifyTeamPassword = mutation({
-  args: {
-    teamSlug: v.string(),
-    password: v.string(),
-  },
+  args: { teamSlug: v.string(), password: v.string() },
   handler: async (ctx, args) => {
-    const access = await ctx.db
-      .query("teamAccess")
-      .withIndex("by_slug", (q) => q.eq("teamSlug", args.teamSlug))
-      .unique();
-
+    const slug = args.teamSlug;
+    const ws = WORKSPACES.find((w) => w.slug === slug);
+    if (!ws) throw new Error("Workspace not found.");
+    let access = await ctx.db.query("teamAccess").withIndex("by_slug", (q) => q.eq("teamSlug", slug)).unique();
     if (!access) {
-      throw new Error("Team not found.");
+      await ctx.db.insert("teamAccess", { teamSlug: ws.slug, teamName: ws.name, passwordHash: hashPassword(ws.initialPassword), isActive: true, createdAt: Date.now(), updatedAt: Date.now() });
+      access = await ctx.db.query("teamAccess").withIndex("by_slug", (q) => q.eq("teamSlug", slug)).unique();
+      if (!access || !access.isActive) throw new Error("This workspace is currently unavailable.");
+      if (!verifyPassword(args.password, access.passwordHash)) throw new Error("Incorrect password. Please try again.");
+    } else {
+      if (!access.isActive) throw new Error("This workspace is currently unavailable.");
+      if (!verifyPassword(args.password, access.passwordHash)) throw new Error("Incorrect password. Please try again.");
     }
-
-    if (!access.isActive) {
-      throw new Error("This team is currently unavailable. Please contact the Admin.");
-    }
-
-    if (!verifyPassword(args.password, access.passwordHash)) {
-      throw new Error("Incorrect team password. Please try again.");
-    }
-
-    // Create session
-    const token = randomHex(32);
-    const expiresAt = Date.now() + 7 * 24 * 60 * 60 * 1000; // 7 days
-    await ctx.db.insert("teamAccessSessions", {
-      teamSlug: args.teamSlug,
-      token,
-      expiresAt,
-      createdAt: Date.now(),
-    });
-
-    return {
-      token,
-      teamSlug: args.teamSlug,
-      teamName: access.teamName,
-      expiresAt,
-    };
+    const token = `${slug}:${randomHex(24)}:${Date.now() + 30 * 24 * 60 * 60 * 1000}`;
+    return { token, teamSlug: slug, teamName: ws.name, workspaceSlug: slug, workspaceName: ws.name };
   },
 });
 
-/** Validate an existing session token. Returns team info or null. */
+/** @deprecated No-op — workspace tokens don't need server-side logout */
+export const logout = mutation({
+  args: { token: v.string() },
+  handler: async () => true,
+});
+
+/** @deprecated Backward compat — accepts {token} without workspaceSlug */
 export const getSession = query({
   args: { token: v.string() },
   handler: async (ctx, args) => {
     if (!args.token) return null;
-    const result = await getSessionFromToken(ctx, args.token);
-    if (!result) return null;
-    return {
-      teamSlug: result.access.teamSlug,
-      teamName: result.access.teamName,
-      expiresAt: result.session.expiresAt,
-    };
-  },
-});
-
-/** Destroy a session (logout). */
-export const logout = mutation({
-  args: { token: v.string() },
-  handler: async (ctx, args) => {
-    if (!args.token) return true;
     try {
-      const session = await ctx.db
-        .query("teamAccessSessions")
-        .withIndex("by_token", (q) => q.eq("token", args.token))
-        .unique();
-      if (session) await ctx.db.delete(session._id);
-    } catch { /* ignore */ }
-    return true;
+      const parts = args.token.split(":");
+      if (parts.length !== 3) return null;
+      const [tokenSlug, , expiryStr] = parts;
+      const expiry = parseInt(expiryStr, 10);
+      if (isNaN(expiry) || Date.now() > expiry) return null;
+      const access = await ctx.db.query("teamAccess").withIndex("by_slug", (q) => q.eq("teamSlug", tokenSlug)).unique();
+      if (!access || !access.isActive) return null;
+      const ws = WORKSPACES.find((w) => w.slug === tokenSlug);
+      if (!ws) return null;
+      return { teamSlug: tokenSlug, teamName: ws.name, workspaceSlug: tokenSlug, workspaceName: ws.name };
+    } catch { return null; }
   },
 });
 
-// ---------------------------------------------------------------------------
-// Admin-only mutations
-// ---------------------------------------------------------------------------
+/** @deprecated Use adminListWorkspaces */
+export const adminListTeams = adminListWorkspaces;
 
-/** Admin changes a team's password. */
+/** @deprecated Use adminChangeWorkspacePassword. Accepts teamSlug for backward compat. */
 export const adminChangePassword = mutation({
-  args: {
-    teamSlug: v.string(),
-    newPassword: v.string(),
-  },
+  args: { teamSlug: v.string(), newPassword: v.string() },
   handler: async (ctx, args) => {
-    if (args.newPassword.length < 6) {
-      throw new Error("Password must be at least 6 characters.");
-    }
-
-    const access = await ctx.db
-      .query("teamAccess")
-      .withIndex("by_slug", (q) => q.eq("teamSlug", args.teamSlug))
-      .unique();
-
-    if (!access) throw new Error("Team not found.");
-
-    await ctx.db.patch(access._id, {
-      passwordHash: hashPassword(args.newPassword),
-      updatedAt: Date.now(),
-    });
-
-    // Invalidate all existing sessions for this team
-    const sessions = await ctx.db
-      .query("teamAccessSessions")
-      .withIndex("by_slug", (q) => q.eq("teamSlug", args.teamSlug))
-      .collect();
-    for (const s of sessions) {
-      await ctx.db.delete(s._id);
-    }
-
+    if (args.newPassword.length < 4) throw new Error("Password must be at least 4 characters.");
+    const access = await ctx.db.query("teamAccess").withIndex("by_slug", (q) => q.eq("teamSlug", args.teamSlug)).unique();
+    if (!access) throw new Error("Workspace not found.");
+    await ctx.db.patch(access._id, { passwordHash: hashPassword(args.newPassword), updatedAt: Date.now() });
     return true;
   },
 });
 
-/** Admin toggles a team's active/disabled status. */
+/** @deprecated No toggle needed — use adminChangeWorkspacePassword */
 export const adminToggleTeam = mutation({
-  args: {
-    teamSlug: v.string(),
-    isActive: v.boolean(),
-  },
+  args: { teamSlug: v.string(), isActive: v.boolean() },
   handler: async (ctx, args) => {
-    const access = await ctx.db
-      .query("teamAccess")
-      .withIndex("by_slug", (q) => q.eq("teamSlug", args.teamSlug))
-      .unique();
-
-    if (!access) throw new Error("Team not found.");
-
-    await ctx.db.patch(access._id, {
-      isActive: args.isActive,
-      updatedAt: Date.now(),
-    });
-
-    // If disabling, invalidate all sessions
-    if (!args.isActive) {
-      const sessions = await ctx.db
-        .query("teamAccessSessions")
-        .withIndex("by_slug", (q) => q.eq("teamSlug", args.teamSlug))
-        .collect();
-      for (const s of sessions) {
-        await ctx.db.delete(s._id);
-      }
-    }
-
+    const access = await ctx.db.query("teamAccess").withIndex("by_slug", (q) => q.eq("teamSlug", args.teamSlug)).unique();
+    if (!access) throw new Error("Workspace not found.");
+    await ctx.db.patch(access._id, { isActive: args.isActive, updatedAt: Date.now() });
     return true;
-  },
-});
-
-/** Admin lists all teams with status info. */
-export const adminListTeams = query({
-  args: {},
-  handler: async (ctx) => {
-    const all = await ctx.db.query("teamAccess").collect();
-    return all.map((t) => ({
-      _id: t._id,
-      teamSlug: t.teamSlug,
-      teamName: t.teamName,
-      isActive: t.isActive,
-      hasPassword: !!t.passwordHash,
-      createdAt: t.createdAt,
-      updatedAt: t.updatedAt,
-    }));
   },
 });

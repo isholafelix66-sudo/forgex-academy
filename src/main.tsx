@@ -134,22 +134,12 @@ const TutorPage = lazy(() => import("./pages/TutorPage.tsx"));
 // ---------------------------------------------------------------------------
 const TeamHub = lazy(() => import("./pages/team/TeamHub.tsx"));
 const TeamPassword = lazy(() => import("./pages/team/TeamPassword.tsx"));
-const TeamShell = lazy(() => import("./pages/team/TeamShell.tsx"));
-const TeamOverview = lazy(() => import("./pages/team/TeamOverview.tsx"));
-const TeamWork = lazy(() => import("./pages/team/TeamWork.tsx"));
-const TeamCourses = lazy(() => import("./pages/team/TeamCourses.tsx"));
-const TeamReviews = lazy(() => import("./pages/team/TeamReviews.tsx"));
-const TeamActivity = lazy(() => import("./pages/team/TeamActivity.tsx"));
-const TeamMembers = lazy(() => import("./pages/team/TeamMembers.tsx"));
-const TeamProfile = lazy(() => import("./pages/team/TeamProfile.tsx"));
+const TeamDashboardShell = lazy(() => import("./pages/team/TeamDashboardShell.tsx"));
+const AcademicOverview = lazy(() => import("./pages/team/AcademicOverview.tsx"));
+const AISupportOverview = lazy(() => import("./pages/team/AISupportOverview.tsx"));
+const TutorSupportOverview = lazy(() => import("./pages/team/TutorSupportOverview.tsx"));
+const StudentSupportOverview = lazy(() => import("./pages/team/StudentSupportOverview.tsx"));
 const TeamSettings = lazy(() => import("./pages/team/TeamSettings.tsx"));
-const TeamTutors = lazy(() => import("./pages/team/TeamTutors.tsx"));
-const TeamAITools = lazy(() => import("./pages/team/TeamAITools.tsx"));
-const TeamPrompts = lazy(() => import("./pages/team/TeamPrompts.tsx"));
-const TeamContentSubmissions = lazy(() => import("./pages/team/TeamContentSubmissions.tsx"));
-const TeamTestimonials = lazy(() => import("./pages/team/TeamTestimonials.tsx"));
-const TeamSupportCases = lazy(() => import("./pages/team/TeamSupportCases.tsx"));
-const TeamTutorProfiles = lazy(() => import("./pages/team/TeamTutorProfiles.tsx"));
 
 
 // ---------------------------------------------------------------------------
@@ -684,32 +674,29 @@ createRoot(document.getElementById("root")!).render(
                   this dynamic segment, so the dashboard keeps working. */}
               <Route path="/tutor/:slug" element={<TutorPage />} />
 
-              {/* Team Hub — password-based team access */}
+              {/* Team Hub — workspace password access */}
               <Route path="/team" element={<TeamHub />} />
               <Route path="/team/access/:teamSlug" element={<TeamPassword />} />
-              <Route path="/team/:teamSlug" element={<RequireTeamAuth><TeamShell /></RequireTeamAuth>}>
-                <Route index element={<TeamOverview />} />
-                <Route path="work" element={<TeamWork />} />
-                <Route path="courses" element={<TeamCourses />} />
-                <Route path="reviews" element={<TeamReviews />} />
-                <Route path="activity" element={<TeamActivity />} />
-                <Route path="members" element={<TeamMembers />} />
-                <Route path="profile" element={<TeamProfile />} />
+              <Route path="/team/:teamSlug" element={<RequireTeamAuth><TeamDashboardShell /></RequireTeamAuth>}>
+                <Route index element={<AcademicOverview />} />
                 <Route path="settings" element={<TeamSettings />} />
-                {/* Academic Team */}
-                <Route path="tutors" element={<TeamTutors />} />
-                {/* Content Team */}
-                <Route path="submissions" element={<TeamContentSubmissions />} />
-                <Route path="testimonials" element={<TeamTestimonials />} />
-                {/* AI Team */}
-                <Route path="ai-tools" element={<TeamAITools />} />
-                <Route path="prompts" element={<TeamPrompts />} />
-                {/* Student Experience + Tutor Support */}
-                <Route path="support" element={<TeamSupportCases />} />
-                <Route path="cases" element={<TeamSupportCases />} />
-                <Route path="feedback" element={<TeamTestimonials />} />
-                <Route path="escalations" element={<TeamSupportCases />} />
-                <Route path="tutor-profiles" element={<TeamTutorProfiles />} />
+              </Route>
+              {/* Workspace-specific overviews */}
+              <Route path="/team/academic" element={<RequireTeamAuth><TeamDashboardShell /></RequireTeamAuth>}>
+                <Route index element={<AcademicOverview />} />
+                <Route path="settings" element={<TeamSettings />} />
+              </Route>
+              <Route path="/team/ai-support" element={<RequireTeamAuth><TeamDashboardShell /></RequireTeamAuth>}>
+                <Route index element={<AISupportOverview />} />
+                <Route path="settings" element={<TeamSettings />} />
+              </Route>
+              <Route path="/team/tutor-support" element={<RequireTeamAuth><TeamDashboardShell /></RequireTeamAuth>}>
+                <Route index element={<TutorSupportOverview />} />
+                <Route path="settings" element={<TeamSettings />} />
+              </Route>
+              <Route path="/team/student-support" element={<RequireTeamAuth><TeamDashboardShell /></RequireTeamAuth>}>
+                <Route index element={<StudentSupportOverview />} />
+                <Route path="settings" element={<TeamSettings />} />
               </Route>
 
 
