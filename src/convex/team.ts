@@ -193,9 +193,7 @@ export const reviewApplication = mutation({
         status: "active",
         joinedAt: Date.now(),
       });
-      if (app.userId) {
-        await ctx.db.patch(app.userId, { teamMemberId: membershipId });
-      }
+      // teamMemberId removed — team access is now role-based via teamRole field on users.
       const team = await ctx.db.get(args.teamId);
       if (team) {
         await ctx.db.patch(args.teamId, {
@@ -251,9 +249,7 @@ export const deactivateMember = mutation({
     const membership = await ctx.db.get(args.membershipId);
     if (!membership) throw new Error("Membership not found.");
     await ctx.db.patch(args.membershipId, { status: "deactivated" });
-    if (membership.userId) {
-      await ctx.db.patch(membership.userId, { teamMemberId: undefined });
-    }
+    // teamMemberId removed — team access is now role-based via teamRole field on users.
     const team = await ctx.db.get(membership.teamId);
     if (team && (team.memberCount ?? 0) > 0) {
       await ctx.db.patch(membership.teamId, {

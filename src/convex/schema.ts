@@ -118,8 +118,16 @@ const schema = defineSchema(
       // Public tutor page slug — e.g. /tutor/david-ogunleye. Assigned when
       // a tutor application is approved/verified; unique per user.
       slug: v.optional(v.string()),
-      // Team Workspace — links to the user's team membership record.
-      teamMemberId: v.optional(v.id("teamMemberships")),
+      // Team Workspace — role-based team access (admin-assigned).
+      teamRole: v.optional(
+        v.union(
+          v.literal("academic"),
+          v.literal("ai-support"),
+          v.literal("tutor-support"),
+          v.literal("student-support"),
+        ),
+      ),
+      teamRoleAssignedAt: v.optional(v.number()),
     })
       .index("email", ["email"])
       .index("by_slug", ["slug"]),
