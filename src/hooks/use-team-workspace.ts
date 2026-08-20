@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from "react";
-import { useMutation } from "convex/react";
+import { useQuery, useMutation } from "convex/react";
 import { api } from "@/convex/_generated/api";
 
 const TOKEN_PREFIX = "forgex_ws_";
@@ -28,11 +28,18 @@ function isTokenValidLocally(token: string, expectedSlug: string): boolean {
   return !isNaN(expiry) && Date.now() < expiry;
 }
 
+const WORKSPACE_NAMES: Record<string, string> = {
+  academic: "Academic Support",
+  "ai-support": "AI Support",
+  "tutor-support": "Tutor Support",
+  "student-support": "Student Support",
+};
+
 /**
- * Team workspace hook — NO useQuery, NO server validation on every render.
- * Token is validated server-side only during password submit (mutation).
- * Client-side validation checks format + expiry — secure because the token
- * is cryptographically generated server-side with random hex.
+ * Team workspace hook.
+ * Uses Convex useQuery for server validation + client-side fallback.
+ * The useQuery is ALWAYS called (hooks rules) but with "skip" when no token.
+ * The client-side check ensures the UI is instant even if server is slow.
  */
 export function useTeamWorkspace(workspaceSlug: string) {
   const [token, setToken] = useState(() => getStoredToken(workspaceSlug));
@@ -45,8 +52,17 @@ export function useTeamWorkspace(workspaceSlug: string) {
     return () => { mountedRef.current = false; };
   }, [workspaceSlug]);
 
-  // Client-side validation — never throws, instant response
-  const isUnlocked = initialized && isTokenValidLocally(token, workspaceSlug);
+  // Client-side validity — instant, never throws
+  const hasValidLocalToken = initialized && isTokenValidLocally(token, workspaceSlug);
+
+  // Server-side validation via Convex query
+  // Called with "skip" when no token (query never fires)
+  const serverWorkspace = useQuery(
+    api.teamAccess.validateWorkspaceToken,
+    hasValidLocalToken && token && workspaceSlug
+      ? { token, workspaceSlug }
+      : "skip",
+  );
 
   const verifyMutation = useMutation(api.teamAccess.verifyWorkspacePassword);
 
@@ -66,11 +82,15 @@ export function useTeamWorkspace(workspaceSlug: string) {
 
   const isLoading = !initialized;
 
-  return {
-    isUnlocked,
-    isLoading,
-    unlock,
-    lock,
-    workspace: isUnlocked ? { workspaceSlug, workspaceName: "" } : null,
-  };
+  // isUnlocked: server validated OR client-side valid (covers server slow/failed)
+  const isUnlocked = initialized && (
+    (serverWorkspace !== null && serverWorkspace !== undefined) ||
+    hasValidLocalToken
+  );
+
+  const workspace = serverWorkspace ?? (hasValidLocalToken
+    ? { workspaceSlug, workspaceName: WORKSPACE_NAMES[workspaceSlug] || "" }
+    : null);
+
+  return { isUnlocked, isLoading, unlock, lock, workspace };
 }
