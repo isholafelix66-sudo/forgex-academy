@@ -4,6 +4,17 @@ import { api } from "@/convex/_generated/api";
 
 const TOKEN_KEY = "forgex_team_session";
 
+// All known stale auth keys from previous Clerk/Convex Auth attempts
+const STALE_KEYS = [
+  "forgex_clerk_session",
+  "forgex_clerk_token",
+  "clerk_session",
+  "convex_auth_token",
+  "__convexAuthUser",
+  "forgex_session",
+  "convex-auth-storage",
+];
+
 function getStoredToken(): string {
   if (typeof window === "undefined") return "";
   try {
@@ -31,8 +42,20 @@ function clearToken() {
   }
 }
 
+/** Remove any stale auth keys from previous auth systems */
+function clearStaleAuthKeys() {
+  if (typeof window === "undefined") return;
+  try {
+    for (const key of STALE_KEYS) {
+      localStorage.removeItem(key);
+    }
+  } catch {
+    // Ignore
+  }
+}
+
 /**
- * Team authentication hook — credential-based, no Clerk.
+ * Team authentication hook — credential-based, no Clerk, no Convex Auth.
  *
  * Flow:
  * 1. User enters Team ID + password on /team/login
@@ -46,10 +69,20 @@ export function useTeamAuth() {
   const [initialized, setInitialized] = useState(false);
   const mountedRef = useRef(true);
 
-  // Read stored token on mount (client-only)
+  // Read stored token on mount (client-only) + clear stale auth keys
   useEffect(() => {
-    setToken(getStoredToken());
-    setInitialized(true);
+    try {
+      clearStaleAuthKeys();
+      const stored = getStoredToken();
+      if (mountedRef.current) {
+        setToken(stored);
+        setInitialized(true);
+      }
+    } catch {
+      if (mountedRef.current) {
+        setInitialized(true);
+      }
+    }
     return () => {
       mountedRef.current = false;
     };
@@ -60,12 +93,20 @@ export function useTeamAuth() {
 
   const login = useCallback(
     async (teamId: string, password: string) => {
-      const result = await teamLoginMutation({ teamId, password });
-      if (result?.token) {
-        storeToken(result.token);
-        setToken(result.token);
+      try {
+        const result = await teamLoginMutation({ teamId, password });
+        if (result?.token) {
+          storeToken(result.token);
+          if (mountedRef.current) {
+            setToken(result.token);
+          }
+        }
+        return result;
+      } catch (err) {
+        // Re-throw with clean message
+        const msg = err instanceof Error ? err.message : String(err);
+        throw new Error(msg || "Login failed. Please try again.");
       }
-      return result;
     },
     [teamLoginMutation],
   );
@@ -76,7 +117,9 @@ export function useTeamAuth() {
   const logout = useCallback(async () => {
     const currentToken = token;
     clearToken();
-    setToken("");
+    if (mountedRef.current) {
+      setToken("");
+    }
     if (currentToken) {
       try {
         await logoutMutation({ token: currentToken });
@@ -92,7 +135,7 @@ export function useTeamAuth() {
     token && initialized ? { token } : "skip",
   );
 
-  // Session is "loaded" once we either have data or the query resolved to null
+  // Session is "loaded" once we either have data or the query resolved to null/undefined
   const isLoading = !initialized || (!!token && session === undefined);
 
   const isAuthenticated =

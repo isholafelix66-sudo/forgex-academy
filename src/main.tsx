@@ -29,6 +29,45 @@ const LazyFloatingChat = lazy(() =>
   })),
 );
 
+/**
+ * Wraps FloatingChat in a dedicated error boundary so that any crash in the
+ * chat component (e.g. Convex Auth hooks failing for team members who
+ * authenticate via token, not Convex Auth) can never take down the entire
+ * application. Also skips rendering entirely on /team/* routes where the
+ * global chat is not needed and the Convex Auth hooks may not be available.
+ */
+class ChatErrorBoundary extends React.Component<
+  { children: React.ReactNode },
+  { hasError: boolean }
+> {
+  state = { hasError: false };
+  static getDerivedStateFromError() {
+    return { hasError: true };
+  }
+  componentDidCatch(err: Error) {
+    console.warn("[ForgeX] FloatingChat suppressed error:", err.message);
+  }
+  render() {
+    return this.state.hasError ? null : this.props.children;
+  }
+}
+
+/**
+ * Conditionally renders FloatingChat — skipped on /team/* routes where team
+ * members authenticate via their own token system and don't have a Convex
+ * Auth session. The chat hooks (useAuth, useMessageSound) depend on Convex
+ * Auth and would fail for team-only users.
+ */
+function LazyFloatingChatWrapper() {
+  const { pathname } = useLocation();
+  if (pathname.startsWith("/team")) return null;
+  return (
+    <ChatErrorBoundary>
+      <LazyFloatingChat />
+    </ChatErrorBoundary>
+  );
+}
+
 const Landing = lazy(() => import("./pages/Landing.tsx"));
 const About = lazy(() => import("./pages/About.tsx"));
 const Courses = lazy(() => import("./pages/Courses.tsx"));
@@ -454,6 +493,23 @@ function SentryUserSync() {
   return null;
 }
 
+/** Error boundary for SentryUserSync so Convex Auth failures never crash the app. */
+class SentrySyncBoundary extends React.Component<
+  { children: React.ReactNode },
+  { hasError: boolean }
+> {
+  state = { hasError: false };
+  static getDerivedStateFromError() {
+    return { hasError: true };
+  }
+  componentDidCatch(err: Error) {
+    console.warn("[ForgeX] SentryUserSync suppressed error:", err.message);
+  }
+  render() {
+    return this.state.hasError ? null : this.props.children;
+  }
+}
+
 function RouteSyncer() {
   const location = useLocation();
   useEffect(() => {
@@ -524,7 +580,9 @@ createRoot(document.getElementById("root")!).render(
             <VlyToolbar />
           </ToolbarErrorBoundary>
           <ConvexAuthProvider client={convex}>
-        <SentryUserSync />
+        <SentrySyncBoundary>
+          <SentryUserSync />
+        </SentrySyncBoundary>
         {/* WhatsApp-style floating chat — global, signed-in users only.
             Lazy-loaded so it (and its data queries) never block first paint
             or initial bundle for visitors. Rendered inside the router so it
@@ -533,7 +591,7 @@ createRoot(document.getElementById("root")!).render(
         <BrowserRouter>
           <RouteSyncer />
           <Suspense fallback={null}>
-            <LazyFloatingChat />
+            <LazyFloatingChatWrapper />
           </Suspense>
           <Suspense fallback={<RouteLoading />}>
             <RouteBoundary>
