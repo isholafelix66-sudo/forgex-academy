@@ -1,6 +1,6 @@
 import { useState, useCallback, useEffect } from "react";
 import { useParams, Link, Navigate } from "react-router";
-import { useQuery, useMutation } from "convex/react";
+import { useMutation } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import { motion } from "framer-motion";
 import { ArrowLeft, Loader2, Lock, Eye, EyeOff } from "lucide-react";
@@ -19,13 +19,11 @@ const TEAM_LABELS: Record<string, string> = {
 export default function TeamPassword() {
   const { teamSlug } = useParams<{ teamSlug: string }>();
   const { isAuthenticated, isLoading: authLoading, teamSlug: activeTeam, login } = useTeamHubAuth();
-  const teams = useQuery(api.teamAccess.listTeams);
-  const seedMutation = useMutation(api.teamAccess.seedTeamAccess);
 
-  // Ensure team access records are seeded (for direct-link visits)
-  useEffect(() => {
-    seedMutation();
-  }, [seedMutation]);
+  // NOTE: We intentionally do NOT use useQuery for listTeams or seedMutation here.
+  // Convex useQuery can throw errors that crash the page (RouteErrorBoundary "snag")
+  // when the backend functions haven't deployed yet, tables are missing, or there's
+  // a transient connection issue. The password page must always render.
 
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -42,8 +40,11 @@ export default function TeamPassword() {
     return <Navigate to={`/team/${activeTeam}`} replace />;
   }
 
-  const team = teams?.find((t) => t.slug === teamSlug);
-  const teamName = TEAM_LABELS[teamSlug || ""] || team?.name || "Team";
+  if (!teamSlug) {
+    return <Navigate to="/team" replace />;
+  }
+
+  const teamName = TEAM_LABELS[teamSlug] || "Team";
 
   const handleSubmit = useCallback(async (e: React.FormEvent) => {
     e.preventDefault();
@@ -52,8 +53,6 @@ export default function TeamPassword() {
     setSubmitting(true);
 
     try {
-      // Use the hook's login() which calls the mutation AND stores the
-      // token in localStorage so RequireTeamAuth can find it on redirect.
       await login(teamSlug, password);
     } catch (err) {
       const msg = err instanceof Error ? err.message : "";
@@ -70,44 +69,6 @@ export default function TeamPassword() {
       setSubmitting(false);
     }
   }, [teamSlug, password, login]);
-
-  // Loading teams list
-  if (teams === undefined) {
-    return (
-      <div className="flex min-h-screen items-center justify-center bg-background">
-        <Loader2 className="size-6 animate-spin text-lime-400" />
-      </div>
-    );
-  }
-
-  // Team not found
-  if (team && !team.isActive) {
-    return (
-      <div className="flex min-h-screen items-center justify-center bg-background px-6">
-        <div className="max-w-md text-center">
-          <div className="mx-auto mb-4 flex size-14 items-center justify-center rounded-2xl border border-red-400/20 bg-red-400/5">
-            <Lock className="size-7 text-red-400" />
-          </div>
-          <h1 className="font-display text-xl font-bold text-white">
-            Team Unavailable
-          </h1>
-          <p className="mt-2 text-sm text-white/40">
-            This team is currently unavailable. Please contact the Admin.
-          </p>
-          <Link
-            to="/team"
-            className="mt-6 inline-flex items-center gap-2 text-sm text-lime-400 hover:text-lime-300"
-          >
-            <ArrowLeft className="size-4" /> Back to Team Hub
-          </Link>
-        </div>
-      </div>
-    );
-  }
-
-  if (!teamSlug || (!team && teams.length > 0)) {
-    return <Navigate to="/team" replace />;
-  }
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-background px-6">

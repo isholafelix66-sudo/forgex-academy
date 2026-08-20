@@ -24,11 +24,11 @@ async function requireTeamToken(
       .withIndex("by_slug", (q: any) => q.eq("teamSlug", hubSession.teamSlug))
       .unique();
     if (!access || !access.isActive) throw new Error("Team is not active.");
+    // Non-fatal — team record may not exist yet if seedTeamAccess hasn't run
     const team = await ctx.db
       .query("teams")
       .withIndex("by_slug", (q: any) => q.eq("slug", hubSession.teamSlug))
       .unique();
-    if (!team) throw new Error("Team not found.");
     const account = {
       _id: access._id,
       teamId: access.teamSlug,
@@ -38,7 +38,7 @@ async function requireTeamToken(
       teamSlug: hubSession.teamSlug,
       status: "active" as const,
     };
-    return { account, membership: null, team, teamId: team._id };
+    return { account, membership: null, team, teamId: team?._id ?? null };
   }
 
   // 2) Fallback: check the legacy per-user sessions (teamSessions)

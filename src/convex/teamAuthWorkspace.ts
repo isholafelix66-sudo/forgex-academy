@@ -138,39 +138,43 @@ async function resolveTeamContext(ctx: any, account: any, membership: any, team:
 export const getTeamWorkspace = query({
   args: { token: v.string() },
   handler: async (ctx, args) => {
-    const { account, membership, team } = await requireTeamToken(
-      ctx,
-      args.token,
-    );
-    return {
-      account: {
-        _id: account._id,
-        teamId: account.teamId,
-        name: account.name,
-        email: account.email,
-        role: account.role,
-        teamSlug: account.teamSlug,
-        status: account.status,
-      },
-      membership: membership
-        ? {
-            _id: membership._id,
-            teamId: membership.teamId,
-            role: membership.role,
-            status: membership.status,
-          }
-        : null,
-      team: team
-        ? {
-            _id: team._id,
-            name: team.name,
-            slug: team.slug,
-            description: team.description,
-            memberCount: team.memberCount,
-            activeWorkCount: team.activeWorkCount,
-          }
-        : null,
-    };
+    try {
+      const { account, membership, team } = await requireTeamToken(
+        ctx,
+        args.token,
+      );
+      return {
+        account: {
+          _id: account._id,
+          teamId: account.teamId,
+          name: account.name,
+          email: account.email,
+          role: account.role,
+          teamSlug: account.teamSlug,
+          status: account.status,
+        },
+        membership: membership
+          ? {
+              _id: membership._id,
+              teamId: membership.teamId,
+              role: membership.role,
+              status: membership.status,
+            }
+          : null,
+        team: team
+          ? {
+              _id: team._id,
+              name: team.name,
+              slug: team.slug,
+              description: team.description,
+              memberCount: team.memberCount,
+              activeWorkCount: team.activeWorkCount,
+            }
+          : null,
+      };
+    } catch {
+      return null;
+    }
   },
 });
 
@@ -188,11 +192,11 @@ export const getTeamWorkItems = query({
     ),
   },
   handler: async (ctx, args) => {
-    const { account, membership, team } = await requireTeamToken(ctx, args.token);
-    const { teamId } = await resolveTeamContext(ctx, account, membership, team);
-    if (!teamId) return [];
-
     try {
+      const { account, membership, team } = await requireTeamToken(ctx, args.token);
+      const { teamId } = await resolveTeamContext(ctx, account, membership, team);
+      if (!teamId) return [];
+
       let q = ctx.db
         .query("workItems")
         .withIndex("by_team", (q) => q.eq("teamId", teamId))
@@ -227,11 +231,10 @@ export const getTeamActivity = query({
     limit: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
-    const { account, membership, team } = await requireTeamToken(ctx, args.token);
-    const { teamId } = await resolveTeamContext(ctx, account, membership, team);
-    if (!teamId) return [];
-
     try {
+      const { account, membership, team } = await requireTeamToken(ctx, args.token);
+      const { teamId } = await resolveTeamContext(ctx, account, membership, team);
+      if (!teamId) return [];
       const activities = await ctx.db
         .query("teamActivity")
         .withIndex("by_team", (q) => q.eq("teamId", teamId))
@@ -256,11 +259,10 @@ export const getTeamActivity = query({
 export const getWorkItemComments = query({
   args: { token: v.string(), workItemId: v.id("workItems") },
   handler: async (ctx, args) => {
-    await requireTeamToken(ctx, args.token);
-    const item = await ctx.db.get(args.workItemId);
-    if (!item) return [];
-
     try {
+      await requireTeamToken(ctx, args.token);
+      const item = await ctx.db.get(args.workItemId);
+      if (!item) return [];
       const comments = await ctx.db
         .query("workComments")
         .withIndex("by_workItem", (q) => q.eq("workItemId", args.workItemId))
@@ -446,11 +448,11 @@ export const addWorkComment = mutation({
 export const listTeamMembers = query({
   args: { token: v.string() },
   handler: async (ctx, args) => {
-    const { account, membership, team } = await requireTeamToken(ctx, args.token);
-    const { teamId } = await resolveTeamContext(ctx, account, membership, team);
-    if (!teamId) return [];
-
     try {
+      const { account, membership, team } = await requireTeamToken(ctx, args.token);
+      const { teamId } = await resolveTeamContext(ctx, account, membership, team);
+      if (!teamId) return [];
+
       const memberships = await ctx.db
         .query("teamMemberships")
         .withIndex("by_team", (q) => q.eq("teamId", teamId as any))
@@ -478,6 +480,10 @@ export const listTeamMembers = query({
 export const listAllTeams = query({
   args: {},
   handler: async (ctx) => {
-    return await ctx.db.query("teams").collect();
+    try {
+      return await ctx.db.query("teams").collect();
+    } catch {
+      return [];
+    }
   },
 });
