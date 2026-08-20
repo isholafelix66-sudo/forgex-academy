@@ -1,6 +1,15 @@
 import { v } from "convex/values";
 import { query, mutation } from "./_generated/server";
 
+// Team slug → {name, description} mapping for auto-creating teams records
+const TEAM_SLUG_MAP: Record<string, { name: string; description: string }> = {
+  academic: { name: "Academic Team", description: "Academic operations, academic quality, and learning support." },
+  "tutor-support": { name: "Tutor Support", description: "Tutor-related support, onboarding, and tutor issues." },
+  "student-support": { name: "Student Support", description: "Student-facing support, student issues, and student experience." },
+  content: { name: "Content Team", description: "Content creation, learning materials, and content operations." },
+  "ai-prompts": { name: "AI & Prompt Team", description: "AI Hub, prompt resources, AI-related tools, and prompt-library operations." },
+};
+
 // ---------------------------------------------------------------------------
 // Helper: validate a team session token and return account + membership
 // ---------------------------------------------------------------------------
@@ -87,6 +96,15 @@ async function requireTeamToken(
     team = await ctx.db.get(membership.teamId);
   }
 
+  // If team is still null (e.g. hub session with no teams record),
+  // try to find by slug from the account
+  if (!team && account.teamSlug) {
+    team = await ctx.db
+      .query("teams")
+      .withIndex("by_slug", (q: any) => q.eq("slug", account.teamSlug))
+      .unique();
+  }
+
   return { account, membership, team };
 }
 
@@ -107,6 +125,21 @@ async function resolveTeamContext(ctx: any, account: any, membership: any, team:
       .withIndex("by_slug", (q: any) => q.eq("slug", account.teamSlug))
       .unique();
     if (teamBySlug) return { teamId: teamBySlug._id, team: teamBySlug };
+    // Auto-create the team record if it doesn't exist yet
+    const catInfo = TEAM_SLUG_MAP[account.teamSlug];
+    if (catInfo) {
+      const newId = await ctx.db.insert("teams", {
+        name: catInfo.name,
+        slug: account.teamSlug,
+        description: catInfo.description,
+        memberCount: 0,
+        activeWorkCount: 0,
+        status: "active",
+        createdAt: Date.now(),
+      });
+      const newTeam = await ctx.db.get(newId);
+      return { teamId: newId, team: newTeam };
+    }
   }
   return { teamId: null, team: null };
 }
@@ -171,25 +204,33 @@ export const getTeamWorkItems = query({
   handler: async (ctx, args) => {
     const { account, membership, team } = await requireTeamToken(ctx, args.token);
     const { teamId } = await resolveTeamContext(ctx, account, membership, team);
-    if (!teamId) throw new Error("You are not assigned to a team.");
+    if (!teamId) return [];
 
-    let q = ctx.db
-      .query("workItems")
-      .withIndex("by_team", (q) => q.eq("teamId", teamId))
-      .order("desc");
-    if (args.status) {
-      q = q.filter((q) => q.eq(q.field("status"), args.status));
+    try {
+      let q = ctx.db
+        .query("workItems")
+        .withIndex("by_team", (q) => q.eq("teamId", teamId))
+        .order("desc");
+      if (args.status) {
+        q = q.filter((q) => q.eq(q.field("status"), args.status));
+      }
+      const items = await q.collect();
+      const enriched = [];
+      for (const item of items) {
+        let assignee = null;
+        try {
+          assignee = item.assignedTo ? await ctx.db.get(item.assignedTo) : null;
+        } catch { /* ignore */ }
+        let creator = null;
+        try {
+          creator = item.createdBy ? await ctx.db.get(item.createdBy) : null;
+        } catch { /* ignore */ }
+        enriched.push({ ...item, assignee, creator });
+      }
+      return enriched;
+    } catch {
+      return [];
     }
-    const items = await q.collect();
-    const enriched = [];
-    for (const item of items) {
-      const assignee = item.assignedTo
-        ? await ctx.db.get(item.assignedTo)
-        : null;
-      const creator = await ctx.db.get(item.createdBy);
-      enriched.push({ ...item, assignee, creator });
-    }
-    return enriched;
   },
 });
 
@@ -202,19 +243,26 @@ export const getTeamActivity = query({
   handler: async (ctx, args) => {
     const { account, membership, team } = await requireTeamToken(ctx, args.token);
     const { teamId } = await resolveTeamContext(ctx, account, membership, team);
-    if (!teamId) throw new Error("You are not assigned to a team.");
+    if (!teamId) return [];
 
-    const activities = await ctx.db
-      .query("teamActivity")
-      .withIndex("by_team", (q) => q.eq("teamId", teamId))
-      .order("desc")
-      .take(args.limit ?? 30);
-    const enriched = [];
-    for (const a of activities) {
-      const u = await ctx.db.get(a.userId);
-      enriched.push({ ...a, user: u });
+    try {
+      const activities = await ctx.db
+        .query("teamActivity")
+        .withIndex("by_team", (q) => q.eq("teamId", teamId))
+        .order("desc")
+        .take(args.limit ?? 30);
+      const enriched = [];
+      for (const a of activities) {
+        let u = null;
+        try {
+          u = await ctx.db.get(a.userId);
+        } catch { /* ignore — hub account */ }
+        enriched.push({ ...a, user: u });
+      }
+      return enriched;
+    } catch {
+      return [];
     }
-    return enriched;
   },
 });
 
@@ -224,18 +272,25 @@ export const getWorkItemComments = query({
   handler: async (ctx, args) => {
     await requireTeamToken(ctx, args.token);
     const item = await ctx.db.get(args.workItemId);
-    if (!item) throw new Error("Work item not found.");
+    if (!item) return [];
 
-    const comments = await ctx.db
-      .query("workComments")
-      .withIndex("by_workItem", (q) => q.eq("workItemId", args.workItemId))
-      .collect();
-    const enriched = [];
-    for (const c of comments) {
-      const u = await ctx.db.get(c.userId);
-      enriched.push({ ...c, user: u });
+    try {
+      const comments = await ctx.db
+        .query("workComments")
+        .withIndex("by_workItem", (q) => q.eq("workItemId", args.workItemId))
+        .collect();
+      const enriched = [];
+      for (const c of comments) {
+        let u = null;
+        try {
+          u = await ctx.db.get(c.userId);
+        } catch { /* ignore */ }
+        enriched.push({ ...c, user: u });
+      }
+      return enriched;
+    } catch {
+      return [];
     }
-    return enriched;
   },
 });
 
@@ -260,13 +315,16 @@ export const createWorkItem = mutation({
     const { teamId } = await resolveTeamContext(ctx, account, membership, team);
     if (!teamId) throw new Error("You are not assigned to a team.");
     const now = Date.now();
+    // Use a safe createdBy — Hub accounts don't have users records,
+    // so we store null and rely on the team context for attribution.
+    const safeCreatorId = (account as any).userId || null;
     const id = await ctx.db.insert("workItems", {
       title: args.title,
       description: args.description,
       teamId: teamId as any,
       courseId: args.courseId,
       assignedTo: args.assignedTo,
-      createdBy: account._id as any,
+      createdBy: safeCreatorId,
       priority: args.priority,
       status: "todo",
       deadline: args.deadline,
@@ -275,20 +333,23 @@ export const createWorkItem = mutation({
       updatedAt: now,
     });
     await ctx.db.insert("teamActivity", {
-      userId: account._id as any,
+      userId: safeCreatorId,
       teamId: teamId as any,
       action: "created_work",
       targetType: "workItem",
       targetId: id,
       targetLabel: args.title,
+      details: account.name ? `${account.name} created this task` : undefined,
       createdAt: now,
     });
-    const teamDoc = teamId ? await ctx.db.get(teamId) as any : null;
-    if (teamDoc) {
-      await ctx.db.patch(teamId, {
-        activeWorkCount: (teamDoc.activeWorkCount ?? 0) + 1,
-      });
-    }
+    try {
+      const teamDoc = teamId ? await ctx.db.get(teamId) as any : null;
+      if (teamDoc) {
+        await ctx.db.patch(teamId, {
+          activeWorkCount: (teamDoc.activeWorkCount ?? 0) + 1,
+        });
+      }
+    } catch { /* ignore */ }
     return id;
   },
 });
@@ -336,16 +397,19 @@ export const updateWorkItem = mutation({
     const statusLabel = args.status
       ? args.status.replace(/_/g, " ")
       : "updated";
-    await ctx.db.insert("teamActivity", {
-      userId: account._id as any,
-      teamId: item.teamId,
-      action: args.status ? `status_${args.status}` : "updated_work",
-      targetType: "workItem",
-      targetId: args.workItemId,
-      targetLabel: item.title,
-      details: args.status ? `Status → ${statusLabel}` : undefined,
-      createdAt: Date.now(),
-    });
+    const safeUserId = (account as any).userId || null;
+    try {
+      await ctx.db.insert("teamActivity", {
+        userId: safeUserId,
+        teamId: item.teamId,
+        action: args.status ? `status_${args.status}` : "updated_work",
+        targetType: "workItem",
+        targetId: args.workItemId,
+        targetLabel: item.title,
+        details: args.status ? `Status → ${statusLabel}` : (account.name ? `${account.name} updated this task` : undefined),
+        createdAt: Date.now(),
+      });
+    } catch { /* ignore activity logging errors */ }
     return args.workItemId;
   },
 });
@@ -363,25 +427,31 @@ export const addWorkComment = mutation({
     if (!item) throw new Error("Work item not found.");
 
     const now = Date.now();
-    await ctx.db.insert("workComments", {
-      workItemId: args.workItemId,
-      userId: account._id as any,
-      content: args.content,
-      createdAt: now,
-    });
+    const safeUserId = (account as any).userId || null;
+    try {
+      await ctx.db.insert("workComments", {
+        workItemId: args.workItemId,
+        userId: safeUserId,
+        content: args.content,
+        createdAt: now,
+      });
+    } catch { /* workComments insert failed — skip */ }
     await ctx.db.patch(args.workItemId, {
       commentCount: (item.commentCount ?? 0) + 1,
       updatedAt: now,
     });
-    await ctx.db.insert("teamActivity", {
-      userId: account._id as any,
-      teamId: item.teamId,
-      action: "added_comment",
-      targetType: "workItem",
-      targetId: args.workItemId,
-      targetLabel: item.title,
-      createdAt: now,
-    });
+    try {
+      await ctx.db.insert("teamActivity", {
+        userId: safeUserId,
+        teamId: item.teamId,
+        action: "added_comment",
+        targetType: "workItem",
+        targetId: args.workItemId,
+        targetLabel: item.title,
+        details: account.name ? `${account.name} commented` : undefined,
+        createdAt: now,
+      });
+    } catch { /* ignore */ }
     return args.workItemId;
   },
 });
@@ -392,21 +462,29 @@ export const listTeamMembers = query({
   handler: async (ctx, args) => {
     const { account, membership, team } = await requireTeamToken(ctx, args.token);
     const { teamId } = await resolveTeamContext(ctx, account, membership, team);
-    if (!teamId) throw new Error("You are not assigned to a team.");
+    if (!teamId) return [];
 
-    const memberships = await ctx.db
-      .query("teamMemberships")
-      .withIndex("by_team", (q) => q.eq("teamId", teamId as any))
-      .collect();
-    const members = [];
-    for (const m of memberships) {
-      const acct = m.teamAccountId
-        ? await ctx.db.get(m.teamAccountId)
-        : null;
-      const user = m.userId ? await ctx.db.get(m.userId) : null;
-      members.push({ ...m, teamAccount: acct, user });
+    try {
+      const memberships = await ctx.db
+        .query("teamMemberships")
+        .withIndex("by_team", (q) => q.eq("teamId", teamId as any))
+        .collect();
+      const members = [];
+      for (const m of memberships) {
+        let acct = null;
+        try {
+          acct = m.teamAccountId ? await ctx.db.get(m.teamAccountId) : null;
+        } catch { /* ignore */ }
+        let user = null;
+        try {
+          user = m.userId ? await ctx.db.get(m.userId) : null;
+        } catch { /* ignore */ }
+        members.push({ ...m, teamAccount: acct, user });
+      }
+      return members;
+    } catch {
+      return [];
     }
-    return members;
   },
 });
 

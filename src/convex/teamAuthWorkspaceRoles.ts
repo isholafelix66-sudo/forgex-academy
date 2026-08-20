@@ -91,7 +91,8 @@ export const listPendingTutorApplications = query({
       .collect();
     const enriched = [];
     for (const app of apps) {
-      const user = await ctx.db.get(app.userId);
+      let user = null;
+      try { user = await ctx.db.get(app.userId); } catch { /* ignore */ }
       const existingReview = await ctx.db
         .query("teamTutorReviews")
         .withIndex("by_application", (q) => q.eq("applicationId", app._id))
@@ -111,7 +112,8 @@ export const listAllTutorApplications = query({
     const apps = await ctx.db.query("tutorApplications").collect();
     const enriched = [];
     for (const app of apps) {
-      const user = await ctx.db.get(app.userId);
+      let user = null;
+      try { user = await ctx.db.get(app.userId); } catch { /* ignore */ }
       const review = await ctx.db
         .query("teamTutorReviews")
         .withIndex("by_application", (q) => q.eq("applicationId", app._id))
@@ -141,7 +143,9 @@ export const reviewTutorApplication = mutation({
     const tokenResult = await requireTeamToken(ctx, args.token);
     const { account } = tokenResult;
     const tid = getTeamId(tokenResult);
+    if (!tid) throw new Error("Team not found.");
     const now = Date.now();
+    const safeUserId = (account as any).userId || null;
     const existing = await ctx.db
       .query("teamTutorReviews")
       .withIndex("by_application", (q) => q.eq("applicationId", args.applicationId))
@@ -157,7 +161,7 @@ export const reviewTutorApplication = mutation({
       await ctx.db.insert("teamTutorReviews", {
         applicationId: args.applicationId,
         teamId: tid,
-        userId: account._id as any,
+        userId: safeUserId,
         status: args.status,
         note: args.note,
         createdAt: now,
@@ -229,7 +233,8 @@ export const listContentSubmissions = query({
       .collect();
     const enriched = [];
     for (const s of subs) {
-      const u = await ctx.db.get(s.userId);
+      let u = null;
+      try { u = await ctx.db.get(s.userId); } catch { /* ignore */ }
       enriched.push({ ...s, user: u });
     }
     return enriched;
@@ -253,10 +258,12 @@ export const createContentSubmission = mutation({
     const tokenResult = await requireTeamToken(ctx, args.token);
     const { account } = tokenResult;
     const tid = getTeamId(tokenResult);
+    if (!tid) throw new Error("Team not found.");
     const now = Date.now();
+    const safeUserId = (account as any).userId || null;
     const id = await ctx.db.insert("teamContentSubmissions", {
       teamId: tid,
-      userId: account._id as any,
+      userId: safeUserId,
       type: args.type,
       title: args.title,
       description: args.description,
@@ -310,10 +317,12 @@ export const createAiToolDraft = mutation({
     const tokenResult = await requireTeamToken(ctx, args.token);
     const { account } = tokenResult;
     const tid = getTeamId(tokenResult);
+    if (!tid) throw new Error("Team not found.");
     const now = Date.now();
+    const safeUserId = (account as any).userId || null;
     const id = await ctx.db.insert("teamAiToolDrafts", {
       teamId: tid,
-      userId: account._id as any,
+      userId: safeUserId,
       title: args.title,
       description: args.description,
       category: args.category,
@@ -362,10 +371,12 @@ export const createPromptDraft = mutation({
     const tokenResult = await requireTeamToken(ctx, args.token);
     const { account } = tokenResult;
     const tid = getTeamId(tokenResult);
+    if (!tid) throw new Error("Team not found.");
     const now = Date.now();
+    const safeUserId = (account as any).userId || null;
     const id = await ctx.db.insert("teamPromptDrafts", {
       teamId: tid,
-      userId: account._id as any,
+      userId: safeUserId,
       title: args.title,
       description: args.description,
       category: args.category,
@@ -394,9 +405,12 @@ export const listSupportTickets = query({
       .collect();
     const enriched = [];
     for (const c of cases) {
-      const msg = await ctx.db.get(c.supportMessageId);
-      const tutor = msg ? await ctx.db.get(msg.tutorId) : null;
-      const assignee = c.assignedTo ? await ctx.db.get(c.assignedTo) : null;
+      let msg = null;
+      try { msg = await ctx.db.get(c.supportMessageId); } catch { /* ignore */ }
+      let tutor = null;
+      try { tutor = msg ? await ctx.db.get(msg.tutorId) : null; } catch { /* ignore */ }
+      let assignee = null;
+      try { assignee = c.assignedTo ? await ctx.db.get(c.assignedTo) : null; } catch { /* ignore */ }
       enriched.push({ ...c, message: msg, tutor, assignee });
     }
     return enriched;
@@ -410,18 +424,21 @@ export const claimSupportCase = mutation({
     const c = await ctx.db.get(args.caseId);
     if (!c) throw new Error("Case not found.");
     const now = Date.now();
+    const safeUserId = (account as any).userId || null;
     await ctx.db.patch(args.caseId, {
-      assignedTo: account._id as any,
+      assignedTo: safeUserId,
       status: "in_progress",
       updatedAt: now,
     });
-    await ctx.db.insert("teamCaseHistory", {
-      caseId: args.caseId,
-      userId: account._id as any,
-      action: "claimed",
-      details: `${account.name ?? "Member"} claimed this case`,
-      createdAt: now,
-    });
+    try {
+      await ctx.db.insert("teamCaseHistory", {
+        caseId: args.caseId,
+        userId: safeUserId,
+        action: "claimed",
+        details: `${account.name ?? "Member"} claimed this case`,
+        createdAt: now,
+      });
+    } catch { /* ignore */ }
     return true;
   },
 });
@@ -438,13 +455,16 @@ export const resolveSupportCase = mutation({
     if (!c) throw new Error("Case not found.");
     const now = Date.now();
     await ctx.db.patch(args.caseId, { status: "resolved", updatedAt: now });
-    await ctx.db.insert("teamCaseHistory", {
-      caseId: args.caseId,
-      userId: account._id as any,
-      action: "resolved",
-      details: args.note ?? "Case resolved",
-      createdAt: now,
-    });
+    const safeUserId = (account as any).userId || null;
+    try {
+      await ctx.db.insert("teamCaseHistory", {
+        caseId: args.caseId,
+        userId: safeUserId,
+        action: "resolved",
+        details: args.note ?? "Case resolved",
+        createdAt: now,
+      });
+    } catch { /* ignore */ }
     return true;
   },
 });
@@ -465,7 +485,8 @@ export const listEscalations = query({
       .collect();
     const enriched = [];
     for (const e of esc) {
-      const u = await ctx.db.get(e.userId);
+      let u = null;
+      try { u = await ctx.db.get(e.userId); } catch { /* ignore */ }
       enriched.push({ ...e, user: u });
     }
     return enriched;

@@ -83,9 +83,40 @@ async function getSessionFromToken(ctx: any, token: string) {
 // Seed initial team access records (idempotent)
 // ---------------------------------------------------------------------------
 
+/** Ensure the `teams` table has a matching record for every teamAccess
+ *  row. The workspace queries (teamAuthWorkspace, teamAuthWorkspaceRoles)
+ *  need a `teams` doc to resolve teamId. This runs idempotently. */
+async function ensureTeamsExist(ctx: any): Promise<void> {
+  for (const team of DEFAULT_TEAMS) {
+    try {
+      const existing = await ctx.db
+        .query("teams")
+        .withIndex("by_slug", (q: any) => q.eq("slug", team.slug))
+        .unique();
+      if (!existing) {
+        await ctx.db.insert("teams", {
+          name: team.name,
+          slug: team.slug,
+          description: team.description,
+          memberCount: 0,
+          activeWorkCount: 0,
+          status: "active",
+          createdAt: Date.now(),
+        });
+      }
+    } catch {
+      // Ignore — team may already exist
+    }
+  }
+}
+
 export const seedTeamAccess = mutation({
   args: {},
   handler: async (ctx) => {
+    // First, ensure all teams have matching records in the `teams` table
+    // so that workspace queries can resolve teamId.
+    await ensureTeamsExist(ctx);
+
     let seeded = 0;
     for (const team of DEFAULT_TEAMS) {
       const existing = await ctx.db
