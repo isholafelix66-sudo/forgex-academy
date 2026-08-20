@@ -90,6 +90,27 @@ async function requireTeamToken(
   return { account, membership, team };
 }
 
+/**
+ * Resolve the team record and teamId for the current session.
+ * Hub sessions (password-based) don't have memberships but have a teamSlug
+ * on the account — look up the `teams` table by slug.
+ * Legacy sessions have a membership with a teamId.
+ */
+async function resolveTeamContext(ctx: any, account: any, membership: any, team: any) {
+  if (team) {
+    return { teamId: team._id, team };
+  }
+  // Hub session without a team record: look up by slug from the account
+  if (account.teamSlug) {
+    const teamBySlug = await ctx.db
+      .query("teams")
+      .withIndex("by_slug", (q: any) => q.eq("slug", account.teamSlug))
+      .unique();
+    if (teamBySlug) return { teamId: teamBySlug._id, team: teamBySlug };
+  }
+  return { teamId: null, team: null };
+}
+
 // ===========================================================================
 // Workspace queries (team-token-authenticated)
 // ===========================================================================
@@ -148,12 +169,13 @@ export const getTeamWorkItems = query({
     ),
   },
   handler: async (ctx, args) => {
-    const { membership } = await requireTeamToken(ctx, args.token);
-    if (!membership) throw new Error("You are not assigned to a team.");
+    const { account, membership, team } = await requireTeamToken(ctx, args.token);
+    const { teamId } = await resolveTeamContext(ctx, account, membership, team);
+    if (!teamId) throw new Error("You are not assigned to a team.");
 
     let q = ctx.db
       .query("workItems")
-      .withIndex("by_team", (q) => q.eq("teamId", membership.teamId))
+      .withIndex("by_team", (q) => q.eq("teamId", teamId))
       .order("desc");
     if (args.status) {
       q = q.filter((q) => q.eq(q.field("status"), args.status));
@@ -178,12 +200,13 @@ export const getTeamActivity = query({
     limit: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
-    const { membership } = await requireTeamToken(ctx, args.token);
-    if (!membership) throw new Error("You are not assigned to a team.");
+    const { account, membership, team } = await requireTeamToken(ctx, args.token);
+    const { teamId } = await resolveTeamContext(ctx, account, membership, team);
+    if (!teamId) throw new Error("You are not assigned to a team.");
 
     const activities = await ctx.db
       .query("teamActivity")
-      .withIndex("by_team", (q) => q.eq("teamId", membership.teamId))
+      .withIndex("by_team", (q) => q.eq("teamId", teamId))
       .order("desc")
       .take(args.limit ?? 30);
     const enriched = [];
@@ -233,13 +256,14 @@ export const createWorkItem = mutation({
     deadline: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
-    const { account, membership } = await requireTeamToken(ctx, args.token);
-    if (!membership) throw new Error("You are not assigned to a team.");
+    const { account, membership, team } = await requireTeamToken(ctx, args.token);
+    const { teamId } = await resolveTeamContext(ctx, account, membership, team);
+    if (!teamId) throw new Error("You are not assigned to a team.");
     const now = Date.now();
     const id = await ctx.db.insert("workItems", {
       title: args.title,
       description: args.description,
-      teamId: membership.teamId,
+      teamId: teamId as any,
       courseId: args.courseId,
       assignedTo: args.assignedTo,
       createdBy: account._id as any,
@@ -252,17 +276,17 @@ export const createWorkItem = mutation({
     });
     await ctx.db.insert("teamActivity", {
       userId: account._id as any,
-      teamId: membership.teamId,
+      teamId: teamId as any,
       action: "created_work",
       targetType: "workItem",
       targetId: id,
       targetLabel: args.title,
       createdAt: now,
     });
-    const team = await ctx.db.get(membership.teamId) as any;
-    if (team) {
-      await ctx.db.patch(membership.teamId, {
-        activeWorkCount: (team.activeWorkCount ?? 0) + 1,
+    const teamDoc = teamId ? await ctx.db.get(teamId) as any : null;
+    if (teamDoc) {
+      await ctx.db.patch(teamId, {
+        activeWorkCount: (teamDoc.activeWorkCount ?? 0) + 1,
       });
     }
     return id;
@@ -366,12 +390,13 @@ export const addWorkComment = mutation({
 export const listTeamMembers = query({
   args: { token: v.string() },
   handler: async (ctx, args) => {
-    const { membership } = await requireTeamToken(ctx, args.token);
-    if (!membership) throw new Error("You are not assigned to a team.");
+    const { account, membership, team } = await requireTeamToken(ctx, args.token);
+    const { teamId } = await resolveTeamContext(ctx, account, membership, team);
+    if (!teamId) throw new Error("You are not assigned to a team.");
 
     const memberships = await ctx.db
       .query("teamMemberships")
-      .withIndex("by_team", (q) => q.eq("teamId", membership.teamId))
+      .withIndex("by_team", (q) => q.eq("teamId", teamId as any))
       .collect();
     const members = [];
     for (const m of memberships) {

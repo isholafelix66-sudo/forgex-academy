@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 
 export default function TeamLogin() {
-  const { isAuthenticated, isLoading: authLoading, teamMember, login } = useTeamAuth();
+  const { isAuthenticated, isLoading: authLoading, teamSlug, login } = useTeamAuth();
   const [searchParams] = useSearchParams();
   const returnTo = searchParams.get("returnTo") || "";
 
@@ -18,9 +18,7 @@ export default function TeamLogin() {
 
   // If already authenticated, redirect to workspace
   if (!authLoading && isAuthenticated) {
-    const dest =
-      returnTo ||
-      (teamMember?.teamSlug ? `/team/${teamMember.teamSlug}` : "/team");
+    const dest = returnTo || (teamSlug ? `/team/${teamSlug}` : "/team");
     return <Navigate to={dest} replace />;
   }
 
@@ -30,25 +28,18 @@ export default function TeamLogin() {
     setSubmitting(true);
 
     try {
-      const result = await login(teamId.trim(), password);
-
-      if (result?.token) {
-        // Login successful — the isAuthenticated redirect above will fire
-        // and send the user to the correct workspace based on teamSlug
-      }
+      // The new hook expects teamSlug as the first argument
+      // Map the teamId input to a slug-like value
+      const slug = teamId.trim().toLowerCase().replace(/\s+/g, "-");
+      await login(slug, password);
     } catch (err) {
       const msg = err instanceof Error ? err.message : "";
-      if (
-        msg.includes("Invalid Team ID") ||
-        msg.includes("password")
-      ) {
-        setError("Invalid Team ID or password.");
-      } else if (msg.includes("pending")) {
-        setError("Your account is pending admin approval. Please wait for activation.");
-      } else if (msg.includes("suspended") || msg.includes("deactivated")) {
-        setError("This Team account has been deactivated. Please contact the Admin.");
-      } else if (msg.includes("reset")) {
-        setError("Your password needs to be reset. Please contact the Admin.");
+      if (msg.includes("currently unavailable")) {
+        setError("This team is currently unavailable. Please contact the Admin.");
+      } else if (msg.includes("not found")) {
+        setError("Team not found.");
+      } else if (msg.includes("Incorrect")) {
+        setError("Incorrect team password. Please try again.");
       } else {
         setError("We couldn't sign you in right now. Please try again.");
       }
@@ -65,11 +56,11 @@ export default function TeamLogin() {
         className="w-full max-w-md"
       >
         <Link
-          to="/"
+          to="/team"
           className="mb-6 inline-flex items-center gap-2 text-sm text-white/40 transition-colors hover:text-white"
         >
           <ArrowLeft className="size-4" />
-          Back to ForgeX
+          Back to Team Hub
         </Link>
 
         <div className="rounded-3xl border border-white/10 bg-card p-8">
@@ -81,23 +72,22 @@ export default function TeamLogin() {
               Team Sign In
             </h1>
             <p className="mt-2 text-sm text-white/40">
-              Enter your Team Member ID and password.
+              Enter your team password to continue.
             </p>
           </div>
 
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
               <label className="mb-1.5 block text-sm font-medium text-white/60">
-                Team Member ID
+                Team
               </label>
               <div className="relative">
                 <User className="absolute left-3.5 top-1/2 size-4 -translate-y-1/2 text-white/30" />
                 <Input
                   value={teamId}
                   onChange={(e) => setTeamId(e.target.value)}
-                  placeholder="e.g. CONTENT-001"
-                  className="h-11 border-white/10 bg-white/5 pl-10 text-white uppercase placeholder:text-white/20"
-                  autoComplete="username"
+                  placeholder="e.g. academic"
+                  className="h-11 border-white/10 bg-white/5 pl-10 text-white lowercase placeholder:text-white/20"
                   autoFocus
                   required
                 />
@@ -114,7 +104,7 @@ export default function TeamLogin() {
                   type="password"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  placeholder="Enter your password"
+                  placeholder="Enter team password"
                   className="h-11 border-white/10 bg-white/5 pl-10 text-white placeholder:text-white/20"
                   autoComplete="current-password"
                   required
@@ -142,7 +132,7 @@ export default function TeamLogin() {
           </form>
 
           <p className="mt-6 text-center text-xs text-white/30">
-            Contact your Admin if you need credentials or have forgotten your
+            Contact your Admin if you need access or have forgotten your
             password.
           </p>
         </div>

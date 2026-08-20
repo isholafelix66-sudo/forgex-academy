@@ -8,7 +8,40 @@ import { query, mutation } from "./_generated/server";
 async function requireTeamToken(
   ctx: any,
   token: string,
-): Promise<{ account: any; membership: any; team: any }> {
+): Promise<{ account: any; membership: any; team: any; teamId: any }> {
+  // 1) Check the new Team Hub sessions (teamAccessSessions)
+  const hubSession = await ctx.db
+    .query("teamAccessSessions")
+    .withIndex("by_token", (q: any) => q.eq("token", token))
+    .unique();
+  if (hubSession) {
+    if (hubSession.expiresAt < Date.now()) {
+      await ctx.db.delete(hubSession._id);
+      throw new Error("Session expired.");
+    }
+    const access = await ctx.db
+      .query("teamAccess")
+      .withIndex("by_slug", (q: any) => q.eq("teamSlug", hubSession.teamSlug))
+      .unique();
+    if (!access || !access.isActive) throw new Error("Team is not active.");
+    const team = await ctx.db
+      .query("teams")
+      .withIndex("by_slug", (q: any) => q.eq("slug", hubSession.teamSlug))
+      .unique();
+    if (!team) throw new Error("Team not found.");
+    const account = {
+      _id: access._id,
+      teamId: access.teamSlug,
+      name: access.teamName,
+      email: `${access.teamSlug}@forgex.team`,
+      role: "teamMember" as const,
+      teamSlug: hubSession.teamSlug,
+      status: "active" as const,
+    };
+    return { account, membership: null, team, teamId: team._id };
+  }
+
+  // 2) Fallback: check the legacy per-user sessions (teamSessions)
   const session = await ctx.db
     .query("teamSessions")
     .withIndex("by_token", (q: any) => q.eq("token", token))
@@ -31,7 +64,16 @@ async function requireTeamToken(
   if (!membership) throw new Error("You are not assigned to a team.");
 
   const team = await ctx.db.get(membership.teamId);
-  return { account, membership, team };
+  return { account, membership, team, teamId: membership.teamId };
+}
+
+/** Extract the resolved team ID from a token result. Works for both Hub
+ *  sessions (membership is null, team has the id) and legacy sessions. */
+function getTeamId(result: { membership: any; team: any; teamId?: any }): any {
+  if (result.teamId) return result.teamId;
+  if (result.membership?.teamId) return result.membership.teamId;
+  if (result.team?._id) return result.team._id;
+  return null;
 }
 
 // ===========================================================================
@@ -41,7 +83,8 @@ async function requireTeamToken(
 export const listPendingTutorApplications = query({
   args: { token: v.string() },
   handler: async (ctx, args) => {
-    const { membership } = await requireTeamToken(ctx, args.token);
+    const tokenResult = await requireTeamToken(ctx, args.token);
+    const tid = getTeamId(tokenResult);
     const apps = await ctx.db
       .query("tutorApplications")
       .withIndex("by_status", (q) => q.eq("status", "submitted"))
@@ -52,7 +95,7 @@ export const listPendingTutorApplications = query({
       const existingReview = await ctx.db
         .query("teamTutorReviews")
         .withIndex("by_application", (q) => q.eq("applicationId", app._id))
-        .filter((q) => q.eq(q.field("teamId"), membership.teamId))
+        .filter((q) => q.eq(q.field("teamId"), tid))
         .first();
       enriched.push({ ...app, user, review: existingReview });
     }
@@ -63,7 +106,8 @@ export const listPendingTutorApplications = query({
 export const listAllTutorApplications = query({
   args: { token: v.string() },
   handler: async (ctx, args) => {
-    const { membership } = await requireTeamToken(ctx, args.token);
+    const tokenResult = await requireTeamToken(ctx, args.token);
+    const tid = getTeamId(tokenResult);
     const apps = await ctx.db.query("tutorApplications").collect();
     const enriched = [];
     for (const app of apps) {
@@ -71,7 +115,7 @@ export const listAllTutorApplications = query({
       const review = await ctx.db
         .query("teamTutorReviews")
         .withIndex("by_application", (q) => q.eq("applicationId", app._id))
-        .filter((q) => q.eq(q.field("teamId"), membership.teamId))
+        .filter((q) => q.eq(q.field("teamId"), tid))
         .first();
       enriched.push({ ...app, user, review });
     }
@@ -94,12 +138,14 @@ export const reviewTutorApplication = mutation({
     note: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
-    const { account, membership } = await requireTeamToken(ctx, args.token);
+    const tokenResult = await requireTeamToken(ctx, args.token);
+    const { account } = tokenResult;
+    const tid = getTeamId(tokenResult);
     const now = Date.now();
     const existing = await ctx.db
       .query("teamTutorReviews")
       .withIndex("by_application", (q) => q.eq("applicationId", args.applicationId))
-      .filter((q) => q.eq(q.field("teamId"), membership.teamId))
+      .filter((q) => q.eq(q.field("teamId"), tid))
       .first();
     if (existing) {
       await ctx.db.patch(existing._id, {
@@ -110,7 +156,7 @@ export const reviewTutorApplication = mutation({
     } else {
       await ctx.db.insert("teamTutorReviews", {
         applicationId: args.applicationId,
-        teamId: membership.teamId,
+        teamId: tid,
         userId: account._id as any,
         status: args.status,
         note: args.note,
@@ -129,7 +175,8 @@ export const reviewTutorApplication = mutation({
 export const listTutorCourses = query({
   args: { token: v.string() },
   handler: async (ctx, args) => {
-    const { membership } = await requireTeamToken(ctx, args.token);
+    const tokenResult = await requireTeamToken(ctx, args.token);
+    const tid = getTeamId(tokenResult);
     const courses = await ctx.db.query("courses").collect();
     const enriched = [];
     for (const c of courses) {
@@ -137,7 +184,7 @@ export const listTutorCourses = query({
       const reviews = await ctx.db
         .query("teamReviews")
         .withIndex("by_course", (q) => q.eq("courseId", c._id))
-        .filter((q) => q.eq(q.field("teamId"), membership.teamId))
+        .filter((q) => q.eq(q.field("teamId"), tid))
         .collect();
       enriched.push({ ...c, tutor, teamReviews: reviews });
     }
@@ -173,10 +220,11 @@ export const getCourseQuizzesForReview = query({
 export const listContentSubmissions = query({
   args: { token: v.string() },
   handler: async (ctx, args) => {
-    const { membership } = await requireTeamToken(ctx, args.token);
+    const tokenResult = await requireTeamToken(ctx, args.token);
+    const tid = getTeamId(tokenResult);
     const subs = await ctx.db
       .query("teamContentSubmissions")
-      .withIndex("by_team", (q) => q.eq("teamId", membership.teamId))
+      .withIndex("by_team", (q) => q.eq("teamId", tid))
       .order("desc")
       .collect();
     const enriched = [];
@@ -202,10 +250,12 @@ export const createContentSubmission = mutation({
     targetId: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
-    const { account, membership } = await requireTeamToken(ctx, args.token);
+    const tokenResult = await requireTeamToken(ctx, args.token);
+    const { account } = tokenResult;
+    const tid = getTeamId(tokenResult);
     const now = Date.now();
     const id = await ctx.db.insert("teamContentSubmissions", {
-      teamId: membership.teamId,
+      teamId: tid,
       userId: account._id as any,
       type: args.type,
       title: args.title,
@@ -227,10 +277,11 @@ export const createContentSubmission = mutation({
 export const listAiToolDrafts = query({
   args: { token: v.string() },
   handler: async (ctx, args) => {
-    const { membership } = await requireTeamToken(ctx, args.token);
+    const tokenResult = await requireTeamToken(ctx, args.token);
+    const tid = getTeamId(tokenResult);
     const drafts = await ctx.db
       .query("teamAiToolDrafts")
-      .withIndex("by_team", (q) => q.eq("teamId", membership.teamId))
+      .withIndex("by_team", (q) => q.eq("teamId", tid))
       .order("desc")
       .collect();
     const enriched = [];
@@ -256,10 +307,12 @@ export const createAiToolDraft = mutation({
     ),
   },
   handler: async (ctx, args) => {
-    const { account, membership } = await requireTeamToken(ctx, args.token);
+    const tokenResult = await requireTeamToken(ctx, args.token);
+    const { account } = tokenResult;
+    const tid = getTeamId(tokenResult);
     const now = Date.now();
     const id = await ctx.db.insert("teamAiToolDrafts", {
-      teamId: membership.teamId,
+      teamId: tid,
       userId: account._id as any,
       title: args.title,
       description: args.description,
@@ -281,10 +334,11 @@ export const createAiToolDraft = mutation({
 export const listPromptDrafts = query({
   args: { token: v.string() },
   handler: async (ctx, args) => {
-    const { membership } = await requireTeamToken(ctx, args.token);
+    const tokenResult = await requireTeamToken(ctx, args.token);
+    const tid = getTeamId(tokenResult);
     const drafts = await ctx.db
       .query("teamPromptDrafts")
-      .withIndex("by_team", (q) => q.eq("teamId", membership.teamId))
+      .withIndex("by_team", (q) => q.eq("teamId", tid))
       .order("desc")
       .collect();
     const enriched = [];
@@ -305,10 +359,12 @@ export const createPromptDraft = mutation({
     template: v.string(),
   },
   handler: async (ctx, args) => {
-    const { account, membership } = await requireTeamToken(ctx, args.token);
+    const tokenResult = await requireTeamToken(ctx, args.token);
+    const { account } = tokenResult;
+    const tid = getTeamId(tokenResult);
     const now = Date.now();
     const id = await ctx.db.insert("teamPromptDrafts", {
-      teamId: membership.teamId,
+      teamId: tid,
       userId: account._id as any,
       title: args.title,
       description: args.description,
@@ -329,10 +385,11 @@ export const createPromptDraft = mutation({
 export const listSupportTickets = query({
   args: { token: v.string() },
   handler: async (ctx, args) => {
-    const { membership } = await requireTeamToken(ctx, args.token);
+    const tokenResult = await requireTeamToken(ctx, args.token);
+    const tid = getTeamId(tokenResult);
     const cases = await ctx.db
       .query("teamSupportCases")
-      .withIndex("by_team", (q) => q.eq("teamId", membership.teamId))
+      .withIndex("by_team", (q) => q.eq("teamId", tid))
       .order("desc")
       .collect();
     const enriched = [];
@@ -399,10 +456,11 @@ export const resolveSupportCase = mutation({
 export const listEscalations = query({
   args: { token: v.string() },
   handler: async (ctx, args) => {
-    const { membership } = await requireTeamToken(ctx, args.token);
+    const tokenResult = await requireTeamToken(ctx, args.token);
+    const tid = getTeamId(tokenResult);
     const esc = await ctx.db
       .query("teamEscalations")
-      .withIndex("by_team", (q) => q.eq("teamId", membership.teamId))
+      .withIndex("by_team", (q) => q.eq("teamId", tid))
       .order("desc")
       .collect();
     const enriched = [];

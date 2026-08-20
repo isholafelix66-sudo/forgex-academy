@@ -1,6 +1,6 @@
-import { useState } from "react";
+import { useState, useCallback } from "react";
 import { useParams, Link, Navigate } from "react-router";
-import { useMutation, useQuery } from "convex/react";
+import { useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import { motion } from "framer-motion";
 import { ArrowLeft, Loader2, Lock, Eye, EyeOff } from "lucide-react";
@@ -18,9 +18,8 @@ const TEAM_LABELS: Record<string, string> = {
 
 export default function TeamPassword() {
   const { teamSlug } = useParams<{ teamSlug: string }>();
-  const { isAuthenticated, isLoading: authLoading, teamSlug: activeTeam } = useTeamHubAuth();
+  const { isAuthenticated, isLoading: authLoading, teamSlug: activeTeam, login } = useTeamHubAuth();
   const teams = useQuery(api.teamAccess.listTeams);
-  const verifyMutation = useMutation(api.teamAccess.verifyTeamPassword);
 
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -40,16 +39,16 @@ export default function TeamPassword() {
   const team = teams?.find((t) => t.slug === teamSlug);
   const teamName = TEAM_LABELS[teamSlug || ""] || team?.name || "Team";
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = useCallback(async (e: React.FormEvent) => {
     e.preventDefault();
     if (!teamSlug) return;
     setError(null);
     setSubmitting(true);
 
     try {
-      await verifyMutation({ teamSlug, password });
-      // After successful mutation, the token is stored by useTeamHubAuth
-      // The redirect above will fire on next render
+      // Use the hook's login() which calls the mutation AND stores the
+      // token in localStorage so RequireTeamAuth can find it on redirect.
+      await login(teamSlug, password);
     } catch (err) {
       const msg = err instanceof Error ? err.message : "";
       if (msg.includes("currently unavailable")) {
@@ -64,7 +63,7 @@ export default function TeamPassword() {
     } finally {
       setSubmitting(false);
     }
-  };
+  }, [teamSlug, password, login]);
 
   // Loading teams list
   if (teams === undefined) {
