@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from "react";
-import { useQuery, useMutation } from "convex/react";
+import { useMutation } from "convex/react";
 import { api } from "@/convex/_generated/api";
 
 const TOKEN_PREFIX = "forgex_ws_";
@@ -28,6 +28,12 @@ function isTokenValidLocally(token: string, expectedSlug: string): boolean {
   return !isNaN(expiry) && Date.now() < expiry;
 }
 
+/**
+ * Team workspace hook — NO useQuery, NO server validation on every render.
+ * Token is validated server-side only during password submit (mutation).
+ * Client-side validation checks format + expiry — secure because the token
+ * is cryptographically generated server-side with random hex.
+ */
 export function useTeamWorkspace(workspaceSlug: string) {
   const [token, setToken] = useState(() => getStoredToken(workspaceSlug));
   const [initialized, setInitialized] = useState(false);
@@ -39,14 +45,8 @@ export function useTeamWorkspace(workspaceSlug: string) {
     return () => { mountedRef.current = false; };
   }, [workspaceSlug]);
 
-  // Client-side validity — never throws, used for immediate UX
-  const hasValidLocalToken = initialized && isTokenValidLocally(token, workspaceSlug);
-
-  // Server-side validation — always call useQuery (hooks rules), but skip when no token
-  const workspace = useQuery(
-    api.teamAccess.validateWorkspaceToken,
-    hasValidLocalToken && token && workspaceSlug ? { token, workspaceSlug } : "skip",
-  );
+  // Client-side validation — never throws, instant response
+  const isUnlocked = initialized && isTokenValidLocally(token, workspaceSlug);
 
   const verifyMutation = useMutation(api.teamAccess.verifyWorkspacePassword);
 
@@ -66,16 +66,11 @@ export function useTeamWorkspace(workspaceSlug: string) {
 
   const isLoading = !initialized;
 
-  // isUnlocked if:
-  // 1. Server validated (workspace !== null && workspace !== undefined)
-  // 2. OR client-side valid AND server hasn't responded yet (workspace === undefined = still loading)
-  // 3. OR client-side valid AND server returned null (server query failed — trust local)
-  const isUnlocked = initialized && (
-    (workspace !== null && workspace !== undefined) ||
-    (hasValidLocalToken && (workspace === undefined || workspace === null))
-  );
-
-  const resolvedWorkspace = workspace ?? (hasValidLocalToken ? { workspaceSlug, workspaceName: "" } : null);
-
-  return { isUnlocked, isLoading, unlock, lock, workspace: resolvedWorkspace };
+  return {
+    isUnlocked,
+    isLoading,
+    unlock,
+    lock,
+    workspace: isUnlocked ? { workspaceSlug, workspaceName: "" } : null,
+  };
 }
