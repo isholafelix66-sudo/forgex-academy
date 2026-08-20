@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useParams, Outlet, Link, NavLink, useLocation } from "react-router";
-import { useTeamAuth } from "@/hooks/use-team-auth";
+import { useTeamHubAuth } from "@/hooks/use-team-hub-auth";
 import {
   LayoutDashboard,
   ClipboardList,
@@ -80,32 +80,11 @@ function getNavSections(teamType: string, basePath: string) {
         {
           label: "Workspace",
           items: [
-            {
-              to: basePath,
-              label: "Overview",
-              icon: <LayoutDashboard className="size-4" />,
-              end: true,
-            },
-            {
-              to: `${basePath}/tutors`,
-              label: "Tutor Verification",
-              icon: <GraduationCap className="size-4" />,
-            },
-            {
-              to: `${basePath}/courses`,
-              label: "Course Reviews",
-              icon: <BookOpen className="size-4" />,
-            },
-            {
-              to: `${basePath}/work`,
-              label: "Work Items",
-              icon: <ClipboardList className="size-4" />,
-            },
-            {
-              to: `${basePath}/activity`,
-              label: "Activity",
-              icon: <Activity className="size-4" />,
-            },
+            { to: basePath, label: "Overview", icon: <LayoutDashboard className="size-4" />, end: true },
+            { to: `${basePath}/tutors`, label: "Tutor Verification", icon: <GraduationCap className="size-4" /> },
+            { to: `${basePath}/courses`, label: "Course Reviews", icon: <BookOpen className="size-4" /> },
+            { to: `${basePath}/work`, label: "Work Items", icon: <ClipboardList className="size-4" /> },
+            { to: `${basePath}/activity`, label: "Activity", icon: <Activity className="size-4" /> },
           ],
         },
         ...common,
@@ -116,37 +95,12 @@ function getNavSections(teamType: string, basePath: string) {
         {
           label: "Workspace",
           items: [
-            {
-              to: basePath,
-              label: "Overview",
-              icon: <LayoutDashboard className="size-4" />,
-              end: true,
-            },
-            {
-              to: `${basePath}/submissions`,
-              label: "Content Submissions",
-              icon: <FileCheck className="size-4" />,
-            },
-            {
-              to: `${basePath}/testimonials`,
-              label: "Testimonials",
-              icon: <MessageSquare className="size-4" />,
-            },
-            {
-              to: `${basePath}/courses`,
-              label: "Approved Content",
-              icon: <BookOpen className="size-4" />,
-            },
-            {
-              to: `${basePath}/work`,
-              label: "Work Items",
-              icon: <ClipboardList className="size-4" />,
-            },
-            {
-              to: `${basePath}/activity`,
-              label: "Activity",
-              icon: <Activity className="size-4" />,
-            },
+            { to: basePath, label: "Overview", icon: <LayoutDashboard className="size-4" />, end: true },
+            { to: `${basePath}/submissions`, label: "Content Submissions", icon: <FileCheck className="size-4" /> },
+            { to: `${basePath}/testimonials`, label: "Testimonials", icon: <MessageSquare className="size-4" /> },
+            { to: `${basePath}/courses`, label: "Approved Content", icon: <BookOpen className="size-4" /> },
+            { to: `${basePath}/work`, label: "Work Items", icon: <ClipboardList className="size-4" /> },
+            { to: `${basePath}/activity`, label: "Activity", icon: <Activity className="size-4" /> },
           ],
         },
         ...common,
@@ -157,32 +111,11 @@ function getNavSections(teamType: string, basePath: string) {
         {
           label: "Workspace",
           items: [
-            {
-              to: basePath,
-              label: "Overview",
-              icon: <LayoutDashboard className="size-4" />,
-              end: true,
-            },
-            {
-              to: `${basePath}/ai-tools`,
-              label: "AI Tools",
-              icon: <Bot className="size-4" />,
-            },
-            {
-              to: `${basePath}/prompts`,
-              label: "Prompt Library",
-              icon: <Palette className="size-4" />,
-            },
-            {
-              to: `${basePath}/work`,
-              label: "Work Items",
-              icon: <ClipboardList className="size-4" />,
-            },
-            {
-              to: `${basePath}/activity`,
-              label: "Activity",
-              icon: <Activity className="size-4" />,
-            },
+            { to: basePath, label: "Overview", icon: <LayoutDashboard className="size-4" />, end: true },
+            { to: `${basePath}/ai-tools`, label: "AI Tools", icon: <Bot className="size-4" /> },
+            { to: `${basePath}/prompts`, label: "Prompt Library", icon: <Palette className="size-4" /> },
+            { to: `${basePath}/work`, label: "Work Items", icon: <ClipboardList className="size-4" /> },
+            { to: `${basePath}/activity`, label: "Activity", icon: <Activity className="size-4" /> },
           ],
         },
         ...common,
@@ -193,37 +126,12 @@ function getNavSections(teamType: string, basePath: string) {
         {
           label: "Workspace",
           items: [
-            {
-              to: basePath,
-              label: "Overview",
-              icon: <LayoutDashboard className="size-4" />,
-              end: true,
-            },
-            {
-              to: `${basePath}/support`,
-              label: "Support Tickets",
-              icon: <HeartHandshake className="size-4" />,
-            },
-            {
-              to: `${basePath}/feedback`,
-              label: "Student Feedback",
-              icon: <MessageSquare className="size-4" />,
-            },
-            {
-              to: `${basePath}/escalations`,
-              label: "Escalations",
-              icon: <AlertTriangle className="size-4" />,
-            },
-            {
-              to: `${basePath}/work`,
-              label: "Work Items",
-              icon: <ClipboardList className="size-4" />,
-            },
-            {
-              to: `${basePath}/activity`,
-              label: "Activity",
-              icon: <Activity className="size-4" />,
-            },
+            { to: basePath, label: "Overview", icon: <LayoutDashboard className="size-4" />, end: true },
+            { to: `${basePath}/support`, label: "Support Tickets", icon: <HeartHandshake className="size-4" /> },
+            { to: `${basePath}/feedback`, label: "Student Feedback", icon: <MessageSquare className="size-4" /> },
+            { to: `${basePath}/escalations`, label: "Escalations", icon: <AlertTriangle className="size-4" /> },
+            { to: `${basePath}/work`, label: "Work Items", icon: <ClipboardList className="size-4" /> },
+            { to: `${basePath}/activity`, label: "Activity", icon: <Activity className="size-4" /> },
           ],
         },
         ...common,
@@ -234,37 +142,12 @@ function getNavSections(teamType: string, basePath: string) {
         {
           label: "Workspace",
           items: [
-            {
-              to: basePath,
-              label: "Overview",
-              icon: <LayoutDashboard className="size-4" />,
-              end: true,
-            },
-            {
-              to: `${basePath}/cases`,
-              label: "Support Cases",
-              icon: <Headphones className="size-4" />,
-            },
-            {
-              to: `${basePath}/tutor-profiles`,
-              label: "Tutor Profiles",
-              icon: <Users className="size-4" />,
-            },
-            {
-              to: `${basePath}/escalations`,
-              label: "Escalations",
-              icon: <AlertTriangle className="size-4" />,
-            },
-            {
-              to: `${basePath}/work`,
-              label: "Work Items",
-              icon: <ClipboardList className="size-4" />,
-            },
-            {
-              to: `${basePath}/activity`,
-              label: "Activity",
-              icon: <Activity className="size-4" />,
-            },
+            { to: basePath, label: "Overview", icon: <LayoutDashboard className="size-4" />, end: true },
+            { to: `${basePath}/cases`, label: "Support Cases", icon: <Headphones className="size-4" /> },
+            { to: `${basePath}/tutor-profiles`, label: "Tutor Profiles", icon: <Users className="size-4" /> },
+            { to: `${basePath}/escalations`, label: "Escalations", icon: <AlertTriangle className="size-4" /> },
+            { to: `${basePath}/work`, label: "Work Items", icon: <ClipboardList className="size-4" /> },
+            { to: `${basePath}/activity`, label: "Activity", icon: <Activity className="size-4" /> },
           ],
         },
         ...common,
@@ -275,32 +158,11 @@ function getNavSections(teamType: string, basePath: string) {
         {
           label: "Workspace",
           items: [
-            {
-              to: basePath,
-              label: "Overview",
-              icon: <LayoutDashboard className="size-4" />,
-              end: true,
-            },
-            {
-              to: `${basePath}/work`,
-              label: "Work",
-              icon: <ClipboardList className="size-4" />,
-            },
-            {
-              to: `${basePath}/courses`,
-              label: "Courses",
-              icon: <BookOpen className="size-4" />,
-            },
-            {
-              to: `${basePath}/reviews`,
-              label: "Reviews",
-              icon: <MessageSquare className="size-4" />,
-            },
-            {
-              to: `${basePath}/activity`,
-              label: "Activity",
-              icon: <Activity className="size-4" />,
-            },
+            { to: basePath, label: "Overview", icon: <LayoutDashboard className="size-4" />, end: true },
+            { to: `${basePath}/work`, label: "Work", icon: <ClipboardList className="size-4" /> },
+            { to: `${basePath}/courses`, label: "Courses", icon: <BookOpen className="size-4" /> },
+            { to: `${basePath}/reviews`, label: "Reviews", icon: <MessageSquare className="size-4" /> },
+            { to: `${basePath}/activity`, label: "Activity", icon: <Activity className="size-4" /> },
           ],
         },
         ...common,
@@ -310,31 +172,27 @@ function getNavSections(teamType: string, basePath: string) {
 
 export default function TeamShell() {
   const { teamSlug } = useParams<{ teamSlug: string }>();
-  const { teamMember, logout } = useTeamAuth();
+  const { teamName, logout } = useTeamHubAuth();
   const location = useLocation();
   const [open, setOpen] = useState(false);
 
   useEffect(() => setOpen(false), [location.pathname]);
 
-  const teamName = teamMember?.team?.name ?? teamMember?.name ?? "Team";
+  const displayName = teamName || "Team";
   const basePath = `/team/${teamSlug}`;
   const teamType = getTeamType(teamSlug);
   const sections = getNavSections(teamType, basePath);
 
   const handleLogout = async () => {
     await logout();
-    window.location.href = "/team/login";
+    window.location.href = "/team";
   };
 
   const sidebar = (
     <div className="flex h-full flex-col">
       <div className="flex h-16 items-center gap-2.5 border-b border-white/8 px-5">
-        <Link to="/" className="flex items-center gap-2.5">
-          <img
-            src={logo}
-            alt="ForgeX Academy"
-            className="size-8 rounded-lg"
-          />
+        <Link to="/team" className="flex items-center gap-2.5">
+          <img src={logo} alt="ForgeX Academy" className="size-8 rounded-lg" />
           <span className="font-display text-base font-bold">
             ForgeX<span className="text-lime-400"> Academy</span>
           </span>
@@ -375,24 +233,14 @@ export default function TeamShell() {
 
       <div className="border-t border-white/8 p-3">
         <div className="flex items-center gap-3 rounded-xl px-2 py-2">
-          <Avatar
-            name={teamMember?.name}
-            className="size-9"
-          />
+          <Avatar name={displayName} className="size-9" />
           <div className="min-w-0 flex-1">
-            <p className="truncate text-sm font-semibold">
-              {teamMember?.name ?? "Team Member"}
-            </p>
+            <p className="truncate text-sm font-semibold">{displayName}</p>
             <p className="truncate text-xs capitalize text-muted-foreground">
-              {teamMember?.team?.name ?? teamMember?.teamSlug ?? "Team"}
+              Workspace
             </p>
           </div>
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={handleLogout}
-            title="Sign out"
-          >
+          <Button variant="ghost" size="icon" onClick={handleLogout} title="Sign out">
             <LogOut className="size-4" />
           </Button>
         </div>
@@ -410,10 +258,7 @@ export default function TeamShell() {
       {/* Mobile drawer */}
       {open && (
         <div className="fixed inset-0 z-50 lg:hidden">
-          <div
-            className="absolute inset-0 bg-black/60 backdrop-blur-sm"
-            onClick={() => setOpen(false)}
-          />
+          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setOpen(false)} />
           <aside className="absolute inset-y-0 left-0 w-72 bg-sidebar shadow-2xl">
             <button
               onClick={() => setOpen(false)}
@@ -430,23 +275,15 @@ export default function TeamShell() {
       <div className="flex min-w-0 flex-1 flex-col lg:pl-64">
         <header className="sticky top-0 z-30 flex h-16 items-center justify-between border-b border-white/8 bg-background/85 px-4 backdrop-blur-xl sm:px-6">
           <div className="flex min-w-0 items-center gap-3">
-            <Button
-              variant="ghost"
-              size="icon"
-              className="shrink-0 lg:hidden"
-              onClick={() => setOpen(true)}
-            >
+            <Button variant="ghost" size="icon" className="shrink-0 lg:hidden" onClick={() => setOpen(true)}>
               <Menu className="size-5" />
             </Button>
             <h1 className="font-display min-w-0 truncate text-lg font-bold">
-              {teamName} Workspace
+              {displayName} Workspace
             </h1>
           </div>
           <div className="flex shrink-0 items-center gap-3">
-            <Avatar
-              name={teamMember?.name}
-              className="size-9"
-            />
+            <Avatar name={displayName} className="size-9" />
           </div>
         </header>
 

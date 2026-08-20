@@ -7,6 +7,46 @@ import { query, mutation } from "./_generated/server";
 
 async function resolveTeamToken(ctx: any, token: string) {
   if (!token) return null;
+
+  // 1) Check the new Team Hub sessions (teamAccessSessions)
+  const hubSession = await ctx.db
+    .query("teamAccessSessions")
+    .withIndex("by_token", (q: any) => q.eq("token", token))
+    .unique();
+  if (hubSession) {
+    if (hubSession.expiresAt < Date.now()) {
+      await ctx.db.delete(hubSession._id);
+      return null;
+    }
+    // Check the team is active
+    const access = await ctx.db
+      .query("teamAccess")
+      .withIndex("by_slug", (q: any) => q.eq("teamSlug", hubSession.teamSlug))
+      .unique();
+    if (!access || !access.isActive) return null;
+
+    // Find the teams record for this slug
+    const team = await ctx.db
+      .query("teams")
+      .withIndex("by_slug", (q: any) => q.eq("slug", hubSession.teamSlug))
+      .unique();
+    if (!team) return null;
+
+    // Create a virtual account object compatible with workspace functions
+    const account = {
+      _id: access._id,
+      teamId: access.teamSlug,
+      name: access.teamName,
+      email: `${access.teamSlug}@forgex.team`,
+      role: "teamMember" as const,
+      teamSlug: hubSession.teamSlug,
+      status: "active" as const,
+    };
+
+    return { account, session: hubSession, team };
+  }
+
+  // 2) Fallback: check the legacy per-user sessions (teamSessions)
   const session = await ctx.db
     .query("teamSessions")
     .withIndex("by_token", (q: any) => q.eq("token", token))
@@ -29,7 +69,12 @@ async function requireTeamToken(
   if (!result) throw new Error("Not authenticated as a team member.");
   const { account } = result;
 
-  // Find membership
+  // If resolveTeamToken already found a team (hub session), use it
+  if ((result as any).team) {
+    return { account, membership: null, team: (result as any).team };
+  }
+
+  // Otherwise, look up via membership (legacy per-user sessions)
   const membership = await ctx.db
     .query("teamMemberships")
     .withIndex("by_team_account", (q: any) =>

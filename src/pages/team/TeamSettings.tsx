@@ -3,7 +3,7 @@ import { Loader2, Settings, LogOut, AlertTriangle } from "lucide-react";
 import { useState } from "react";
 
 export default function TeamSettings() {
-  const { teamMember, isLoading, logout } = useTeamAuth();
+  const { teamName, teamSlug, isLoading, logout } = useTeamAuth();
   const [signingOut, setSigningOut] = useState(false);
 
   const handleSignOut = async () => {
@@ -35,22 +35,14 @@ export default function TeamSettings() {
 
       <div className="rounded-2xl border border-white/5 bg-card p-6 space-y-4">
         <h3 className="text-sm font-semibold text-white/80">Account</h3>
-        {teamMember && (
-          <div className="space-y-1 text-sm text-white/60">
-            <p>
-              Name: <span className="text-white/80">{teamMember.name}</span>
-            </p>
-            <p>
-              Email: <span className="text-white/80">{teamMember.email}</span>
-            </p>
-            <p>
-              Team ID: <span className="font-mono text-lime-400">{teamMember.teamId}</span>
-            </p>
-            <p>
-              Department: <span className="text-white/80">{teamMember.team?.name ?? "N/A"}</span>
-            </p>
-          </div>
-        )}
+        <div className="space-y-1 text-sm text-white/60">
+          <p>
+            Team: <span className="text-white/80">{teamName}</span>
+          </p>
+          <p>
+            Team Slug: <span className="text-white/80">{teamSlug}</span>
+          </p>
+        </div>
       </div>
 
       <div className="rounded-2xl border border-white/5 bg-card p-6 space-y-4">
@@ -59,8 +51,8 @@ export default function TeamSettings() {
           Danger Zone
         </h3>
         <p className="text-xs text-white/40">
-          Signing out will end your team session. You'll need your Team ID and
-          password to sign back in.
+          Signing out will end your team session. You'll need the team password
+          to sign back in.
         </p>
         <button
           onClick={handleSignOut}

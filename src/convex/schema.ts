@@ -1271,6 +1271,33 @@ const schema = defineSchema(
       .index("by_user", ["userId", "createdAt"]),
 
     // -----------------------------------------------------------------
+    // Team Hub — per-team password access
+    // -----------------------------------------------------------------
+
+    /** Per-team access configuration. One row per team: stores the password
+     *  hash and active/disabled status. The Admin manages these from the
+     *  Team Access Management page. */
+    teamAccess: defineTable({
+      teamSlug: v.string(),
+      teamName: v.string(),
+      passwordHash: v.string(),
+      isActive: v.boolean(),
+      createdAt: v.number(),
+      updatedAt: v.number(),
+    }).index("by_slug", ["teamSlug"]),
+
+    /** Sessions for team-hub password-based access. One row per active
+     *  session. Tokens expire after 7 days. */
+    teamAccessSessions: defineTable({
+      teamSlug: v.string(),
+      token: v.string(),
+      expiresAt: v.number(),
+      createdAt: v.number(),
+    })
+      .index("by_token", ["token"])
+      .index("by_slug", ["teamSlug"]),
+
+    // -----------------------------------------------------------------
     // Team Workspace — Role-specific tables
     // -----------------------------------------------------------------
 

@@ -132,6 +132,8 @@ const TutorPage = lazy(() => import("./pages/TutorPage.tsx"));
 // ---------------------------------------------------------------------------
 // Team Workspace
 // ---------------------------------------------------------------------------
+const TeamHub = lazy(() => import("./pages/team/TeamHub.tsx"));
+const TeamPassword = lazy(() => import("./pages/team/TeamPassword.tsx"));
 const TeamEntry = lazy(() => import("./pages/team/TeamEntry.tsx"));
 const TeamRegister = lazy(() => import("./pages/team/TeamRegister.tsx"));
 const TeamLogin = lazy(() => import("./pages/team/TeamLogin.tsx"));
@@ -176,6 +178,7 @@ const AdminChat = lazy(() => import("./pages/admin/AdminChat.tsx"));
 const AdminInbox = lazy(() => import("./pages/admin/AdminInbox.tsx"));
 const AdminCoursePreview = lazy(() => import("./pages/admin/AdminCoursePreview.tsx"));
 const AdminTeamManagement = lazy(() => import("./pages/admin/AdminTeamManagement.tsx"));
+const AdminTeamAccess = lazy(() => import("./pages/admin/AdminTeamAccess.tsx"));
 
 // Communication & Community module (admin moderation)
 const AdminCommunication = lazy(() => import("./pages/admin/AdminCommunication.tsx"));
@@ -684,9 +687,9 @@ createRoot(document.getElementById("root")!).render(
                   this dynamic segment, so the dashboard keeps working. */}
               <Route path="/tutor/:slug" element={<TutorPage />} />
 
-              {/* Team Workspace — credential-based auth (no Clerk) */}
-              <Route path="/team" element={<TeamEntry />} />
-              <Route path="/team/login" element={<TeamLogin />} />
+              {/* Team Hub — password-based team access */}
+              <Route path="/team" element={<TeamHub />} />
+              <Route path="/team/access/:teamSlug" element={<TeamPassword />} />
               <Route path="/team/:teamSlug" element={<RequireTeamAuth><TeamShell /></RequireTeamAuth>}>
                 <Route index element={<TeamOverview />} />
                 <Route path="work" element={<TeamWork />} />
@@ -742,6 +745,7 @@ createRoot(document.getElementById("root")!).render(
                 <Route path="communication/reports" element={<AdminReports />} />
                 <Route path="communication/audit" element={<AdminCommAudit />} />
                 <Route path="teams" element={<AdminTeamManagement />} />
+                <Route path="team-access" element={<AdminTeamAccess />} />
               </Route>
 
               <Route path="*" element={<NotFound />} />

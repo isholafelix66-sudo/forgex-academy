@@ -1,18 +1,17 @@
 import { Navigate, useLocation, useParams } from "react-router";
-import { useTeamAuth } from "@/hooks/use-team-auth";
+import { useTeamHubAuth } from "@/hooks/use-team-hub-auth";
 
 /**
  * Guard for team dashboard routes.
- * Verifies the user has a valid team session AND is accessing their own team's route.
- * Redirects unauthenticated users to /team/login.
- * Redirects users accessing wrong team routes to their own workspace.
+ * Uses the new Team Hub password-based session.
+ * Verifies the user has a valid session AND is accessing their own team's route.
  */
 export function RequireTeamAuth({
   children,
 }: {
   children: React.ReactNode;
 }) {
-  const { isAuthenticated, isLoading, teamMember } = useTeamAuth();
+  const { isAuthenticated, isLoading, teamSlug: activeTeamSlug } = useTeamHubAuth();
   const location = useLocation();
   const { teamSlug } = useParams<{ teamSlug: string }>();
 
@@ -31,27 +30,24 @@ export function RequireTeamAuth({
   }
 
   if (!isAuthenticated) {
-    // Never redirect if already on the login page — prevents loops
-    if (location.pathname === "/team/login") {
+    // Never redirect if already on a password or login page — prevents loops
+    if (
+      location.pathname.startsWith("/team/access") ||
+      location.pathname === "/team/login"
+    ) {
       return <>{children}</>;
     }
     return (
       <Navigate
-        to={`/team/login?returnTo=${encodeURIComponent(location.pathname)}`}
+        to={`/team/access/${teamSlug || ""}`}
         replace
       />
     );
   }
 
   // Role-based routing: ensure user is accessing their own team's route
-  if (teamSlug && teamMember?.teamSlug && teamSlug !== teamMember.teamSlug) {
-    // User is trying to access another team's workspace — redirect to their own
-    return <Navigate to={`/team/${teamMember.teamSlug}`} replace />;
-  }
-
-  // If no teamSlug in URL (shouldn't happen for protected routes), redirect to their workspace
-  if (!teamSlug && teamMember?.teamSlug) {
-    return <Navigate to={`/team/${teamMember.teamSlug}`} replace />;
+  if (teamSlug && activeTeamSlug && teamSlug !== activeTeamSlug) {
+    return <Navigate to={`/team/${activeTeamSlug}`} replace />;
   }
 
   return <>{children}</>;

@@ -2,7 +2,7 @@ import { useTeamAuth } from "@/hooks/use-team-auth";
 import { Loader2, UserCircle } from "lucide-react";
 
 export default function TeamProfile() {
-  const { teamMember, isLoading } = useTeamAuth();
+  const { teamName, teamSlug, isLoading } = useTeamAuth();
 
   if (isLoading) {
     return (
@@ -12,7 +12,7 @@ export default function TeamProfile() {
     );
   }
 
-  if (!teamMember) {
+  if (!teamSlug) {
     return (
       <div className="flex justify-center py-10">
         <p className="text-sm text-muted-foreground">No account data found.</p>
@@ -34,11 +34,11 @@ export default function TeamProfile() {
           </div>
           <div>
             <h3 className="font-display text-lg font-bold text-white">
-              {teamMember.name ?? "Team Member"}
+              {teamName || "Team Member"}
             </h3>
-            <p className="text-sm text-white/40">{teamMember.email}</p>
+            <p className="text-sm text-white/40">{teamSlug}@forgex.team</p>
             <p className="mt-1 text-xs text-lime-400/70">
-              Team ID: {teamMember.teamId} • Role: {teamMember.role ?? "Member"}
+              Team: {teamSlug}
             </p>
           </div>
         </div>
@@ -50,13 +50,13 @@ export default function TeamProfile() {
         </h4>
         <div className="space-y-1 text-sm text-white/70">
           <p>
-            Department: <span className="text-white/90">{teamMember.team?.name ?? "N/A"}</span>
+            Department: <span className="text-white/90">{teamName || "N/A"}</span>
           </p>
           <p>
-            Role: <span className="text-white/90">{teamMember.role ?? "Member"}</span>
+            Team Slug: <span className="text-white/90">{teamSlug}</span>
           </p>
           <p>
-            Status: <span className="text-white/90">{teamMember.status ?? "Active"}</span>
+            Status: <span className="text-white/90">Active</span>
           </p>
         </div>
       </div>
