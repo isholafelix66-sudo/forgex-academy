@@ -107,6 +107,7 @@ const Discover = lazy(() => import("./pages/dashboard/Discover.tsx"));
 const Connections = lazy(() => import("./pages/dashboard/Connections.tsx"));
 const StudentDMs = lazy(() => import("./pages/dashboard/StudentDMs.tsx"));
 const StudentDMThread = lazy(() => import("./pages/dashboard/StudentDMThread.tsx"));
+const StudentSupport = lazy(() => import("./pages/dashboard/StudentSupport.tsx"));
 
 // ---------------------------------------------------------------------------
 // Tutor dashboard
@@ -641,6 +642,7 @@ createRoot(document.getElementById("root")!).render(
                 <Route path="connections" element={<Connections />} />
                 <Route path="dms" element={<StudentDMs />} />
                 <Route path="dms/:id" element={<StudentDMThread />} />
+                <Route path="support" element={<StudentSupport />} />
               </Route>
 
               {/* Tutor dashboard — verified tutors only, or the admin session

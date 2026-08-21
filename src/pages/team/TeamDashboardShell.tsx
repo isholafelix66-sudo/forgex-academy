@@ -372,74 +372,175 @@ function AIPromptsPanel() {
 
 // ====================== ACADEMIC COURSES PANEL ======================
 function AcademicCoursesPanel() {
-  const courses = useQuery(api.teamWorkspace.listAllAiTools, {}); // placeholder — would query courses
+  const courses = useQuery(api.teamWorkspace.listCoursesForReview, {});
   const requestRevision = useMutation(api.teamWorkspace.requestCourseRevision);
   const approveCourse = useMutation(api.teamWorkspace.approveCourse);
   const escalate = useMutation(api.teamWorkspace.escalateToAdmin);
   const [showRevisionModal, setShowRevisionModal] = useState<string | null>(null);
   const [revisionFeedback, setRevisionFeedback] = useState("");
+  const [filterStatus, setFilterStatus] = useState<string>("");
+
+  const safeCourses = Array.isArray(courses) ? courses : [];
+  const filtered = filterStatus ? safeCourses.filter((c: any) => c.status === filterStatus) : safeCourses;
+  const awaitingCount = safeCourses.filter((c: any) => !c.status || c.status === "pending" || c.status === "draft").length;
+  const approvedCount = safeCourses.filter((c: any) => c.status === "approved").length;
+  const rejectedCount = safeCourses.filter((c: any) => c.status === "rejected").length;
+
+  const handleRequestRevision = async (courseId: string) => {
+    if (!revisionFeedback.trim()) { toast.error("Please provide feedback"); return; }
+    try {
+      await requestRevision({ courseId: courseId as any, feedback: revisionFeedback.trim() });
+      toast.success("Revision requested");
+      setShowRevisionModal(null); setRevisionFeedback("");
+    } catch (err: any) { toast.error(err.message); }
+  };
+
+  const handleApprove = async (courseId: string) => {
+    try { await approveCourse({ courseId: courseId as any }); toast.success("Course approved"); } catch (err: any) { toast.error(err.message); }
+  };
 
   return (
     <div className="space-y-4">
       <h2 className="font-display text-lg font-bold text-white">Course Review Queue</h2>
-      <div className="rounded-2xl border border-white/10 bg-card p-6">
-        <p className="text-sm text-white/40">Connect to the existing courses table to show pending review courses. Use "Request Revision" and "Approve" buttons to manage the review workflow.</p>
-        <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-3">
-          <div className="rounded-xl border border-white/10 bg-white/5 p-4 text-center">
-            <p className="text-2xl font-bold text-blue-300">—</p>
-            <p className="mt-1 text-xs text-white/40">Awaiting Review</p>
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-4">
+        <button type="button" onClick={() => setFilterStatus("")} className={`rounded-xl border p-4 text-center transition-colors ${!filterStatus ? "border-lime-400/30 bg-lime-400/5" : "border-white/10 bg-card hover:bg-white/5"}`}>
+          <p className="text-2xl font-bold text-white">{safeCourses.length}</p>
+          <p className="mt-1 text-xs text-white/40">All Courses</p>
+        </button>
+        <button type="button" onClick={() => setFilterStatus("pending")} className={`rounded-xl border p-4 text-center transition-colors ${filterStatus === "pending" ? "border-blue-400/30 bg-blue-400/5" : "border-white/10 bg-card hover:bg-white/5"}`}>
+          <p className="text-2xl font-bold text-blue-300">{awaitingCount}</p>
+          <p className="mt-1 text-xs text-white/40">Awaiting Review</p>
+        </button>
+        <button type="button" onClick={() => setFilterStatus("rejected")} className={`rounded-xl border p-4 text-center transition-colors ${filterStatus === "rejected" ? "border-amber-400/30 bg-amber-400/5" : "border-white/10 bg-card hover:bg-white/5"}`}>
+          <p className="text-2xl font-bold text-amber-300">{rejectedCount}</p>
+          <p className="mt-1 text-xs text-white/40">Revision Needed</p>
+        </button>
+        <button type="button" onClick={() => setFilterStatus("approved")} className={`rounded-xl border p-4 text-center transition-colors ${filterStatus === "approved" ? "border-lime-400/30 bg-lime-400/5" : "border-white/10 bg-card hover:bg-white/5"}`}>
+          <p className="text-2xl font-bold text-lime-300">{approvedCount}</p>
+          <p className="mt-1 text-xs text-white/40">Approved</p>
+        </button>
+      </div>
+      {courses === undefined ? (
+        <div className="flex justify-center py-12"><Loader2 className="size-6 animate-spin text-lime-400" /></div>
+      ) : filtered.length === 0 ? (
+        <div className="rounded-2xl border border-white/10 bg-card p-12 text-center">
+          <BookOpen className="mx-auto size-10 text-white/20" /><p className="mt-3 text-sm text-white/40">No courses{filterStatus ? " matching this filter" : " yet"}.</p>
+        </div>
+      ) : (
+        <div className="space-y-2">{filtered.map((c: any) => (
+          <div key={c._id} className="rounded-xl border border-white/10 bg-card p-4 hover:bg-white/[0.02] transition-colors">
+            <div className="flex items-center justify-between">
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-2">
+                  <p className="font-medium text-white truncate">{c.title}</p>
+                  <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold ${c.status === "approved" ? "bg-lime-400/10 text-lime-300" : c.status === "rejected" ? "bg-amber-400/10 text-amber-300" : "bg-blue-400/10 text-blue-300"}`}>
+                    {c.status?.toUpperCase() || "DRAFT"}
+                  </span>
+                </div>
+                <p className="mt-0.5 text-xs text-white/30">{c.difficulty ?? ""} {c.category ? `• ${c.category}` : ""}</p>
+              </div>
+              <div className="flex items-center gap-2">
+                {c.status !== "approved" && (
+                  <button type="button" onClick={() => handleApprove(c._id)} className="rounded-lg border border-lime-400/30 px-3 py-1.5 text-[10px] font-semibold text-lime-300 hover:bg-lime-400/10">
+                    <CheckCircle2 className="mr-1 inline size-3" />Approve
+                  </button>
+                )}
+                {c.status !== "rejected" && (
+                  <button type="button" onClick={() => { setShowRevisionModal(c._id); setRevisionFeedback(c.reviewNote || ""); }} className="rounded-lg border border-amber-400/30 px-3 py-1.5 text-[10px] font-semibold text-amber-300 hover:bg-amber-400/10">
+                    <ArrowUpCircle className="mr-1 inline size-3" />Request Revision
+                  </button>
+                )}
+                <button type="button" onClick={async () => { const reason = prompt("Escalation reason:"); if (reason) { try { await escalate({ targetType: "course", targetId: c._id, targetLabel: c.title, reason }); toast.success("Escalated to admin"); } catch (err: any) { toast.error(err.message); } } }} className="rounded-lg border border-white/10 px-3 py-1.5 text-[10px] font-semibold text-white/40 hover:bg-white/5">
+                  Escalate
+                </button>
+              </div>
+            </div>
+            {c.reviewNote && <p className="mt-2 rounded-lg bg-amber-400/5 border border-amber-400/10 px-3 py-2 text-xs text-amber-300/70">Review note: {c.reviewNote}</p>}
           </div>
-          <div className="rounded-xl border border-white/10 bg-white/5 p-4 text-center">
-            <p className="text-2xl font-bold text-amber-300">—</p>
-            <p className="mt-1 text-xs text-white/40">Under Review</p>
-          </div>
-          <div className="rounded-xl border border-white/10 bg-white/5 p-4 text-center">
-            <p className="text-2xl font-bold text-lime-300">—</p>
-            <p className="mt-1 text-xs text-white/40">Approved</p>
+        ))}</div>
+      )}
+      {showRevisionModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" onClick={() => setShowRevisionModal(null)}>
+          <div className="w-full max-w-lg rounded-2xl border border-white/10 bg-card p-6" onClick={(e) => e.stopPropagation()}>
+            <h3 className="font-display text-lg font-bold text-white">Request Revision</h3>
+            <textarea value={revisionFeedback} onChange={(e) => setRevisionFeedback(e.target.value)}
+              placeholder="Describe what needs to be changed..." rows={4}
+              className="mt-4 w-full rounded-xl border border-white/10 bg-black/20 px-4 py-2.5 text-sm text-white placeholder:text-white/30 focus:border-lime-400/40 focus:outline-none resize-none" />
+            <div className="mt-4 flex justify-end gap-2">
+              <button type="button" onClick={() => { setShowRevisionModal(null); setRevisionFeedback(""); }} className="rounded-xl border border-white/10 px-4 py-2 text-sm text-white/50 hover:bg-white/5">Cancel</button>
+              <button type="button" onClick={() => handleRequestRevision(showRevisionModal)} className="rounded-xl bg-amber-400 px-5 py-2 text-sm font-semibold text-black hover:bg-amber-300">Send Revision Request</button>
+            </div>
           </div>
         </div>
-        <p className="mt-4 text-xs text-white/20">Courses submitted by tutors will appear here for academic review.</p>
-      </div>
+      )}
     </div>
   );
 }
 
 // ====================== SUPPORT CASES PANEL ======================
 function SupportCasesPanel({ teamRole }: { teamRole: string }) {
-  const cases = useQuery(api.teamWorkspace.listStudentSupportCases, teamRole === "student-support" ? {} : "skip");
-  const claimCase = useMutation(api.teamWorkspace.claimSupportCase);
-  const replyToCase = useMutation(api.teamWorkspace.replyToStudentCase);
-  const escalateCase = useMutation(api.teamWorkspace.escalateStudentCase);
+  const isTutorSupport = teamRole === "tutor-support";
+  const isStudentSupport = teamRole === "student-support";
+
+  // Student support cases
+  const studentCases = useQuery(api.teamWorkspace.listStudentSupportCases, isStudentSupport ? {} : "skip");
+  const claimStudentCase = useMutation(api.teamWorkspace.claimSupportCase);
+  const replyToStudentCase = useMutation(api.teamWorkspace.replyToStudentCase);
+  const escalateStudentCase = useMutation(api.teamWorkspace.escalateStudentCase);
+
+  // Tutor support cases
+  const tutorCases = useQuery(api.teamWorkspace.listTutorSupportCases, isTutorSupport ? {} : "skip");
+  const replyToTutorCase = useMutation(api.teamWorkspace.replyToTutorSupportCase);
+
   const [selectedCase, setSelectedCase] = useState<any>(null);
   const [replyText, setReplyText] = useState("");
   const [isInternal, setIsInternal] = useState(false);
 
+  const cases = isTutorSupport ? tutorCases : studentCases;
+  const isTutorCase = isTutorSupport && selectedCase && selectedCase.tutorId;
+
   const handleReply = async () => {
     if (!selectedCase || !replyText.trim()) return;
     try {
-      await replyToCase({ caseId: selectedCase._id, body: replyText.trim(), isInternal });
+      if (isTutorCase) {
+        await replyToTutorCase({ caseId: selectedCase._id, body: replyText.trim(), isInternal });
+      } else {
+        await replyToStudentCase({ caseId: selectedCase._id, body: replyText.trim(), isInternal });
+      }
       setReplyText(""); setIsInternal(false);
       toast.success(isInternal ? "Internal note added" : "Reply sent");
     } catch (err: any) { toast.error(err.message); }
   };
 
   const handleClaim = async (caseId: string) => {
-    try { await claimCase({ caseId: caseId as any }); toast.success("Case claimed"); } catch (err: any) { toast.error(err.message); }
+    try {
+      if (isTutorCase) {
+        await replyToTutorCase({ caseId: caseId as any, body: "Claiming this case.", status: "responded" });
+      } else {
+        await claimStudentCase({ caseId: caseId as any });
+      }
+      toast.success("Case claimed");
+    } catch (err: any) { toast.error(err.message); }
   };
 
   const handleEscalate = async (caseId: string, to: "admin" | "academic") => {
     const note = prompt("Escalation reason:");
     if (!note) return;
-    try { await escalateCase({ caseId: caseId as any, escalateTo: to, note }); toast.success("Escalated"); } catch (err: any) { toast.error(err.message); }
+    try {
+      await escalateStudentCase({ caseId: caseId as any, escalateTo: to, note });
+      toast.success("Escalated");
+    } catch (err: any) { toast.error(err.message); }
   };
 
   return (
     <div className="flex gap-4" style={{ height: "calc(100vh - 200px)" }}>
       <div className="w-80 shrink-0 space-y-2 overflow-y-auto rounded-2xl border border-white/10 bg-card p-3">
-        <h3 className="px-2 pb-2 font-display text-sm font-bold text-white">Support Cases</h3>
+        <h3 className="px-2 pb-2 font-display text-sm font-bold text-white">
+          {isTutorSupport ? "Tutor Support Cases" : "Student Support Cases"}
+        </h3>
         {cases === undefined ? <Loader2 className="mx-auto size-4 animate-spin text-lime-400" /> :
          cases.length === 0 ? <p className="px-2 py-4 text-sm text-white/30">No cases yet.</p> :
-         cases.map((c: any) => (
+         (cases as any[]).map((c: any) => (
           <button key={c._id} onClick={() => setSelectedCase(c)}
             className={`w-full rounded-xl p-3 text-left transition-colors ${selectedCase?._id === c._id ? "bg-lime-400/10 border border-lime-400/30" : "hover:bg-white/5 border border-transparent"}`}>
             <div className="flex items-center justify-between">
@@ -448,7 +549,7 @@ function SupportCasesPanel({ teamRole }: { teamRole: string }) {
                 {c.status?.replace(/_/g, " ")}
               </span>
             </div>
-            <p className="mt-0.5 text-xs text-white/30">{c.caseNumber}</p>
+            <p className="mt-0.5 text-xs text-white/30">{isTutorSupport ? (c.tutor?.name ?? "Unknown tutor") : c.caseNumber}</p>
           </button>
          ))}
       </div>
@@ -459,18 +560,48 @@ function SupportCasesPanel({ teamRole }: { teamRole: string }) {
               <div className="flex items-center justify-between">
                 <div>
                   <h3 className="font-medium text-white">{selectedCase.subject}</h3>
-                  <p className="text-xs text-white/30">{selectedCase.caseNumber} • {selectedCase.category}</p>
+                  <p className="text-xs text-white/30">
+                    {isTutorCase ? `From: ${selectedCase.tutor?.name ?? "Unknown"} • ${selectedCase.category}` : `${selectedCase.caseNumber} • ${selectedCase.category}`}
+                  </p>
                 </div>
                 <div className="flex gap-2">
-                  {!selectedCase.assignedTo && <button type="button" onClick={() => handleClaim(selectedCase._id)} className="rounded-lg border border-lime-400/30 px-3 py-1.5 text-xs font-medium text-lime-300 hover:bg-lime-400/10">Claim</button>}
-                  <button type="button" onClick={() => handleEscalate(selectedCase._id, "academic")} className="rounded-lg border border-blue-400/30 px-3 py-1.5 text-xs font-medium text-blue-300 hover:bg-blue-400/10">Escalate → Academic</button>
-                  <button type="button" onClick={() => handleEscalate(selectedCase._id, "admin")} className="rounded-lg border border-amber-400/30 px-3 py-1.5 text-xs font-medium text-amber-300 hover:bg-amber-400/10">Escalate → Admin</button>
+                  {!selectedCase.assignedTo && !isTutorCase && (
+                    <button type="button" onClick={() => handleClaim(selectedCase._id)} className="rounded-lg border border-lime-400/30 px-3 py-1.5 text-xs font-medium text-lime-300 hover:bg-lime-400/10">Claim</button>
+                  )}
+                  {!selectedCase.assignedTo && isTutorCase && (
+                    <button type="button" onClick={() => handleClaim(selectedCase._id)} className="rounded-lg border border-lime-400/30 px-3 py-1.5 text-xs font-medium text-lime-300 hover:bg-lime-400/10">Claim</button>
+                  )}
+                  {isStudentSupport && (
+                    <>
+                      <button type="button" onClick={() => handleEscalate(selectedCase._id, "academic")} className="rounded-lg border border-blue-400/30 px-3 py-1.5 text-xs font-medium text-blue-300 hover:bg-blue-400/10">Escalate → Academic</button>
+                      <button type="button" onClick={() => handleEscalate(selectedCase._id, "admin")} className="rounded-lg border border-amber-400/30 px-3 py-1.5 text-xs font-medium text-amber-300 hover:bg-amber-400/10">Escalate → Admin</button>
+                    </>
+                  )}
                 </div>
               </div>
-              <p className="mt-2 text-sm text-white/50">{selectedCase.description}</p>
+              <p className="mt-2 text-sm text-white/50">{selectedCase.description || selectedCase.body}</p>
             </div>
             <div className="flex-1 overflow-y-auto p-4">
-              <p className="text-xs text-white/20">Messages appear here from the conversation thread.</p>
+              <div className="space-y-3">
+                {/* Original message */}
+                <div className="rounded-xl bg-white/5 border border-white/5 p-3">
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-medium text-white">{isTutorCase ? (selectedCase.tutor?.name ?? "Tutor") : "Student"}</span>
+                    <span className="text-xs text-white/20">{new Date(selectedCase.createdAt).toLocaleString()}</span>
+                  </div>
+                  <p className="mt-1 text-sm text-white/60">{selectedCase.body}</p>
+                </div>
+                {/* Admin response if exists */}
+                {selectedCase.adminNote && (
+                  <div className="rounded-xl bg-lime-400/5 border border-lime-400/10 p-3">
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-medium text-lime-300">Team Response</span>
+                      <span className="text-xs text-white/20">{selectedCase.adminNoteAt ? new Date(selectedCase.adminNoteAt).toLocaleString() : ""}</span>
+                    </div>
+                    <p className="mt-1 text-sm text-white/60">{selectedCase.adminNote}</p>
+                  </div>
+                )}
+              </div>
             </div>
             <div className="border-t border-white/10 p-3">
               <label className="flex items-center gap-2 mb-2 cursor-pointer">
@@ -480,7 +611,7 @@ function SupportCasesPanel({ teamRole }: { teamRole: string }) {
               <div className="flex gap-2">
                 <input value={replyText} onChange={(e) => setReplyText(e.target.value)}
                   onKeyDown={(e) => e.key === "Enter" && handleReply()}
-                  placeholder={isInternal ? "Internal note..." : "Reply to student..."}
+                  placeholder={isInternal ? "Internal note..." : isTutorCase ? "Reply to tutor..." : "Reply to student..."}
                   className="flex-1 rounded-xl border border-white/10 bg-black/20 px-4 py-2.5 text-sm text-white placeholder:text-white/30 focus:border-lime-400/40 focus:outline-none" />
                 <button type="button" onClick={handleReply} disabled={!replyText.trim()}
                   className="rounded-xl bg-lime-400 px-4 py-2.5 text-sm font-semibold text-black hover:bg-lime-300 disabled:opacity-40">

@@ -1122,3 +1122,155 @@ export const listPromptCategories = query({
     return await ctx.db.query("promptCategories").collect();
   },
 });
+
+// ---------------------------------------------------------------------------
+// Tutor Support — List tutor support cases + reply
+// ---------------------------------------------------------------------------
+
+export const listTutorSupportCases = query({
+  args: {},
+  handler: async (ctx) => {
+    const user = await requireTeamRole(ctx, ["tutor-support", "admin"]);
+    const cases = await ctx.db.query("tutorSupportMessages").order("desc").take(100);
+    const enriched = [];
+    for (const c of cases) {
+      const tutor = await ctx.db.get(c.tutorId);
+      enriched.push({ ...c, tutor });
+    }
+    return enriched;
+  },
+});
+
+export const replyToTutorSupportCase = mutation({
+  args: {
+    caseId: v.id("tutorSupportMessages"),
+    body: v.string(),
+    isInternal: v.optional(v.boolean()),
+    status: v.optional(v.union(v.literal("open"), v.literal("responded"), v.literal("resolved"))),
+  },
+  handler: async (ctx, args) => {
+    const user = await requireTeamRole(ctx, ["tutor-support", "admin"]);
+    const doc = await ctx.db.get(args.caseId);
+    if (!doc) throw new Error("Support case not found");
+    const now = Date.now();
+
+    // Find or create a conversation for this case
+    let conv = await ctx.db
+      .query("teamConversations")
+      .withIndex("by_entity", (q) =>
+        q.eq("entityType", "tutor_support").eq("entityId", args.caseId)
+      )
+      .first();
+
+    if (!conv) {
+      const convId = await ctx.db.insert("teamConversations", {
+        entityType: "tutor_support",
+        entityId: args.caseId,
+        subject: `Tutor Support: ${doc.subject}`,
+        status: "open",
+        lastMessageAt: now,
+        createdAt: now,
+      });
+      conv = await ctx.db.get(convId);
+      // Add tutor as participant
+      if (conv) {
+        await ctx.db.insert("teamConversationParticipants", {
+          conversationId: conv._id,
+          userId: doc.tutorId,
+          role: "tutor",
+          joinedAt: now,
+        });
+        await ctx.db.insert("teamConversationParticipants", {
+          conversationId: conv._id,
+          userId: user._id,
+          role: "team",
+          joinedAt: now,
+        });
+      }
+    }
+
+    if (conv) {
+      await ctx.db.insert("teamConversationMessages", {
+        conversationId: conv._id,
+        senderId: user._id,
+        senderRole: user.teamRole || "support",
+        body: args.body.trim().slice(0, 5000),
+        isInternal: args.isInternal || false,
+        createdAt: now,
+      });
+      await ctx.db.patch(conv._id, { lastMessageAt: now });
+    }
+
+    // Update the tutorSupportMessages doc
+    const patch: Record<string, any> = { updatedAt: now };
+    if (args.status) {
+      patch.status = args.status;
+      patch.adminNote = args.body.trim().slice(0, 5000);
+      patch.adminNoteAt = now;
+    } else {
+      patch.status = "responded";
+      patch.adminNote = args.body.trim().slice(0, 5000);
+      patch.adminNoteAt = now;
+    }
+    await ctx.db.patch(args.caseId, patch);
+
+    // Notify tutor
+    await createNotification(ctx, {
+      userId: doc.tutorId,
+      title: `Update on: ${doc.subject}`,
+      body: args.body.trim().slice(0, 150),
+      type: "support",
+      link: "/tutor/support",
+    });
+
+    await logActivity(ctx, {
+      userId: user._id,
+      action: args.isInternal ? "added_internal_note" : "replied_to_tutor_case",
+      targetType: "tutor_support",
+      targetId: args.caseId,
+      targetLabel: doc.subject,
+    });
+
+    return true;
+  },
+});
+
+// ---------------------------------------------------------------------------
+// Academic Team — List courses for review
+// ---------------------------------------------------------------------------
+
+export const listCoursesForReview = query({
+  args: {
+    status: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const user = await requireTeamRole(ctx, ["academic", "admin"]);
+    let q = ctx.db.query("courses").order("desc");
+    const all = await q.take(100);
+    if (args.status) {
+      return all.filter((c) => c.status === args.status);
+    }
+    return all;
+  },
+});
+
+// ---------------------------------------------------------------------------
+// List all users (for team messaging contact directory)
+// ---------------------------------------------------------------------------
+
+export const listTeamDirectory = query({
+  args: {},
+  handler: async (ctx) => {
+    const user = await requireAuth(ctx);
+    const users = await ctx.db.query("users").collect();
+    return users
+      .filter((u) => !u.isSeed && u._id !== user._id)
+      .map((u) => ({
+        _id: u._id,
+        name: u.name ?? "Anonymous",
+        email: u.email ?? "",
+        role: u.role ?? "student",
+        teamRole: u.teamRole ?? null,
+      }));
+  },
+});

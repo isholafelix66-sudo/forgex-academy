@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useMutation } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import {
@@ -9,8 +9,9 @@ import {
   Check,
   X,
   Users,
-  Mail,
   Clock,
+  AlertTriangle,
+  RefreshCw,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -22,56 +23,99 @@ const TEAM_ROLES = [
   { value: "content", label: "Content Team", icon: "📝", color: "text-cyan-300" },
 ] as const;
 
+/** Error boundary for the entire admin team management section */
+function ErrorFallback({ error, onRetry }: { error: string; onRetry: () => void }) {
+  return (
+    <div className="rounded-2xl border border-rose-400/20 bg-rose-400/5 p-8 text-center">
+      <AlertTriangle className="mx-auto size-10 text-rose-400" />
+      <p className="mt-3 font-display text-lg font-bold text-white">Something went wrong</p>
+      <p className="mt-2 text-sm text-white/40">{error}</p>
+      <button
+        type="button"
+        onClick={onRetry}
+        className="mt-4 inline-flex items-center gap-2 rounded-xl border border-white/10 px-4 py-2 text-sm text-white/60 hover:bg-white/5"
+      >
+        <RefreshCw className="size-4" />
+        Retry
+      </button>
+    </div>
+  );
+}
+
 export default function AdminTeamManagement() {
   const users = useQuery(api.teamAccess.adminListUsers);
   const setTeamRole = useMutation(api.teamAccess.setTeamRole);
   const [search, setSearch] = useState("");
   const [editingId, setEditingId] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [queryError, setQueryError] = useState<string | null>(null);
 
-  const handleAssign = async (e: React.MouseEvent, userId: string, role: string) => {
-    e.preventDefault();
-    e.stopPropagation();
+  // Reset error when query retries
+  useEffect(() => {
+    if (users !== undefined) {
+      setQueryError(null);
+    }
+  }, [users]);
+
+  const handleAssign = async (userId: string, role: string) => {
+    if (!role) return;
     setSaving(true);
     try {
       await setTeamRole({ userId: userId as any, teamRole: role as any });
       toast.success("Team role assigned successfully");
       setEditingId(null);
     } catch (err: any) {
-      toast.error(err?.message || "Failed to assign role");
+      const msg = err?.message || "Failed to assign role";
+      toast.error(msg);
+      // Do NOT reload — just show the error
     } finally {
       setSaving(false);
     }
   };
 
-  const handleRemove = async (e: React.MouseEvent, userId: string) => {
-    e.preventDefault();
-    e.stopPropagation();
+  const handleRemove = async (userId: string) => {
     setSaving(true);
     try {
       await setTeamRole({ userId: userId as any, teamRole: null });
       toast.success("Team role removed");
       setEditingId(null);
     } catch (err: any) {
-      toast.error(err?.message || "Failed to remove role");
+      const msg = err?.message || "Failed to remove role";
+      toast.error(msg);
     } finally {
       setSaving(false);
     }
   };
 
-  const filteredUsers = (users ?? []).filter((u) => {
+  const safeUsers = Array.isArray(users) ? users : [];
+  const filteredUsers = safeUsers.filter((u) => {
     if (!search) return true;
     const q = search.toLowerCase();
     return (
-      u.name.toLowerCase().includes(q) ||
-      u.email.toLowerCase().includes(q)
+      (u?.name ?? "").toLowerCase().includes(q) ||
+      (u?.email ?? "").toLowerCase().includes(q)
     );
   });
 
   const roleCounts = TEAM_ROLES.map((r) => ({
     ...r,
-    count: (users ?? []).filter((u) => u.teamRole === r.value).length,
+    count: safeUsers.filter((u) => u?.teamRole === r.value).length,
   }));
+
+  // Error state
+  if (queryError) {
+    return (
+      <div className="space-y-6">
+        <div>
+          <h1 className="font-display text-2xl font-bold">Team Access</h1>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Manage team role assignments. Assign users to team workspaces.
+          </p>
+        </div>
+        <ErrorFallback error={queryError} onRetry={() => { setQueryError(null); }} />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -157,6 +201,7 @@ export default function AdminTeamManagement() {
               </thead>
               <tbody className="divide-y divide-white/5">
                 {filteredUsers.map((u) => {
+                  if (!u?._id) return null;
                   const isEditing = editingId === u._id;
                   const currentRole = TEAM_ROLES.find((r) => r.value === u.teamRole);
 
@@ -167,8 +212,8 @@ export default function AdminTeamManagement() {
                     >
                       <td className="px-4 py-3">
                         <div>
-                          <p className="font-medium text-white">{u.name}</p>
-                          <p className="text-xs text-white/40">{u.email}</p>
+                          <p className="font-medium text-white">{u.name ?? "Anonymous"}</p>
+                          <p className="text-xs text-white/40">{u.email ?? ""}</p>
                         </div>
                       </td>
                       <td className="px-4 py-3">
@@ -204,9 +249,9 @@ export default function AdminTeamManagement() {
                                   <select
                                     className="h-8 appearance-none rounded-lg border border-white/10 bg-black/30 pl-3 pr-8 text-xs text-white focus:border-lime-400/40 focus:outline-none"
                                     onChange={(e) => {
-                                      e.preventDefault();
-                                      if (e.target.value) {
-                                        handleAssign(e as any, u._id, e.target.value);
+                                      const val = e.target.value;
+                                      if (val) {
+                                        handleAssign(u._id, val);
                                       }
                                     }}
                                     defaultValue=""
@@ -225,7 +270,7 @@ export default function AdminTeamManagement() {
                                 {u.teamRole && (
                                   <button
                                     type="button"
-                                    onClick={(e) => handleRemove(e, u._id)}
+                                    onClick={() => handleRemove(u._id)}
                                     className="h-8 rounded-lg border border-rose-400/30 px-2 text-xs text-rose-300 transition-colors hover:bg-rose-400/10"
                                   >
                                     Remove

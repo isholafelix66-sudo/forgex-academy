@@ -7,6 +7,7 @@ import {
   BookOpen,
   FileText,
   Globe,
+  HelpCircle,
   LayoutDashboard,
   Map,
   MessageCircle,
@@ -113,6 +114,12 @@ export default function DashboardShell() {
         },
         { to: "/dashboard/profile", label: "Profile", icon: <User className="size-4" /> },
         { to: "/dashboard/settings", label: "Settings", icon: <Settings className="size-4" /> },
+      ],
+    },
+    {
+      label: "Support",
+      items: [
+        { to: "/dashboard/support", label: "Need Help?", icon: <HelpCircle className="size-4" /> },
       ],
     },
   ];
