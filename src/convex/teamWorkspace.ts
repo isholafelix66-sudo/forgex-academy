@@ -604,3 +604,521 @@ export const adminGlobalActivity = query({
     return enriched;
   },
 });
+
+// ---------------------------------------------------------------------------
+// AI Support CRUD — Connected to existing aiResources + prompts tables
+// ---------------------------------------------------------------------------
+
+export const createAiTool = mutation({
+  args: {
+    title: v.string(),
+    slug: v.string(),
+    description: v.string(),
+    category: v.string(),
+    url: v.string(),
+    pricingType: v.union(v.literal("free"), v.literal("freemium"), v.literal("paid")),
+    body: v.optional(v.string()),
+    published: v.optional(v.boolean()),
+  },
+  handler: async (ctx, args) => {
+    const user = await requireTeamRole(ctx, ["ai-support"]);
+    const now = Date.now();
+    const id = await ctx.db.insert("aiResources", {
+      title: args.title.trim(),
+      slug: args.slug.trim().toLowerCase().replace(/\s+/g, "-"),
+      description: args.description.trim(),
+      category: args.category,
+      resourceType: "tool",
+      url: args.url.trim(),
+      pricingType: args.pricingType,
+      noCreditCard: false,
+      body: args.body,
+      featured: false,
+      published: args.published ?? false,
+      createdAt: now,
+      updatedAt: now,
+    });
+    await logActivity(ctx, {
+      userId: user._id,
+      action: args.published ? "published_ai_tool" : "created_ai_tool",
+      targetType: "ai_tool",
+      targetId: id,
+      targetLabel: args.title,
+    });
+    return id;
+  },
+});
+
+export const updateAiTool = mutation({
+  args: {
+    toolId: v.id("aiResources"),
+    title: v.optional(v.string()),
+    description: v.optional(v.string()),
+    category: v.optional(v.string()),
+    url: v.optional(v.string()),
+    pricingType: v.optional(v.union(v.literal("free"), v.literal("freemium"), v.literal("paid"))),
+    body: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const user = await requireTeamRole(ctx, ["ai-support"]);
+    const patch: Record<string, any> = { updatedAt: Date.now() };
+    if (args.title !== undefined) patch.title = args.title;
+    if (args.description !== undefined) patch.description = args.description;
+    if (args.category !== undefined) patch.category = args.category;
+    if (args.url !== undefined) patch.url = args.url;
+    if (args.pricingType !== undefined) patch.pricingType = args.pricingType;
+    if (args.body !== undefined) patch.body = args.body;
+    await ctx.db.patch(args.toolId, patch);
+    const tool = await ctx.db.get(args.toolId);
+    await logActivity(ctx, {
+      userId: user._id,
+      action: "updated_ai_tool",
+      targetType: "ai_tool",
+      targetId: args.toolId,
+      targetLabel: tool?.title,
+    });
+    return true;
+  },
+});
+
+export const toggleAiToolPublish = mutation({
+  args: { toolId: v.id("aiResources") },
+  handler: async (ctx, args) => {
+    const user = await requireTeamRole(ctx, ["ai-support"]);
+    const tool = await ctx.db.get(args.toolId);
+    if (!tool) throw new Error("Tool not found");
+    const newPublished = !tool.published;
+    await ctx.db.patch(args.toolId, {
+      published: newPublished,
+      updatedAt: Date.now(),
+    });
+    await logActivity(ctx, {
+      userId: user._id,
+      action: newPublished ? "published_ai_tool" : "unpublished_ai_tool",
+      targetType: "ai_tool",
+      targetId: args.toolId,
+      targetLabel: tool.title,
+    });
+    return newPublished;
+  },
+});
+
+export const deleteAiTool = mutation({
+  args: { toolId: v.id("aiResources") },
+  handler: async (ctx, args) => {
+    const user = await requireTeamRole(ctx, ["ai-support"]);
+    const tool = await ctx.db.get(args.toolId);
+    if (!tool) throw new Error("Tool not found");
+    await ctx.db.delete(args.toolId);
+    await logActivity(ctx, {
+      userId: user._id,
+      action: "deleted_ai_tool",
+      targetType: "ai_tool",
+      targetId: args.toolId,
+      targetLabel: tool.title,
+    });
+    return true;
+  },
+});
+
+// --- Prompts CRUD ---
+
+export const createPrompt = mutation({
+  args: {
+    title: v.string(),
+    slug: v.string(),
+    description: v.string(),
+    categoryId: v.id("promptCategories"),
+    template: v.string(),
+    usefulFor: v.string(),
+    tags: v.array(v.string()),
+    published: v.optional(v.boolean()),
+    featured: v.optional(v.boolean()),
+  },
+  handler: async (ctx, args) => {
+    const user = await requireTeamRole(ctx, ["ai-support"]);
+    const now = Date.now();
+    const id = await ctx.db.insert("prompts", {
+      title: args.title.trim(),
+      slug: args.slug.trim().toLowerCase().replace(/\s+/g, "-"),
+      description: args.description.trim(),
+      categoryId: args.categoryId,
+      tags: args.tags,
+      usefulFor: args.usefulFor,
+      requiredInputs: [],
+      template: args.template,
+      fields: [],
+      featured: args.featured ?? false,
+      published: args.published ?? false,
+      order: 0,
+      views: 0,
+      createdAt: now,
+      updatedAt: now,
+    });
+    await logActivity(ctx, {
+      userId: user._id,
+      action: args.published ? "published_prompt" : "created_prompt",
+      targetType: "prompt",
+      targetId: id,
+      targetLabel: args.title,
+    });
+    return id;
+  },
+});
+
+export const updatePrompt = mutation({
+  args: {
+    promptId: v.id("prompts"),
+    title: v.optional(v.string()),
+    description: v.optional(v.string()),
+    template: v.optional(v.string()),
+    tags: v.optional(v.array(v.string())),
+    usefulFor: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const user = await requireTeamRole(ctx, ["ai-support"]);
+    const patch: Record<string, any> = { updatedAt: Date.now() };
+    if (args.title !== undefined) patch.title = args.title;
+    if (args.description !== undefined) patch.description = args.description;
+    if (args.template !== undefined) patch.template = args.template;
+    if (args.tags !== undefined) patch.tags = args.tags;
+    if (args.usefulFor !== undefined) patch.usefulFor = args.usefulFor;
+    await ctx.db.patch(args.promptId, patch);
+    return true;
+  },
+});
+
+export const togglePromptPublish = mutation({
+  args: { promptId: v.id("prompts") },
+  handler: async (ctx, args) => {
+    const user = await requireTeamRole(ctx, ["ai-support"]);
+    const prompt = await ctx.db.get(args.promptId);
+    if (!prompt) throw new Error("Prompt not found");
+    await ctx.db.patch(args.promptId, {
+      published: !prompt.published,
+      updatedAt: Date.now(),
+    });
+    return !prompt.published;
+  },
+});
+
+export const togglePromptFeatured = mutation({
+  args: { promptId: v.id("prompts") },
+  handler: async (ctx, args) => {
+    const user = await requireTeamRole(ctx, ["ai-support"]);
+    const prompt = await ctx.db.get(args.promptId);
+    if (!prompt) throw new Error("Prompt not found");
+    await ctx.db.patch(args.promptId, {
+      featured: !prompt.featured,
+      updatedAt: Date.now(),
+    });
+    return !prompt.featured;
+  },
+});
+
+// ---------------------------------------------------------------------------
+// Academic Team — Course Review Actions
+// ---------------------------------------------------------------------------
+
+export const requestCourseRevision = mutation({
+  args: {
+    courseId: v.id("courses"),
+    feedback: v.string(),
+    section: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const user = await requireTeamRole(ctx, ["academic"]);
+    const course = await ctx.db.get(args.courseId);
+    if (!course) throw new Error("Course not found");
+    const now = Date.now();
+
+    // Update course status
+    await ctx.db.patch(args.courseId, {
+      status: "rejected",
+      reviewNote: args.feedback,
+    });
+
+    // Notify tutor
+    await createNotification(ctx, {
+      userId: course.tutorId,
+      title: `Revision requested: ${course.title}`,
+      body: args.feedback.slice(0, 200),
+      type: "course_review",
+      link: "/tutor/courses",
+    });
+
+    await logActivity(ctx, {
+      userId: user._id,
+      action: "requested_revision",
+      targetType: "course",
+      targetId: args.courseId,
+      targetLabel: course.title,
+      details: args.section ? `Section: ${args.section}` : undefined,
+    });
+
+    return true;
+  },
+});
+
+export const approveCourse = mutation({
+  args: { courseId: v.id("courses") },
+  handler: async (ctx, args) => {
+    const user = await requireTeamRole(ctx, ["academic"]);
+    const course = await ctx.db.get(args.courseId);
+    if (!course) throw new Error("Course not found");
+
+    await ctx.db.patch(args.courseId, {
+      status: "approved",
+      published: true,
+      reviewNote: undefined,
+    });
+
+    await createNotification(ctx, {
+      userId: course.tutorId,
+      title: `Course approved: ${course.title}`,
+      body: "Your course has been approved and is now live.",
+      type: "course_review",
+      link: "/tutor/courses",
+    });
+
+    await logActivity(ctx, {
+      userId: user._id,
+      action: "approved_course",
+      targetType: "course",
+      targetId: args.courseId,
+      targetLabel: course.title,
+    });
+
+    return true;
+  },
+});
+
+export const escalateToAdmin = mutation({
+  args: {
+    targetType: v.string(),
+    targetId: v.string(),
+    targetLabel: v.optional(v.string()),
+    reason: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const user = await requireAuth(ctx);
+    const now = Date.now();
+
+    // Find or create a team for escalations
+    const adminTeam = await ctx.db
+      .query("teams")
+      .withIndex("by_slug", (q) => q.eq("slug", "admin"))
+      .first();
+
+    await ctx.db.insert("teamEscalations", {
+      teamId: adminTeam?._id as any,
+      userId: user._id,
+      targetType: args.targetType,
+      targetId: args.targetId,
+      targetLabel: args.targetLabel,
+      escalateTo: "admin",
+      reason: args.reason,
+      status: "pending",
+      createdAt: now,
+      updatedAt: now,
+    });
+
+    // Notify all admins
+    const admins = await ctx.db.query("users").collect();
+    for (const a of admins) {
+      if (a.role === "admin") {
+        await createNotification(ctx, {
+          userId: a._id,
+          title: `Escalation: ${args.targetLabel || args.targetType}`,
+          body: `${user.name || "Team member"} escalated: ${args.reason.slice(0, 150)}`,
+          type: "escalation",
+          link: "/admin",
+        });
+      }
+    }
+
+    await logActivity(ctx, {
+      userId: user._id,
+      action: "escalated_to_admin",
+      targetType: args.targetType,
+      targetId: args.targetId,
+      targetLabel: args.targetLabel,
+      details: args.reason,
+    });
+
+    return true;
+  },
+});
+
+// ---------------------------------------------------------------------------
+// Support Team — Ticket Actions
+// ---------------------------------------------------------------------------
+
+export const claimSupportCase = mutation({
+  args: { caseId: v.id("studentSupportCases") },
+  handler: async (ctx, args) => {
+    const user = await requireTeamRole(ctx, ["student-support"]);
+    await ctx.db.patch(args.caseId, {
+      assignedTo: user._id,
+      status: "in_progress",
+      updatedAt: Date.now(),
+    });
+    const doc = await ctx.db.get(args.caseId);
+    await logActivity(ctx, {
+      userId: user._id,
+      action: "claimed_case",
+      targetType: "student_support",
+      targetId: args.caseId,
+      targetLabel: doc?.caseNumber,
+    });
+    return true;
+  },
+});
+
+export const replyToStudentCase = mutation({
+  args: {
+    caseId: v.id("studentSupportCases"),
+    body: v.string(),
+    isInternal: v.optional(v.boolean()),
+  },
+  handler: async (ctx, args) => {
+    const user = await requireTeamRole(ctx, ["student-support"]);
+    const doc = await ctx.db.get(args.caseId);
+    if (!doc) throw new Error("Case not found");
+    const now = Date.now();
+
+    // Create conversation if not exists
+    const convKey = `student_support:${args.caseId}`;
+    let conv = await ctx.db
+      .query("teamConversations")
+      .withIndex("by_entity", (q) =>
+        q.eq("entityType", "student_support").eq("entityId", args.caseId)
+      )
+      .first();
+
+    if (!conv) {
+      const convId = await ctx.db.insert("teamConversations", {
+        entityType: "student_support",
+        entityId: args.caseId,
+        subject: `Support: ${doc.subject}`,
+        status: "open",
+        lastMessageAt: now,
+        createdAt: now,
+      });
+      conv = await ctx.db.get(convId);
+    }
+
+    if (conv) {
+      await ctx.db.insert("teamConversationMessages", {
+        conversationId: conv._id,
+        senderId: user._id,
+        senderRole: user.teamRole || "support",
+        body: args.body.trim().slice(0, 5000),
+        isInternal: args.isInternal || false,
+        createdAt: now,
+      });
+      await ctx.db.patch(conv._id, { lastMessageAt: now });
+    }
+
+    // Notify student (non-internal only)
+    if (!args.isInternal) {
+      await createNotification(ctx, {
+        userId: doc.studentId,
+        title: `Reply to your support case ${doc.caseNumber}`,
+        body: args.body.slice(0, 150),
+        type: "student_support",
+        link: "/dashboard",
+      });
+    }
+
+    await logActivity(ctx, {
+      userId: user._id,
+      action: args.isInternal ? "added_internal_note" : "replied_to_case",
+      targetType: "student_support",
+      targetId: args.caseId,
+      targetLabel: doc.caseNumber,
+    });
+
+    return true;
+  },
+});
+
+export const escalateStudentCase = mutation({
+  args: {
+    caseId: v.id("studentSupportCases"),
+    escalateTo: v.union(v.literal("admin"), v.literal("academic")),
+    note: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const user = await requireTeamRole(ctx, ["student-support"]);
+    const doc = await ctx.db.get(args.caseId);
+    if (!doc) throw new Error("Case not found");
+
+    await ctx.db.patch(args.caseId, {
+      status: "escalated",
+      escalatedTo: args.escalateTo,
+      escalationNote: args.note,
+      updatedAt: Date.now(),
+    });
+
+    // Notify target team
+    const users = await ctx.db.query("users").collect();
+    for (const u of users) {
+      if (args.escalateTo === "academic" && u.teamRole === "academic") {
+        await createNotification(ctx, {
+          userId: u._id,
+          title: `Escalated: ${doc.caseNumber}`,
+          body: args.note.slice(0, 150),
+          type: "escalation",
+          link: "/team/academic",
+        });
+      }
+      if (args.escalateTo === "admin" && u.role === "admin") {
+        await createNotification(ctx, {
+          userId: u._id,
+          title: `Escalated: ${doc.caseNumber}`,
+          body: args.note.slice(0, 150),
+          type: "escalation",
+          link: "/admin",
+        });
+      }
+    }
+
+    await logActivity(ctx, {
+      userId: user._id,
+      action: `escalated_to_${args.escalateTo}`,
+      targetType: "student_support",
+      targetId: args.caseId,
+      targetLabel: doc.caseNumber,
+    });
+
+    return true;
+  },
+});
+
+// ---------------------------------------------------------------------------
+// List all AI tools (for AI Support team)
+// ---------------------------------------------------------------------------
+
+export const listAllAiTools = query({
+  args: {},
+  handler: async (ctx) => {
+    const user = await requireTeamRole(ctx, ["ai-support"]);
+    return await ctx.db.query("aiResources").order("desc").take(100);
+  },
+});
+
+export const listAllPrompts = query({
+  args: {},
+  handler: async (ctx) => {
+    const user = await requireTeamRole(ctx, ["ai-support"]);
+    return await ctx.db.query("prompts").order("desc").take(100);
+  },
+});
+
+export const listPromptCategories = query({
+  args: {},
+  handler: async (ctx) => {
+    return await ctx.db.query("promptCategories").collect();
+  },
+});
