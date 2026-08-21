@@ -266,6 +266,10 @@ function TeamOverview({ teamRole }: { teamRole: string }) {
 // Cases Panel (Support Teams)
 // ---------------------------------------------------------------------------
 function TeamCases({ teamRole }: { teamRole: string }) {
+  // AI Support doesn't use support cases — it manages AI Hub tools
+  if (teamRole === "ai-support") return <AISupportTools />;
+  if (teamRole === "content") return <ContentTeamPanel />;
+
   const cases = useQuery(
     api.teamWorkspace.listStudentSupportCases,
     teamRole === "student-support" ? {} : "skip"
@@ -547,6 +551,106 @@ function TeamActivityFeed() {
           ))}
         </div>
       )}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// AI Support — Connected to existing AI Hub tables
+// ---------------------------------------------------------------------------
+function AISupportTools() {
+  const aiResources = useQuery(api.aiResources.listPublished, {});
+  const prompts = useQuery(api.prompts.listPublished, {});
+
+  return (
+    <div className="space-y-6">
+      <h2 className="font-display text-lg font-bold text-white">AI Hub Management</h2>
+
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+        <div className="rounded-2xl border border-white/10 bg-card p-5">
+          <p className="text-xs font-medium uppercase tracking-wider text-white/30">AI Tools</p>
+          <p className="mt-2 font-display text-3xl font-bold text-purple-300">{aiResources === undefined ? "—" : aiResources.length}</p>
+        </div>
+        <div className="rounded-2xl border border-white/10 bg-card p-5">
+          <p className="text-xs font-medium uppercase tracking-wider text-white/30">Prompts</p>
+          <p className="mt-2 font-display text-3xl font-bold text-blue-300">{prompts === undefined ? "—" : prompts.length}</p>
+        </div>
+        <div className="rounded-2xl border border-white/10 bg-card p-5">
+          <p className="text-xs font-medium uppercase tracking-wider text-white/30">Status</p>
+          <p className="mt-2 font-display text-3xl font-bold text-lime-400">Active</p>
+        </div>
+      </div>
+
+      {/* AI Tools List */}
+      <div className="rounded-2xl border border-white/10 bg-card p-6">
+        <h3 className="font-display text-sm font-bold text-white">Published AI Tools</h3>
+        <div className="mt-4 space-y-2">
+          {aiResources === undefined ? (
+            <Loader2 className="size-4 animate-spin text-lime-400" />
+          ) : aiResources.length === 0 ? (
+            <p className="text-sm text-white/30">No AI tools published yet.</p>
+          ) : (
+            aiResources.slice(0, 10).map((r) => (
+              <div key={r._id} className="flex items-center justify-between rounded-xl border border-white/5 bg-white/[0.02] p-3">
+                <div className="min-w-0 flex-1">
+                  <p className="font-medium text-white truncate">{r.title}</p>
+                  <p className="text-xs text-white/30">{r.category} • {r.pricingType}</p>
+                </div>
+                <a href={`/ai-hub/${r.slug}`} target="_blank" rel="noreferrer" className="text-xs text-lime-300 hover:text-lime-200">View →</a>
+              </div>
+            ))
+          )}
+        </div>
+      </div>
+
+      {/* Prompts List */}
+      <div className="rounded-2xl border border-white/10 bg-card p-6">
+        <h3 className="font-display text-sm font-bold text-white">Published Prompts</h3>
+        <div className="mt-4 space-y-2">
+          {prompts === undefined ? (
+            <Loader2 className="size-4 animate-spin text-lime-400" />
+          ) : prompts.length === 0 ? (
+            <p className="text-sm text-white/30">No prompts published yet.</p>
+          ) : (
+            prompts.slice(0, 10).map((p) => (
+              <div key={p._id} className="flex items-center justify-between rounded-xl border border-white/5 bg-white/[0.02] p-3">
+                <div className="min-w-0 flex-1">
+                  <p className="font-medium text-white truncate">{p.title}</p>
+                  <p className="text-xs text-white/30">{p.usefulFor}</p>
+                </div>
+                <a href={`/prompts/${p.slug}`} target="_blank" rel="noreferrer" className="text-xs text-lime-300 hover:text-lime-200">View →</a>
+              </div>
+            ))
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Content Team Panel
+// ---------------------------------------------------------------------------
+function ContentTeamPanel() {
+  return (
+    <div className="space-y-6">
+      <h2 className="font-display text-lg font-bold text-white">Content Management</h2>
+      <div className="rounded-2xl border border-white/10 bg-card p-6">
+        <p className="text-sm text-white/40">
+          Content Team manages platform content, articles, resources, and announcements.
+          Connect to existing siteContent and updates tables for live content management.
+        </p>
+        <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <div className="rounded-xl border border-white/10 bg-white/5 p-4 text-center">
+            <p className="text-2xl font-bold text-cyan-300">0</p>
+            <p className="mt-1 text-xs text-white/40">Articles</p>
+          </div>
+          <div className="rounded-xl border border-white/10 bg-white/5 p-4 text-center">
+            <p className="text-2xl font-bold text-cyan-300">0</p>
+            <p className="mt-1 text-xs text-white/40">Resources</p>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }

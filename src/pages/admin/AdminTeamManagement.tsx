@@ -29,7 +29,9 @@ export default function AdminTeamManagement() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
-  const handleAssign = async (userId: string, role: string) => {
+  const handleAssign = async (e: React.MouseEvent, userId: string, role: string) => {
+    e.preventDefault();
+    e.stopPropagation();
     setSaving(true);
     try {
       await setTeamRole({ userId: userId as any, teamRole: role as any });
@@ -42,7 +44,9 @@ export default function AdminTeamManagement() {
     }
   };
 
-  const handleRemove = async (userId: string) => {
+  const handleRemove = async (e: React.MouseEvent, userId: string) => {
+    e.preventDefault();
+    e.stopPropagation();
     setSaving(true);
     try {
       await setTeamRole({ userId: userId as any, teamRole: null });
@@ -200,8 +204,9 @@ export default function AdminTeamManagement() {
                                   <select
                                     className="h-8 appearance-none rounded-lg border border-white/10 bg-black/30 pl-3 pr-8 text-xs text-white focus:border-lime-400/40 focus:outline-none"
                                     onChange={(e) => {
+                                      e.preventDefault();
                                       if (e.target.value) {
-                                        handleAssign(u._id, e.target.value);
+                                        handleAssign(e as any, u._id, e.target.value);
                                       }
                                     }}
                                     defaultValue=""
@@ -219,13 +224,15 @@ export default function AdminTeamManagement() {
                                 </div>
                                 {u.teamRole && (
                                   <button
-                                    onClick={() => handleRemove(u._id)}
+                                    type="button"
+                                    onClick={(e) => handleRemove(e, u._id)}
                                     className="h-8 rounded-lg border border-rose-400/30 px-2 text-xs text-rose-300 transition-colors hover:bg-rose-400/10"
                                   >
                                     Remove
                                   </button>
                                 )}
                                 <button
+                                  type="button"
                                   onClick={() => setEditingId(null)}
                                   className="h-8 rounded-lg border border-white/10 px-2 text-xs text-white/40 transition-colors hover:bg-white/5 hover:text-white"
                                 >
@@ -236,6 +243,7 @@ export default function AdminTeamManagement() {
                           </div>
                         ) : (
                           <button
+                            type="button"
                             onClick={() => setEditingId(u._id)}
                             className="inline-flex items-center gap-1.5 rounded-lg border border-white/10 px-3 py-1.5 text-xs font-medium text-white/60 transition-colors hover:border-lime-400/30 hover:bg-lime-400/5 hover:text-lime-300"
                           >
