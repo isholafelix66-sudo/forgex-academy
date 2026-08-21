@@ -15,10 +15,11 @@ import {
 import { toast } from "sonner";
 
 const TEAM_ROLES = [
-  { value: "academic", label: "Academic Support", icon: "📚", color: "text-blue-300" },
+  { value: "academic", label: "Academic Team", icon: "📚", color: "text-blue-300" },
   { value: "ai-support", label: "AI Support", icon: "🤖", color: "text-purple-300" },
   { value: "tutor-support", label: "Tutor Support", icon: "🎓", color: "text-amber-300" },
   { value: "student-support", label: "Student Support", icon: "💚", color: "text-lime-300" },
+  { value: "content", label: "Content Team", icon: "📝", color: "text-cyan-300" },
 ] as const;
 
 export default function AdminTeamManagement() {

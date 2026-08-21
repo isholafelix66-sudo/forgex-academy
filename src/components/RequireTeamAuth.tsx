@@ -5,7 +5,7 @@ import { Loader2, ShieldAlert } from "lucide-react";
 import type { ReactNode } from "react";
 import { Navigate, useLocation, Link } from "react-router";
 
-const VALID_ROLES = ["academic", "ai-support", "tutor-support", "student-support"] as const;
+const VALID_ROLES = ["academic", "ai-support", "tutor-support", "student-support", "content"] as const;
 
 /**
  * Guard for team dashboard routes.

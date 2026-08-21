@@ -4,13 +4,14 @@ import { api } from "@/convex/_generated/api";
 import { Loader2 } from "lucide-react";
 
 const TEAM_INFO: Record<string, string> = {
-  academic: "Academic Support",
+  academic: "Academic Team",
   "ai-support": "AI Support",
   "tutor-support": "Tutor Support",
   "student-support": "Student Support",
+  content: "Content Team",
 };
 
-const VALID_ROLES = ["academic", "ai-support", "tutor-support", "student-support"] as const;
+const VALID_ROLES = ["academic", "ai-support", "tutor-support", "student-support", "content"] as const;
 
 export default function TeamSettings() {
   const { user } = useAuth();

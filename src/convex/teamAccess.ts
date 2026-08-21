@@ -7,6 +7,7 @@ const teamRoleValidator = v.union(
   v.literal("ai-support"),
   v.literal("tutor-support"),
   v.literal("student-support"),
+  v.literal("content"),
 );
 
 /** Get the current user's team role. */

@@ -125,6 +125,7 @@ const schema = defineSchema(
           v.literal("ai-support"),
           v.literal("tutor-support"),
           v.literal("student-support"),
+          v.literal("content"),
         ),
       ),
       teamRoleAssignedAt: v.optional(v.number()),
@@ -1458,6 +1459,80 @@ const schema = defineSchema(
     })
       .index("by_team", ["teamId", "createdAt"])
       .index("by_status", ["status"]),
+
+    /** Student support cases — students submit issues from the student dashboard. */
+    studentSupportCases: defineTable({
+      studentId: v.id("users"),
+      caseNumber: v.string(), // e.g. SUP-2026-000124
+      category: v.union(
+        v.literal("course"),
+        v.literal("video"),
+        v.literal("quiz"),
+        v.literal("account"),
+        v.literal("technical"),
+        v.literal("academic"),
+        v.literal("learning"),
+        v.literal("general"),
+        v.literal("other"),
+      ),
+      subject: v.string(),
+      description: v.string(),
+      courseId: v.optional(v.id("courses")),
+      moduleLesson: v.optional(v.string()),
+      attachmentUrl: v.optional(v.string()),
+      assignedTo: v.optional(v.id("users")),
+      status: v.union(
+        v.literal("open"),
+        v.literal("in_progress"),
+        v.literal("waiting_for_student"),
+        v.literal("escalated"),
+        v.literal("resolved"),
+        v.literal("closed"),
+      ),
+      escalatedTo: v.optional(v.union(v.literal("admin"), v.literal("academic"))),
+      escalationNote: v.optional(v.string()),
+      resolvedAt: v.optional(v.number()),
+      createdAt: v.number(),
+      updatedAt: v.number(),
+    })
+      .index("by_student", ["studentId", "createdAt"])
+      .index("by_status", ["status"])
+      .index("by_case_number", ["caseNumber"]),
+
+    /** Reusable conversation threads — attached to any entity. */
+    teamConversations: defineTable({
+      entityType: v.string(), // "course" | "support_case" | "student_support" | "ai_tool" | "prompt"
+      entityId: v.string(),
+      teamId: v.optional(v.id("teams")),
+      subject: v.string(),
+      status: v.union(v.literal("open"), v.literal("closed")),
+      lastMessageAt: v.number(),
+      createdAt: v.number(),
+    })
+      .index("by_entity", ["entityType", "entityId"])
+      .index("by_team", ["teamId", "lastMessageAt"]),
+
+    /** Messages inside a team conversation thread. */
+    teamConversationMessages: defineTable({
+      conversationId: v.id("teamConversations"),
+      senderId: v.id("users"),
+      senderRole: v.string(), // "admin" | "academic" | "tutor" | "student" | "tutor-support" | etc.
+      body: v.string(),
+      isInternal: v.boolean(), // private notes visible only to team members
+      createdAt: v.number(),
+    })
+      .index("by_conversation", ["conversationId", "createdAt"]),
+
+    /** Who participates in a conversation (for access control). */
+    teamConversationParticipants: defineTable({
+      conversationId: v.id("teamConversations"),
+      userId: v.id("users"),
+      role: v.string(), // their role in this conversation
+      joinedAt: v.number(),
+      lastReadAt: v.optional(v.number()),
+    })
+      .index("by_conversation", ["conversationId"])
+      .index("by_user", ["userId"]),
 
     /** Activity history for support cases — tracks who handled what. */
     teamCaseHistory: defineTable({
