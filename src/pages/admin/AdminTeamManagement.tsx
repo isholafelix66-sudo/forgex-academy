@@ -333,7 +333,7 @@ function SupportLogsPanel() {
 // ===================== MESSAGES PANEL =====================
 function AdminMessagesPanel() {
   const { user } = useAuth();
-  const conversations = useQuery(api.teamWorkspace.adminListAllConversations);
+  const conversations = useQuery(api.teamWorkspace.myConversations);
   const directory = useQuery(api.teamWorkspace.listTeamDirectory);
   const sendMessage = useMutation(api.teamWorkspace.adminSendDirectMessage);
   const sendConvMsg = useMutation(api.teamWorkspace.sendConversationMessage);

@@ -1276,6 +1276,81 @@ export const listTeamDirectory = query({
 });
 
 // ---------------------------------------------------------------------------
+// List admin users (for team members to message admin directly)
+// ---------------------------------------------------------------------------
+
+export const listAdminUsers = query({
+  args: {},
+  handler: async (ctx) => {
+    await requireAuth(ctx);
+    const users = await ctx.db.query("users").collect();
+    return users
+      .filter((u) => !u.isSeed && u.role === "admin")
+      .map((u) => ({
+        _id: u._id,
+        name: u.name ?? "Admin",
+        email: u.email ?? "",
+        role: u.role ?? "admin",
+        teamRole: u.teamRole ?? null,
+      }));
+  },
+});
+
+// ---------------------------------------------------------------------------
+// Team member: get my conversations (unified for both admin and team)
+// ---------------------------------------------------------------------------
+
+export const myConversations = query({
+  args: {},
+  handler: async (ctx) => {
+    const user = await requireAuth(ctx);
+    // Get conversations the user participates in
+    const participations = await ctx.db
+      .query("teamConversationParticipants")
+      .withIndex("by_user", (q) => q.eq("userId", user._id))
+      .collect();
+    const ids = participations.map((p) => p.conversationId);
+    const convs = [] as any[];
+    for (const id of ids) {
+      const c = await ctx.db.get(id);
+      if (!c) continue;
+      // Get last message
+      const lastMsgs = await ctx.db
+        .query("teamConversationMessages")
+        .withIndex("by_conversation", (q) => q.eq("conversationId", id))
+        .order("desc")
+        .take(1);
+      const lastMsg = lastMsgs[0];
+      let lastSenderName = "";
+      if (lastMsg) {
+        const sender = await ctx.db.get(lastMsg.senderId) as any;
+        lastSenderName = sender?.name ?? "Unknown";
+      }
+      // Get other participants' names for display
+      const otherParts = await ctx.db
+        .query("teamConversationParticipants")
+        .withIndex("by_conversation", (q) => q.eq("conversationId", id))
+        .collect();
+      const otherNames = [] as string[];
+      for (const op of otherParts) {
+        if (op.userId !== user._id) {
+          const ou = await ctx.db.get(op.userId) as any;
+          otherNames.push(ou?.name ?? "Unknown");
+        }
+      }
+      convs.push({
+        ...c,
+        lastSenderName,
+        lastMessageBody: lastMsg?.body ?? "",
+        otherParticipantNames: otherNames,
+      });
+    }
+    convs.sort((a, b) => b.lastMessageAt - a.lastMessageAt);
+    return convs;
+  },
+});
+
+// ---------------------------------------------------------------------------
 // Admin: All Support Cases (Student + Tutor)
 // ---------------------------------------------------------------------------
 

@@ -631,7 +631,7 @@ function SupportCasesPanel({ teamRole }: { teamRole: string }) {
 // ====================== MESSAGES ======================
 function TeamMessages() {
   const { user } = useAuth();
-  const conversations = useQuery(api.teamWorkspace.listTeamConversations, {});
+  const conversations = useQuery(api.teamWorkspace.myConversations);
   const sendMessage = useMutation(api.teamWorkspace.sendConversationMessage);
   const adminSendMsg = useMutation(api.teamWorkspace.adminSendDirectMessage);
   const directory = useQuery(api.teamWorkspace.listTeamDirectory);
@@ -647,11 +647,22 @@ function TeamMessages() {
   );
 
   const safeDirectory = Array.isArray(directory) ? directory : [];
-  const filteredDirectory = safeDirectory.filter((d: any) => {
+  // Sort directory: admins first, then team roles, then others
+  const sortedDirectory = [...safeDirectory].sort((a: any, b: any) => {
+    if (a.role === "admin" && b.role !== "admin") return -1;
+    if (a.role !== "admin" && b.role === "admin") return 1;
+    if (a.teamRole && !b.teamRole) return -1;
+    if (!a.teamRole && b.teamRole) return 1;
+    return 0;
+  });
+  const filteredDirectory = sortedDirectory.filter((d: any) => {
     if (!searchUser) return true;
     const q = searchUser.toLowerCase();
-    return (d.name ?? "").toLowerCase().includes(q) || (d.email ?? "").toLowerCase().includes(q);
+    return (d.name ?? "").toLowerCase().includes(q) || (d.email ?? "").toLowerCase().includes(q) || (d.role ?? "").toLowerCase().includes(q);
   });
+  // Separate admins from the rest for quick access
+  const adminUsers = filteredDirectory.filter((d: any) => d.role === "admin");
+  const otherUsers = filteredDirectory.filter((d: any) => d.role !== "admin");
 
   const handleSend = async () => {
     if (!selectedId || !newMsg.trim()) return;
@@ -678,12 +689,15 @@ function TeamMessages() {
           </button>
         </div>
         {conversations === undefined ? <Loader2 className="mx-auto size-4 animate-spin text-lime-400" /> :
-         conversations.length === 0 ? <p className="px-2 py-4 text-sm text-white/30">No conversations yet.</p> :
+         (conversations as any[]).length === 0 ? <p className="px-2 py-4 text-sm text-white/30">No conversations yet.</p> :
          (conversations as any[]).map((c: any) => (
           <button key={c._id} type="button" onClick={() => { setSelectedId(c._id); setShowNewConv(false); }}
             className={`w-full rounded-xl p-3 text-left transition-colors ${selectedId === c._id ? "bg-lime-400/10 border border-lime-400/30" : "hover:bg-white/5 border border-transparent"}`}>
-            <p className="text-sm font-medium text-white truncate">{c.subject || "Direct Message"}</p>
-            <p className="mt-0.5 text-xs text-white/30">{c.entityType} • {new Date(c.lastMessageAt).toLocaleDateString()}</p>
+            <p className="text-sm font-medium text-white truncate">
+              {(c.otherParticipantNames && c.otherParticipantNames.length > 0) ? c.otherParticipantNames.join(", ") : c.subject || "Direct Message"}
+            </p>
+            <p className="mt-0.5 text-xs text-white/40 line-clamp-1">{c.lastSenderName ? `${c.lastSenderName}: ` : ""}{c.lastMessageBody || "No messages"}</p>
+            <p className="mt-0.5 text-[10px] text-white/20">{new Date(c.lastMessageAt).toLocaleDateString()}</p>
           </button>
          ))}
       </div>
@@ -697,23 +711,46 @@ function TeamMessages() {
                 placeholder="Search users..."
                 className="h-10 w-full rounded-xl border border-white/10 bg-black/20 pl-10 pr-4 text-sm text-white placeholder:text-white/30 focus:border-lime-400/40 focus:outline-none" />
             </div>
-            <div className="max-h-48 overflow-y-auto space-y-1 mb-3">
-              {filteredDirectory.map((d: any) => (
-                <button key={d._id} type="button" onClick={() => { setRecipientId(d._id); setSearchUser(d.name); }}
+            <div className="max-h-[60vh] overflow-y-auto space-y-2">
+              {/* Quick Message Admin buttons */}
+              {adminUsers.length > 0 && !searchUser && (
+                <div className="mb-2">
+                  <p className="px-1 pb-1 text-[10px] font-semibold uppercase tracking-wider text-amber-300/60">Message Admin</p>
+                  {adminUsers.map((d: any) => (
+                    <button key={d._id} type="button"
+                      onClick={() => { setRecipientId(d._id); setSearchUser(d.name); }}
+                      className={`w-full rounded-lg p-2.5 text-left transition-colors mb-1 ${recipientId === d._id ? "bg-amber-400/10 border border-amber-400/30" : "bg-amber-400/5 border border-amber-400/10 hover:bg-amber-400/10"}`}>
+                      <div className="flex items-center justify-between">
+                        <p className="text-sm font-medium text-amber-300">{d.name}</p>
+                        <span className="rounded-full bg-amber-400/10 px-1.5 py-0.5 text-[10px] font-semibold text-amber-300">Admin</span>
+                      </div>
+                      <p className="text-xs text-white/30">{d.email}</p>
+                    </button>
+                  ))}
+                </div>
+              )}
+              {/* All other users */}
+              {adminUsers.length > 0 && !searchUser && <p className="px-1 pb-1 text-[10px] font-semibold uppercase tracking-wider text-white/30">All Users</p>}
+              {(searchUser ? filteredDirectory : otherUsers).map((d: any) => (
+                <button key={d._id} type="button"
+                  onClick={() => { setRecipientId(d._id); setSearchUser(d.name); }}
                   className={`w-full rounded-lg p-2.5 text-left transition-colors ${recipientId === d._id ? "bg-lime-400/10 border border-lime-400/30" : "hover:bg-white/5 border border-transparent"}`}>
                   <div className="flex items-center justify-between">
                     <p className="text-sm text-white">{d.name}</p>
-                    <span className="text-[10px] text-white/30">{d.teamRole || d.role}</span>
+                    <div className="flex items-center gap-1.5">
+                      {d.teamRole && <span className="rounded-full bg-lime-400/10 px-1.5 py-0.5 text-[10px] font-semibold text-lime-300">{d.teamRole}</span>}
+                      <span className="text-[10px] text-white/30">{d.role}</span>
+                    </div>
                   </div>
                   <p className="text-xs text-white/30">{d.email}</p>
                 </button>
               ))}
               {filteredDirectory.length === 0 && <p className="py-3 text-sm text-white/30 text-center">No users found</p>}
             </div>
-            <div className="flex gap-2 mt-auto">
+            <div className="flex gap-2 mt-3 pt-3 border-t border-white/10">
               <input value={newMsg} onChange={(e) => setNewMsg(e.target.value)}
                 onKeyDown={(e) => e.key === "Enter" && handleStartConversation()}
-                placeholder="Type your message..." disabled={!recipientId}
+                placeholder={recipientId ? "Type your message..." : "Select a recipient first..."} disabled={!recipientId}
                 className="flex-1 rounded-xl border border-white/10 bg-black/20 px-4 py-2.5 text-sm text-white placeholder:text-white/30 focus:border-lime-400/40 focus:outline-none disabled:opacity-40" />
               <button type="button" onClick={handleStartConversation} disabled={!recipientId || !newMsg.trim()}
                 className="rounded-xl bg-lime-400 px-4 py-2.5 text-sm font-semibold text-black hover:bg-lime-300 disabled:opacity-40"><Send className="size-4" /></button>
@@ -725,10 +762,10 @@ function TeamMessages() {
               {messages === undefined ? <Loader2 className="mx-auto size-4 animate-spin text-lime-400" /> :
                (messages as any[]).length === 0 ? <p className="text-center text-sm text-white/30 py-8">No messages yet.</p> :
                (messages as any[]).map((m: any) => (
-                <div key={m._id} className={`rounded-xl p-3 ${m.isInternal ? "bg-amber-400/5 border border-amber-400/20" : "bg-white/5"}`}>
+                <div key={m._id} className={`rounded-xl p-3 ${m.isInternal ? "bg-amber-400/5 border border-amber-400/20" : m.senderRoleLabel === "Admin" ? "bg-amber-400/5 border border-amber-400/10" : "bg-white/5"}`}>
                   <div className="flex items-center gap-2">
-                    <span className="text-xs font-medium text-white">{m.senderName || m.senderRole}</span>
-                    {m.senderRoleLabel && <span className="text-[10px] rounded-full bg-white/5 px-1.5 py-0.5 text-white/30">{m.senderRoleLabel}</span>}
+                    <span className={`text-xs font-medium ${m.senderRoleLabel === "Admin" ? "text-amber-300" : "text-white"}`}>{m.senderName || m.senderRole}</span>
+                    {m.senderRoleLabel && <span className={`text-[10px] rounded-full px-1.5 py-0.5 ${m.senderRoleLabel === "Admin" ? "bg-amber-400/10 text-amber-300" : "bg-white/5 text-white/30"}`}>{m.senderRoleLabel}</span>}
                     <span className="text-xs text-white/30">{new Date(m.createdAt).toLocaleString()}</span>
                     {m.isInternal && <span className="text-[10px] text-amber-300">INTERNAL</span>}
                   </div>
