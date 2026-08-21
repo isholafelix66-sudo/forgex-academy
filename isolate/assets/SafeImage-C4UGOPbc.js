@@ -1,0 +1,1 @@
+import{r as s,j as r}from"./index-Cq3HS5Eg.js";function c({src:e,alt:f,className:i,fallback:n,...l}){const[t,a]=s.useState({src:e,failed:!1});return s.useEffect(()=>{a({src:e,failed:!1})},[e]),!t.src||t.failed?r.jsx(r.Fragment,{children:n??null}):r.jsx("img",{src:t.src,alt:f,className:i,onError:()=>a(o=>({...o,failed:!0})),...l})}export{c as S};
