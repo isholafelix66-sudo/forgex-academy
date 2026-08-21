@@ -1597,3 +1597,142 @@ export const adminListAllConversations = query({
     return convs;
   },
 });
+
+// ---------------------------------------------------------------------------
+// Course Preview: full detail for Academic team review
+// ---------------------------------------------------------------------------
+
+export const getCoursePreview = query({
+  args: { courseId: v.id("courses") },
+  handler: async (ctx, args) => {
+    const user = await requireAuth(ctx);
+    const course = await ctx.db.get(args.courseId);
+    if (!course) throw new Error("Course not found");
+
+    // Get tutor info
+    const tutor = await ctx.db.get(course.tutorId) as any;
+    const category = await ctx.db.get(course.categoryId) as any;
+
+    // Get lessons
+    const lessons = await ctx.db
+      .query("lessons")
+      .withIndex("by_course", (q) => q.eq("courseId", args.courseId))
+      .order("asc")
+      .collect();
+
+    // Get quizzes
+    const quizzes = await ctx.db
+      .query("quizzes")
+      .withIndex("by_course", (q) => q.eq("courseId", args.courseId))
+      .collect();
+
+    // Get lesson quizzes
+    const lessonQuizzes = await ctx.db
+      .query("lessonQuizzes")
+      .withIndex("by_course", (q) => q.eq("courseId", args.courseId))
+      .collect();
+
+    return {
+      course,
+      tutorName: tutor?.name ?? "Unknown",
+      tutorEmail: tutor?.email ?? "",
+      categoryName: category?.name ?? "Unknown",
+      lessons: lessons.map((l) => ({
+        _id: l._id,
+        title: l.title,
+        order: l.order,
+        durationMinutes: l.durationMinutes,
+        videoUrl: l.videoUrl,
+        videoType: l.videoType,
+        muxPlaybackId: l.muxPlaybackId,
+        videoStorageId: l.videoStorageId,
+        notes: l.notes,
+        transcript: l.transcript,
+        resources: l.resources,
+      })),
+      quizzes: quizzes.map((q) => ({
+        _id: q._id,
+        title: q.title,
+        description: q.description,
+        timeLimitMinutes: q.timeLimitMinutes,
+        questionCount: q.questions.length,
+        questions: q.questions,
+      })),
+      lessonQuizzes: lessonQuizzes.map((lq) => ({
+        _id: lq._id,
+        lessonId: lq.lessonId,
+        title: lq.title,
+        passPercent: lq.passPercent,
+        questionCount: lq.questions.length,
+        questions: lq.questions,
+        published: lq.published,
+      })),
+    };
+  },
+});
+
+// ---------------------------------------------------------------------------
+// Team-scoped stats for Overview panels
+// ---------------------------------------------------------------------------
+
+export const getTeamScopedStats = query({
+  args: {},
+  handler: async (ctx) => {
+    const user = await requireAuth(ctx);
+    const role = user.teamRole;
+    const isAdmin = user.role === "admin";
+
+    if (isAdmin || role === "academic") {
+      const courses = await ctx.db.query("courses").collect();
+      return {
+        type: "academic" as const,
+        totalCourses: courses.length,
+        awaitingReview: courses.filter((c) => !c.status || c.status === "pending" || c.status === "draft").length,
+        approved: courses.filter((c) => c.status === "approved").length,
+        rejected: courses.filter((c) => c.status === "rejected").length,
+      };
+    }
+    if (role === "tutor-support") {
+      const tutorCases = await ctx.db.query("tutorSupportMessages").collect();
+      return {
+        type: "tutor-support" as const,
+        totalCases: tutorCases.length,
+        open: tutorCases.filter((c) => c.status === "open").length,
+        responded: tutorCases.filter((c) => c.status === "responded").length,
+        resolved: tutorCases.filter((c) => c.status === "resolved").length,
+      };
+    }
+    if (role === "student-support") {
+      const studentCases = await ctx.db.query("studentSupportCases").collect();
+      return {
+        type: "student-support" as const,
+        totalCases: studentCases.length,
+        open: studentCases.filter((c) => c.status === "open").length,
+        inProgress: studentCases.filter((c) => c.status === "in_progress").length,
+        escalated: studentCases.filter((c) => c.status === "escalated").length,
+        resolved: studentCases.filter((c) => c.status === "resolved").length,
+      };
+    }
+    if (role === "ai-support") {
+      const tools = await ctx.db.query("aiResources").collect();
+      const prompts = await ctx.db.query("prompts").collect();
+      return {
+        type: "ai-support" as const,
+        totalTools: tools.length,
+        publishedTools: tools.filter((t) => t.published).length,
+        totalPrompts: prompts.length,
+        publishedPrompts: prompts.filter((p) => p.published).length,
+      };
+    }
+    if (role === "content") {
+      const content = await ctx.db.query("siteContent").collect();
+      return {
+        type: "content" as const,
+        totalContent: content.length,
+        published: content.filter((c: any) => c.published).length,
+      };
+    }
+    // Default fallback
+    return { type: "default" as const };
+  },
+});

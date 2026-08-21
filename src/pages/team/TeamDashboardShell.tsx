@@ -7,9 +7,10 @@ import {
   Loader2, LayoutDashboard, Settings, LogOut, Menu, X, BookOpen,
   MessageSquare, Bell, Activity, ClipboardList, Search, Bot, FileText,
   HelpCircle, Users, Send, Plus, Pencil, Trash2, CheckCircle2,
-  ArrowUpCircle, Eye, Star, Globe, ExternalLink, ChevronDown,
+  ArrowUpCircle,  Eye, Star, Globe, ExternalLink, ChevronDown, Play,
 } from "lucide-react";
 import { toast } from "sonner";
+import CoursePreviewModal from "@/components/team/CoursePreviewModal";
 
 const VALID_ROLES = ["academic", "ai-support", "tutor-support", "student-support", "content"] as const;
 const TEAM_INFO: Record<string, { name: string; icon: string; color: string }> = {
@@ -63,7 +64,7 @@ export default function TeamDashboardShell({ children }: { children?: React.Reac
   }
 
   return (
-    <div className="flex min-h-screen bg-background">
+    <div className="flex min-h-screen max-w-full overflow-x-hidden bg-background">
       {sidebarOpen && <div className="fixed inset-0 z-40 bg-black/50 lg:hidden" onClick={() => setSidebarOpen(false)} />}
       <aside className={`fixed inset-y-0 left-0 z-50 w-64 border-r border-white/10 bg-card transition-transform lg:static lg:translate-x-0 ${sidebarOpen ? "translate-x-0" : "-translate-x-full"}`}>
         <div className="flex h-full flex-col">
@@ -97,13 +98,13 @@ export default function TeamDashboardShell({ children }: { children?: React.Reac
           </div>
         </div>
       </aside>
-      <div className="flex flex-1 flex-col min-w-0">
+      <div className="flex flex-1 flex-col min-w-0 max-w-full overflow-x-hidden">
         <header className="flex items-center gap-4 border-b border-white/10 bg-card/50 px-4 py-3 backdrop-blur-sm">
           <button onClick={() => setSidebarOpen(true)} className="lg:hidden text-white/40 hover:text-white"><Menu className="size-5" /></button>
-          <h1 className="font-display text-lg font-bold text-white">{TAB_LABELS[tab].label} — {info.name}</h1>
+          <h1 className="font-display text-base sm:text-lg font-bold text-white truncate">{TAB_LABELS[tab].label} — {info.name}</h1>
           <div className="ml-auto text-xs text-white/30">{user.name || user.email}</div>
         </header>
-        <main className="flex-1 overflow-auto p-4 lg:p-6">
+        <main className="flex-1 overflow-auto p-3 sm:p-4 lg:p-6 min-w-0 max-w-full">
           {tab === "overview" && <TeamOverview teamRole={teamRole!} />}
           {tab === "tools" && <AIToolsPanel />}
           {tab === "prompts" && <AIPromptsPanel />}
@@ -124,6 +125,7 @@ export default function TeamDashboardShell({ children }: { children?: React.Reac
 function TeamOverview({ teamRole }: { teamRole: string }) {
   const teamData = useQuery(api.teamAccess.getMyTeamRole);
   const activity = useQuery(api.teamWorkspace.getTeamActivityFeed, { limit: 10 });
+  const stats = useQuery(api.teamWorkspace.getTeamScopedStats);
   const info = TEAM_INFO[teamRole];
   return (
     <div className="space-y-6">
@@ -137,6 +139,15 @@ function TeamOverview({ teamRole }: { teamRole: string }) {
           {teamRole === "content" && "Manage platform content, articles, and resources."}
         </p>
       </div>
+      {stats && stats.type !== "default" && (
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+          {stats.type === "academic" && (<><div className="rounded-xl border border-white/10 bg-card p-4 text-center"><p className="font-display text-2xl font-bold text-white">{(stats as any).totalCourses ?? 0}</p><p className="mt-1 text-xs text-white/40">Total Courses</p></div><div className="rounded-xl border border-white/10 bg-card p-4 text-center"><p className="font-display text-2xl font-bold text-blue-300">{(stats as any).awaitingReview ?? 0}</p><p className="mt-1 text-xs text-white/40">Awaiting Review</p></div><div className="rounded-xl border border-white/10 bg-card p-4 text-center"><p className="font-display text-2xl font-bold text-lime-300">{(stats as any).approved ?? 0}</p><p className="mt-1 text-xs text-white/40">Approved</p></div><div className="rounded-xl border border-white/10 bg-card p-4 text-center"><p className="font-display text-2xl font-bold text-amber-300">{(stats as any).rejected ?? 0}</p><p className="mt-1 text-xs text-white/40">Rejected</p></div></>)}
+          {stats.type === "tutor-support" && (<><div className="rounded-xl border border-white/10 bg-card p-4 text-center"><p className="font-display text-2xl font-bold text-white">{(stats as any).totalCases ?? 0}</p><p className="mt-1 text-xs text-white/40">Total Cases</p></div><div className="rounded-xl border border-white/10 bg-card p-4 text-center"><p className="font-display text-2xl font-bold text-amber-300">{(stats as any).open ?? 0}</p><p className="mt-1 text-xs text-white/40">Open</p></div><div className="rounded-xl border border-white/10 bg-card p-4 text-center"><p className="font-display text-2xl font-bold text-blue-300">{(stats as any).responded ?? 0}</p><p className="mt-1 text-xs text-white/40">Responded</p></div><div className="rounded-xl border border-white/10 bg-card p-4 text-center"><p className="font-display text-2xl font-bold text-lime-300">{(stats as any).resolved ?? 0}</p><p className="mt-1 text-xs text-white/40">Resolved</p></div></>)}
+          {stats.type === "student-support" && (<><div className="rounded-xl border border-white/10 bg-card p-4 text-center"><p className="font-display text-2xl font-bold text-white">{(stats as any).totalCases ?? 0}</p><p className="mt-1 text-xs text-white/40">Total Cases</p></div><div className="rounded-xl border border-white/10 bg-card p-4 text-center"><p className="font-display text-2xl font-bold text-amber-300">{(stats as any).open ?? 0}</p><p className="mt-1 text-xs text-white/40">Open</p></div><div className="rounded-xl border border-white/10 bg-card p-4 text-center"><p className="font-display text-2xl font-bold text-blue-300">{(stats as any).inProgress ?? 0}</p><p className="mt-1 text-xs text-white/40">In Progress</p></div><div className="rounded-xl border border-white/10 bg-card p-4 text-center"><p className="font-display text-2xl font-bold text-lime-300">{(stats as any).resolved ?? 0}</p><p className="mt-1 text-xs text-white/40">Resolved</p></div></>)}
+          {stats.type === "ai-support" && (<><div className="rounded-xl border border-white/10 bg-card p-4 text-center"><p className="font-display text-2xl font-bold text-white">{(stats as any).totalTools ?? 0}</p><p className="mt-1 text-xs text-white/40">AI Tools</p></div><div className="rounded-xl border border-white/10 bg-card p-4 text-center"><p className="font-display text-2xl font-bold text-lime-300">{(stats as any).publishedTools ?? 0}</p><p className="mt-1 text-xs text-white/40">Published</p></div><div className="rounded-xl border border-white/10 bg-card p-4 text-center"><p className="font-display text-2xl font-bold text-purple-300">{(stats as any).totalPrompts ?? 0}</p><p className="mt-1 text-xs text-white/40">Prompts</p></div><div className="rounded-xl border border-white/10 bg-card p-4 text-center"><p className="font-display text-2xl font-bold text-lime-300">{(stats as any).publishedPrompts ?? 0}</p><p className="mt-1 text-xs text-white/40">Published</p></div></>)}
+          {stats.type === "content" && (<><div className="rounded-xl border border-white/10 bg-card p-4 text-center"><p className="font-display text-2xl font-bold text-white">{(stats as any).totalContent ?? 0}</p><p className="mt-1 text-xs text-white/40">Total Content</p></div><div className="rounded-xl border border-white/10 bg-card p-4 text-center"><p className="font-display text-2xl font-bold text-lime-300">{(stats as any).published ?? 0}</p><p className="mt-1 text-xs text-white/40">Published</p></div></>)}
+        </div>
+      )}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
         <div className="rounded-2xl border border-white/10 bg-card p-5">
           <p className="text-xs font-medium uppercase tracking-wider text-white/30">Your Role</p>
@@ -379,6 +390,8 @@ function AcademicCoursesPanel() {
   const [showRevisionModal, setShowRevisionModal] = useState<string | null>(null);
   const [revisionFeedback, setRevisionFeedback] = useState("");
   const [filterStatus, setFilterStatus] = useState<string>("");
+  const [previewCourseId, setPreviewCourseId] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
 
   const safeCourses = Array.isArray(courses) ? courses : [];
   const filtered = filterStatus ? safeCourses.filter((c: any) => c.status === filterStatus) : safeCourses;
@@ -439,9 +452,10 @@ function AcademicCoursesPanel() {
                 </div>
                 <p className="mt-0.5 text-xs text-white/30">{c.difficulty ?? ""} {c.category ? `• ${c.category}` : ""}</p>
               </div>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-wrap">
+                <button type="button" onClick={() => setPreviewCourseId(c._id)} className="rounded-lg border border-white/10 px-2.5 py-1.5 text-[10px] font-semibold text-white/60 hover:bg-white/5"><Eye className="mr-1 inline size-3" />Preview</button>
                 {c.status !== "approved" && (
-                  <button type="button" onClick={() => handleApprove(c._id)} className="rounded-lg border border-lime-400/30 px-3 py-1.5 text-[10px] font-semibold text-lime-300 hover:bg-lime-400/10">
+                  <button type="button" onClick={() => handleApprove(c._id)} disabled={saving} className="rounded-lg border border-lime-400/30 px-2.5 py-1.5 text-[10px] font-semibold text-lime-300 hover:bg-lime-400/10 disabled:opacity-40">
                     <CheckCircle2 className="mr-1 inline size-3" />Approve
                   </button>
                 )}
@@ -468,11 +482,12 @@ function AcademicCoursesPanel() {
               className="mt-4 w-full rounded-xl border border-white/10 bg-black/20 px-4 py-2.5 text-sm text-white placeholder:text-white/30 focus:border-lime-400/40 focus:outline-none resize-none" />
             <div className="mt-4 flex justify-end gap-2">
               <button type="button" onClick={() => { setShowRevisionModal(null); setRevisionFeedback(""); }} className="rounded-xl border border-white/10 px-4 py-2 text-sm text-white/50 hover:bg-white/5">Cancel</button>
-              <button type="button" onClick={() => handleRequestRevision(showRevisionModal)} className="rounded-xl bg-amber-400 px-5 py-2 text-sm font-semibold text-black hover:bg-amber-300">Send Revision Request</button>
+              <button type="button" onClick={() => handleRequestRevision(showRevisionModal)} disabled={saving} className="rounded-xl bg-amber-400 px-5 py-2 text-sm font-semibold text-black hover:bg-amber-300 disabled:opacity-40">{saving ? <Loader2 className="mr-1 inline size-3 animate-spin" /> : null}Send Revision Request</button>
             </div>
           </div>
         </div>
       )}
+      {previewCourseId && <CoursePreviewModal courseId={previewCourseId} onClose={() => setPreviewCourseId(null)} />}
     </div>
   );
 }
