@@ -1274,3 +1274,251 @@ export const listTeamDirectory = query({
       }));
   },
 });
+
+// ---------------------------------------------------------------------------
+// Admin: All Support Cases (Student + Tutor)
+// ---------------------------------------------------------------------------
+
+export const adminAllSupportCases = query({
+  args: {},
+  handler: async (ctx) => {
+    const user = await requireAuth(ctx);
+    const isAdmin = user.role === "admin";
+    if (!isAdmin && !user.teamRole) throw new Error("Not authorized");
+
+    // Student support cases
+    const studentCasesRaw = await ctx.db.query("studentSupportCases").order("desc").take(200);
+    const studentCases = [] as any[];
+    for (const sc of studentCasesRaw) {
+      const reporter = await ctx.db.get(sc.studentId);
+      const rName = reporter && "name" in reporter ? (reporter as any).name : undefined;
+      const rEmail = reporter && "email" in reporter ? (reporter as any).email : undefined;
+      studentCases.push({
+        ...sc,
+        type: "student" as const,
+        reporterName: rName ?? "Unknown",
+        reporterEmail: rEmail ?? "",
+      });
+    }
+
+    // Tutor support cases
+    const tutorCasesRaw = await ctx.db.query("tutorSupportMessages").order("desc").take(200);
+    const tutorCases = [] as any[];
+    for (const tc of tutorCasesRaw) {
+      const tutor = await ctx.db.get(tc.tutorId as any);
+      const tName = tutor && "name" in tutor ? (tutor as any).name : undefined;
+      const tEmail = tutor && "email" in tutor ? (tutor as any).email : undefined;
+      tutorCases.push({
+        ...tc,
+        type: "tutor" as const,
+        reporterName: tName ?? "Unknown",
+        reporterEmail: tEmail ?? "",
+      });
+    }
+
+    // Merge and sort by date
+    const all = [...studentCases, ...tutorCases].sort(
+      (a, b) => (b.createdAt || 0) - (a.createdAt || 0)
+    );
+    return all;
+  },
+});
+
+// ---------------------------------------------------------------------------
+// Admin: Send direct message to any user
+// ---------------------------------------------------------------------------
+
+export const adminSendDirectMessage = mutation({
+  args: {
+    recipientId: v.id("users"),
+    body: v.string(),
+    subject: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const user = await requireAuth(ctx);
+    const isAdmin = user.role === "admin" || user.teamRole;
+    if (!isAdmin) throw new Error("Not authorized");
+
+    const recipient = await ctx.db.get(args.recipientId) as any;
+    if (!recipient) throw new Error("Recipient not found");
+
+    const now = Date.now();
+    const subject = args.subject || `Message from ${user.name || "Admin"}`;
+
+    // Check for existing direct conversation between these two users
+    const myParticipations = await ctx.db
+      .query("teamConversationParticipants")
+      .withIndex("by_user", (q) => q.eq("userId", user._id))
+      .collect();
+
+    let convId = null;
+    for (const p of myParticipations) {
+      const otherPart = await ctx.db
+        .query("teamConversationParticipants")
+        .withIndex("by_conversation", (q) =>
+          q.eq("conversationId", p.conversationId)
+        )
+        .collect();
+      const hasRecipient = otherPart.some((op) => op.userId === args.recipientId);
+      if (hasRecipient && otherPart.length === 2) {
+        convId = p.conversationId;
+        break;
+      }
+    }
+
+    if (!convId) {
+      convId = await ctx.db.insert("teamConversations", {
+        entityType: "direct",
+        entityId: `dm-${user._id}-${args.recipientId}`,
+        subject,
+        status: "open",
+        lastMessageAt: now,
+        createdAt: now,
+      });
+      await ctx.db.insert("teamConversationParticipants", {
+        conversationId: convId,
+        userId: user._id,
+        role: "member",
+        joinedAt: now,
+      });
+      await ctx.db.insert("teamConversationParticipants", {
+        conversationId: convId,
+        userId: args.recipientId,
+        role: "member",
+        joinedAt: now,
+      });
+    }
+
+    // Send message
+    await ctx.db.insert("teamConversationMessages", {
+      conversationId: convId,
+      senderId: user._id,
+      senderRole: user.role === "admin" ? "admin" : (user.teamRole || "team"),
+      body: args.body.trim().slice(0, 5000),
+      isInternal: false,
+      createdAt: now,
+    });
+    await ctx.db.patch(convId, { lastMessageAt: now });
+
+    // Notify recipient
+    await createNotification(ctx, {
+      userId: args.recipientId as string,
+      title: `New message from ${user.name || "Admin"}`,
+      body: args.body.slice(0, 80),
+      type: "message",
+      link: "/team",
+    });
+
+    return convId;
+  },
+});
+
+// ---------------------------------------------------------------------------
+// Get conversation with resolved participant names
+// ---------------------------------------------------------------------------
+
+export const getConversationParticipants = query({
+  args: { conversationId: v.id("teamConversations") },
+  handler: async (ctx, args) => {
+    await requireAuth(ctx);
+    const parts = await ctx.db
+      .query("teamConversationParticipants")
+      .withIndex("by_conversation", (q) =>
+        q.eq("conversationId", args.conversationId)
+      )
+      .collect();
+    const result = [] as any[];
+    for (const p of parts) {
+      const u = await ctx.db.get(p.userId) as any;
+      result.push({
+        userId: p.userId,
+        name: u?.name ?? "Unknown",
+        email: u?.email ?? "",
+        role: u?.role ?? "student",
+        teamRole: u?.teamRole ?? null,
+      });
+    }
+    return result;
+  },
+});
+
+// ---------------------------------------------------------------------------
+// Get messages with resolved sender names
+// ---------------------------------------------------------------------------
+
+export const getConversationMessagesDetailed = query({
+  args: { conversationId: v.id("teamConversations") },
+  handler: async (ctx, args) => {
+    const user = await requireAuth(ctx);
+    const messages = await ctx.db
+      .query("teamConversationMessages")
+      .withIndex("by_conversation", (q) =>
+        q.eq("conversationId", args.conversationId)
+      )
+      .order("asc")
+      .collect();
+
+    // Filter internal notes for non-staff users
+    const filtered = messages.filter((m) => {
+      if (m.isInternal && user.role !== "admin" && !user.teamRole) return false;
+      return true;
+    });
+
+    // Resolve sender names
+    const detailed = [] as any[];
+    for (const m of filtered) {
+      const sender = await ctx.db.get(m.senderId) as any;
+      detailed.push({
+        ...m,
+        senderName: sender?.name ?? "Unknown",
+        senderEmail: sender?.email ?? "",
+        senderRoleLabel: sender?.role === "admin" ? "Admin" : sender?.teamRole ? sender.teamRole.replace(/-/g, " ").replace(/\b\w/g, (c: string) => c.toUpperCase()) : sender?.role ?? "Member",
+      });
+    }
+    return detailed;
+  },
+});
+
+// ---------------------------------------------------------------------------
+// Admin: List all conversations
+// ---------------------------------------------------------------------------
+
+export const adminListAllConversations = query({
+  args: {},
+  handler: async (ctx) => {
+    const user = await requireAuth(ctx);
+    const isAdmin = user.role === "admin" || user.teamRole;
+    if (!isAdmin) throw new Error("Not authorized");
+
+    // Get conversations the user participates in
+    const participations = await ctx.db
+      .query("teamConversationParticipants")
+      .withIndex("by_user", (q) => q.eq("userId", user._id))
+      .collect();
+    const ids = participations.map((p) => p.conversationId);
+    const convs = [] as any[];
+    for (const id of ids) {
+      const c = await ctx.db.get(id);
+      if (!c) continue;
+      // Get last message
+      const lastMsgs = await ctx.db
+        .query("teamConversationMessages")
+        .withIndex("by_conversation", (q) => q.eq("conversationId", id))
+        .order("desc")
+        .take(1);
+      const lastMsg = lastMsgs[0];
+      let lastSenderName = "";
+      if (lastMsg) {
+        const sender = await ctx.db.get(lastMsg.senderId) as any;
+        lastSenderName = sender?.name ?? "Unknown";
+      }
+      convs.push({
+        ...c,
+        lastSenderName,
+        lastMessageBody: lastMsg?.body ?? "",
+      });
+    }
+    convs.sort((a, b) => b.lastMessageAt - a.lastMessageAt);
+    return convs;
+  },
+});

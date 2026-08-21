@@ -630,40 +630,105 @@ function SupportCasesPanel({ teamRole }: { teamRole: string }) {
 
 // ====================== MESSAGES ======================
 function TeamMessages() {
+  const { user } = useAuth();
   const conversations = useQuery(api.teamWorkspace.listTeamConversations, {});
+  const sendMessage = useMutation(api.teamWorkspace.sendConversationMessage);
+  const adminSendMsg = useMutation(api.teamWorkspace.adminSendDirectMessage);
+  const directory = useQuery(api.teamWorkspace.listTeamDirectory);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [newMsg, setNewMsg] = useState("");
-  const sendMessage = useMutation(api.teamWorkspace.sendConversationMessage);
-  const messages = useQuery(api.teamWorkspace.getConversationMessages, selectedId ? { conversationId: selectedId as any } : "skip");
+  const [showNewConv, setShowNewConv] = useState(false);
+  const [recipientId, setRecipientId] = useState<string | null>(null);
+  const [searchUser, setSearchUser] = useState("");
+
+  const messages = useQuery(
+    api.teamWorkspace.getConversationMessagesDetailed,
+    selectedId ? { conversationId: selectedId as any } : "skip"
+  );
+
+  const safeDirectory = Array.isArray(directory) ? directory : [];
+  const filteredDirectory = safeDirectory.filter((d: any) => {
+    if (!searchUser) return true;
+    const q = searchUser.toLowerCase();
+    return (d.name ?? "").toLowerCase().includes(q) || (d.email ?? "").toLowerCase().includes(q);
+  });
 
   const handleSend = async () => {
     if (!selectedId || !newMsg.trim()) return;
     try { await sendMessage({ conversationId: selectedId as any, body: newMsg.trim() }); setNewMsg(""); } catch (err: any) { toast.error(err.message); }
   };
 
+  const handleStartConversation = async () => {
+    if (!recipientId || !newMsg.trim()) return;
+    try {
+      await adminSendMsg({ recipientId: recipientId as any, body: newMsg.trim() });
+      toast.success("Message sent!");
+      setShowNewConv(false); setNewMsg(""); setRecipientId(null); setSearchUser("");
+    } catch (err: any) { toast.error(err.message); }
+  };
+
   return (
     <div className="flex gap-4" style={{ height: "calc(100vh - 200px)" }}>
       <div className="w-80 shrink-0 space-y-2 overflow-y-auto rounded-2xl border border-white/10 bg-card p-3">
-        <h3 className="px-2 pb-2 font-display text-sm font-bold text-white">Conversations</h3>
+        <div className="flex items-center justify-between px-2 pb-2">
+          <h3 className="font-display text-sm font-bold text-white">Conversations</h3>
+          <button type="button" onClick={() => { setShowNewConv(true); setSelectedId(null); }}
+            className="rounded-lg bg-lime-400 px-2.5 py-1 text-[10px] font-semibold text-black hover:bg-lime-300">
+            <Plus className="mr-1 inline size-3" />New
+          </button>
+        </div>
         {conversations === undefined ? <Loader2 className="mx-auto size-4 animate-spin text-lime-400" /> :
          conversations.length === 0 ? <p className="px-2 py-4 text-sm text-white/30">No conversations yet.</p> :
-         conversations.map((c: any) => (
-          <button key={c._id} onClick={() => setSelectedId(c._id)}
+         (conversations as any[]).map((c: any) => (
+          <button key={c._id} type="button" onClick={() => { setSelectedId(c._id); setShowNewConv(false); }}
             className={`w-full rounded-xl p-3 text-left transition-colors ${selectedId === c._id ? "bg-lime-400/10 border border-lime-400/30" : "hover:bg-white/5 border border-transparent"}`}>
-            <p className="text-sm font-medium text-white truncate">{c.subject}</p>
+            <p className="text-sm font-medium text-white truncate">{c.subject || "Direct Message"}</p>
             <p className="mt-0.5 text-xs text-white/30">{c.entityType} • {new Date(c.lastMessageAt).toLocaleDateString()}</p>
           </button>
          ))}
       </div>
       <div className="flex flex-1 flex-col rounded-2xl border border-white/10 bg-card">
-        {selectedId ? (
+        {showNewConv ? (
+          <div className="flex flex-1 flex-col p-4">
+            <h3 className="font-display text-sm font-bold text-white mb-3">Start Conversation</h3>
+            <div className="relative mb-3">
+              <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-white/30" />
+              <input type="text" value={searchUser} onChange={(e) => setSearchUser(e.target.value)}
+                placeholder="Search users..."
+                className="h-10 w-full rounded-xl border border-white/10 bg-black/20 pl-10 pr-4 text-sm text-white placeholder:text-white/30 focus:border-lime-400/40 focus:outline-none" />
+            </div>
+            <div className="max-h-48 overflow-y-auto space-y-1 mb-3">
+              {filteredDirectory.map((d: any) => (
+                <button key={d._id} type="button" onClick={() => { setRecipientId(d._id); setSearchUser(d.name); }}
+                  className={`w-full rounded-lg p-2.5 text-left transition-colors ${recipientId === d._id ? "bg-lime-400/10 border border-lime-400/30" : "hover:bg-white/5 border border-transparent"}`}>
+                  <div className="flex items-center justify-between">
+                    <p className="text-sm text-white">{d.name}</p>
+                    <span className="text-[10px] text-white/30">{d.teamRole || d.role}</span>
+                  </div>
+                  <p className="text-xs text-white/30">{d.email}</p>
+                </button>
+              ))}
+              {filteredDirectory.length === 0 && <p className="py-3 text-sm text-white/30 text-center">No users found</p>}
+            </div>
+            <div className="flex gap-2 mt-auto">
+              <input value={newMsg} onChange={(e) => setNewMsg(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && handleStartConversation()}
+                placeholder="Type your message..." disabled={!recipientId}
+                className="flex-1 rounded-xl border border-white/10 bg-black/20 px-4 py-2.5 text-sm text-white placeholder:text-white/30 focus:border-lime-400/40 focus:outline-none disabled:opacity-40" />
+              <button type="button" onClick={handleStartConversation} disabled={!recipientId || !newMsg.trim()}
+                className="rounded-xl bg-lime-400 px-4 py-2.5 text-sm font-semibold text-black hover:bg-lime-300 disabled:opacity-40"><Send className="size-4" /></button>
+            </div>
+          </div>
+        ) : selectedId ? (
           <>
             <div className="flex-1 overflow-y-auto p-4 space-y-3">
               {messages === undefined ? <Loader2 className="mx-auto size-4 animate-spin text-lime-400" /> :
-               messages.map((m: any) => (
+               (messages as any[]).length === 0 ? <p className="text-center text-sm text-white/30 py-8">No messages yet.</p> :
+               (messages as any[]).map((m: any) => (
                 <div key={m._id} className={`rounded-xl p-3 ${m.isInternal ? "bg-amber-400/5 border border-amber-400/20" : "bg-white/5"}`}>
                   <div className="flex items-center gap-2">
-                    <span className="text-xs font-medium text-white">{m.senderRole}</span>
+                    <span className="text-xs font-medium text-white">{m.senderName || m.senderRole}</span>
+                    {m.senderRoleLabel && <span className="text-[10px] rounded-full bg-white/5 px-1.5 py-0.5 text-white/30">{m.senderRoleLabel}</span>}
                     <span className="text-xs text-white/30">{new Date(m.createdAt).toLocaleString()}</span>
                     {m.isInternal && <span className="text-[10px] text-amber-300">INTERNAL</span>}
                   </div>
@@ -679,7 +744,7 @@ function TeamMessages() {
               </div>
             </div>
           </>
-        ) : <div className="flex flex-1 items-center justify-center"><p className="text-sm text-white/30">Select a conversation</p></div>}
+        ) : <div className="flex flex-1 items-center justify-center"><p className="text-sm text-white/30">Select a conversation or start a new one</p></div>}
       </div>
     </div>
   );
