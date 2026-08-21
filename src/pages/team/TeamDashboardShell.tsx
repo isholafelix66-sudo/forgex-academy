@@ -6,7 +6,7 @@ import { useNavigate } from "react-router";
 import {
   Loader2, LayoutDashboard, Settings, LogOut, Menu, X, BookOpen,
   MessageSquare, Bell, Activity, ClipboardList, Search, Bot, FileText,
-  HelpCircle, Users, Send, Plus, Edit3, Trash2, CheckCircle2,
+  HelpCircle, Users, Send, Plus, Pencil, Trash2, CheckCircle2,
   ArrowUpCircle, Eye, Star, Globe, ExternalLink, ChevronDown,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -239,7 +239,7 @@ function AIToolsPanel() {
             <button type="button" onClick={() => handleTogglePublish(t)} className={`rounded-lg border px-2.5 py-1.5 text-[10px] font-semibold ${t.published ? "border-amber-400/30 text-amber-300 hover:bg-amber-400/10" : "border-lime-400/30 text-lime-300 hover:bg-lime-400/10"}`}>
               {t.published ? "Unpublish" : "Publish"}
             </button>
-            <button type="button" onClick={() => openEdit(t)} className="rounded-lg border border-white/10 p-1.5 text-white/40 hover:bg-white/5"><Edit3 className="size-3.5" /></button>
+            <button type="button" onClick={() => openEdit(t)} className="rounded-lg border border-white/10 p-1.5 text-white/40 hover:bg-white/5"><Pencil className="size-3.5" /></button>
             <button type="button" onClick={() => handleDelete(t)} className="rounded-lg border border-rose-400/20 p-1.5 text-rose-400/60 hover:bg-rose-400/10"><Trash2 className="size-3.5" /></button>
           </div>
         </div>
@@ -340,7 +340,7 @@ function AIPromptsPanel() {
               <Star className="size-3.5" />
             </button>
             <button type="button" onClick={() => { setEditing(p); setForm({ title: p.title, slug: p.slug, description: p.description, categoryId: p.categoryId, template: p.template, usefulFor: p.usefulFor, tags: p.tags.join(", "), published: p.published, featured: p.featured }); setShowModal(true); }}
-              className="rounded-lg border border-white/10 p-1.5 text-white/40 hover:bg-white/5"><Edit3 className="size-3.5" /></button>
+              className="rounded-lg border border-white/10 p-1.5 text-white/40 hover:bg-white/5"><Pencil className="size-3.5" /></button>
           </div>
         </div>
        ))}</div>}
