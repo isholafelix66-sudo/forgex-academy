@@ -1,5 +1,7 @@
 import { useState } from "react";
 import { useAuth } from "@/hooks/use-auth";
+import { useQuery } from "convex/react";
+import { api } from "@/convex/_generated/api";
 import { useNavigate } from "react-router";
 import {
   Loader2,
@@ -9,7 +11,8 @@ import {
   Menu,
   X,
 } from "lucide-react";
-import { getTeamRole } from "@/components/RequireTeamAuth";
+
+const VALID_ROLES = ["academic", "ai-support", "tutor-support", "student-support"] as const;
 
 const TEAM_INFO: Record<
   string,
@@ -43,11 +46,12 @@ export default function TeamDashboardShell({
   children?: React.ReactNode;
 }) {
   const { user, signOut } = useAuth();
+  const teamData = useQuery(api.teamAccess.getMyTeamRole);
   const navigate = useNavigate();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [tab, setTab] = useState<"dashboard" | "settings">("dashboard");
 
-  if (!user) {
+  if (!user || teamData === undefined) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-background">
         <Loader2 className="size-6 animate-spin text-lime-400" />
@@ -55,8 +59,9 @@ export default function TeamDashboardShell({
     );
   }
 
-  const teamRole = getTeamRole(user as unknown as Record<string, unknown>);
-  const info = teamRole ? TEAM_INFO[teamRole] : null;
+  const teamRole = teamData?.teamRole;
+  const isValidRole = teamRole && VALID_ROLES.includes(teamRole as typeof VALID_ROLES[number]);
+  const info = isValidRole ? TEAM_INFO[teamRole!] : null;
 
   if (!info) {
     return (
@@ -216,12 +221,12 @@ export default function TeamDashboardShell({
                     Member Since
                   </p>
                   <p className="mt-2 font-display text-2xl font-bold text-white">
-                    {new Date(
-                      (user as Record<string, unknown>)?.teamRoleAssignedAt as number || Date.now(),
-                    ).toLocaleDateString("en-US", {
-                      month: "short",
-                      year: "numeric",
-                    })}
+                    {teamData?.teamRoleAssignedAt
+                      ? new Date(teamData.teamRoleAssignedAt).toLocaleDateString("en-US", {
+                          month: "short",
+                          year: "numeric",
+                        })
+                      : "N/A"}
                   </p>
                 </div>
               </div>

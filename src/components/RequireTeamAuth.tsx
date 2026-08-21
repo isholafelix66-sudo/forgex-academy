@@ -1,9 +1,11 @@
 import { useAuth } from "@/hooks/use-auth";
+import { useQuery } from "convex/react";
+import { api } from "@/convex/_generated/api";
 import { Loader2, ShieldAlert } from "lucide-react";
 import type { ReactNode } from "react";
 import { Navigate, useLocation, Link } from "react-router";
 
-const TEAM_ROLES = ["academic", "ai-support", "tutor-support", "student-support"] as const;
+const VALID_ROLES = ["academic", "ai-support", "tutor-support", "student-support"] as const;
 
 /**
  * Guard for team dashboard routes.
@@ -11,10 +13,11 @@ const TEAM_ROLES = ["academic", "ai-support", "tutor-support", "student-support"
  * Admins bypass the teamRole check.
  */
 export function RequireTeamAuth({ children }: { children: ReactNode }) {
-  const { isLoading, isAuthenticated, user } = useAuth();
+  const { isLoading: authLoading, isAuthenticated, user } = useAuth();
+  const teamData = useQuery(api.teamAccess.getMyTeamRole);
   const location = useLocation();
 
-  if (isLoading) {
+  if (authLoading || (isAuthenticated && teamData === undefined)) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-background">
         <div className="flex flex-col items-center gap-3">
@@ -40,12 +43,11 @@ export function RequireTeamAuth({ children }: { children: ReactNode }) {
   // Admins can access any team
   if (user?.role === "admin") return <>{children}</>;
 
-  const teamRole = (user as Record<string, unknown> | undefined)
-    ?.teamRole as string | undefined;
+  const teamRole = teamData?.teamRole;
 
   if (
     !teamRole ||
-    !TEAM_ROLES.includes(teamRole as (typeof TEAM_ROLES)[number])
+    !VALID_ROLES.includes(teamRole as (typeof VALID_ROLES)[number])
   ) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-background px-4">

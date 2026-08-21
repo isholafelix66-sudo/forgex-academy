@@ -1,5 +1,7 @@
 import { useAuth } from "@/hooks/use-auth";
-import { getTeamRole } from "@/components/RequireTeamAuth";
+import { useQuery } from "convex/react";
+import { api } from "@/convex/_generated/api";
+import { Loader2 } from "lucide-react";
 
 const TEAM_INFO: Record<string, string> = {
   academic: "Academic Support",
@@ -8,9 +10,22 @@ const TEAM_INFO: Record<string, string> = {
   "student-support": "Student Support",
 };
 
+const VALID_ROLES = ["academic", "ai-support", "tutor-support", "student-support"] as const;
+
 export default function TeamSettings() {
   const { user } = useAuth();
-  const teamRole = getTeamRole(user as unknown as Record<string, unknown>);
+  const teamData = useQuery(api.teamAccess.getMyTeamRole);
+
+  if (teamData === undefined) {
+    return (
+      <div className="flex items-center justify-center py-12">
+        <Loader2 className="size-5 animate-spin text-lime-400" />
+      </div>
+    );
+  }
+
+  const teamRole = teamData?.teamRole;
+  const isValidRole = teamRole && VALID_ROLES.includes(teamRole as typeof VALID_ROLES[number]);
 
   return (
     <div className="space-y-6">
