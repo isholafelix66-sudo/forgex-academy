@@ -19,7 +19,7 @@
  * bump VERSION whenever sw.js behavior changes so old broken caches are
  * purged instead of being served forever.
  */
-const VERSION = "forgex-shell-v2";
+const VERSION = "forgex-shell-v3";
 const SHELL_CACHE = `${VERSION}-shell`;
 const FONT_CACHE = `${VERSION}-fonts`;
 
@@ -28,6 +28,14 @@ self.addEventListener("install", (event) => {
   // only known after the first load, so the runtime caches fill as the app
   // is used. Taking control immediately keeps the experience consistent.
   event.waitUntil(self.skipWaiting());
+});
+
+// Allow the page to fast-forward the update: when a new worker is waiting,
+// posting { type: "SKIP_WAITING" } activates it immediately.
+self.addEventListener("message", (event) => {
+  if (event.data && event.data.type === "SKIP_WAITING") {
+    self.skipWaiting();
+  }
 });
 
 self.addEventListener("activate", (event) => {
@@ -69,7 +77,12 @@ self.addEventListener("fetch", (event) => {
   }
 
   // Same-origin static assets: serve from cache instantly, refresh in the
-  // background so the next load is already up to date.
+  // background so the next load is already up to date. The service worker
+  // file itself must ALWAYS be network-first, otherwise browsers can keep
+  // running a stale worker across deploys.
+  if (url.pathname === "/sw.js") {
+    return; // fall through to network
+  }
   event.respondWith(staleWhileRevalidate(request, SHELL_CACHE));
 });
 
