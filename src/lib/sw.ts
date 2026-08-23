@@ -17,8 +17,28 @@ export function registerServiceWorker() {
     () => {
       navigator.serviceWorker
         .register("/sw.js", { scope: "/" })
-        .then(() => {
+        .then((registration) => {
           console.info("[ForgeX] Service worker ready — offline support active.");
+          // If an updated worker finished installing but is waiting to take
+          // over (deploy happened while this tab was open), activate it now.
+          // We deliberately do NOT force a page reload on controllerchange:
+          // assets are content-hashed and navigations are network-first, so
+          // the running session stays valid until the user's next navigation
+          // naturally picks up the fresh deployment.
+          if (registration.waiting) {
+            registration.waiting.postMessage({ type: "SKIP_WAITING" });
+          }
+          registration.addEventListener("updatefound", () => {
+            const installing = registration.installing;
+            installing?.addEventListener("statechange", () => {
+              if (
+                installing.state === "installed" &&
+                navigator.serviceWorker.controller
+              ) {
+                installing.postMessage({ type: "SKIP_WAITING" });
+              }
+            });
+          });
         })
         .catch((err: unknown) => {
           console.warn(

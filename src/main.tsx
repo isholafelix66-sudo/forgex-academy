@@ -9,7 +9,7 @@ import { RequireTeamAuth } from "@/components/RequireTeamAuth";
 import { VlyToolbar } from "../vly-toolbar-readonly.tsx";
 import { ConvexAuthProvider } from "@convex-dev/auth/react";
 import { ConvexReactClient } from "convex/react";
-import React, { StrictMode, useEffect, lazy, Suspense, useState } from "react";
+import React, { StrictMode, useEffect, lazy, Suspense, useState, LazyExoticComponent, ComponentType } from "react";
 import { RefreshCw } from "lucide-react";
 import { createRoot } from "react-dom/client";
 import { BrowserRouter, Route, Routes, useLocation } from "react-router";
@@ -22,7 +22,55 @@ import { registerServiceWorker } from "@/lib/sw";
 // ---------------------------------------------------------------------------
 // Public pages
 // ---------------------------------------------------------------------------
-const LazyFloatingChat = lazy(() =>
+/**
+ * Retry wrapper for route-level dynamic imports.
+ *
+ * After a Vercel deploy, an already-open tab can hold HTML that references
+ * hashed chunk filenames which no longer exist. The first navigation to such
+ * a route throws "Failed to fetch dynamically imported module" — which used
+ * to surface as the error-boundary refresh loop. Instead we transparently
+ * retry the import once (transient network hiccups) and, if it still fails,
+ * force one full reload so the browser picks up the fresh deployment. A
+ * sessionStorage guard prevents reload loops if the site is truly down.
+ */
+/* eslint-disable-next-line @typescript-eslint/no-explicit-any */
+function lazyRetry(
+  loader: () => Promise<{ default: React.ComponentType<any> }>,
+): LazyExoticComponent<React.ComponentType<any>> {
+  return lazy(async () => {
+    try {
+      return await loader();
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err ?? "");
+      const isChunkError =
+        /failed to fetch dynamically imported module|importing a module script|error loading dynamically imported module|load failed|dynamically imported/i.test(
+          msg,
+        );
+      if (isChunkError && typeof window !== "undefined") {
+        // One retry after a short delay — handles momentary network drops.
+        await new Promise((r) => setTimeout(r, 300));
+        try {
+          return await loader();
+        } catch {
+          // Still failing: the deployment changed under us. Reload once so
+          // the browser fetches current HTML + chunk names.
+          const KEY = "fx_chunk_reload_at";
+          const last = Number(sessionStorage.getItem(KEY) ?? 0);
+          if (Date.now() - last > 10_000) {
+            sessionStorage.setItem(KEY, String(Date.now()));
+            window.location.reload();
+          }
+        }
+      }
+      throw err;
+    }
+  });
+}
+
+/** Route lazy-loader with deploy-safe retry. Use this instead of raw lazy(). */
+const L = lazyRetry;
+
+const LazyFloatingChat = L(() =>
   import("@/components/chat/FloatingChat").then((m) => ({
     default: m.FloatingChat,
   })),
@@ -67,112 +115,112 @@ function LazyFloatingChatWrapper() {
   );
 }
 
-const Landing = lazy(() => import("./pages/Landing.tsx"));
-const About = lazy(() => import("./pages/About.tsx"));
-const Courses = lazy(() => import("./pages/Courses.tsx"));
-const CourseDetail = lazy(() => import("./pages/CourseDetail.tsx"));
-const Tutors = lazy(() => import("./pages/Tutors.tsx"));
-const TutorDetail = lazy(() => import("./pages/TutorDetail.tsx"));
-const RoadmapPage = lazy(() => import("./pages/RoadmapPage.tsx"));
-const Updates = lazy(() => import("./pages/Updates.tsx"));
-const Stories = lazy(() => import("./pages/Stories.tsx"));
-const AIHub = lazy(() => import("./pages/AIHub.tsx"));
-const PromptLibrary = lazy(() => import("./pages/PromptLibrary.tsx"));
-const PromptDetail = lazy(() => import("./pages/PromptDetail.tsx"));
-const Contact = lazy(() => import("./pages/Contact.tsx"));
-const VerifyCertificate = lazy(() => import("./pages/VerifyCertificate.tsx"));
-const BecomeTutor = lazy(() => import("./pages/BecomeTutor.tsx"));
-const AuthPage = lazy(() => import("./pages/Auth.tsx"));
-const NotFound = lazy(() => import("./pages/NotFound.tsx"));
+const Landing = L(() => import("./pages/Landing.tsx"));
+const About = L(() => import("./pages/About.tsx"));
+const Courses = L(() => import("./pages/Courses.tsx"));
+const CourseDetail = L(() => import("./pages/CourseDetail.tsx"));
+const Tutors = L(() => import("./pages/Tutors.tsx"));
+const TutorDetail = L(() => import("./pages/TutorDetail.tsx"));
+const RoadmapPage = L(() => import("./pages/RoadmapPage.tsx"));
+const Updates = L(() => import("./pages/Updates.tsx"));
+const Stories = L(() => import("./pages/Stories.tsx"));
+const AIHub = L(() => import("./pages/AIHub.tsx"));
+const PromptLibrary = L(() => import("./pages/PromptLibrary.tsx"));
+const PromptDetail = L(() => import("./pages/PromptDetail.tsx"));
+const Contact = L(() => import("./pages/Contact.tsx"));
+const VerifyCertificate = L(() => import("./pages/VerifyCertificate.tsx"));
+const BecomeTutor = L(() => import("./pages/BecomeTutor.tsx"));
+const AuthPage = L(() => import("./pages/Auth.tsx"));
+const NotFound = L(() => import("./pages/NotFound.tsx"));
 
 // ---------------------------------------------------------------------------
 // Learning + student dashboard
 // ---------------------------------------------------------------------------
-const Learn = lazy(() => import("./pages/Learn.tsx"));
-const DashboardShell = lazy(() => import("./pages/dashboard/DashboardShell.tsx"));
-const DashboardHome = lazy(() => import("./pages/dashboard/DashboardHome.tsx"));
-const MyCourses = lazy(() => import("./pages/dashboard/MyCourses.tsx"));
-const RoadmapProgress = lazy(() => import("./pages/dashboard/RoadmapProgress.tsx"));
-const Assignments = lazy(() => import("./pages/dashboard/Assignments.tsx"));
-const Certificates = lazy(() => import("./pages/dashboard/Certificates.tsx"));
-const Messages = lazy(() => import("./pages/dashboard/Messages.tsx"));
-const Notifications = lazy(() => import("./pages/dashboard/Notifications.tsx"));
-const Profile = lazy(() => import("./pages/dashboard/Profile.tsx"));
-const Settings = lazy(() => import("./pages/dashboard/Settings.tsx"));
+const Learn = L(() => import("./pages/Learn.tsx"));
+const DashboardShell = L(() => import("./pages/dashboard/DashboardShell.tsx"));
+const DashboardHome = L(() => import("./pages/dashboard/DashboardHome.tsx"));
+const MyCourses = L(() => import("./pages/dashboard/MyCourses.tsx"));
+const RoadmapProgress = L(() => import("./pages/dashboard/RoadmapProgress.tsx"));
+const Assignments = L(() => import("./pages/dashboard/Assignments.tsx"));
+const Certificates = L(() => import("./pages/dashboard/Certificates.tsx"));
+const Messages = L(() => import("./pages/dashboard/Messages.tsx"));
+const Notifications = L(() => import("./pages/dashboard/Notifications.tsx"));
+const Profile = L(() => import("./pages/dashboard/Profile.tsx"));
+const Settings = L(() => import("./pages/dashboard/Settings.tsx"));
 
 // Communication & Community module (student side)
-const Communities = lazy(() => import("./pages/dashboard/Communities.tsx"));
-const CommunityRoom = lazy(() => import("./pages/dashboard/CommunityRoom.tsx"));
-const Discover = lazy(() => import("./pages/dashboard/Discover.tsx"));
-const Connections = lazy(() => import("./pages/dashboard/Connections.tsx"));
-const StudentDMs = lazy(() => import("./pages/dashboard/StudentDMs.tsx"));
-const StudentDMThread = lazy(() => import("./pages/dashboard/StudentDMThread.tsx"));
-const StudentSupport = lazy(() => import("./pages/dashboard/StudentSupport.tsx"));
+const Communities = L(() => import("./pages/dashboard/Communities.tsx"));
+const CommunityRoom = L(() => import("./pages/dashboard/CommunityRoom.tsx"));
+const Discover = L(() => import("./pages/dashboard/Discover.tsx"));
+const Connections = L(() => import("./pages/dashboard/Connections.tsx"));
+const StudentDMs = L(() => import("./pages/dashboard/StudentDMs.tsx"));
+const StudentDMThread = L(() => import("./pages/dashboard/StudentDMThread.tsx"));
+const StudentSupport = L(() => import("./pages/dashboard/StudentSupport.tsx"));
 
 // ---------------------------------------------------------------------------
 // Tutor dashboard
 // ---------------------------------------------------------------------------
-const TutorShell = lazy(() => import("./pages/tutor/TutorShell.tsx"));
-const TutorOverview = lazy(() => import("./pages/tutor/TutorOverview.tsx"));
-const TutorCourses = lazy(() => import("./pages/tutor/TutorCourses.tsx"));
-const CourseEditor = lazy(() => import("./pages/tutor/CourseEditor.tsx"));
-const TutorGrading = lazy(() => import("./pages/tutor/TutorGrading.tsx"));
-const TutorStudents = lazy(() => import("./pages/tutor/TutorStudents.tsx"));
-const TutorInbox = lazy(() => import("./pages/tutor/TutorInbox.tsx"));
-const TutorAnnouncements = lazy(() => import("./pages/tutor/TutorAnnouncements.tsx"));
-const TutorSupport = lazy(() => import("./pages/tutor/TutorSupport.tsx"));
-const TutorCommunities = lazy(() => import("./pages/tutor/TutorCommunities.tsx"));
-const TutorCommunityManage = lazy(() => import("./pages/tutor/TutorCommunityManage.tsx"));
-const TutorProfile = lazy(() => import("./pages/tutor/TutorProfile.tsx"));
-const TutorSettings = lazy(() => import("./pages/tutor/TutorSettings.tsx"));
+const TutorShell = L(() => import("./pages/tutor/TutorShell.tsx"));
+const TutorOverview = L(() => import("./pages/tutor/TutorOverview.tsx"));
+const TutorCourses = L(() => import("./pages/tutor/TutorCourses.tsx"));
+const CourseEditor = L(() => import("./pages/tutor/CourseEditor.tsx"));
+const TutorGrading = L(() => import("./pages/tutor/TutorGrading.tsx"));
+const TutorStudents = L(() => import("./pages/tutor/TutorStudents.tsx"));
+const TutorInbox = L(() => import("./pages/tutor/TutorInbox.tsx"));
+const TutorAnnouncements = L(() => import("./pages/tutor/TutorAnnouncements.tsx"));
+const TutorSupport = L(() => import("./pages/tutor/TutorSupport.tsx"));
+const TutorCommunities = L(() => import("./pages/tutor/TutorCommunities.tsx"));
+const TutorCommunityManage = L(() => import("./pages/tutor/TutorCommunityManage.tsx"));
+const TutorProfile = L(() => import("./pages/tutor/TutorProfile.tsx"));
+const TutorSettings = L(() => import("./pages/tutor/TutorSettings.tsx"));
 
 // Public tutor mini-website (shareable /tutor/<slug> page)
-const TutorPage = lazy(() => import("./pages/TutorPage.tsx"));
+const TutorPage = L(() => import("./pages/TutorPage.tsx"));
 
 // ---------------------------------------------------------------------------
 // Team Workspace
 // ---------------------------------------------------------------------------
-const TeamHub = lazy(() => import("./pages/team/TeamHub.tsx"));
-const TeamPassword = lazy(() => import("./pages/team/TeamPassword.tsx"));
-const TeamDashboardShell = lazy(() => import("./pages/team/TeamDashboardShell.tsx"));
-const AcademicOverview = lazy(() => import("./pages/team/AcademicOverview.tsx"));
-const AISupportOverview = lazy(() => import("./pages/team/AISupportOverview.tsx"));
-const TutorSupportOverview = lazy(() => import("./pages/team/TutorSupportOverview.tsx"));
-const StudentSupportOverview = lazy(() => import("./pages/team/StudentSupportOverview.tsx"));
-const TeamSettings = lazy(() => import("./pages/team/TeamSettings.tsx"));
+const TeamHub = L(() => import("./pages/team/TeamHub.tsx"));
+const TeamPassword = L(() => import("./pages/team/TeamPassword.tsx"));
+const TeamDashboardShell = L(() => import("./pages/team/TeamDashboardShell.tsx"));
+const AcademicOverview = L(() => import("./pages/team/AcademicOverview.tsx"));
+const AISupportOverview = L(() => import("./pages/team/AISupportOverview.tsx"));
+const TutorSupportOverview = L(() => import("./pages/team/TutorSupportOverview.tsx"));
+const StudentSupportOverview = L(() => import("./pages/team/StudentSupportOverview.tsx"));
+const TeamSettings = L(() => import("./pages/team/TeamSettings.tsx"));
 
 
 // ---------------------------------------------------------------------------
 // Admin dashboard
 // ---------------------------------------------------------------------------
-const AdminShell = lazy(() => import("./pages/admin/AdminShell.tsx"));
-const AdminOverview = lazy(() => import("./pages/admin/AdminOverview.tsx"));
-const AdminUsers = lazy(() => import("./pages/admin/AdminUsers.tsx"));
-const AdminApplications = lazy(() => import("./pages/admin/AdminApplications.tsx"));
-const AdminCourses = lazy(() => import("./pages/admin/AdminCourses.tsx"));
-const AdminCatalog = lazy(() => import("./pages/admin/AdminCatalog.tsx"));
-const AdminUpdates = lazy(() => import("./pages/admin/AdminUpdates.tsx"));
-const AdminStories = lazy(() => import("./pages/admin/AdminStories.tsx"));
-const AdminAIHub = lazy(() => import("./pages/admin/AdminAIHub.tsx"));
-const AdminPrompts = lazy(() => import("./pages/admin/AdminPrompts.tsx"));
-const AdminCertificates = lazy(() => import("./pages/admin/AdminCertificates.tsx"));
-const AdminContent = lazy(() => import("./pages/admin/AdminContent.tsx"));
-const AdminMedia = lazy(() => import("./pages/admin/AdminMedia.tsx"));
-const AdminFormBuilder = lazy(() => import("./pages/admin/AdminFormBuilder.tsx"));
-const AdminAudit = lazy(() => import("./pages/admin/AdminAudit.tsx"));
-const AdminProfile = lazy(() => import("./pages/admin/AdminProfile.tsx"));
-const AdminChat = lazy(() => import("./pages/admin/AdminChat.tsx"));
-const AdminInbox = lazy(() => import("./pages/admin/AdminInbox.tsx"));
-const AdminCoursePreview = lazy(() => import("./pages/admin/AdminCoursePreview.tsx"));
-const AdminTeamManagement = lazy(() => import("./pages/admin/AdminTeamManagement.tsx"));
+const AdminShell = L(() => import("./pages/admin/AdminShell.tsx"));
+const AdminOverview = L(() => import("./pages/admin/AdminOverview.tsx"));
+const AdminUsers = L(() => import("./pages/admin/AdminUsers.tsx"));
+const AdminApplications = L(() => import("./pages/admin/AdminApplications.tsx"));
+const AdminCourses = L(() => import("./pages/admin/AdminCourses.tsx"));
+const AdminCatalog = L(() => import("./pages/admin/AdminCatalog.tsx"));
+const AdminUpdates = L(() => import("./pages/admin/AdminUpdates.tsx"));
+const AdminStories = L(() => import("./pages/admin/AdminStories.tsx"));
+const AdminAIHub = L(() => import("./pages/admin/AdminAIHub.tsx"));
+const AdminPrompts = L(() => import("./pages/admin/AdminPrompts.tsx"));
+const AdminCertificates = L(() => import("./pages/admin/AdminCertificates.tsx"));
+const AdminContent = L(() => import("./pages/admin/AdminContent.tsx"));
+const AdminMedia = L(() => import("./pages/admin/AdminMedia.tsx"));
+const AdminFormBuilder = L(() => import("./pages/admin/AdminFormBuilder.tsx"));
+const AdminAudit = L(() => import("./pages/admin/AdminAudit.tsx"));
+const AdminProfile = L(() => import("./pages/admin/AdminProfile.tsx"));
+const AdminChat = L(() => import("./pages/admin/AdminChat.tsx"));
+const AdminInbox = L(() => import("./pages/admin/AdminInbox.tsx"));
+const AdminCoursePreview = L(() => import("./pages/admin/AdminCoursePreview.tsx"));
+const AdminTeamManagement = L(() => import("./pages/admin/AdminTeamManagement.tsx"));
 
 // Communication & Community module (admin moderation)
-const AdminCommunication = lazy(() => import("./pages/admin/AdminCommunication.tsx"));
-const AdminCommunityDetail = lazy(() => import("./pages/admin/AdminCommunityDetail.tsx"));
-const AdminDMs = lazy(() => import("./pages/admin/AdminDMs.tsx"));
-const AdminDMDetail = lazy(() => import("./pages/admin/AdminDMDetail.tsx"));
-const AdminReports = lazy(() => import("./pages/admin/AdminReports.tsx"));
-const AdminCommAudit = lazy(() => import("./pages/admin/AdminCommAudit.tsx"));
+const AdminCommunication = L(() => import("./pages/admin/AdminCommunication.tsx"));
+const AdminCommunityDetail = L(() => import("./pages/admin/AdminCommunityDetail.tsx"));
+const AdminDMs = L(() => import("./pages/admin/AdminDMs.tsx"));
+const AdminDMDetail = L(() => import("./pages/admin/AdminDMDetail.tsx"));
+const AdminReports = L(() => import("./pages/admin/AdminReports.tsx"));
+const AdminCommAudit = L(() => import("./pages/admin/AdminCommAudit.tsx"));
 
 // Compact spinner fallback for lazy route transitions — matches the brand
 // and avoids the layout shift of a full-page text swap.
@@ -262,6 +310,22 @@ class RootErrorBoundary extends React.Component<
       captureException(err, { componentStack: info?.componentStack });
     } catch (reportErr) {
       console.warn("[ForgeX] Could not report error to Sentry:", reportErr);
+    }
+    // A stale-chunk error can never be fixed by re-rendering — only by
+    // fetching the new deployment. Reload once instead of looping.
+    const msg = err instanceof Error ? err.message : String(err ?? "");
+    if (
+      /failed to fetch dynamically imported module|importing a module script|error loading dynamically imported module/i.test(
+        msg,
+      ) &&
+      typeof sessionStorage !== "undefined"
+    ) {
+      const KEY = "fx_chunk_reload_at";
+      const last = Number(sessionStorage.getItem(KEY) ?? 0);
+      if (Date.now() - last > 10_000) {
+        sessionStorage.setItem(KEY, String(Date.now()));
+        window.location.reload();
+      }
     }
   }
 
@@ -464,6 +528,29 @@ function ensureBootFallback() {
 }
 window.addEventListener("error", ensureBootFallback);
 window.addEventListener("unhandledrejection", ensureBootFallback);
+
+/**
+ * Deploy-safety net #2: any *unhandled* stale-chunk failure (from code paths
+ * outside our lazy() wrapper) triggers exactly one reload so the browser
+ * picks up the new deployment instead of looping through error boundaries.
+ */ window.addEventListener("unhandledrejection", (event) => {
+  const reason: unknown = event?.reason;
+  const msg = reason instanceof Error ? reason.message : String(reason ?? "");
+  if (
+    /failed to fetch dynamically imported module|importing a module script|error loading dynamically imported module/i.test(
+      msg,
+    ) &&
+    typeof sessionStorage !== "undefined"
+  ) {
+    event.preventDefault();
+    const KEY = "fx_chunk_reload_at";
+    const last = Number(sessionStorage.getItem(KEY) ?? 0);
+    if (Date.now() - last > 10_000) {
+      sessionStorage.setItem(KEY, String(Date.now()));
+      window.location.reload();
+    }
+  }
+});
 
 /** Keep Sentry's user context in sync with the signed-in Convex user. */
 function SentryUserSync() {
