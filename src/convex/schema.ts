@@ -1632,6 +1632,74 @@ const schema = defineSchema(
       createdAt: v.number(),
     })
       .index("by_ticket", ["ticketId", "createdAt"]),
+
+    // ---------------------------------------------------------------------
+    // Resilience infrastructure (circuit breakers, monitoring, jobs)
+    // ---------------------------------------------------------------------
+
+    /** Circuit-breaker state per external provider ("gemini", "groq",
+     *  "gemini-tts", "groq-stt", "mux", "cloudinary"…). CLOSED = normal,
+     *  OPEN = provider bypassed until the cooldown elapses, HALF_OPEN = a
+     *  limited test request is allowed through. */
+    providerHealth: defineTable({
+      provider: v.string(),
+      state: v.union(
+        v.literal("closed"),
+        v.literal("open"),
+        v.literal("half_open"),
+      ),
+      consecutiveFailures: v.number(),
+      openedAt: v.optional(v.number()), // when the breaker last opened
+      lastError: v.optional(v.string()), // safe, non-sensitive error code
+      lastSuccessAt: v.optional(v.number()),
+      lastFailureAt: v.optional(v.number()),
+      updatedAt: v.number(),
+    }).index("by_provider", ["provider"]),
+
+    /** Observability log for every wrapped external API call. Pruned by a
+     *  scheduled job; never contains secrets or user content. */
+    externalApiLogs: defineTable({
+      provider: v.string(),
+      operation: v.string(),
+      ok: v.boolean(),
+      statusCode: v.optional(v.number()),
+      latencyMs: v.number(),
+      attempts: v.optional(v.number()),
+      fallbackUsed: v.optional(v.boolean()),
+      errorCode: v.optional(v.string()), // safe classification only
+      createdAt: v.number(),
+    })
+      .index("by_created", ["createdAt"])
+      .index("by_provider", ["provider"]),
+
+    /** Durable background-job queue with retry + dead-letter semantics.
+     *  Jobs that exhaust their attempts land in status "dead" (the dead
+     *  letter state) where an admin can inspect or safely re-run them. */
+    backgroundJobs: defineTable({
+      idempotencyKey: v.string(), // duplicate enqueue is a no-op
+      type: v.string(),
+      status: v.union(
+        v.literal("pending"),
+        v.literal("processing"),
+        v.literal("retrying"),
+        v.literal("completed"),
+        v.literal("failed"),
+        v.literal("dead"),
+      ),
+      payload: v.any(),
+      attemptCount: v.number(),
+      maxAttempts: v.number(),
+      nextAttemptAt: v.number(), // earliest time a pending/retrying job may run
+      lastError: v.optional(v.string()),
+      failureCategory: v.optional(v.string()),
+      createdBy: v.optional(v.id("users")),
+      createdAt: v.number(),
+      updatedAt: v.number(),
+      completedAt: v.optional(v.number()),
+    })
+      .index("by_status_next", ["status", "nextAttemptAt"])
+      .index("by_idempotency", ["idempotencyKey"])
+      .index("by_type", ["type"]),
   },
   {
     schemaValidation: false,

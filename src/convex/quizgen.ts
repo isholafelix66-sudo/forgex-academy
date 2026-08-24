@@ -7,6 +7,11 @@ import { internal } from "./_generated/api";
 import { YoutubeTranscript } from "youtube-transcript";
 import type { Id } from "./_generated/dataModel";
 import type { Question } from "./schema";
+import {
+  gatewayChat,
+  enforceUserLimit,
+  guardedExternalCall,
+} from "./resilienceGateway";
 
 function youtubeIdFromUrl(url: string): string | null {
   const m =
@@ -19,16 +24,14 @@ function youtubeIdFromUrl(url: string): string | null {
 /** AI provider config — Groq cloud API preferred (OpenAI-compatible endpoint),
  *  falling back to OpenAI or Novita AI. Keys live in the server environment
  *  only, never in the client bundle. */
-function aiConfig(): { key: string; base: string; model: string; sttModel: string } {
+/** Speech-to-text endpoint config (Groq/OpenAI Whisper-compatible). Text
+ *  generation itself goes through the centralized resilience gateway. */
+function sttConfig(): { key: string; base: string; sttModel: string } {
   const groqKey = process.env.GROQ_API_KEY;
   if (groqKey) {
     return {
       key: groqKey,
       base: process.env.GROQ_BASE_URL ?? "https://api.groq.com/openai/v1",
-      model:
-        process.env.GROQ_MODEL ??
-        process.env.OPENAI_MODEL ??
-        "openai/gpt-oss-120b",
       sttModel: process.env.OPENAI_STT_MODEL ?? "whisper-large-v3",
     };
   }
@@ -37,21 +40,14 @@ function aiConfig(): { key: string; base: string; model: string; sttModel: strin
   const key = openaiKey ?? novitaKey;
   if (!key) {
     throw new Error(
-      "AI isn't configured yet — add GROQ_API_KEY (or OPENAI_API_KEY / NOVITA_API_KEY) to your project's environment keys, then try again.",
+      "Transcription isn't configured yet — add GROQ_API_KEY (or OPENAI_API_KEY) to your project's environment keys.",
     );
-  }
-  if (openaiKey) {
-    return {
-      key,
-      base: process.env.OPENAI_BASE_URL ?? "https://api.openai.com/v1",
-      model: process.env.OPENAI_MODEL ?? "gpt-4o-mini",
-      sttModel: process.env.OPENAI_STT_MODEL ?? "whisper-1",
-    };
   }
   return {
     key,
-    base: "https://api.novita.ai/v3/openai",
-    model: process.env.OPENAI_MODEL ?? "meta-llama/llama-3.1-8b-instruct",
+    base: openaiKey
+      ? process.env.OPENAI_BASE_URL ?? "https://api.openai.com/v1"
+      : "https://api.novita.ai/v3/openai",
     sttModel: process.env.OPENAI_STT_MODEL ?? "whisper-1",
   };
 }
@@ -69,39 +65,10 @@ async function requireActiveTutor(ctx: any): Promise<Id<"users">> {
 }
 
 // ---------------------------------------------------------------------------
-// LLM plumbing
+// LLM plumbing — routed through the centralized resilience gateway
+// (Gemini primary → Groq → OpenAI/Novita, with circuit breakers, timeouts,
+// failover and monitoring). No provider-specific code lives here anymore.
 // ---------------------------------------------------------------------------
-
-async function chat(
-  cfg: ReturnType<typeof aiConfig>,
-  system: string,
-  user: string,
-): Promise<string> {
-  const res = await fetch(`${cfg.base}/chat/completions`, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${cfg.key}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      model: cfg.model,
-      messages: [
-        { role: "system", content: system },
-        { role: "user", content: user },
-      ],
-      temperature: 0.4,
-      max_tokens: 4000,
-    }),
-  });
-  if (!res.ok) {
-    const text = await res.text();
-    throw new Error(`AI request failed (${res.status}): ${text.slice(0, 300)}`);
-  }
-  const json = await res.json();
-  const content = json?.choices?.[0]?.message?.content ?? "";
-  if (!content) throw new Error("The AI returned an empty response — try again.");
-  return content;
-}
 
 function parseQuestions(raw: string, want: number): Question[] {
   const cleaned = raw.replace(/```json|```/g, "").trim();
@@ -153,7 +120,8 @@ export const generateQuizQuestions = action({
   },
   handler: async (ctx, { courseId, scope, lessonId, count }) => {
     const userId = await requireActiveTutor(ctx);
-    const cfg = aiConfig();
+    // Expensive-op protection: max ~6 quiz generations per 5 min per tutor.
+    await enforceUserLimit(ctx, userId, "quizgen", 6, 5 * 60_000);
     const want = Math.min(15, Math.max(1, Math.round(count ?? 5)));
 
     // Gather content STRICTLY from the course material — never the model's
@@ -216,8 +184,16 @@ export const generateQuizQuestions = action({
       "You write quiz questions for a course. Generate questions STRICTLY from the provided lesson content — never introduce facts from outside the content. Each question must be answerable from the content alone. Prefer multiple-choice; include a few true/false when the content supports it. Return ONLY a JSON array, no prose, with this exact shape: [{\"type\":\"multiple-choice\"|\"true-false\",\"question\":\"...\",\"options\":[\"A\",\"B\",\"C\",\"D\"],\"answer\":\"<exact option text>\",\"explanation\":\"<1-2 sentence explanation from the content>\"}]. For true-false questions use options [\"True\",\"False\"] and answer \"True\" or \"False\". Do not use outside knowledge.";
     const user = `Lesson content:\n${content.slice(0, 16000)}\n\nGenerate ${want} questions as a JSON array.`;
 
-    const raw = await chat(cfg, system, user);
-    const questions = parseQuestions(raw, want);
+    const completion = await gatewayChat(ctx, {
+      operation: "quizgen",
+      maxTokens: 4000,
+      temperature: 0.4,
+      messages: [
+        { role: "system", content: system },
+        { role: "user", content: user },
+      ],
+    });
+    const questions = parseQuestions(completion.content, want);
     return { source, questions };
   },
 });
@@ -232,7 +208,8 @@ export const transcribeVideo = action({
   },
   handler: async (ctx, { courseId, lessonId, url }) => {
     const userId = await requireActiveTutor(ctx);
-    const cfg = aiConfig();
+    // Expensive media operation — limit to ~4 transcriptions per 10 minutes.
+    await enforceUserLimit(ctx, userId, "video-transcribe", 4, 10 * 60_000);
     // Verify the tutor owns the course (a saved lesson isn't required — the
     // tutor may transcribe before saving the lesson).
     await ctx.runQuery(internal.quizgenInternal.getCourseContent, {
@@ -256,20 +233,37 @@ export const transcribeVideo = action({
       throw new Error("Video is too large to transcribe (max 60 MB).");
     }
 
-    const form = new FormData();
-    form.append("file", new Blob([buf], { type: "video/mp4" }), "lesson.mp4");
-    form.append("model", cfg.sttModel);
-    const res = await fetch(`${cfg.base}/audio/transcriptions`, {
-      method: "POST",
-      headers: { Authorization: `Bearer ${cfg.key}` },
-      body: form,
-    });
-    if (!res.ok) {
-      const text = await res.text();
-      throw new Error(`Speech-to-text failed (${res.status}): ${text.slice(0, 300)}`);
+    const cfg = sttConfig();
+    // Guarded call: timeout + circuit breaker + monitoring + safe errors.
+    let text = "";
+    try {
+      const json = await guardedExternalCall(
+        ctx,
+        { provider: "groq-stt", operation: "video-transcribe", timeoutMs: 240_000 },
+        async (signal) => {
+          const form = new FormData();
+          form.append("file", new Blob([buf], { type: "video/mp4" }), "lesson.mp4");
+          form.append("model", cfg.sttModel);
+          const res = await fetch(`${cfg.base}/audio/transcriptions`, {
+            method: "POST",
+            signal,
+            headers: { Authorization: `Bearer ${cfg.key}` },
+            body: form,
+          });
+          if (!res.ok) {
+            console.error(`[quizgen.transcribeVideo] STT ${res.status}:`, (await res.text()).slice(0, 300));
+            throw Object.assign(new Error(`stt-${res.status}`), { status: res.status });
+          }
+          return res.json();
+        },
+      );
+      text = String(json?.text ?? "").trim();
+    } catch (err) {
+      console.error("[quizgen.transcribeVideo] transcription failed:", err instanceof Error ? err.message : err);
+      throw new Error(
+        "Speech-to-text is temporarily unavailable. Please try again shortly, or paste the transcript manually.",
+      );
     }
-    const json = await res.json();
-    const text = String(json?.text ?? "").trim();
     if (!text) throw new Error("The transcription came back empty — try again.");
     return { text };
   },

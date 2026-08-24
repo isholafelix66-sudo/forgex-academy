@@ -16,6 +16,10 @@
 import { v } from "convex/values";
 import { action } from "./_generated/server";
 import { getAuthUserId } from "@convex-dev/auth/server";
+import {
+  guardedExternalCall,
+  enforceUserLimit,
+} from "./resilienceGateway";
 
 // ---------------------------------------------------------------------------
 // Provider config — mirrors aiSupport.ts / quizgen.ts priority order
@@ -43,9 +47,10 @@ function voiceConfig(): { key: string; base: string; sttModel: string } {
   );
 }
 
-async function requireUser(ctx: any) {
+async function requireUser(ctx: any): Promise<string> {
   const userId = await getAuthUserId(ctx);
   if (userId === null) throw new Error("You must be signed in to use voice support.");
+  return String(userId);
 }
 
 // ---------------------------------------------------------------------------
@@ -61,7 +66,7 @@ export const transcribeVoice = action({
     mimeType: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
-    await requireUser(ctx);
+    const userId = await requireUser(ctx);
 
     const base64 = args.audioBase64.includes(",")
       ? args.audioBase64.slice(args.audioBase64.indexOf(",") + 1)
@@ -74,33 +79,43 @@ export const transcribeVoice = action({
     const mime = args.mimeType || "audio/webm";
     const ext = mime.includes("ogg") ? "ogg" : mime.includes("mp4") ? "m4a" : mime.includes("wav") ? "wav" : "webm";
 
-    const form = new FormData();
-    form.append("file", new Blob([new Uint8Array(buf)], { type: mime }), `voice.${ext}`);
-    form.append("model", cfg.sttModel);
-    form.append("response_format", "json");
-    form.append("temperature", "0");
+    // Expensive-op protection: max ~8 transcriptions per minute per user.
+    await enforceUserLimit(ctx, String(userId), "stt", 8, 60_000);
 
-    let res: Response;
+    let text = "";
     try {
-      res = await fetch(`${cfg.base}/audio/transcriptions`, {
-        method: "POST",
-        headers: { Authorization: `Bearer ${cfg.key}` },
-        body: form,
-      });
-    } catch (err: any) {
-      console.error("[aiVoice.transcribeVoice] network error:", err?.message ?? err);
-      throw new Error("Network problem while reaching the transcription service. Check your connection and try again.");
-    }
-    if (!res.ok) {
-      const detail = await res.text();
-      // Technical details go to SERVER LOGS ONLY.
-      console.error(`[aiVoice.transcribeVoice] STT ${res.status} (${cfg.sttModel}):`, detail.slice(0, 500));
-      throw new Error("Transcription failed on our side. Please try again, or type your message instead.");
+      const json = await guardedExternalCall(
+        ctx,
+        { provider: "groq-stt", operation: "voice-transcribe", timeoutMs: 60_000 },
+        async (signal) => {
+          const form = new FormData();
+          form.append("file", new Blob([new Uint8Array(buf)], { type: mime }), `voice.${ext}`);
+          form.append("model", cfg.sttModel);
+          form.append("response_format", "json");
+          form.append("temperature", "0");
+          const res = await fetch(`${cfg.base}/audio/transcriptions`, {
+            method: "POST",
+            signal,
+            headers: { Authorization: `Bearer ${cfg.key}` },
+            body: form,
+          });
+          if (!res.ok) {
+            // Technical details go to SERVER LOGS ONLY.
+            console.error(`[aiVoice.transcribeVoice] STT ${res.status} (${cfg.sttModel}):`, (await res.text()).slice(0, 500));
+            throw Object.assign(new Error(`stt-${res.status}`), { status: res.status });
+          }
+          return res.json() as Promise<{ text?: string }>;
+        },
+      );
+      text = (json.text ?? "").trim();
+    } catch (err) {
+      console.error("[aiVoice.transcribeVoice] final failure:", err instanceof Error ? err.message : err);
+      throw new Error(
+        "Transcription is temporarily unavailable. Please try again shortly, or type your message instead.",
+      );
     }
     // Speech validation happens here: short clips (even a single word) are
     // accepted — only audio where Whisper detects no actual speech is rejected.
-    const json = (await res.json()) as { text?: string };
-    const text = (json.text ?? "").trim();
     if (!text) {
       throw new Error(
         "No speech was detected in that recording. Please try speaking a bit closer to the microphone, or type your message instead.",
@@ -219,11 +234,13 @@ function extractAudio(json: unknown): { pcm: Buffer; sampleRate: number } | null
 async function geminiTtsAttempt(
   key: string,
   input: string,
+  signal: AbortSignal,
 ): Promise<{ pcm: Buffer; sampleRate: number } | null> {
   // Attempt 1 — Interactions API (current recommended surface).
   try {
     const res = await fetch("https://generativelanguage.googleapis.com/v1beta/interactions", {
       method: "POST",
+      signal,
       headers: { "x-goog-api-key": key, "Content-Type": "application/json" },
       body: JSON.stringify({
         model: GEMINI_TTS_MODEL,
@@ -248,6 +265,7 @@ async function geminiTtsAttempt(
     `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_TTS_FALLBACK_MODEL}:generateContent`,
     {
       method: "POST",
+      signal,
       headers: { "x-goog-api-key": key, "Content-Type": "application/json" },
       body: JSON.stringify({
         contents: [{ parts: [{ text: input }] }],
@@ -272,9 +290,9 @@ async function geminiTtsAttempt(
   return audio;
 }
 
-async function ttsRequest(input: string): Promise<Buffer> {
+async function ttsRequest(input: string, signal: AbortSignal): Promise<Buffer> {
   const key = geminiApiKey();
-  const audio = await geminiTtsAttempt(key, input);
+  const audio = await geminiTtsAttempt(key, input, signal);
   if (!audio) throw new Error("tts-empty");
   return pcmToWav(audio.pcm, audio.sampleRate);
 }
@@ -302,8 +320,18 @@ export const speakText = action({
     const chunks = splitForTts(speechText);
     const index = Math.max(0, Math.min(args.chunkIndex ?? 0, chunks.length - 1));
 
+    // Expensive-op protection: max ~30 TTS chunk generations per minute per
+    // user (a long spoken reply is several chunks).
+    await enforceUserLimit(ctx, await requireUser(ctx), "tts", 30, 60_000);
+
     try {
-      const buf = await ttsRequest(chunks[index]);
+      // Guarded call: circuit breaker + 30s timeout + concurrency control +
+      // monitoring. A Gemini outage opens the breaker instead of hammering it.
+      const buf = await guardedExternalCall(
+        ctx,
+        { provider: "gemini-tts", operation: "tts-chunk", timeoutMs: 45_000 },
+        (signal) => ttsRequest(chunks[index], signal),
+      );
       // Store as a Convex file — served back as an https URL with no function-
       // return size limit. This is what makes LONG replies work reliably.
       const storageId = await ctx.storage.store(

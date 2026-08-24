@@ -19,71 +19,14 @@ import { action } from "./_generated/server";
 import { getAuthUserId } from "@convex-dev/auth/server";
 import { internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
+import { gatewayChat, enforceUserLimit } from "./resilienceGateway";
 
-// ---------------------------------------------------------------------------
-// AI provider config (same pattern as quizgen.ts)
-// ---------------------------------------------------------------------------
-
-function aiConfig(): { key: string; base: string; model: string } {
-  // Preferred: Groq cloud API (OpenAI-compatible endpoint).
-  const groqKey = process.env.GROQ_API_KEY;
-  if (groqKey) {
-    return {
-      key: groqKey,
-      base: process.env.GROQ_BASE_URL ?? "https://api.groq.com/openai/v1",
-      model:
-        process.env.GROQ_MODEL ??
-        process.env.OPENAI_MODEL ??
-        "openai/gpt-oss-120b",
-    };
-  }
-  const openaiKey = process.env.OPENAI_API_KEY;
-  const novitaKey = process.env.NOVITA_API_KEY;
-  const key = openaiKey ?? novitaKey;
-  if (!key) {
-    throw new Error(
-      "AI isn't configured yet — add GROQ_API_KEY (or OPENAI_API_KEY / NOVITA_API_KEY) to your project's environment keys, then try again.",
-    );
-  }
-  if (openaiKey) {
-    return {
-      key,
-      base: process.env.OPENAI_BASE_URL ?? "https://api.openai.com/v1",
-      model: process.env.OPENAI_MODEL ?? "gpt-4o-mini",
-    };
-  }
-  return {
-    key,
-    base: "https://api.novita.ai/v3/openai",
-    model: process.env.OPENAI_MODEL ?? "meta-llama/llama-3.1-8b-instruct",
-  };
-}
+// AI calls go through the centralized resilience gateway:
+//   Gemini (primary, 5s budget) → Groq → OpenAI/Novita fallbacks,
+// with circuit breakers, concurrency limits, per-user rate limiting and
+// monitoring handled in one place. See src/convex/resilienceGateway.ts.
 
 type ChatMsg = { role: "system" | "user" | "assistant"; content: string };
-
-async function chatCompletion(cfg: ReturnType<typeof aiConfig>, messages: ChatMsg[]): Promise<string> {
-  const res = await fetch(`${cfg.base}/chat/completions`, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${cfg.key}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      model: cfg.model,
-      messages,
-      temperature: 0.3,
-      max_tokens: 1200,
-    }),
-  });
-  if (!res.ok) {
-    const text = await res.text();
-    throw new Error(`AI request failed (${res.status}): ${text.slice(0, 300)}`);
-  }
-  const json = await res.json();
-  const content = json?.choices?.[0]?.message?.content ?? "";
-  if (!content) throw new Error("The AI returned an empty response — try again.");
-  return content.trim();
-}
 
 // ---------------------------------------------------------------------------
 // Routing helpers
@@ -236,13 +179,21 @@ export const sendAiMessage = action({
       ? "\n\nThe user is speaking with you by VOICE. Reply in a natural, conversational tone of roughly 50-100 words unless more detail is genuinely required. Read-aloud friendly: avoid markdown symbols, tables and long lists — at most 4 short spoken steps."
       : "";
 
+    // Expensive-op protection: max ~12 support chats per minute per user.
+    await enforceUserLimit(ctx, userId, "support-chat", 12, 60_000);
+
     let reply: string;
     try {
-      reply = await chatCompletion(aiConfig(), [
-        { role: "system", content: `${SYSTEM_PROMPT}${voicePreamble}\n\nAPPROVED KNOWLEDGE BASE:\n${kbContext}` },
-        ...history,
-        { role: "user", content: cleanText },
-      ]);
+      const result = await gatewayChat(ctx, {
+        operation: "support-chat",
+        maxTokens: 1200,
+        messages: [
+          { role: "system", content: `${SYSTEM_PROMPT}${voicePreamble}\n\nAPPROVED KNOWLEDGE BASE:\n${kbContext}` },
+          ...history,
+          { role: "user", content: cleanText },
+        ],
+      });
+      reply = result.content;
     } catch {
       // Graceful degradation: answer from the best KB match without the LLM.
       const best = scored[0]?.entry;
@@ -293,7 +244,10 @@ export const escalateToHuman = action({
         .map((m: any) => `${m.role === "user" ? "USER" : "AI"}: ${m.body}`)
         .join("\n")
         .slice(-4000);
-      const raw = await chatCompletion(aiConfig(), [
+      const completion = await gatewayChat(ctx, {
+        operation: "escalation-classify",
+        maxTokens: 600,
+        messages: [
         {
           role: "system",
           content:
@@ -307,8 +261,9 @@ export const escalateToHuman = action({
             args.additionalDetails ? `\nExtra details from user: ${args.additionalDetails}` : ""
           }`,
         },
-      ]);
-      const cleaned = raw.replace(/```json|```/g, "").trim();
+        ],
+      });
+      const cleaned = completion.content.replace(/```json|```/g, "").trim();
       const start = cleaned.indexOf("{");
       const end = cleaned.lastIndexOf("}");
       if (start >= 0 && end > start) {
