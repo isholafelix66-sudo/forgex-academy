@@ -19,10 +19,9 @@
  */
 
 import { internal } from "./_generated/api";
-// DB persistence lives in the V8 runtime (actions-only restriction in node
+// DB persistence lives in the V8 runtime (Convex only allows actions in node
 // files) — breaker state, monitoring logs and rate limiting all flow through
 // internal.resilienceData.*.
-const data = () => internal.resilienceData;
 
 // ---------------------------------------------------------------------------
 // Configuration (env-overridable, centralized)
@@ -194,12 +193,12 @@ export function currentQueueDepth(): number {
 type Ctx = any; // action ctx (runQuery/runMutation only)
 
 export async function breakerAllows(ctx: Ctx, provider: string): Promise<boolean> {
-  const doc = await ctx.runQuery(internal.resilienceGateway.internalGetBreaker, { provider });
+  const doc = await ctx.runQuery(internal.resilienceData.internalGetBreaker, { provider });
   if (!doc || doc.state === "closed") return true;
   const now = Date.now();
   if (doc.state === "open" && doc.openedAt && now - doc.openedAt >= RESILIENCE.breakerCooldownMs) {
     // Cooldown elapsed → allow ONE limited probe through.
-    await ctx.runMutation(internal.resilienceGateway.internalSetBreaker, {
+    await ctx.runMutation(internal.resilienceData.internalSetBreaker, {
       provider,
       state: "half_open",
       lastError: doc.lastError,
@@ -211,7 +210,7 @@ export async function breakerAllows(ctx: Ctx, provider: string): Promise<boolean
 
 export async function recordProviderSuccess(ctx: Ctx, provider: string): Promise<void> {
   try {
-    await ctx.runMutation(internal.resilienceGateway.internalRecordSuccess, { provider });
+    await ctx.runMutation(internal.resilienceData.internalRecordSuccess, { provider });
   } catch (err) {
     console.warn("[resilience] success record failed:", err instanceof Error ? err.message : err);
   }
@@ -219,7 +218,7 @@ export async function recordProviderSuccess(ctx: Ctx, provider: string): Promise
 
 export async function recordProviderFailure(ctx: Ctx, provider: string, failure: SafeFailure): Promise<void> {
   try {
-    await ctx.runMutation(internal.resilienceGateway.internalRecordFailure, {
+    await ctx.runMutation(internal.resilienceData.internalRecordFailure, {
       provider,
       lastError: failure.code,
       threshold: RESILIENCE.breakerThreshold,
@@ -247,7 +246,7 @@ export async function logExternalCall(
   },
 ): Promise<void> {
   try {
-    await ctx.runMutation(internal.resilienceGateway.internalLogCall, entry);
+    await ctx.runMutation(internal.resilienceData.internalLogCall, entry);
   } catch {
     // Observability must never break the request path.
   }

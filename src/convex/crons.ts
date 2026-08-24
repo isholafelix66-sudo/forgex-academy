@@ -10,8 +10,8 @@ import { internal } from "./_generated/api";
  */
 const crons = cronJobs();
 
-crons.interval("resilience-requeue-retries", { minutes: 1 }, internal.jobs.internalRequeueDueRetries, {});
-crons.interval("resilience-process-jobs", { minutes: 1 }, internal.jobs.runDueJobAction, {});
+crons.interval("resilience-requeue-retries", { minutes: 5 }, internal.jobs.internalRequeueDueRetries, {});
+crons.interval("resilience-process-jobs", { minutes: 5 }, internal.jobs.runDueJobAction, {});
 crons.interval("resilience-cleanup", { minutes: 30 }, internal.jobs.cleanupResilience, {});
 
 export default crons;
