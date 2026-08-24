@@ -62,6 +62,7 @@ function useVoiceChat(
   const chunksRef = useRef<Blob[]>([]);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const convex = useConvex();
 
   // Real-time audio analysis
   const audioCtxRef = useRef<AudioContext | null>(null);
@@ -438,11 +439,6 @@ type TtsResult = { storageIds: string[] };
 /** Generated-audio cache keyed by exact reply text — replay never re-bills. */
 const ttsCache = new Map<string, TtsResult>();
 
-function base64ToBlobUrl(b64: string, mime: string): string {
-  const bytes = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
-  return URL.createObjectURL(new Blob([bytes], { type: mime }));
-}
-
 /**
  * Generate ALL chunks for a reply, one small action call each.
  * Each call stores its audio as a Convex file and returns just an ID —
@@ -725,7 +721,7 @@ function SpeakButton({ text }: { text: string }) {
 
     // Replay from cache without hitting the server again.
     const cached = ttsCache.get(trimmed);
-    if (cached && cached.chunks.length > 0) {
+    if (cached && cached.storageIds.length > 0) {
       resultRef.current = cached;
       void runPlayback(id, cached);
       return;
