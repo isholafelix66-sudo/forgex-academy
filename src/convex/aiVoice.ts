@@ -27,7 +27,8 @@ function voiceConfig(): { key: string; base: string; sttModel: string; ttsModel:
       base: process.env.GROQ_BASE_URL ?? "https://api.groq.com/openai/v1",
       sttModel: process.env.GROQ_STT_MODEL ?? "whisper-large-v3-turbo",
       ttsModel: process.env.GROQ_TTS_MODEL ?? "canopylabs/orpheus-v1-english",
-      ttsVoice: process.env.GROQ_TTS_VOICE ?? "tara",
+      // Valid Orpheus voices: autumn | diana | hannah | austin | daniel | troy
+      ttsVoice: process.env.GROQ_TTS_VOICE ?? "autumn",
     };
   }
   const openaiKey = process.env.OPENAI_API_KEY;
@@ -109,54 +110,101 @@ export const transcribeVoice = action({
   },
 });
 
+
 // ---------------------------------------------------------------------------
 // Text-to-Speech
 // ---------------------------------------------------------------------------
+
+const ORPHEUS_VOICES = new Set(["autumn", "diana", "hannah", "austin", "daniel", "troy"]);
+const MAX_TTS_CHUNK_CHARS = 800;
+
+/** Split long text into sentence-boundary chunks within provider limits. */
+function splitForTts(text: string): string[] {
+  if (text.length <= MAX_TTS_CHUNK_CHARS) return [text];
+  const chunks: string[] = [];
+  let rest = text;
+  while (rest.length > MAX_TTS_CHUNK_CHARS) {
+    let cut = -1;
+    for (const sep of [". ", "! ", "? ", "\n", "; ", ", "]) {
+      const idx = rest.lastIndexOf(sep, MAX_TTS_CHUNK_CHARS);
+      if (idx > MAX_TTS_CHUNK_CHARS * 0.4) {
+        cut = idx + sep.length;
+        break;
+      }
+    }
+    if (cut <= 0) cut = MAX_TTS_CHUNK_CHARS;
+    chunks.push(rest.slice(0, cut).trim());
+    rest = rest.slice(cut).trim();
+  }
+  if (rest) chunks.push(rest);
+  return chunks.filter((c) => c.length > 0);
+}
+
+async function ttsRequest(cfg: ReturnType<typeof voiceConfig>, input: string): Promise<Buffer> {
+  let res: Response;
+  try {
+    res = await fetch(`${cfg.base}/audio/speech`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${cfg.key}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model: cfg.ttsModel,
+        voice: ORPHEUS_VOICES.has(cfg.ttsVoice) ? cfg.ttsVoice : "autumn",
+        input,
+        response_format: "wav",
+      }),
+    });
+  } catch (err: any) {
+    console.error("[aiVoice.speakText] network error reaching TTS API:", err?.message ?? err);
+    throw new Error("network");
+  }
+  if (!res.ok) {
+    const detail = await res.text();
+    // Detailed technical errors go to SERVER LOGS ONLY — never to clients.
+    console.error(`[aiVoice.speakText] TTS ${res.status} (${cfg.ttsModel}/${cfg.ttsVoice}):`, detail.slice(0, 500));
+    throw new Error(`tts-${res.status}`);
+  }
+  return Buffer.from(await res.arrayBuffer());
+}
 
 export const speakText = action({
   args: { text: v.string() },
   handler: async (ctx, args) => {
     await requireUser(ctx);
 
-    const cleaned =
-      args.text
+    // Only completely empty text is rejected — single words are fine.
+    const cleaned = args.text.trim();
+    if (!cleaned) {
+      console.error("[aiVoice.speakText] rejected empty text");
+      throw new Error("Nothing to read aloud.");
+    }
+
+    const speechText =
+      cleaned
         .replace(/```[\s\S]*?```/g, " code block omitted. ")
         .replace(/\[([^\]]+)\]\([^)]*\)/g, "$1")
         .replace(/[*_#`>~]/g, "")
-        .replace(/\s+/g, " ")
-        .trim()
-        .slice(0, 900) || "Sorry, I have nothing to say.";
+        .replace(/\s+/g, " ") || "Sorry, I have nothing to say.";
 
     const cfg = voiceConfig();
-    let res: Response;
+    const chunks = splitForTts(speechText);
+
     try {
-      res = await fetch(`${cfg.base}/audio/speech`, {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${cfg.key}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          model: cfg.ttsModel,
-          voice: cfg.ttsVoice,
-          input: cleaned,
-          response_format: "wav",
-        }),
-      });
-    } catch {
-      throw new Error("Network problem while generating the voice reply.");
-    }
-    if (!res.ok) {
-      const detail = await res.text();
-      if (detail.includes("terms acceptance")) {
-        throw new Error(
-          "Voice replies need a one-time setup: an admin of your Groq organization must open https://console.groq.com/playground?model=canopylabs%2Forpheus-v1-english and accept the model terms once.",
-        );
+      // Generate ALL chunks before returning so playback never starts on a
+      // request that will fail halfway through.
+      const parts: Array<{ audioBase64: string }> = [];
+      for (const chunk of chunks) {
+        const buf = await ttsRequest(cfg, chunk);
+        parts.push({ audioBase64: buf.toString("base64") });
       }
-      throw new Error(`Text-to-speech failed (${res.status}): ${detail.slice(0, 300)}`);
+      return { chunks: parts, mimeType: "audio/wav" };
+    } catch (err: any) {
+      console.error("[aiVoice.speakText] final failure:", err?.message ?? err);
+      // Client receives a stable non-technical message only.
+      throw new Error("Audio couldn't be played. Please try again.");
     }
-    const audioBuf = Buffer.from(await res.arrayBuffer());
-    return { audioBase64: audioBuf.toString("base64"), mimeType: "audio/wav" };
   },
 });
 
