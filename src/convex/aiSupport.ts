@@ -25,12 +25,24 @@ import type { Id } from "./_generated/dataModel";
 // ---------------------------------------------------------------------------
 
 function aiConfig(): { key: string; base: string; model: string } {
+  // Preferred: Groq cloud API (OpenAI-compatible endpoint).
+  const groqKey = process.env.GROQ_API_KEY;
+  if (groqKey) {
+    return {
+      key: groqKey,
+      base: process.env.GROQ_BASE_URL ?? "https://api.groq.com/openai/v1",
+      model:
+        process.env.GROQ_MODEL ??
+        process.env.OPENAI_MODEL ??
+        "openai/gpt-oss-120b",
+    };
+  }
   const openaiKey = process.env.OPENAI_API_KEY;
   const novitaKey = process.env.NOVITA_API_KEY;
   const key = openaiKey ?? novitaKey;
   if (!key) {
     throw new Error(
-      "AI isn't configured yet — add OPENAI_API_KEY (or NOVITA_API_KEY) to your project's environment keys, then try again.",
+      "AI isn't configured yet — add GROQ_API_KEY (or OPENAI_API_KEY / NOVITA_API_KEY) to your project's environment keys, then try again.",
     );
   }
   if (openaiKey) {

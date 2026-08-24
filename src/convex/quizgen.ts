@@ -16,16 +16,28 @@ function youtubeIdFromUrl(url: string): string | null {
   return m ? m[1] : null;
 }
 
-/** AI provider config — OpenAI by default, Novita AI when NOVITA_API_KEY is
- *  set (OpenAI-compatible endpoint, cheaper open models). Keys live in the
- *  server environment only, never in the client bundle. */
+/** AI provider config — Groq cloud API preferred (OpenAI-compatible endpoint),
+ *  falling back to OpenAI or Novita AI. Keys live in the server environment
+ *  only, never in the client bundle. */
 function aiConfig(): { key: string; base: string; model: string; sttModel: string } {
+  const groqKey = process.env.GROQ_API_KEY;
+  if (groqKey) {
+    return {
+      key: groqKey,
+      base: process.env.GROQ_BASE_URL ?? "https://api.groq.com/openai/v1",
+      model:
+        process.env.GROQ_MODEL ??
+        process.env.OPENAI_MODEL ??
+        "openai/gpt-oss-120b",
+      sttModel: process.env.OPENAI_STT_MODEL ?? "whisper-large-v3",
+    };
+  }
   const openaiKey = process.env.OPENAI_API_KEY;
   const novitaKey = process.env.NOVITA_API_KEY;
   const key = openaiKey ?? novitaKey;
   if (!key) {
     throw new Error(
-      "AI isn't configured yet — add OPENAI_API_KEY (or NOVITA_API_KEY) to your project's environment keys, then try again.",
+      "AI isn't configured yet — add GROQ_API_KEY (or OPENAI_API_KEY / NOVITA_API_KEY) to your project's environment keys, then try again.",
     );
   }
   if (openaiKey) {
