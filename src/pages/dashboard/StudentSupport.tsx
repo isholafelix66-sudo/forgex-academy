@@ -16,6 +16,7 @@ import {
   Mic,
   Square,
   Volume2,
+  VolumeX,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -48,6 +49,7 @@ const SOUND_THRESHOLD = 0.015;
 function useVoiceChat(
   onTranscribed: (text: string) => Promise<string | null>,
   echoTranscriptToInput: (text: string) => void,
+  shouldSpeakReply?: () => boolean,
 ) {
   const transcribe = useAction(api.aiVoice.transcribeVoice);
   const speak = useAction(api.aiVoice.speakText);
@@ -121,6 +123,7 @@ function useVoiceChat(
 
   const speakReply = useCallback(
     async (text: string) => {
+      if (shouldSpeakReply && !shouldSpeakReply()) return; // muted → text only
       setPhase("speaking");
       const owner: AudioOwner = {
         stop: () => {
@@ -165,7 +168,7 @@ function useVoiceChat(
         releaseAudio(owner);
       }
     },
-    [convex, speak],
+    [convex, shouldSpeakReply, speak],
   );
 
   const startRecording = useCallback(async () => {
@@ -480,6 +483,29 @@ function claimAudio(owner: AudioOwner) {
 
 function releaseAudio(owner: AudioOwner) {
   if (currentOwner === owner) currentOwner = null;
+}
+
+/** The auto-play engine's single audio element + its stop handle. */
+let engineAudioEl: HTMLAudioElement | null = null;
+let engineStopCurrent: (() => void) | null = null;
+function stopEngineAudio() {
+  try {
+    engineStopCurrent?.();
+  } catch {
+    // ignore
+  }
+}
+
+/**
+ * Browser autoplay unlock: audio may auto-play once the user has interacted
+ * with the page (any tap/click). Persisted per tab session so we ask once.
+ */
+const VOICE_UNLOCK_KEY = "fx_voice_unlocked_v1";
+let voiceUnlocked = false;
+try {
+  voiceUnlocked = sessionStorage.getItem(VOICE_UNLOCK_KEY) === "1";
+} catch {
+  // storage unavailable — start locked; first tap unlocks for this session
 }
 
 // ---------------------------------------------------------------------------
@@ -876,7 +902,194 @@ export default function StudentSupport() {
   const voice = useVoiceChat(
     async (spoken) => handleSend(spoken, { voice: true }),
     (text) => setInput(text),
+    () => voiceOnRef.current,
   );
+
+  // -----------------------------------------------------------------------
+  // Automatic voice-reply engine.
+  // Every NEW AI response is spoken automatically — no buttons. Chunks are
+  // generated one small request each, queued, and played strictly in order.
+  // A single failure NEVER blocks the next response (each item isolated).
+  // -----------------------------------------------------------------------
+  const speak = useAction(api.aiVoice.speakText);
+  const convex = useConvex();
+
+  const [voiceOn, setVoiceOn] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem("fx_voice_on") !== "0";
+    } catch {
+      return true;
+    }
+  });
+  const [needsUnlock, setNeedsUnlock] = useState(false);
+  const unlockedRef = useRef(voiceUnlocked);
+  const voiceOnRef = useRef(voiceOn);
+  voiceOnRef.current = voiceOn;
+
+  const toggleVoice = useCallback(() => {
+    setVoiceOn((v) => {
+      const next = !v;
+      try {
+        localStorage.setItem("fx_voice_on", next ? "1" : "0");
+      } catch {
+        // ignore
+      }
+      if (!next) stopEngineAudio();
+      return next;
+    });
+  }, []);
+
+  /** Play one storage URL to completion on the engine's own element. */
+  const enginePlayUrl = useCallback(
+    (url: string): Promise<"done" | "blocked"> =>
+      new Promise((resolve) => {
+        const audio = new Audio(url);
+        engineAudioEl = audio;
+        let settled = false;
+        const owner: AudioOwner = { stop: () => undefined };
+        const finish = (r: "done" | "blocked") => {
+          if (settled) return;
+          settled = true;
+          if (engineAudioEl === audio) engineAudioEl = null;
+          releaseAudio(owner);
+          resolve(r);
+        };
+        owner.stop = () => {
+          try {
+            audio.pause();
+          } catch {
+            // ignore
+          }
+          finish("done");
+        };
+        claimAudio(owner); // mic replies / other buttons stop us cleanly
+        engineStopCurrent = owner.stop;
+        audio.onended = () => finish("done");
+        audio.onerror = () => finish("done"); // skip a bad chunk, never fail the run
+        audio.play().catch((err: DOMException) => {
+          finish(err?.name === "NotAllowedError" ? "blocked" : "done");
+        });
+      }),
+    [],
+  );
+
+  /** Generate + play one full reply. Isolated: throws never escape upward. */
+  const generateAndPlay = useCallback(
+    async (text: string): Promise<void> => {
+      try {
+        const trimmed = text.trim();
+        if (!trimmed) return; // empty AI response → nothing to speak
+        const first = (await speak({ text: trimmed, chunkIndex: 0 })) as unknown as {
+          storageId: string;
+          chunkCount: number;
+        };
+        const ids: string[] = [first.storageId];
+        for (let i = 1; i < first.chunkCount; i++) {
+          const next = (await speak({ text: trimmed, chunkIndex: i })) as unknown as {
+            storageId: string;
+          };
+          ids.push(next.storageId);
+        }
+        for (const sid of ids) {
+          if (!unlockedRef.current || !voiceOnRef.current) return;
+          let url: string | null = null;
+          try {
+            url = await convex.query(api.aiSupportData.getAudioUrl, {
+              storageId: sid as never,
+            });
+          } catch (err) {
+            console.warn("[voiceEngine] URL resolve failed", err); // logs only
+          }
+          if (!url) continue; // skip unresolvable chunk
+          const outcome = await enginePlayUrl(url);
+          if (outcome === "blocked") {
+            // Browser blocked autoplay → ask ONCE for a tap.
+            unlockedRef.current = false;
+            try {
+              sessionStorage.removeItem(VOICE_UNLOCK_KEY);
+            } catch {
+              // ignore
+            }
+            setNeedsUnlock(true);
+            return;
+          }
+        }
+      } catch (err) {
+        // One failed response must never affect the next. Log internally only.
+        console.warn("[voiceEngine] TTS failed for this response", err);
+      }
+    },
+    [convex, enginePlayUrl, speak],
+  );
+
+  type QueueItem = { key: string; text: string };
+  const queueRef = useRef<QueueItem[]>([]);
+  const runningRef = useRef(false);
+
+  const processQueue = useCallback(async () => {
+    if (runningRef.current) return;
+    if (!unlockedRef.current || !voiceOnRef.current) return;
+    runningRef.current = true;
+    try {
+      while (queueRef.current.length > 0 && unlockedRef.current && voiceOnRef.current) {
+        const item = queueRef.current.shift()!;
+        await generateAndPlay(item.text);
+      }
+    } finally {
+      runningRef.current = false;
+    }
+  }, [generateAndPlay]);
+
+  /** Unlock on the user's very first interaction anywhere (autoplay policy). */
+  useEffect(() => {
+    const unlock = () => {
+      if (unlockedRef.current) return;
+      unlockedRef.current = true;
+      voiceUnlocked = true;
+      try {
+        sessionStorage.setItem(VOICE_UNLOCK_KEY, "1");
+      } catch {
+        // ignore
+      }
+      setNeedsUnlock(false);
+      void processQueue();
+    };
+    window.addEventListener("pointerdown", unlock);
+    window.addEventListener("keydown", unlock);
+    return () => {
+      window.removeEventListener("pointerdown", unlock);
+      window.removeEventListener("keydown", unlock);
+    };
+  }, [processQueue]);
+
+  // Stop engine audio when leaving the page or toggling voice off.
+  useEffect(
+    () => () => {
+      engineStopCurrent?.();
+    },
+    [],
+  );
+
+  // Enqueue every NEW AI response exactly once (dedup by stable key).
+  const ttsProcessedRef = useRef<Set<string>>(new Set());
+  useEffect(() => {
+    if (mode !== "chat" || !sessionId) return;
+    const lastIdx = messages.length - 1;
+    const last = messages[lastIdx];
+    if (!last || last.role !== "ai") return;
+    const key = `${sessionId}:${lastIdx}:${last.body.length}`;
+    if (ttsProcessedRef.current.has(key)) return;
+    ttsProcessedRef.current.add(key); // StrictMode / re-render proof
+    if (!voiceOnRef.current) return; // muted → text-only
+    // Cap pending items so a burst can't pile up stale speech.
+    if (queueRef.current.length >= 2) queueRef.current.shift();
+    queueRef.current.push({ key, text: last.body });
+    if (unlockedRef.current) {
+      void processQueue();
+    } else {
+      setNeedsUnlock(true); // ask once for the enabling tap
+    }
+  }, [messages, mode, processQueue, sessionId]);
 
   const handleStartNew = async () => {
     try {
@@ -954,15 +1167,40 @@ export default function StudentSupport() {
             </p>
           </div>
         </div>
+        <div className="flex shrink-0 items-center gap-2">
+          <button
+            type="button"
+            onClick={toggleVoice}
+            aria-label={voiceOn ? "Mute voice replies" : "Unmute voice replies"}
+            title={voiceOn ? "Voice replies on" : "Voice replies muted"}
+            className={`inline-flex size-9 items-center justify-center rounded-lg border transition-colors ${
+              voiceOn
+                ? "border-lime-400/40 bg-lime-400/10 text-lime-300"
+                : "border-white/10 bg-black/20 text-white/40 hover:text-white/70"
+            }`}
+          >
+            {voiceOn ? <Volume2 className="size-4" /> : <VolumeX className="size-4" />}
+          </button>
+          <button
+            type="button"
+            onClick={handleStartNew}
+            disabled={latest === undefined}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-white/10 px-3 py-1.5 text-xs font-medium text-white/60 transition-colors hover:border-lime-400/30 hover:text-lime-300 disabled:opacity-40"
+          >
+            <RefreshCw className="size-3.5" /> New chat
+          </button>
+        </div>
+      </div>
+
+      {/* One-time autoplay unlock — appears only if the browser blocked audio */}
+      {needsUnlock && !unlockedRef.current && (
         <button
           type="button"
-          onClick={handleStartNew}
-          disabled={latest === undefined}
-          className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-white/10 px-3 py-1.5 text-xs font-medium text-white/60 transition-colors hover:border-lime-400/30 hover:text-lime-300 disabled:opacity-40"
+          className="flex w-full items-center justify-center gap-2 rounded-xl border border-amber-400/30 bg-amber-400/10 px-4 py-2.5 text-xs font-semibold text-amber-200 transition-colors hover:bg-amber-400/20"
         >
-          <RefreshCw className="size-3.5" /> New chat
+          🔊 Tap anywhere to enable voice replies (one time)
         </button>
-      </div>
+      )}
 
       {/* Live team-reply banner (shows anywhere on the page, realtime) */}
       {activeTicketUnseen && latest?.ticket && (
@@ -1049,8 +1287,8 @@ export default function StudentSupport() {
                         {fmtTime(m.at)}
                       </span>
                     </div>
-                    {/* Play-as-audio under every AI reply — independent of chat */}
-                    {m.role === "ai" && mode === "chat" && <SpeakButton text={m.body} />}
+                    {/* Voice replies play automatically — see the engine below.
+                        Manual per-message buttons were intentionally removed. */}
                   </div>
                 ))}
                 {sending && (
