@@ -138,9 +138,9 @@ function useVoiceChat(onTranscribed: (text: string) => Promise<string | null>) {
         cleanupRecording();
         const blob = new Blob(chunksRef.current.slice(), { type: mimeType });
         chunksRef.current = [];
-        if (blob.size < 1200) {
+        if (blob.size === 0) {
           setPhase("idle");
-          toast.error("That recording was too short. Hold the mic a little longer.");
+          toast.error("Nothing was captured from your microphone. Please try again.");
           return;
         }
         setPhase("transcribing");

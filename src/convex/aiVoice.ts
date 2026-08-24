@@ -69,7 +69,7 @@ export const transcribeVoice = action({
       ? args.audioBase64.slice(args.audioBase64.indexOf(",") + 1)
       : args.audioBase64;
     const buf = Buffer.from(base64, "base64");
-    if (buf.length < 800) throw new Error("That recording was too short or silent. Please try again.");
+    if (buf.length === 0) throw new Error("No audio was received — please try recording again.");
     if (buf.length > MAX_AUDIO_BYTES) throw new Error("Recording too long — please keep voice messages under ~2 minutes.");
 
     const cfg = voiceConfig();
@@ -96,9 +96,15 @@ export const transcribeVoice = action({
       const detail = (await res.text()).slice(0, 300);
       throw new Error(`Speech-to-text failed (${res.status}): ${detail}`);
     }
+    // Speech validation happens here: short clips (even a single word) are
+    // accepted — only audio where Whisper detects no actual speech is rejected.
     const json = (await res.json()) as { text?: string };
     const text = (json.text ?? "").trim();
-    if (!text) throw new Error("We couldn't hear any clear speech in that recording. Try again or type your message.");
+    if (!text) {
+      throw new Error(
+        "No speech was detected in that recording. Please try speaking a bit closer to the microphone, or type your message instead.",
+      );
+    }
     return { text };
   },
 });
