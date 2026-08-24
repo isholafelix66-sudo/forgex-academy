@@ -3,12 +3,8 @@ import { useEffect, useRef } from "react";
 /**
  * How long the admin dashboard stays unlocked with zero user activity
  * (mouse movement, clicks, keyboard, touch, scroll) before it auto-locks.
- *
- * NOTE: this is intentionally very short per product request — any real
- * interaction (moving the mouse, typing, scrolling) resets the timer, so it
- * only fires when the admin is genuinely away from the page.
  */
-export const ADMIN_IDLE_LOCK_MS = 5_000;
+export const ADMIN_IDLE_LOCK_MS = 5 * 60 * 1000;
 
 const ACTIVITY_EVENTS: (keyof WindowEventMap)[] = [
   "pointermove",
