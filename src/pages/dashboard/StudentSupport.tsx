@@ -854,6 +854,7 @@ export default function StudentSupport() {
   const markSeen = useMutation(api.aiSupportData.markTicketSeen);
   const sendAi = useAction(api.aiSupport.sendAiMessage);
   const escalate = useAction(api.aiSupport.escalateToHuman);
+  const replyToTeam = useMutation(api.aiSupportData.replyToMyTicket);
 
   const [mode, setMode] = useState<PageMode>("ask");
   const [input, setInput] = useState("");
@@ -869,6 +870,25 @@ export default function StudentSupport() {
   const sessionId = latest?._id ?? null;
   const messages: AiMessage[] = (latest?.messages ?? []) as AiMessage[];
   const safeTickets = Array.isArray(myTickets) ? myTickets : [];
+
+  // -----------------------------------------------------------------------
+  // HUMAN-OWNED CONVERSATION (seamless AI → human handoff).
+  // When the AI hit its limit (or the user escalated), the SAME chat window
+  // becomes the support-team thread: team replies appear here in realtime
+  // and the composer sends directly to the team.
+  // -----------------------------------------------------------------------
+  const isHumanOwned = latest?.status === "escalated" && !!latest?.ticket;
+  const activeThreadId = isHumanOwned ? (latest!.ticket!._id as string) : null;
+  const liveThread = useQuery(
+    api.aiSupportData.getTicketThread,
+    activeThreadId ? { ticketId: activeThreadId as never } : "skip",
+  );
+
+  // Mark team replies read while they're visible in the merged transcript.
+  useEffect(() => {
+    if (!isHumanOwned || !activeThreadId) return;
+    void markSeen({ ticketId: activeThreadId as never }).catch(() => {});
+  }, [activeThreadId, isHumanOwned, liveThread?.messages.length]);
 
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
@@ -886,8 +906,19 @@ export default function StudentSupport() {
     setShowEscalateForm(false);
     setSending(true);
     try {
-      const res = (await sendAi({ sessionId, text: body, voice: opts?.voice })) as { reply: string };
-      setAskedSolved(true);
+      // Human-owned conversation → straight into the support-team thread.
+      if (isHumanOwned && activeThreadId) {
+        await replyToTeam({ ticketId: activeThreadId as never, body });
+        return null;
+      }
+      const res = (await sendAi({ sessionId, text: body, voice: opts?.voice })) as any;
+      if (res?.transferred) {
+        // The AI was unavailable — the backend already created the ticket,
+        // preserved the full history and appended the friendly notice.
+        toast.success("Your conversation is now with our support team.");
+      } else {
+        setAskedSolved(true);
+      }
       return res?.reply ?? null;
     } catch (err: any) {
       toast.error(err?.message ?? "Could not reach the assistant. Try again.");
@@ -1220,6 +1251,19 @@ export default function StudentSupport() {
         </button>
       )}
 
+      {/* Human-owned conversation state strip — same chat, live updates */}
+      {mode !== "ask" && isHumanOwned && latest?.ticket && (
+        <div className="flex items-center gap-2.5 rounded-2xl border border-amber-400/25 bg-amber-400/8 p-3">
+          <span className="relative flex size-2 shrink-0">
+            <span className="absolute inline-flex size-full animate-ping rounded-full bg-amber-400 opacity-60" />
+            <span className="relative inline-flex size-2 rounded-full bg-amber-400" />
+          </span>
+          <p className="min-w-0 flex-1 text-xs font-medium text-amber-200">
+            👤 You're chatting with our {latest.ticket.teamLabel} · Ticket {latest.ticket.ticketNumber}
+          </p>
+        </div>
+      )}
+
       {/* Live team-reply banner (shows anywhere on the page, realtime) */}
       {activeTicketUnseen && latest?.ticket && (
         <button
@@ -1309,9 +1353,37 @@ export default function StudentSupport() {
                         Manual per-message buttons were intentionally removed. */}
                   </div>
                 ))}
+                {/* Human-support messages render in the SAME transcript —
+                    realtime via reactive query. AI history stays above. */}
+                {isHumanOwned &&
+                  (liveThread?.messages ?? []).map((m: any) =>
+                    m.senderType === "system" ? (
+                      <p key={m._id} className="text-center text-[11px] text-white/30">{m.body}</p>
+                    ) : (
+                      <div key={m._id} className={`flex flex-col ${m.senderType === "user" ? "items-end" : "items-start"}`}>
+                        <div
+                          className={`max-w-[85%] whitespace-pre-wrap break-words rounded-2xl px-4 py-2.5 text-sm leading-relaxed ${
+                            m.senderType === "user"
+                              ? "rounded-br-sm bg-lime-400 text-black"
+                              : "rounded-bl-sm border border-sky-400/20 bg-black/25 text-white/85"
+                          }`}
+                        >
+                          {m.senderType === "team" && (
+                            <p className="mb-1 flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wide text-sky-300/80">
+                              👤 {m.senderName ?? "Human Support Team"}
+                            </p>
+                          )}
+                          {m.body}
+                          <span className={`mt-1 block text-right text-[10px] ${m.senderType === "user" ? "text-black/50" : "text-white/25"}`}>
+                            {fmtTime(m.createdAt)}
+                          </span>
+                        </div>
+                      </div>
+                    ),
+                  )}
                 {sending && (
                   <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                    <Loader2 className="size-3.5 animate-spin text-lime-400" /> Assistant is thinking…
+                    <Loader2 className="size-3.5 animate-spin text-lime-400" /> {isHumanOwned ? "Sending to the support team…" : "Assistant is thinking…"}
                   </div>
                 )}
                 <div ref={endRef} />
@@ -1457,7 +1529,13 @@ export default function StudentSupport() {
                     <input
                       value={input}
                       onChange={(e) => setInput(e.target.value)}
-                      placeholder={voice.busy ? "Voice in progress…" : "Describe your issue — type or tap the mic…"}
+                      placeholder={
+                        voice.busy
+                          ? "Voice in progress…"
+                          : isHumanOwned
+                            ? `Message our support team${latest?.ticket ? ` (Ticket ${latest.ticket.ticketNumber})` : ""}…`
+                            : "Describe your issue — type or tap the mic…"
+                      }
                       maxLength={1200}
                       disabled={voice.phase === "recording" || voice.phase === "transcribing"}
                       className="h-11 min-w-0 flex-1 rounded-xl border border-white/10 bg-black/20 px-4 text-sm placeholder:text-white/25 focus:border-lime-400/40 focus:outline-none disabled:opacity-50"

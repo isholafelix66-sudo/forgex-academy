@@ -19,7 +19,12 @@ import { action } from "./_generated/server";
 import { getAuthUserId } from "@convex-dev/auth/server";
 import { internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
-import { gatewayChat, enforceUserLimit } from "./resilienceGateway";
+import {
+  gatewayChat,
+  enforceUserLimit,
+  GatewayUnavailableError,
+} from "./resilienceGateway";
+import { AI_TRANSFER_MESSAGE } from "./aiSupportData";
 
 // AI calls go through the centralized resilience gateway:
 //   Gemini (primary, 5s budget) → Groq → OpenAI/Novita fallbacks,
@@ -152,10 +157,26 @@ export const sendAiMessage = action({
     })) as any;
     if (!session) throw new Error("Support session not found.");
     if (session.userId !== userId) throw new Error("Not your session.");
-    if (session.status !== "active") throw new Error("This session has ended — start a new one.");
 
     const cleanText = args.text.trim();
     if (!cleanText) throw new Error("Please describe your issue first.");
+
+    // ------------------------------------------------------------------
+    // HUMAN-OWNED CONVERSATION: when this session has been transferred to
+    // the support team, messages flow into the ticket thread instead. The
+    // user stays in the SAME interface and team replies arrive in realtime.
+    // The AI never resumes until the team resolves/closes the ticket.
+    // ------------------------------------------------------------------
+    if (session.status === "escalated" && session.ticketId) {
+      await ctx.runMutation(internal.aiSupportData.internalRouteUserMessageToTicket, {
+        sessionId: args.sessionId,
+        body: cleanText,
+      });
+      return { reply: "", transferred: true, routedToHuman: true };
+    }
+    if (session.status !== "active") {
+      throw new Error("This conversation has ended — start a new one.");
+    }
 
     // Retrieve top KB matches for grounding.
     const kb = (await ctx.runQuery(internal.aiSupportData.internalListEnabledKb, {})) as KbEntry[];
@@ -194,12 +215,41 @@ export const sendAiMessage = action({
         ],
       });
       reply = result.content;
-    } catch {
-      // Graceful degradation: answer from the best KB match without the LLM.
+    } catch (err) {
+      // -----------------------------------------------------------------
+      // AUTOMATIC AI-SUPPORT LIMIT FALLBACK.
+      // The gateway already failed over every provider — reaching here means
+      // rate limits / quota / timeout / outage / repeated failures. We NEVER
+      // surface technical errors: the conversation is seamlessly transferred
+      // to the human support team with full history preserved.
+      // -----------------------------------------------------------------
+      const reasonCode =
+        err instanceof GatewayUnavailableError ? err.code : "unknown_failure";
       const best = scored[0]?.entry;
-      reply = best
-        ? `Here's what our knowledge base says about "${best.title}":\n\n${best.content}\n\nIf this doesn't solve your issue, you can request human support below.`
-        : `${ESCALATION_OFFER}`;
+      const fallbackCategory = classifyKeywords(cleanText, session.userRole);
+      const transfer = (await ctx.runMutation(
+        internal.aiSupportData.internalAutoTransferToHuman,
+        {
+          sessionId: args.sessionId,
+          userId,
+          userRole: session.userRole,
+          reasonCode,
+          category: fallbackCategory,
+          subject: cleanText.slice(0, 90),
+          summary:
+            buildLocalSummary(
+              { messages: session.messages, userRole: session.userRole },
+              undefined,
+            ) + (best ? ` [KB attempted: ${best.title}]` : ""),
+          assignedTeam: routeTeam(session.userRole, fallbackCategory),
+        },
+      )) as { ticketNumber: string } | null;
+
+      return {
+        reply: AI_TRANSFER_MESSAGE,
+        transferred: true,
+        ticketNumber: transfer?.ticketNumber ?? null,
+      };
     }
 
     const suggestedCategory = classifyKeywords(cleanText, session.userRole);

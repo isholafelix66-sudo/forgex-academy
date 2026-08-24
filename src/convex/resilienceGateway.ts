@@ -126,8 +126,20 @@ export class GatewayAbortError extends Error {
   }
 }
 
-/** Stable, user-safe error thrown when every provider failed. */
-export class GatewayUnavailableError extends Error {}
+/**
+ * Stable, user-safe error thrown when the AI is unavailable. `code` is a
+ * machine-readable classification ("rate_limited", "provider_down",
+ * "timeout", "network", "circuit_open", "all_providers_failed", "busy",
+ * "not_configured") that feature code uses for automatic fallback decisions —
+ * it never reaches the client.
+ */
+export class GatewayUnavailableError extends Error {
+  code: string;
+  constructor(message: string, code = "all_providers_failed") {
+    super(message);
+    this.code = code;
+  }
+}
 
 // ---------------------------------------------------------------------------
 // Concurrency control — in-isolate semaphore with a bounded waiting queue.
@@ -154,6 +166,7 @@ class Semaphore {
     if (this.queue.length >= this.queueCap) {
       throw new GatewayUnavailableError(
         "We're experiencing very high demand right now. Please try again in a few seconds.",
+        "busy",
       );
     }
     await new Promise<void>((resolve) => this.queue.push(resolve));
@@ -268,6 +281,7 @@ export async function guardedExternalCall<T>(
     if (!(await breakerAllows(ctx, opts.provider))) {
       throw new GatewayUnavailableError(
         "This service is temporarily unavailable. Please try again in a minute.",
+        "circuit_open",
       );
     }
     const sem = semFor(opts.provider);
@@ -411,7 +425,7 @@ export async function gatewayChat(
 ): Promise<GatewayChatResult> {
   const providers = textProviders();
   if (providers.length === 0) {
-    throw new GatewayUnavailableError("The AI service isn't configured yet.");
+    throw new GatewayUnavailableError("The AI service isn't configured yet.", "not_configured");
   }
 
   await globalSem.acquire();
@@ -521,6 +535,7 @@ export async function gatewayChat(
     throw new GatewayUnavailableError(
       lastFailure?.message ??
         "The AI service is temporarily unavailable. Your message is safe — please try again shortly.",
+      lastFailure?.code ?? "circuit_open",
     );
   } finally {
     globalSem.release();

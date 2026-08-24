@@ -1585,6 +1585,24 @@ const schema = defineSchema(
       summary: v.optional(v.string()),
       rating: v.optional(v.union(v.literal("helpful"), v.literal("not_helpful"))),
       ticketId: v.optional(v.id("aiSupportTickets")),
+      // Conversation lifecycle for the AI↔human handoff:
+      //   AI_ACTIVE        assistant is answering
+      //   AI_LIMIT_REACHED provider hit a limit/outage → auto-transferred
+      //   WAITING_FOR_HUMAN ticket created, no human reply yet
+      //   HUMAN_ACTIVE     a support member has joined the conversation
+      //   RESOLVED         closed by the team or the user
+      aiState: v.optional(
+        v.union(
+          v.literal("AI_ACTIVE"),
+          v.literal("AI_LIMIT_REACHED"),
+          v.literal("WAITING_FOR_HUMAN"),
+          v.literal("HUMAN_ACTIVE"),
+          v.literal("RESOLVED"),
+        ),
+      ),
+      // Consecutive AI-provider failures inside this session (reset on any
+      // successful reply). Drives automatic escalation.
+      aiFailureCount: v.optional(v.number()),
       createdAt: v.number(),
       updatedAt: v.number(),
       resolvedAt: v.optional(v.number()),
@@ -1602,6 +1620,9 @@ const schema = defineSchema(
       assignedTeam: v.string(), // "student-support" | "tutor-support" | "technical" | "academic" | "ai-support" | "admin"
       subject: v.string(),
       aiSummary: v.string(),
+      // INTERNAL ONLY — why the AI handed off (e.g. "rate_limited",
+      // "provider_down", "timeout"). Never shown to users.
+      escalationReason: v.optional(v.string()),
       additionalDetails: v.optional(v.string()),
       assignedTo: v.optional(v.id("users")),
       status: v.union(

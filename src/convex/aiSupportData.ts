@@ -35,6 +35,14 @@ export const TEAM_LABELS: Record<string, string> = {
   admin: "General Support (Admin)",
 };
 
+/**
+ * User-facing copy shown when the AI is unavailable and the conversation is
+ * automatically handed to the human support team. Friendly, non-technical —
+ * never mentions limits, quotas, providers or errors.
+ */
+export const AI_TRANSFER_MESSAGE =
+  "Our AI assistant is currently unavailable, but don't worry. Your conversation has been transferred to our support team. A team member will respond as soon as possible. 🙏";
+
 // ---------------------------------------------------------------------------
 // AI voice audio files (stored by aiVoice.speakText actions)
 // ---------------------------------------------------------------------------
@@ -195,6 +203,9 @@ export const internalAppendMessages = internalMutation({
         { role: "ai" as const, body: args.aiReply, at: now + 1 },
       ],
       suggestedCategory: args.suggestedCategory,
+      // The AI answered successfully → it's healthy again.
+      aiFailureCount: 0,
+      aiState: session.aiState ?? "AI_ACTIVE",
       updatedAt: now,
     });
     for (const kbId of args.usedKbIds) {
@@ -242,73 +253,236 @@ export const internalTicketBySession = internalQuery({
     ctx.db.query("aiSupportTickets").withIndex("by_session", (q) => q.eq("sessionId", args.sessionId)).first(),
 });
 
+/** Shared ticket-creation core used by manual escalation AND automatic
+ *  AI-failure transfer. Plain function so both mutations can reuse it. */
+async function createEscalatedTicketCore(
+  ctx: any,
+  args: {
+    sessionId: Id<"aiSupportSessions">;
+    userId: Id<"users">;
+    userRole: string;
+    category: string;
+    assignedTeam: string;
+    subject: string;
+    aiSummary: string;
+    escalationReason?: string; // INTERNAL only — never shown to users
+    additionalDetails?: string;
+  },
+): Promise<{ ticketId: Id<"aiSupportTickets">; ticketNumber: string }> {
+  const now = Date.now();
+  const count = (await ctx.db.query("aiSupportTickets").collect()).length;
+  const ticketNumber = `FX-${1001 + count}`;
+
+  const ticketId = await ctx.db.insert("aiSupportTickets", {
+    ticketNumber,
+    sessionId: args.sessionId,
+    userId: args.userId,
+    userRole: args.userRole,
+    category: args.category,
+    assignedTeam: args.assignedTeam,
+    subject: args.subject,
+    aiSummary: args.aiSummary,
+    escalationReason: args.escalationReason,
+    additionalDetails: args.additionalDetails,
+    status: "open",
+    createdAt: now,
+    updatedAt: now,
+  });
+
+  await ctx.db.patch(args.sessionId, {
+    status: "escalated",
+    ticketId,
+    summary: args.aiSummary,
+    updatedAt: now,
+  });
+
+  await ctx.db.insert("aiSupportTicketMessages", {
+    ticketId,
+    senderType: "system",
+    body: `Ticket ${ticketNumber} created from AI Support Assistant. Assigned to ${
+      TEAM_LABELS[args.assignedTeam] ?? args.assignedTeam
+    }. Full AI conversation attached.`,
+    isInternalNote: false,
+    createdAt: now,
+  });  const staff = await ctx.db
+    .query("users")
+    .filter((q: any) =>
+      q.or(q.eq(q.field("teamRole"), args.assignedTeam), q.eq(q.field("role"), "admin")),
+    )
+    .collect();
+
+  for (const member of staff) {
+    await ctx.db.insert("notifications", {
+      userId: member._id,
+      title: `New AI-escalated ticket ${ticketNumber}`,
+      body: args.subject.slice(0, 140),
+      type: "ai_support_ticket",
+      link: "/admin/ai-support",
+      read: false,
+      createdAt: now,
+    });
+  }
+
+  return { ticketId, ticketNumber };
+}
+
 export const internalCreateEscalatedTicket = internalMutation({
   args: {
     sessionId: v.id("aiSupportSessions"),
     userId: v.id("users"),
     userRole: v.string(),
     category: v.string(),
-    assignedTeam: v.string(),
     subject: v.string(),
     aiSummary: v.string(),
+    assignedTeam: v.string(),
     additionalDetails: v.optional(v.string()),
   },
-  handler: async (ctx, args) => {
-    const now = Date.now();
-    const count = (await ctx.db.query("aiSupportTickets").collect()).length;
-    const ticketNumber = `FX-${1001 + count}`;
+  handler: async (ctx, args) => createEscalatedTicketCore(ctx, args),
+});
 
-    const ticketId = await ctx.db.insert("aiSupportTickets", {
-      ticketNumber,
+/**
+ * AUTOMATIC AI-LIMIT FALLBACK.
+ *
+ * Called by sendAiMessage when the AI gateway failed (rate limit, quota,
+ * timeout, outage, or repeated failures). Idempotent per session:
+ *  - creates the human-support ticket once (full conversation preserved)
+ *  - records the INTERNAL error reason on the ticket (never shown to users)
+ *  - appends the friendly transfer notice into the SAME chat transcript
+ *  - flips the session to AI_LIMIT_REACHED → WAITING_FOR_HUMAN so the AI
+ *    never takes the conversation back while a human owns it
+ */
+export const internalAutoTransferToHuman = internalMutation({
+  args: {
+    sessionId: v.id("aiSupportSessions"),
+    userId: v.id("users"),
+    userRole: v.string(),
+    reasonCode: v.string(), // internal classification only
+    category: v.string(),
+    subject: v.string(),
+    summary: v.string(),
+    assignedTeam: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const session = await ctx.db.get(args.sessionId);
+    if (!session) return null;
+    const now = Date.now();
+
+    // Already transferred? Never duplicate tickets or notices.
+    const existing = await ctx.db
+      .query("aiSupportTickets")
+      .withIndex("by_session", (q) => q.eq("sessionId", args.sessionId))
+      .first();
+    if (existing) {
+      await ctx.db.patch(existing._id, {
+        escalationReason: `ai_failure:${args.reasonCode}`,
+        updatedAt: now,
+      });
+      return {
+        ticketId: existing._id,
+        ticketNumber: existing.ticketNumber,
+        alreadyTransferred: true,
+      };
+    }
+
+    // Internal-only failure note travels with the summary for staff context;
+    // the user-visible message is always the friendly transfer copy.
+    const result = await createEscalatedTicketCore(ctx, {
       sessionId: args.sessionId,
       userId: args.userId,
       userRole: args.userRole,
       category: args.category,
       assignedTeam: args.assignedTeam,
       subject: args.subject,
-      aiSummary: args.aiSummary,
-      additionalDetails: args.additionalDetails,
-      status: "open",
-      createdAt: now,
-      updatedAt: now,
+      aiSummary: `${args.summary}\n\n[Internal] Auto-transferred: AI unavailable (${args.reasonCode}).`,
+      escalationReason: `ai_failure:${args.reasonCode}`,
     });
 
+    // Keep the user inside the SAME chat: append the friendly notice as the
+    // assistant's next message in the live transcript.
     await ctx.db.patch(args.sessionId, {
-      status: "escalated",
-      ticketId,
-      summary: args.aiSummary,
+      messages: [
+        ...session.messages,
+        { role: "ai" as const, body: AI_TRANSFER_MESSAGE, at: now + 1 },
+      ],
+      aiState: "WAITING_FOR_HUMAN",
       updatedAt: now,
     });
 
+    return { ...result, alreadyTransferred: false };
+  },
+});
+
+/**
+ * Route a user's message from the AI chat interface into the human-support
+ * ticket thread (used while a conversation is human-owned). The message is
+ * appended as the USER in the ticket thread and staff are notified — the
+ * user never leaves their chat window.
+ */
+export const internalRouteUserMessageToTicket = internalMutation({
+  args: {
+    sessionId: v.id("aiSupportSessions"),
+    body: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const session = await ctx.db.get(args.sessionId);
+    if (!session || !session.ticketId) return false;
+    const ticket = await ctx.db.get(session.ticketId);
+    if (!ticket) return false;
+    const clean = args.body.trim();
+    if (!clean) return false;
+
+    // Idempotency: identical body sent within 3s is a client retry.
+    const recent = await ctx.db
+      .query("aiSupportTicketMessages")
+      .withIndex("by_ticket", (q) => q.eq("ticketId", ticket._id))
+      .order("desc")
+      .first();
+    if (
+      recent &&
+      recent.senderType === "user" &&
+      recent.senderId &&
+      recent.body === clean &&
+      Date.now() - recent.createdAt < 3_000
+    ) {
+      return true;
+    }
+
+    const now = Date.now();
     await ctx.db.insert("aiSupportTicketMessages", {
-      ticketId,
-      senderType: "system",
-      body: `Ticket ${ticketNumber} created from AI Support Assistant. Assigned to ${
-        TEAM_LABELS[args.assignedTeam] ?? args.assignedTeam
-      }. Full AI conversation attached.`,
+      ticketId: ticket._id,
+      senderId: session.userId,
+      senderType: "user",
+      body: clean,
       isInternalNote: false,
       createdAt: now,
+    });
+    await ctx.db.patch(ticket._id, {
+      status:
+        ticket.status === "resolved" || ticket.status === "closed"
+          ? "open"
+          : ticket.status === "waiting_for_user"
+            ? "in_progress"
+            : ticket.status,
+      updatedAt: now,
     });
 
     const staff = await ctx.db
       .query("users")
       .filter((q) =>
-        q.or(q.eq(q.field("teamRole"), args.assignedTeam), q.eq(q.field("role"), "admin")),
+        q.or(q.eq(q.field("teamRole"), ticket.assignedTeam), q.eq(q.field("role"), "admin")),
       )
       .collect();
-    for (const member of staff) {
+    for (const s of staff) {
       await ctx.db.insert("notifications", {
-        userId: member._id,
-        title: `New AI-escalated ticket ${ticketNumber}`,
-        body: args.subject.slice(0, 140),
+        userId: s._id,
+        title: `User replied on ${ticket.ticketNumber}`,
+        body: clean.slice(0, 140),
         type: "ai_support_ticket",
-        link: "/admin/ai-support",
         read: false,
         createdAt: now,
       });
     }
-
-    return { ticketId, ticketNumber };
+    return true;
   },
 });
 
@@ -502,6 +676,15 @@ export const updateTicketStatus = mutation({
       resolvedAt: args.status === "resolved" ? now : ticket.resolvedAt,
       updatedAt: now,
     });
+    // Ticket closed/resolved by the team → conversation state RESOLVED. A new
+    // chat with the AI can start fresh; this one stays human-owned history.
+    if ((args.status === "resolved" || args.status === "closed") && ticket.sessionId) {
+      await ctx.db.patch(ticket.sessionId, {
+        aiState: "RESOLVED",
+        ...(args.status === "resolved" ? { resolvedAt: now } : {}),
+        updatedAt: now,
+      });
+    }
     await ctx.db.insert("aiSupportTicketMessages", {
       ticketId: args.ticketId,
       senderType: "system",
@@ -562,6 +745,11 @@ export const teamReplyToTicket = mutation({
       status: args.isInternalNote ? ticket.status : "waiting_for_user",
       updatedAt: now,
     });
+    // A human has joined: the conversation is now HUMAN_ACTIVE. The AI will
+    // NOT resume unless the team closes/resolves the ticket.
+    if (!args.isInternalNote && ticket.sessionId) {
+      await ctx.db.patch(ticket.sessionId, { aiState: "HUMAN_ACTIVE", updatedAt: now });
+    }
     if (!args.isInternalNote) {
       await ctx.db.insert("notifications", {
         userId: ticket.userId,
