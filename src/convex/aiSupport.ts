@@ -201,7 +201,7 @@ export const ESCALATION_OFFER =
   "I'm sorry I couldn't fully resolve this issue. You can request support from our team, and they will receive the details of everything we have already discussed so you won't need to start over.";
 
 export const sendAiMessage = action({
-  args: { sessionId: v.id("aiSupportSessions"), text: v.string() },
+  args: { sessionId: v.id("aiSupportSessions"), text: v.string(), voice: v.optional(v.boolean()) },
   handler: async (ctx, args) => {
     const { userId } = await requireUser(ctx);
     const session = (await ctx.runQuery(internal.aiSupportData.internalGetSession, {
@@ -226,15 +226,20 @@ export const sendAiMessage = action({
       ? scored.map((s, i) => `[${i + 1}] (${s.entry.category}) ${s.entry.title}\n${s.entry.content}`).join("\n\n")
       : "(No directly matching knowledge base articles. Be honest about this and recommend human support if unsure.)";
 
-    const history: ChatMsg[] = session.messages.slice(-12).map((m: any) => ({
+    const history: ChatMsg[] = session.messages.slice(-6).map((m: any) => ({
       role: m.role === "user" ? ("user" as const) : ("assistant" as const),
-      content: m.body,
+      // Keep context lean — only the user's questions and short AI answers.
+      content: m.body.slice(0, 600),
     }));
+
+    const voicePreamble = args.voice
+      ? "\n\nThe user is speaking with you by VOICE. Reply in a natural, conversational tone of roughly 50-100 words unless more detail is genuinely required. Read-aloud friendly: avoid markdown symbols, tables and long lists — at most 4 short spoken steps."
+      : "";
 
     let reply: string;
     try {
       reply = await chatCompletion(aiConfig(), [
-        { role: "system", content: `${SYSTEM_PROMPT}\n\nAPPROVED KNOWLEDGE BASE:\n${kbContext}` },
+        { role: "system", content: `${SYSTEM_PROMPT}${voicePreamble}\n\nAPPROVED KNOWLEDGE BASE:\n${kbContext}` },
         ...history,
         { role: "user", content: cleanText },
       ]);

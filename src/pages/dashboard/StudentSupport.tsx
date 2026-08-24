@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { useMutation, useQuery, useAction } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import {
@@ -13,6 +13,9 @@ import {
   ChevronDown,
   MessageCircle,
   ArrowRight,
+  Mic,
+  Square,
+  Volume2,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -31,6 +34,161 @@ function fmtTime(t: number) {
 }
 
 type PageMode = "ask" | "chat" | "thread";
+type VoicePhase = "idle" | "recording" | "transcribing" | "speaking";
+
+// ---------------------------------------------------------------------------
+// Voice engine — record → transcribe (server) → speak reply (server)
+// Recordings live only in memory; nothing is persisted.
+// ---------------------------------------------------------------------------
+
+function useVoiceChat(onTranscribed: (text: string) => Promise<string | null>) {
+  const transcribe = useAction(api.aiVoice.transcribeVoice);
+  const speak = useAction(api.aiVoice.speakText);
+
+  const [phase, setPhase] = useState<VoicePhase>("idle");
+  const [transcriptPreview, setTranscriptPreview] = useState("");
+  const recorderRef = useRef<MediaRecorder | null>(null);
+  const streamRef = useRef<MediaStream | null>(null);
+  const chunksRef = useRef<Blob[]>([]);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const cleanupRecording = useCallback(() => {
+    if (timerRef.current) clearTimeout(timerRef.current);
+    timerRef.current = null;
+    streamRef.current?.getTracks().forEach((t) => t.stop());
+    streamRef.current = null;
+    recorderRef.current = null;
+    chunksRef.current = [];
+  }, []);
+
+  const stopAudio = useCallback(() => {
+    if (audioRef.current) {
+      audioRef.current.pause();
+      audioRef.current.currentTime = 0;
+      audioRef.current = null;
+    }
+    setPhase((p) => (p === "speaking" ? "idle" : p));
+  }, []);
+
+  useEffect(() => () => {
+    // Unmount: never leave a mic hot or audio playing.
+    cleanupRecording();
+    if (audioRef.current) audioRef.current.pause();
+  }, [cleanupRecording]);
+
+  const speakReply = useCallback(
+    async (text: string) => {
+      setPhase("speaking");
+      try {
+        const res = (await speak({ text })) as { audioBase64: string; mimeType: string };
+        const bytes = Uint8Array.from(atob(res.audioBase64), (c) => c.charCodeAt(0));
+        const url = URL.createObjectURL(new Blob([bytes], { type: res.mimeType }));
+        const audio = new Audio(url);
+        audioRef.current = audio;
+        audio.onended = () => {
+          URL.revokeObjectURL(url);
+          if (audioRef.current === audio) {
+            audioRef.current = null;
+            setPhase("idle");
+          }
+        };
+        await audio.play();
+      } catch (err: any) {
+        setPhase("idle");
+        toast.error(err?.message ?? "Could not play the voice reply — you can still read it above.");
+      }
+    },
+    [speak],
+  );
+
+  const startRecording = useCallback(async () => {
+    if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === "undefined") {
+      toast.error("Voice input isn't supported in this browser. Please type your message instead.");
+      return;
+    }
+    let stream: MediaStream;
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    } catch (err: any) {
+      if (err?.name === "NotAllowedError" || err?.name === "PermissionDeniedError") {
+        toast.error("Microphone permission denied. Enable it in your browser settings, or simply type your message.");
+      } else if (err?.name === "NotFoundError" || err?.name === "DevicesNotFoundError") {
+        toast.error("No microphone detected on this device. Please type your message instead.");
+      } else {
+        toast.error("Couldn't start recording. Please try again or type your message.");
+      }
+      return;
+    }
+
+    try {
+      const mime = MediaRecorder.isTypeSupported("audio/webm")
+        ? "audio/webm"
+        : MediaRecorder.isTypeSupported("audio/mp4")
+          ? "audio/mp4"
+          : MediaRecorder.isTypeSupported("audio/ogg")
+            ? "audio/ogg"
+            : "";
+      const recorder = mime ? new MediaRecorder(stream, { mimeType: mime }) : new MediaRecorder(stream);
+      streamRef.current = stream;
+      chunksRef.current = [];
+      recorder.ondataavailable = (e) => e.data.size > 0 && chunksRef.current.push(e.data);
+      recorder.onstop = async () => {
+        const mimeType = recorder.mimeType || "audio/webm";
+        cleanupRecording();
+        const blob = new Blob(chunksRef.current.slice(), { type: mimeType });
+        chunksRef.current = [];
+        if (blob.size < 1200) {
+          setPhase("idle");
+          toast.error("That recording was too short. Hold the mic a little longer.");
+          return;
+        }
+        setPhase("transcribing");
+        try {
+          const base64: string = await new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onloadend = () => resolve(String(reader.result));
+            reader.onerror = () => reject(new Error("Could not process the recording."));
+            reader.readAsDataURL(blob);
+          });
+          const out = (await transcribe({ audioBase64: base64, mimeType })) as { text: string };
+          setTranscriptPreview(out.text); // show what we heard before sending
+          const reply = await onTranscribed(out.text);
+          if (reply) await speakReply(reply);
+          else setPhase("idle");
+        } catch (err: any) {
+          setPhase("idle");
+          toast.error(err?.message ?? "Speech-to-text failed. Please type your message instead.");
+        } finally {
+          setTimeout(() => setTranscriptPreview(""), 4000);
+        }
+      };
+      recorderRef.current = recorder;
+      recorder.start();
+      setPhase("recording");
+      // Hard cap at 2 minutes so uploads stay small.
+      timerRef.current = setTimeout(() => {
+        if (recorderRef.current?.state === "recording") recorder.stop();
+      }, 120_000);
+    } catch {
+      cleanupRecording();
+      toast.error("Recording failed to start. Please try again or type your message.");
+    }
+  }, [cleanupRecording, onTranscribed, speakReply, transcribe]);
+
+  const stopRecording = useCallback(() => {
+    if (recorderRef.current?.state === "recording") recorderRef.current.stop();
+  }, []);
+
+  return {
+    phase,
+    transcriptPreview,
+    startRecording,
+    stopRecording,
+    stopAudio,
+    busy: phase !== "idle",
+  };
+}
 
 export default function StudentSupport() {
   // Reactive subscription — every message, status change and team reply
@@ -66,22 +224,27 @@ export default function StudentSupport() {
   // surface it immediately (realtime — no refresh needed).
   const activeTicketUnseen = !!latest?.ticket?.hasUnseenTeamReply;
 
-  const handleSend = async (text?: string) => {
+  const handleSend = async (text?: string, opts?: { voice?: boolean }): Promise<string | null> => {
     const body = (text ?? input).trim();
-    if (!body || sending || !sessionId) return;
+    if (!body || sending || !sessionId) return null;
     setInput("");
     setAskedSolved(false);
     setShowEscalateForm(false);
     setSending(true);
     try {
-      await sendAi({ sessionId, text: body });
+      const res = (await sendAi({ sessionId, text: body, voice: opts?.voice })) as { reply: string };
       setAskedSolved(true);
+      return res?.reply ?? null;
     } catch (err: any) {
       toast.error(err?.message ?? "Could not reach the assistant. Try again.");
+      return null;
     } finally {
       setSending(false);
     }
   };
+
+  // Voice pipeline: transcribed text flows through the SAME AI support system.
+  const voice = useVoiceChat(async (spoken) => handleSend(spoken, { voice: true }));
 
   const handleStartNew = async () => {
     try {
@@ -325,6 +488,47 @@ export default function StudentSupport() {
                 </div>
               )}
 
+              {/* Voice status strip */}
+              {sessionId && latest!.status === "active" && voice.phase !== "idle" && (
+                <div className="border-t border-white/10 bg-black/20 p-3">
+                  {voice.phase === "recording" && (
+                    <div className="flex items-center justify-between gap-3">
+                      <p className="flex min-w-0 items-center gap-2 text-xs font-medium text-rose-300">
+                        <span className="size-2 shrink-0 animate-pulse rounded-full bg-rose-400" />
+                        🎙️ Listening… tap the square when you're done speaking
+                      </p>
+                      <button
+                        type="button"
+                        onClick={voice.stopRecording}
+                        className="inline-flex shrink-0 items-center gap-1.5 rounded-lg bg-rose-400/15 px-3 py-1.5 text-xs font-semibold text-rose-200 hover:bg-rose-400/25"
+                      >
+                        <Square className="size-3" /> Stop &amp; send
+                      </button>
+                    </div>
+                  )}
+                  {voice.phase === "transcribing" && (
+                    <p className="flex items-center gap-2 text-xs text-muted-foreground">
+                      <Loader2 className="size-3.5 animate-spin text-lime-400" /> Transcribing your message…
+                      {voice.transcriptPreview && <span className="truncate text-lime-300">“{voice.transcriptPreview}”</span>}
+                    </p>
+                  )}
+                  {voice.phase === "speaking" && (
+                    <div className="flex items-center justify-between gap-3">
+                      <p className="flex items-center gap-2 text-xs font-medium text-lime-300">
+                        <Volume2 className="size-4 animate-pulse" /> 🔊 Assistant is speaking…
+                      </p>
+                      <button
+                        type="button"
+                        onClick={voice.stopAudio}
+                        className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-white/10 px-3 py-1.5 text-xs font-medium text-white/60 hover:bg-white/5"
+                      >
+                        <Square className="size-3" /> Stop audio
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
+
               {/* Input / CTAs */}
               <div className="border-t border-white/10 p-3">
                 {!sessionId || latest!.status !== "active" ? (
@@ -355,13 +559,37 @@ export default function StudentSupport() {
                     <input
                       value={input}
                       onChange={(e) => setInput(e.target.value)}
-                      placeholder="Describe your issue…"
+                      placeholder={voice.busy ? "Voice in progress…" : "Describe your issue — type or tap the mic…"}
                       maxLength={1200}
-                      className="h-11 min-w-0 flex-1 rounded-xl border border-white/10 bg-black/20 px-4 text-sm placeholder:text-white/25 focus:border-lime-400/40 focus:outline-none"
+                      disabled={voice.phase === "recording" || voice.phase === "transcribing"}
+                      className="h-11 min-w-0 flex-1 rounded-xl border border-white/10 bg-black/20 px-4 text-sm placeholder:text-white/25 focus:border-lime-400/40 focus:outline-none disabled:opacity-50"
                     />
+                    {/* Microphone */}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (voice.phase === "recording") voice.stopRecording();
+                        else if (!voice.busy) void voice.startRecording();
+                      }}
+                      disabled={sending || (voice.busy && voice.phase !== "recording")}
+                      aria-label={voice.phase === "recording" ? "Stop recording and send" : "Record a voice message"}
+                      className={`flex size-11 shrink-0 items-center justify-center rounded-xl border transition-colors disabled:opacity-40 ${
+                        voice.phase === "recording"
+                          ? "animate-pulse border-rose-400/50 bg-rose-500/25 text-rose-200"
+                          : "border-white/10 bg-black/20 text-white/60 hover:border-lime-400/40 hover:text-lime-300"
+                      }`}
+                    >
+                      {voice.phase === "transcribing" ? (
+                        <Loader2 className="size-4 animate-spin" />
+                      ) : voice.phase === "recording" ? (
+                        <Square className="size-4" />
+                      ) : (
+                        <Mic className="size-4" />
+                      )}
+                    </button>
                     <button
                       type="submit"
-                      disabled={sending || !input.trim()}
+                      disabled={sending || !input.trim() || voice.busy}
                       className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-lime-400 text-black transition-colors hover:bg-lime-300 disabled:opacity-40"
                       aria-label="Send message"
                     >
