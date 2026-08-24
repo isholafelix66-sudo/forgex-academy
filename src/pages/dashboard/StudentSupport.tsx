@@ -53,6 +53,8 @@ function useVoiceChat(
   const speak = useAction(api.aiVoice.speakText);
 
   const [phase, setPhase] = useState<VoicePhase>("idle");
+  const phaseRef = useRef<VoicePhase>("idle");
+  phaseRef.current = phase;
   const [transcriptPreview, setTranscriptPreview] = useState("");
   const [soundDetected, setSoundDetected] = useState(false); // live mic feedback
   const recorderRef = useRef<MediaRecorder | null>(null);
@@ -120,22 +122,32 @@ function useVoiceChat(
     async (text: string) => {
       setPhase("speaking");
       try {
-        const res = (await speak({ text })) as { audioBase64: string; mimeType: string };
-        const bytes = Uint8Array.from(atob(res.audioBase64), (c) => c.charCodeAt(0));
-        const url = URL.createObjectURL(new Blob([bytes], { type: res.mimeType }));
-        const audio = new Audio(url);
-        audioRef.current = audio;
-        audio.onended = () => {
-          URL.revokeObjectURL(url);
-          if (audioRef.current === audio) {
-            audioRef.current = null;
-            setPhase("idle");
-          }
-        };
-        await audio.play();
-      } catch (err: any) {
+        // New backend contract: array of sequential audio chunks.
+        const res = (await speak({ text })) as unknown as { chunks: { audioBase64: string }[]; mimeType: string };
+        for (const part of res.chunks ?? []) {
+          if (phaseRef.current !== "speaking") break;
+          const bytes = Uint8Array.from(atob(part.audioBase64), (c) => c.charCodeAt(0));
+          const url = URL.createObjectURL(new Blob([bytes], { type: res.mimeType ?? "audio/wav" }));
+          const audio = new Audio(url);
+          audioRef.current = audio;
+          await new Promise<void>((resolve) => {
+            audio.onended = () => {
+              URL.revokeObjectURL(url);
+              resolve();
+            };
+            audio.onerror = () => {
+              URL.revokeObjectURL(url);
+              resolve(); // skip a bad chunk rather than failing the reply
+            };
+            audio.play().catch(() => resolve()); // autoplay block → stop quietly
+          });
+        }
         setPhase("idle");
-        toast.error(err?.message ?? "Could not play the voice reply — you can still read it above.");
+      } catch (err) {
+        console.warn("[speakReply] TTS failed", err); // technical detail: logs only
+        setPhase("idle");
+        // Friendly, fixed message — NEVER surface raw Convex/server errors.
+        toast.error("Audio couldn’t be played. You can still read the reply above.");
       }
     },
     [speak],
@@ -401,6 +413,166 @@ function VoiceWaveform({ levelRef, active }: { levelRef: React.MutableRefObject<
   );
 }
 
+// ---------------------------------------------------------------------------
+// SpeakButton — "Play text as audio" under AI replies.
+// Never exposes server/Convex errors; caches generated audio so replays are
+// free; plays chunks sequentially; handles mobile autoplay restrictions.
+// ---------------------------------------------------------------------------
+
+type TtsResult = { chunks: string[]; mimeType: string };
+
+/** Generated-audio cache keyed by exact reply text — replay never re-bills. */
+const ttsCache = new Map<string, TtsResult>();
+
+function base64ToBlobUrl(b64: string, mime: string): string {
+  const bytes = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
+  return URL.createObjectURL(new Blob([bytes], { type: mime }));
+}
+
+function SpeakButton({ text }: { text: string }) {
+  const speak = useAction(api.aiVoice.speakText);
+  const [phase, setPhase] = useState<"idle" | "loading" | "playing" | "blocked">("idle");
+  const [failed, setFailed] = useState(false);
+  const stopFlagRef = useRef(false);
+  const currentAudioRef = useRef<HTMLAudioElement | null>(null);
+
+  // Different message → reset local UI state.
+  useEffect(() => {
+    setPhase("idle");
+    setFailed(false);
+    stopFlagRef.current = true;
+    currentAudioRef.current?.pause();
+    currentAudioRef.current = null;
+  }, [text]);
+
+  useEffect(
+    () => () => {
+      stopFlagRef.current = true;
+      currentAudioRef.current?.pause();
+    },
+    [],
+  );
+
+  const stopPlayback = useCallback(() => {
+    stopFlagRef.current = true;
+    if (currentAudioRef.current) {
+      currentAudioRef.current.pause();
+      currentAudioRef.current = null;
+    }
+    setPhase("idle");
+  }, []);
+
+  const playFromCache = useCallback(async (result: TtsResult): Promise<"done" | "blocked"> => {
+    stopFlagRef.current = false;
+    setPhase("playing");
+    try {
+      for (const chunkB64 of result.chunks) {
+        if (stopFlagRef.current) return "done";
+        const url = base64ToBlobUrl(chunkB64, result.mimeType);
+        try {
+          await new Promise<void>((resolve, reject) => {
+            const audio = new Audio(url);
+            currentAudioRef.current = audio;
+            audio.onended = () => {
+              URL.revokeObjectURL(url);
+              resolve();
+            };
+            audio.onerror = () => {
+              URL.revokeObjectURL(url);
+              resolve(); // skip a bad chunk rather than failing the rest
+            };
+            audio.play().then(resolve).catch(reject);
+          });
+        } catch (err: any) {
+          URL.revokeObjectURL(url);
+          if (err?.name === "NotAllowedError") return "blocked"; // mobile autoplay policy
+          throw err;
+        }
+      }
+      return "done";
+    } finally {
+      if (!stopFlagRef.current) setPhase("idle");
+      currentAudioRef.current = null;
+    }
+  }, []);
+
+  const handlePlay = useCallback(async () => {
+    if (phase === "playing") {
+      stopPlayback();
+      return;
+    }
+    if (phase === "loading") return; // repeated taps: no duplicate requests
+    const trimmed = (text ?? "").trim();
+    if (!trimmed) return; // empty handled gracefully — nothing to read
+
+    // Replay from cache without hitting the server again.
+    const cached = ttsCache.get(trimmed);
+    if (cached) {
+      const outcome = await playFromCache(cached);
+      if (outcome === "blocked") setPhase("blocked");
+      return;
+    }
+
+    setFailed(false);
+    setPhase("loading");
+    try {
+      const res = (await speak({ text: trimmed })) as unknown as TtsResult;
+      const result: TtsResult = { chunks: res.chunks ?? [], mimeType: res.mimeType ?? "audio/wav" };
+      if (result.chunks.length === 0) throw new Error("no audio returned");
+      ttsCache.set(trimmed, result);
+      const outcome = await playFromCache(result);
+      if (outcome === "blocked") setPhase("blocked");
+    } catch (err) {
+      console.warn("[speakText] playback failed", err); // technical detail: console only
+      setPhase("idle");
+      setFailed(true); // small non-blocking inline retry — never a raw error
+    }
+  }, [phase, playFromCache, speak, stopPlayback, text]);
+
+  return (
+    <div className="mt-1 flex flex-wrap items-center gap-2">
+      <button
+        type="button"
+        onClick={() => void handlePlay()}
+        disabled={phase === "loading"}
+        aria-label={phase === "playing" ? "Stop audio" : "Play this reply as audio"}
+        className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[10px] font-semibold transition-colors disabled:opacity-50 ${
+          phase === "playing"
+            ? "border-lime-400/40 bg-lime-400/15 text-lime-300"
+            : "border-white/10 bg-black/20 text-white/50 hover:border-lime-400/30 hover:text-lime-300"
+        }`}
+      >
+        {phase === "loading" ? (
+          <>
+            <Loader2 className="size-3 animate-spin" /> Generating…
+          </>
+        ) : phase === "playing" ? (
+          <>
+            <Square className="size-3" /> Stop audio
+          </>
+        ) : phase === "blocked" ? (
+          <>
+            <Volume2 className="size-3" /> Tap to play
+          </>
+        ) : (
+          <>
+            <Volume2 className="size-3" /> Play text as audio
+          </>
+        )}
+      </button>
+      {failed && (
+        <button
+          type="button"
+          onClick={() => void handlePlay()}
+          className="text-[10px] font-medium text-amber-300/80 underline-offset-2 hover:underline"
+        >
+          Couldn’t play audio. Tap to retry.
+        </button>
+      )}
+    </div>
+  );
+}
+
 export default function StudentSupport() {  // Reactive subscription — every message, status change and team reply
   // appears here instantly without refreshing the page.
   const latest = useQuery(api.aiSupportData.getMyLatestSession);
@@ -613,7 +785,7 @@ export default function StudentSupport() {  // Reactive subscription — every m
               {/* Chat transcript */}
               <div className="max-h-[52vh] min-h-[240px] space-y-3 overflow-y-auto p-4">
                 {messages.map((m, i) => (
-                  <div key={i} className={`flex ${m.role === "user" ? "justify-end" : "justify-start"}`}>
+                  <div key={i} className={`flex flex-col ${m.role === "user" ? "items-end" : "items-start"}`}>
                     <div
                       className={`max-w-[85%] whitespace-pre-wrap break-words rounded-2xl px-4 py-2.5 text-sm leading-relaxed ${
                         m.role === "user"
@@ -631,6 +803,8 @@ export default function StudentSupport() {  // Reactive subscription — every m
                         {fmtTime(m.at)}
                       </span>
                     </div>
+                    {/* Play-as-audio under every AI reply — independent of chat */}
+                    {m.role === "ai" && mode === "chat" && <SpeakButton text={m.body} />}
                   </div>
                 ))}
                 {sending && (

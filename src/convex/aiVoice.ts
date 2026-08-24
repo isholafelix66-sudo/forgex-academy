@@ -90,12 +90,15 @@ export const transcribeVoice = action({
         headers: { Authorization: `Bearer ${cfg.key}` },
         body: form,
       });
-    } catch {
+    } catch (err: any) {
+      console.error("[aiVoice.transcribeVoice] network error:", err?.message ?? err);
       throw new Error("Network problem while reaching the transcription service. Check your connection and try again.");
     }
     if (!res.ok) {
-      const detail = (await res.text()).slice(0, 300);
-      throw new Error(`Speech-to-text failed (${res.status}): ${detail}`);
+      const detail = await res.text();
+      // Technical details go to SERVER LOGS ONLY.
+      console.error(`[aiVoice.transcribeVoice] STT ${res.status} (${cfg.sttModel}):`, detail.slice(0, 500));
+      throw new Error("Transcription failed on our side. Please try again, or type your message instead.");
     }
     // Speech validation happens here: short clips (even a single word) are
     // accepted — only audio where Whisper detects no actual speech is rejected.
