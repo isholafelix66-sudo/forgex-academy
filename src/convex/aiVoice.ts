@@ -305,19 +305,3 @@ export const speakText = action({
   },
 });
 
-// TEMP DIAGNOSTIC — verify Gemini TTS connectivity (remove after verifying)
-export const diagGemini = action({
-  args: {},
-  handler: async () => {
-    const key = process.env.GEMINI_API_KEY ?? process.env.GOOGLE_API_KEY;
-    if (!key) return { configured: false };
-    try {
-      const buf = await ttsRequest("Hello. This is a voice test.");
-      const isWav = buf.length > 44 && buf.toString("ascii", 0, 4) === "RIFF";
-      return { configured: true, bytes: buf.length, validWavHeader: isWav };
-    } catch (err: any) {
-      return { configured: true, error: String(err?.message ?? err).slice(0, 200) };
-    }
-  },
-});
-
