@@ -3,12 +3,14 @@
 /**
  * ForgeX AI Support — Voice actions.
  *
- * Speech-to-Text and Text-to-Speech backed by the Groq API (OpenAI-compatible
- * endpoints). The GROQ_API_KEY never leaves the server: the browser records
- * audio, this action transcribes it, and spoken replies are synthesized here
- * and returned as base64 audio for the client to play locally.
+ * Speech-to-Text: Groq Whisper (recordings transcribed in-memory, never stored).
+ * Text-to-Speech: GOOGLE GEMINI TTS — a dedicated speech provider, fully
+ * separate from the AI text generation (which stays on Groq in aiSupport.ts).
  *
- * Privacy: recordings are transcribed in-memory and NEVER persisted.
+ * Architecture: existing AI generates the text → this action converts that
+ * exact text to speech via Gemini → audio is stored as a Convex file and
+ * played automatically by the client. The GEMINI/GROQ keys never leave the
+ * server.
  */
 
 import { v } from "convex/values";
@@ -19,16 +21,13 @@ import { getAuthUserId } from "@convex-dev/auth/server";
 // Provider config — mirrors aiSupport.ts / quizgen.ts priority order
 // ---------------------------------------------------------------------------
 
-function voiceConfig(): { key: string; base: string; sttModel: string; ttsModel: string; ttsVoice: string } {
+function voiceConfig(): { key: string; base: string; sttModel: string } {
   const groqKey = process.env.GROQ_API_KEY;
   if (groqKey) {
     return {
       key: groqKey,
       base: process.env.GROQ_BASE_URL ?? "https://api.groq.com/openai/v1",
       sttModel: process.env.GROQ_STT_MODEL ?? "whisper-large-v3-turbo",
-      ttsModel: process.env.GROQ_TTS_MODEL ?? "canopylabs/orpheus-v1-english",
-      // Valid Orpheus voices: autumn | diana | hannah | austin | daniel | troy
-      ttsVoice: process.env.GROQ_TTS_VOICE ?? "autumn",
     };
   }
   const openaiKey = process.env.OPENAI_API_KEY;
@@ -37,8 +36,6 @@ function voiceConfig(): { key: string; base: string; sttModel: string; ttsModel:
       key: openaiKey,
       base: process.env.OPENAI_BASE_URL ?? "https://api.openai.com/v1",
       sttModel: process.env.OPENAI_STT_MODEL ?? "whisper-1",
-      ttsModel: process.env.OPENAI_TTS_MODEL ?? "tts-1",
-      ttsVoice: process.env.OPENAI_TTS_VOICE ?? "nova",
     };
   }
   throw new Error(
@@ -115,29 +112,60 @@ export const transcribeVoice = action({
 
 
 // ---------------------------------------------------------------------------
-// Text-to-Speech
+// Text-to-Speech — GOOGLE GEMINI (dedicated speech provider)
 //
-// IMPORTANT ARCHITECTURE NOTES:
-//  - Groq's Orpheus model outputs WAV ONLY (no mp3), so audio is BIG.
-//  - Convex caps function RETURN values (~1MB). Returning multi-chunk or
-//    long base64 payloads crashes the action.
-//  - Therefore: ONE chunk per call, delivered as a Convex STORAGE FILE URL
-//    (no size limit) instead of inline base64.
+// Architecture notes:
+//  - Gemini returns raw headerless PCM (24 kHz, 16-bit, mono). We wrap it in
+//    a proper WAV header server-side before storing.
+//  - Convex caps function RETURN values (~1MB), so: ONE chunk per call,
+//    delivered as a Convex STORAGE FILE URL instead of inline base64.
+//  - We try the modern Interactions API first and fall back to the legacy
+//    generateContent TTS endpoint — both are parsed defensively.
 // ---------------------------------------------------------------------------
 
-const ORPHEUS_VOICES = new Set(["autumn", "diana", "hannah", "austin", "daniel", "troy"]);
-// ~240 chars ≈ 15 s of WAV ≈ 480 KB — comfortably within every limit,
-// and keeps each provider request fast (Orpheus is heavily rate-limited).
-const MAX_TTS_CHUNK_CHARS = 240;
+const GEMINI_TTS_MODEL = process.env.GEMINI_TTS_MODEL ?? "gemini-3.1-flash-tts-preview";
+const GEMINI_TTS_FALLBACK_MODEL = "gemini-2.5-flash-preview-tts";
+const GEMINI_TTS_VOICE = process.env.GEMINI_TTS_VOICE ?? "Kore";
+// Gemini handles long input well; ~1000 chars ≈ 60 s of audio per request
+// keeps responses fast and comfortably inside provider limits.
+const MAX_TTS_CHUNK_CHARS = 1000;
 
-/** Split long text into sentence-boundary chunks within provider limits. */
+function geminiApiKey(): string {
+  const key = process.env.GEMINI_API_KEY ?? process.env.GOOGLE_API_KEY;
+  if (!key) {
+    console.error("[aiVoice.speakText] GEMINI_API_KEY is not set — add it to your project's environment keys.");
+    throw new Error("Voice replies aren't configured yet. Please try again later.");
+  }
+  return key;
+}
+
+/** Wrap raw headerless PCM into a playable WAV container. */
+function pcmToWav(pcm: Buffer, sampleRate: number): Buffer {
+  const header = Buffer.alloc(44);
+  header.write("RIFF", 0);
+  header.writeUInt32LE(36 + pcm.length, 4);
+  header.write("WAVE", 8);
+  header.write("fmt ", 12);
+  header.writeUInt32LE(16, 16);
+  header.writeUInt16LE(1, 20); // PCM
+  header.writeUInt16LE(1, 22); // mono
+  header.writeUInt32LE(sampleRate, 24);
+  header.writeUInt32LE(sampleRate * 2, 28); // byte rate
+  header.writeUInt16LE(2, 32);
+  header.writeUInt16LE(16, 34);
+  header.write("data", 36);
+  header.writeUInt32LE(pcm.length, 40);
+  return Buffer.concat([header, pcm]);
+}
+
+/** Split long text at sentence/paragraph boundaries within limits. */
 function splitForTts(text: string): string[] {
   if (text.length <= MAX_TTS_CHUNK_CHARS) return [text];
   const chunks: string[] = [];
   let rest = text;
   while (rest.length > MAX_TTS_CHUNK_CHARS) {
     let cut = -1;
-    for (const sep of [". ", "! ", "? ", "\n", "; ", ", "]) {
+    for (const sep of ["\n\n", ". ", "! ", "? ", "\n", "; ", ", "]) {
       const idx = rest.lastIndexOf(sep, MAX_TTS_CHUNK_CHARS);
       if (idx > MAX_TTS_CHUNK_CHARS * 0.4) {
         cut = idx + sep.length;
@@ -152,33 +180,90 @@ function splitForTts(text: string): string[] {
   return chunks.filter((c) => c.length > 0);
 }
 
-async function ttsRequest(cfg: ReturnType<typeof voiceConfig>, input: string): Promise<Buffer> {
-  let res: Response;
+/** Deep-search a JSON response for the base64 audio payload + sample rate. */
+function extractAudio(json: unknown): { pcm: Buffer; sampleRate: number } | null {
+  const seen = new Set<unknown>();
+  const visit = (node: any): { pcm: Buffer; sampleRate: number } | null => {
+    if (!node || typeof node !== "object" || seen.has(node)) return null;
+    seen.add(node);
+    if (typeof node.data === "string" && node.data.length > 100) {
+      const mime = typeof node.mimeType === "string" ? node.mimeType : "";
+      if (/audio|pcm|L16/i.test(mime) || !mime) {
+        const rate = Number(/rate=(\d+)/.exec(mime)?.[1] ?? 24000);
+        return { pcm: Buffer.from(node.data, "base64"), sampleRate: rate };
+      }
+    }
+    for (const v of Object.values(node)) {
+      const found = visit(v);
+      if (found) return found;
+    }
+    return null;
+  };
+  return visit(json);
+}
+
+/** Call Gemini TTS via one endpoint shape; returns decoded PCM or null. */
+async function geminiTtsAttempt(
+  key: string,
+  input: string,
+): Promise<{ pcm: Buffer; sampleRate: number } | null> {
+  // Attempt 1 — Interactions API (current recommended surface).
   try {
-    res = await fetch(`${cfg.base}/audio/speech`, {
+    const res = await fetch("https://generativelanguage.googleapis.com/v1beta/interactions", {
       method: "POST",
-      headers: {
-        Authorization: `Bearer ${cfg.key}`,
-        "Content-Type": "application/json",
-      },
+      headers: { "x-goog-api-key": key, "Content-Type": "application/json" },
       body: JSON.stringify({
-        model: cfg.ttsModel,
-        voice: ORPHEUS_VOICES.has(cfg.ttsVoice) ? cfg.ttsVoice : "autumn",
+        model: GEMINI_TTS_MODEL,
         input,
-        response_format: "wav",
+        response_format: { type: "audio" },
+        generation_config: { speech_config: [{ voice: GEMINI_TTS_VOICE }] },
       }),
     });
+    if (res.ok) {
+      const audio = extractAudio(await res.json());
+      if (audio && audio.pcm.length > 100) return audio;
+      console.error("[aiVoice.speakText] interactions OK but no audio payload found");
+    } else {
+      console.error(`[aiVoice.speakText] interactions ${res.status}:`, (await res.text()).slice(0, 400));
+    }
   } catch (err: any) {
-    console.error("[aiVoice.speakText] network error reaching TTS API:", err?.message ?? err);
-    throw new Error("network");
+    console.error("[aiVoice.speakText] interactions network error:", err?.message ?? err);
   }
+
+  // Attempt 2 — legacy generateContent TTS endpoint.
+  const res = await fetch(
+    `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_TTS_FALLBACK_MODEL}:generateContent`,
+    {
+      method: "POST",
+      headers: { "x-goog-api-key": key, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        contents: [{ parts: [{ text: input }] }],
+        generationConfig: {
+          responseModalities: ["AUDIO"],
+          speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: GEMINI_TTS_VOICE } } },
+        },
+      }),
+    },
+  );
   if (!res.ok) {
     const detail = await res.text();
-    // Detailed technical errors go to SERVER LOGS ONLY — never to clients.
-    console.error(`[aiVoice.speakText] TTS ${res.status} (${cfg.ttsModel}/${cfg.ttsVoice}):`, detail.slice(0, 500));
+    // Technical detail: SERVER LOGS ONLY.
+    console.error(`[aiVoice.speakText] legacy TTS ${res.status} (${GEMINI_TTS_FALLBACK_MODEL}/${GEMINI_TTS_VOICE}):`, detail.slice(0, 400));
     throw new Error(`tts-${res.status}`);
   }
-  return Buffer.from(await res.arrayBuffer());
+  const audio = extractAudio(await res.json());
+  if (!audio || audio.pcm.length < 100) {
+    console.error("[aiVoice.speakText] legacy TTS returned no usable audio payload");
+    throw new Error("tts-empty");
+  }
+  return audio;
+}
+
+async function ttsRequest(input: string): Promise<Buffer> {
+  const key = geminiApiKey();
+  const audio = await geminiTtsAttempt(key, input);
+  if (!audio) throw new Error("tts-empty");
+  return pcmToWav(audio.pcm, audio.sampleRate);
 }
 
 export const speakText = action({
@@ -186,13 +271,14 @@ export const speakText = action({
   handler: async (ctx, args) => {
     await requireUser(ctx);
 
-    // Only completely empty text is rejected — single words are fine.
+    // Only completely empty text is rejected — single words like "Hi." are fine.
     const cleaned = args.text.trim();
     if (!cleaned) {
       console.error("[aiVoice.speakText] rejected empty text");
       throw new Error("Nothing to read aloud.");
     }
 
+    // Markdown → natural spoken text before synthesis.
     const speechText =
       cleaned
         .replace(/```[\s\S]*?```/g, " code block omitted. ")
@@ -200,17 +286,13 @@ export const speakText = action({
         .replace(/[*_#`>~]/g, "")
         .replace(/\s+/g, " ") || "Sorry, I have nothing to say.";
 
-    const cfg = voiceConfig();
     const chunks = splitForTts(speechText);
     const index = Math.max(0, Math.min(args.chunkIndex ?? 0, chunks.length - 1));
 
     try {
-      const buf = await ttsRequest(cfg, chunks[index]);
-      if (buf.length < 100) {
-        console.error(`[aiVoice.speakText] suspiciously small audio (${buf.length} bytes)`);
-      }
-      // Store as a Convex file — served back as a normal https URL with no
-      // function-return size limit. This is what makes LONG replies work.
+      const buf = await ttsRequest(chunks[index]);
+      // Store as a Convex file — served back as an https URL with no function-
+      // return size limit. This is what makes LONG replies work reliably.
       const storageId = await ctx.storage.store(
         new Blob([new Uint8Array(buf)], { type: "audio/wav" }),
       );
@@ -219,6 +301,22 @@ export const speakText = action({
       console.error("[aiVoice.speakText] final failure:", err?.message ?? err);
       // Client receives a stable non-technical message only.
       throw new Error("Audio couldn't be played. Please try again.");
+    }
+  },
+});
+
+// TEMP DIAGNOSTIC — verify Gemini TTS connectivity (remove after verifying)
+export const diagGemini = action({
+  args: {},
+  handler: async () => {
+    const key = process.env.GEMINI_API_KEY ?? process.env.GOOGLE_API_KEY;
+    if (!key) return { configured: false };
+    try {
+      const buf = await ttsRequest("Hello. This is a voice test.");
+      const isWav = buf.length > 44 && buf.toString("ascii", 0, 4) === "RIFF";
+      return { configured: true, bytes: buf.length, validWavHeader: isWav };
+    } catch (err: any) {
+      return { configured: true, error: String(err?.message ?? err).slice(0, 200) };
     }
   },
 });
