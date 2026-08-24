@@ -10,6 +10,8 @@
 
 import type * as admin from "../admin.js";
 import type * as aiResources from "../aiResources.js";
+import type * as aiSupport from "../aiSupport.js";
+import type * as aiSupportData from "../aiSupportData.js";
 import type * as apitemplate from "../apitemplate.js";
 import type * as auth from "../auth.js";
 import type * as auth_emailOtp from "../auth/emailOtp.js";
@@ -56,6 +58,8 @@ import type {
 declare const fullApi: ApiFromModules<{
   admin: typeof admin;
   aiResources: typeof aiResources;
+  aiSupport: typeof aiSupport;
+  aiSupportData: typeof aiSupportData;
   apitemplate: typeof apitemplate;
   auth: typeof auth;
   "auth/emailOtp": typeof auth_emailOtp;

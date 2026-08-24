@@ -151,6 +151,7 @@ export default function AdminShell() {
         { to: "/admin/courses", label: "Courses", icon: <BookOpen className="size-4" /> },
         { to: "/admin/catalog", label: "Categories & roadmaps", icon: <ListChecks className="size-4" /> },
         { to: "/admin/teams", label: "Team Access", icon: <Users className="size-4" /> },
+        { to: "/admin/ai-support", label: "AI Support", icon: <Bot className="size-4" /> },
         { to: "/tutor", label: "Tutor dashboard (preview)", icon: <GraduationCap className="size-4" /> },
       ],
     },

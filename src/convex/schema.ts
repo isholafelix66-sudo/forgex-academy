@@ -1543,6 +1543,94 @@ const schema = defineSchema(
       createdAt: v.number(),
     })
       .index("by_case", ["caseId", "createdAt"]),
+
+    // ---------------------------------------------------------------------
+    // AI Support Assistant
+    // ---------------------------------------------------------------------
+
+    /** Approved support knowledge base — the AI's primary source of truth. */
+    aiKnowledgeBase: defineTable({
+      title: v.string(),
+      category: v.string(), // "student-support" | "tutor-support" | "course-management" | "platform-features" | "technical" | "account" | "community" | "ai-hub" | "general"
+      keywords: v.optional(v.array(v.string())),
+      content: v.string(), // step-by-step answer / troubleshooting guide
+      enabled: v.boolean(),
+      createdBy: v.optional(v.id("users")),
+      timesUsed: v.optional(v.number()),
+      helpfulCount: v.optional(v.number()),
+      notHelpfulCount: v.optional(v.number()),
+      createdAt: v.number(),
+      updatedAt: v.number(),
+    })
+      .index("by_category", ["category"])
+      .index("by_enabled", ["enabled"]),
+
+    /** One AI support conversation between a user and the assistant. */
+    aiSupportSessions: defineTable({
+      userId: v.id("users"),
+      userRole: v.string(), // "student" | "tutor" | team role | "admin"
+      status: v.union(
+        v.literal("active"),
+        v.literal("resolved"),
+        v.literal("escalated"),
+      ),
+      messages: v.array(
+        v.object({
+          role: v.union(v.literal("user"), v.literal("ai")),
+          body: v.string(),
+          at: v.number(),
+        }),
+      ),
+      suggestedCategory: v.optional(v.string()),
+      summary: v.optional(v.string()),
+      rating: v.optional(v.union(v.literal("helpful"), v.literal("not_helpful"))),
+      ticketId: v.optional(v.id("aiSupportTickets")),
+      createdAt: v.number(),
+      updatedAt: v.number(),
+      resolvedAt: v.optional(v.number()),
+    })
+      .index("by_user", ["userId", "createdAt"])
+      .index("by_status", ["status"]),
+
+    /** Tickets created when the AI cannot resolve an issue (or user opts out). */
+    aiSupportTickets: defineTable({
+      ticketNumber: v.string(), // e.g. FX-1024
+      sessionId: v.id("aiSupportSessions"),
+      userId: v.id("users"),
+      userRole: v.string(),
+      category: v.string(), // routing category label
+      assignedTeam: v.string(), // "student-support" | "tutor-support" | "technical" | "academic" | "ai-support" | "admin"
+      subject: v.string(),
+      aiSummary: v.string(),
+      additionalDetails: v.optional(v.string()),
+      assignedTo: v.optional(v.id("users")),
+      status: v.union(
+        v.literal("pending_escalation"),
+        v.literal("open"),
+        v.literal("assigned"),
+        v.literal("in_progress"),
+        v.literal("waiting_for_user"),
+        v.literal("resolved"),
+        v.literal("closed"),
+      ),
+      resolvedAt: v.optional(v.number()),
+      createdAt: v.number(),
+      updatedAt: v.number(),
+    })
+      .index("by_team_status", ["assignedTeam", "status"])
+      .index("by_user", ["userId", "createdAt"])
+      .index("by_session", ["sessionId"]),
+
+    /** Replies inside an escalated AI support ticket (user ↔ human team). */
+    aiSupportTicketMessages: defineTable({
+      ticketId: v.id("aiSupportTickets"),
+      senderId: v.optional(v.id("users")), // null = system
+      senderType: v.union(v.literal("user"), v.literal("team"), v.literal("system")),
+      body: v.string(),
+      isInternalNote: v.boolean(),
+      createdAt: v.number(),
+    })
+      .index("by_ticket", ["ticketId", "createdAt"]),
   },
   {
     schemaValidation: false,

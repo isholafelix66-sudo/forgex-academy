@@ -11,6 +11,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import CoursePreviewModal from "@/components/team/CoursePreviewModal";
+import AiEscalatedTickets from "@/components/team/AiEscalatedTickets";
 
 const VALID_ROLES = ["academic", "ai-support", "tutor-support", "student-support", "content"] as const;
 const TEAM_INFO: Record<string, { name: string; icon: string; color: string }> = {
@@ -548,8 +549,10 @@ function SupportCasesPanel({ teamRole }: { teamRole: string }) {
   };
 
   return (
-    <div className="flex gap-4" style={{ height: "calc(100vh - 200px)" }}>
-      <div className="w-80 shrink-0 space-y-2 overflow-y-auto rounded-2xl border border-white/10 bg-card p-3">
+    <div className="space-y-5">
+      <AiEscalatedTickets />
+      <div className="flex flex-col gap-4 lg:flex-row" style={{ minHeight: "calc(100vh - 320px)" }}>
+      <div className="w-full shrink-0 space-y-2 overflow-y-auto rounded-2xl border border-white/10 bg-card p-3 lg:w-80">
         <h3 className="px-2 pb-2 font-display text-sm font-bold text-white">
           {isTutorSupport ? "Tutor Support Cases" : "Student Support Cases"}
         </h3>
@@ -638,6 +641,7 @@ function SupportCasesPanel({ teamRole }: { teamRole: string }) {
         ) : (
           <div className="flex flex-1 items-center justify-center"><p className="text-sm text-white/30">Select a case</p></div>
         )}
+      </div>
       </div>
     </div>
   );

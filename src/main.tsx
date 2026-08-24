@@ -213,6 +213,7 @@ const AdminChat = L(() => import("./pages/admin/AdminChat.tsx"));
 const AdminInbox = L(() => import("./pages/admin/AdminInbox.tsx"));
 const AdminCoursePreview = L(() => import("./pages/admin/AdminCoursePreview.tsx"));
 const AdminTeamManagement = L(() => import("./pages/admin/AdminTeamManagement.tsx"));
+const AdminAiSupport = L(() => import("./pages/admin/AdminAiSupport.tsx"));
 
 // Communication & Community module (admin moderation)
 const AdminCommunication = L(() => import("./pages/admin/AdminCommunication.tsx"));
@@ -799,6 +800,7 @@ createRoot(document.getElementById("root")!).render(
                 <Route path="communication/reports" element={<AdminReports />} />
                 <Route path="communication/audit" element={<AdminCommAudit />} />
                 <Route path="teams" element={<AdminTeamManagement />} />
+                <Route path="ai-support" element={<AdminAiSupport />} />
               </Route>
 
               <Route path="*" element={<NotFound />} />
