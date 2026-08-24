@@ -116,10 +116,19 @@ export const transcribeVoice = action({
 
 // ---------------------------------------------------------------------------
 // Text-to-Speech
+//
+// IMPORTANT ARCHITECTURE NOTES:
+//  - Groq's Orpheus model outputs WAV ONLY (no mp3), so audio is BIG.
+//  - Convex caps function RETURN values (~1MB). Returning multi-chunk or
+//    long base64 payloads crashes the action.
+//  - Therefore: ONE chunk per call, delivered as a Convex STORAGE FILE URL
+//    (no size limit) instead of inline base64.
 // ---------------------------------------------------------------------------
 
 const ORPHEUS_VOICES = new Set(["autumn", "diana", "hannah", "austin", "daniel", "troy"]);
-const MAX_TTS_CHUNK_CHARS = 800;
+// ~240 chars ≈ 15 s of WAV ≈ 480 KB — comfortably within every limit,
+// and keeps each provider request fast (Orpheus is heavily rate-limited).
+const MAX_TTS_CHUNK_CHARS = 240;
 
 /** Split long text into sentence-boundary chunks within provider limits. */
 function splitForTts(text: string): string[] {
@@ -173,7 +182,7 @@ async function ttsRequest(cfg: ReturnType<typeof voiceConfig>, input: string): P
 }
 
 export const speakText = action({
-  args: { text: v.string() },
+  args: { text: v.string(), chunkIndex: v.optional(v.number()) },
   handler: async (ctx, args) => {
     await requireUser(ctx);
 
@@ -193,16 +202,19 @@ export const speakText = action({
 
     const cfg = voiceConfig();
     const chunks = splitForTts(speechText);
+    const index = Math.max(0, Math.min(args.chunkIndex ?? 0, chunks.length - 1));
 
     try {
-      // Generate ALL chunks before returning so playback never starts on a
-      // request that will fail halfway through.
-      const parts: Array<{ audioBase64: string }> = [];
-      for (const chunk of chunks) {
-        const buf = await ttsRequest(cfg, chunk);
-        parts.push({ audioBase64: buf.toString("base64") });
+      const buf = await ttsRequest(cfg, chunks[index]);
+      if (buf.length < 100) {
+        console.error(`[aiVoice.speakText] suspiciously small audio (${buf.length} bytes)`);
       }
-      return { chunks: parts, mimeType: "audio/wav" };
+      // Store as a Convex file — served back as a normal https URL with no
+      // function-return size limit. This is what makes LONG replies work.
+      const storageId = await ctx.storage.store(
+        new Blob([new Uint8Array(buf)], { type: "audio/wav" }),
+      );
+      return { storageId, chunkCount: chunks.length, chunkIndex: index };
     } catch (err: any) {
       console.error("[aiVoice.speakText] final failure:", err?.message ?? err);
       // Client receives a stable non-technical message only.

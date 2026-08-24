@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from "react";
-import { useMutation, useQuery, useAction } from "convex/react";
+import { useMutation, useQuery, useAction, useConvex } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import {
   Bot,
@@ -128,23 +128,29 @@ function useVoiceChat(
       };
       claimAudio(owner); // stops any SpeakButton playback app-wide
       try {
-        // New backend contract: array of sequential audio chunks.
-        const res = (await speak({ text })) as unknown as { chunks: { audioBase64: string }[]; mimeType: string };
-        for (const part of res.chunks ?? []) {
+        // New backend contract: one small action per chunk, each returning a
+        // Convex storage ID that we resolve to a playable https URL.
+        const first = (await speak({ text, chunkIndex: 0 })) as unknown as {
+          storageId: string;
+          chunkCount: number;
+        };
+        const storageIds: string[] = [first.storageId];
+        for (let i = 1; i < first.chunkCount; i++) {
           if (phaseRef.current !== "speaking") break;
-          const bytes = Uint8Array.from(atob(part.audioBase64), (c) => c.charCodeAt(0));
-          const url = URL.createObjectURL(new Blob([bytes], { type: res.mimeType ?? "audio/wav" }));
+          const next = (await speak({ text, chunkIndex: i })) as unknown as { storageId: string };
+          storageIds.push(next.storageId);
+        }
+        for (const sid of storageIds) {
+          if (phaseRef.current !== "speaking") break;
+          const url = await convex.query(api.aiSupportData.getAudioUrl, {
+            storageId: sid as never,
+          });
+          if (!url || phaseRef.current !== "speaking") break;
           const audio = new Audio(url);
           audioRef.current = audio;
           await new Promise<void>((resolve) => {
-            audio.onended = () => {
-              URL.revokeObjectURL(url);
-              resolve();
-            };
-            audio.onerror = () => {
-              URL.revokeObjectURL(url);
-              resolve(); // skip a bad chunk rather than failing the reply
-            };
+            audio.onended = () => resolve();
+            audio.onerror = () => resolve(); // skip a bad chunk rather than failing the reply
             audio.play().catch(() => resolve()); // autoplay block → stop quietly
           });
         }
@@ -158,7 +164,7 @@ function useVoiceChat(
         releaseAudio(owner);
       }
     },
-    [speak],
+    [convex, speak],
   );
 
   const startRecording = useCallback(async () => {
@@ -427,7 +433,7 @@ function VoiceWaveform({ levelRef, active }: { levelRef: React.MutableRefObject<
 // free; plays chunks sequentially; handles mobile autoplay restrictions.
 // ---------------------------------------------------------------------------
 
-type TtsResult = { chunks: string[]; mimeType: string };
+type TtsResult = { storageIds: string[] };
 
 /** Generated-audio cache keyed by exact reply text — replay never re-bills. */
 const ttsCache = new Map<string, TtsResult>();
@@ -435,6 +441,26 @@ const ttsCache = new Map<string, TtsResult>();
 function base64ToBlobUrl(b64: string, mime: string): string {
   const bytes = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
   return URL.createObjectURL(new Blob([bytes], { type: mime }));
+}
+
+/**
+ * Generate ALL chunks for a reply, one small action call each.
+ * Each call stores its audio as a Convex file and returns just an ID —
+ * this is what makes LONG replies work (no oversized function results).
+ */
+async function generateTtsChunks(
+  speak: (args: { text: string; chunkIndex?: number }) => Promise<unknown>,
+  text: string,
+  isCurrent: () => boolean,
+): Promise<TtsResult> {
+  const first = (await speak({ text, chunkIndex: 0 })) as { storageId: string; chunkCount: number };
+  const storageIds: string[] = [first.storageId];
+  for (let i = 1; i < first.chunkCount; i++) {
+    if (!isCurrent()) return { storageIds };
+    const next = (await speak({ text, chunkIndex: i })) as { storageId: string };
+    storageIds.push(next.storageId);
+  }
+  return { storageIds };
 }
 
 // ---------------------------------------------------------------------------
@@ -476,6 +502,7 @@ function releaseAudio(owner: AudioOwner) {
 
 function SpeakButton({ text }: { text: string }) {
   const speak = useAction(api.aiVoice.speakText);
+  const convex = useConvex();
   const [phase, setPhase] = useState<
     "idle" | "generating" | "loading" | "playing" | "paused" | "blocked" | "error"
   >("idle");
@@ -535,7 +562,7 @@ function SpeakButton({ text }: { text: string }) {
   );
 
   /** Create/refresh the single Audio element for a chunk source. */
-  const prepareChunk = useCallback((b64: string, mime: string): HTMLAudioElement => {
+  const prepareChunk = useCallback((sourceUrl: string): HTMLAudioElement => {
     if (!audioRef.current) audioRef.current = new Audio();
     const audio = audioRef.current;
     // Reset previous source & handlers before assigning the new one.
@@ -544,21 +571,20 @@ function SpeakButton({ text }: { text: string }) {
     audio.onended = null;
     audio.onerror = null;
     audio.pause();
-    if (urlRef.current) URL.revokeObjectURL(urlRef.current);
-    urlRef.current = base64ToBlobUrl(b64, mime);
-    audio.src = urlRef.current;
+    // Storage URLs are https links — nothing to revoke between chunks.
+    audio.src = sourceUrl;
     audio.load(); // explicit load of the new source
     return audio;
   }, []);
 
   /** Play one chunk fully. Resolves ONLY when the chunk ends or is stopped. */
   const playChunkToCompletion = useCallback(
-    (id: number, b64: string, mime: string): Promise<"done" | "stopped" | "blocked" | "failed"> =>
+    (id: number, sourceUrl: string): Promise<"done" | "stopped" | "blocked" | "failed"> =>
       new Promise((resolve) => {
         if (!isCurrent(id)) return resolve("stopped");
         startedRef.current = false;
         stopFlagRef.current = false;
-        const audio = prepareChunk(b64, mime);
+        const audio = prepareChunk(sourceUrl);
 
         let settled = false;
         const finish = (outcome: "done" | "stopped" | "blocked" | "failed") => {
@@ -617,10 +643,22 @@ function SpeakButton({ text }: { text: string }) {
       claimAudio(ownerRef.current!);
       try {
         setPhase("loading");
-        for (let i = 0; i < result.chunks.length; i++) {
+        for (let i = 0; i < result.storageIds.length; i++) {
           if (!isCurrent(id)) return; // superseded — touch nothing
           chunkIdxRef.current = i;
-          const outcome = await playChunkToCompletion(id, result.chunks[i], result.mimeType);
+          // Resolve the stored file to a fresh signed URL right before playing
+          // (URLs expire, so never reuse an old one across sessions).
+          let sourceUrl: string | null = null;
+          try {
+            sourceUrl = await convex.query(api.aiSupportData.getAudioUrl, {
+              storageId: result.storageIds[i] as never,
+            });
+          } catch (err) {
+            console.warn("[speakText] could not resolve audio URL", err);
+          }
+          if (!sourceUrl) throw new Error("audio-url-unavailable");
+          if (!isCurrent(id)) return;
+          const outcome = await playChunkToCompletion(id, sourceUrl);
           if (!isCurrent(id)) return;
           if (outcome === "stopped") return; // user stop / superseded — stay quiet
           if (outcome === "blocked") {
@@ -643,7 +681,7 @@ function SpeakButton({ text }: { text: string }) {
         releaseAudio(ownerRef.current!);
       }
     },
-    [destroyAudio, isCurrent, ownerRef, playChunkToCompletion],
+    [convex, destroyAudio, isCurrent, ownerRef, playChunkToCompletion],
   );
 
   const handleTap = useCallback(async () => {
@@ -695,19 +733,22 @@ function SpeakButton({ text }: { text: string }) {
 
     setPhase("generating");
     try {
-      const res = (await speak({ text: trimmed })) as unknown as TtsResult;
+      const res = await generateTtsChunks(
+        (args) => speak(args as never),
+        trimmed,
+        () => isCurrent(id),
+      );
       if (!isCurrent(id)) return; // stale response — ignore entirely
-      const result: TtsResult = { chunks: res.chunks ?? [], mimeType: res.mimeType ?? "audio/wav" };
-      if (result.chunks.length === 0) throw new Error("no audio returned");
-      ttsCache.set(trimmed, result);
-      resultRef.current = result;
+      if (res.storageIds.length === 0) throw new Error("no audio returned");
+      ttsCache.set(trimmed, res);
+      resultRef.current = res;
       if (!isCurrent(id)) return;
-      await runPlayback(id, result);
+      await runPlayback(id, res);
     } catch (err) {
       console.warn("[speakText] generation failed", err); // technical: console only
       if (isCurrent(id)) setPhase("error");
     }
-  }, [isCurrent, phase, runPlayback, speak, text]);
+    }, [isCurrent, phase, runPlayback, speak, text]);
 
   const label = (() => {
     switch (phase) {

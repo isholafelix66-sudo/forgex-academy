@@ -36,6 +36,20 @@ export const TEAM_LABELS: Record<string, string> = {
 };
 
 // ---------------------------------------------------------------------------
+// AI voice audio files (stored by aiVoice.speakText actions)
+// ---------------------------------------------------------------------------
+
+/** Resolve a stored TTS audio chunk to a playable https URL. */
+export const getAudioUrl = query({
+  args: { storageId: v.id("_storage") },
+  handler: async (ctx, args) => {
+    const userId = await getAuthUserId(ctx);
+    if (userId === null) return null; // signed-in only
+    return ctx.storage.getUrl(args.storageId);
+  },
+});
+
+// ---------------------------------------------------------------------------
 // Sessions
 // ---------------------------------------------------------------------------
 
