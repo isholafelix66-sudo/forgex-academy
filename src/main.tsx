@@ -16,6 +16,7 @@ import { BrowserRouter, Route, Routes, useLocation } from "react-router";
 import "./index.css";
 import { attachRoutePrefetch } from "@/lib/prefetch";
 import { registerServiceWorker } from "@/lib/sw";
+import { ConnectionBanner } from "@/components/network/ConnectionBanner";
 
 
 
@@ -808,6 +809,7 @@ createRoot(document.getElementById("root")!).render(
             </RouteBoundary>
           </Suspense>
         </BrowserRouter>
+            <ConnectionBanner />
             <Toaster />
           </ConvexAuthProvider>
         </>

@@ -138,12 +138,13 @@ export class GatewayUnavailableError extends Error {}
 class Semaphore {
   private active = 0;
   private queue: Array<() => void> = [];
+  private readonly limit: number;
+  private readonly queueCap: number;
 
-  constructor(
-    private readonly limit: number,
-    private readonly queueCap: number,
-    private readonly label: string,
-  ) {}
+  constructor(limit: number, queueCap: number) {
+    this.limit = limit;
+    this.queueCap = queueCap;
+  }
 
   async acquire(): Promise<void> {
     if (this.active < this.limit) {
@@ -170,13 +171,13 @@ class Semaphore {
   }
 }
 
-const globalSem = new Semaphore(RESILIENCE.maxConcurrent, RESILIENCE.queueCap, "global");
+const globalSem = new Semaphore(RESILIENCE.maxConcurrent, RESILIENCE.queueCap);
 const providerSems = new Map<string, Semaphore>();
 
 function semFor(provider: string): Semaphore {
   let s = providerSems.get(provider);
   if (!s) {
-    s = new Semaphore(RESILIENCE.maxPerProvider, RESILIENCE.queueCap, provider);
+    s = new Semaphore(RESILIENCE.maxPerProvider, RESILIENCE.queueCap);
     providerSems.set(provider, s);
   }
   return s;
@@ -536,162 +537,9 @@ export async function gatewayChat(
 }
 
 // ---------------------------------------------------------------------------
-// Internal breaker/log persistence (queries & mutations)
+// Per-user rate limiting for EXPENSIVE operations — DB-backed fixed-window
+// counters, safe across concurrent instances (persistence in resilienceData).
 // ---------------------------------------------------------------------------
-
-export const internalGetBreaker = internalQuery({
-  args: { provider: v.string() },
-  handler: async (ctx, args) => {
-    return ctx.db
-      .query("providerHealth")
-      .withIndex("by_provider", (q) => q.eq("provider", args.provider))
-      .first();
-  },
-});
-
-export const internalSetBreaker = internalMutation({
-  args: {
-    provider: v.string(),
-    state: v.union(v.literal("closed"), v.literal("open"), v.literal("half_open")),
-    lastError: v.optional(v.string()),
-  },
-  handler: async (ctx, args) => {
-    const existing = await ctx.db
-      .query("providerHealth")
-      .withIndex("by_provider", (q) => q.eq("provider", args.provider))
-      .first();
-    if (!existing) {
-      await ctx.db.insert("providerHealth", {
-        provider: args.provider,
-        state: args.state,
-        consecutiveFailures: 0,
-        openedAt: args.state === "open" ? Date.now() : undefined,
-        lastError: args.lastError,
-        updatedAt: Date.now(),
-      });
-      return;
-    }
-    await ctx.db.patch(existing._id, {
-      state: args.state,
-      openedAt:
-        args.state === "open"
-          ? (existing.openedAt ?? Date.now()) // keep original opening time for cooldown math
-          : existing.state === "half_open" && args.state === "half_open"
-            ? existing.openedAt
-            : undefined,
-      lastError: args.lastError,
-      updatedAt: Date.now(),
-    });
-  },
-});
-
-export const internalRecordSuccess = internalMutation({
-  args: { provider: v.string() },
-  handler: async (ctx, args) => {
-    const existing = await ctx.db
-      .query("providerHealth")
-      .withIndex("by_provider", (q) => q.eq("provider", args.provider))
-      .first();
-    if (!existing) {
-      await ctx.db.insert("providerHealth", {
-        provider: args.provider,
-        state: "closed",
-        consecutiveFailures: 0,
-        lastSuccessAt: Date.now(),
-        updatedAt: Date.now(),
-      });
-      return;
-    }
-    await ctx.db.patch(existing._id, {
-      state: "closed",
-      consecutiveFailures: 0,
-      lastSuccessAt: Date.now(),
-      updatedAt: Date.now(),
-    });
-  },
-});
-
-export const internalRecordFailure = internalMutation({
-  args: { provider: v.string(), lastError: v.string(), threshold: v.number() },
-  handler: async (ctx, args) => {
-    const existing = await ctx.db
-      .query("providerHealth")
-      .withIndex("by_provider", (q) => q.eq("provider", args.provider))
-      .first();
-    const failures = (existing?.consecutiveFailures ?? 0) + 1;
-    const shouldOpen = failures >= args.threshold;
-    if (!existing) {
-      await ctx.db.insert("providerHealth", {
-        provider: args.provider,
-        state: shouldOpen ? "open" : "closed",
-        consecutiveFailures: failures,
-        openedAt: shouldOpen ? Date.now() : undefined,
-        lastError: args.lastError,
-        lastFailureAt: Date.now(),
-        updatedAt: Date.now(),
-      });
-      if (shouldOpen) {
-        console.error(`[breaker] ${args.provider} OPENED after ${failures} consecutive failures`);
-      }
-      return;
-    }
-    await ctx.db.patch(existing._id, {
-      consecutiveFailures: failures,
-      state: shouldOpen ? "open" : existing.state,
-      openedAt: shouldOpen ? Date.now() : existing.openedAt,
-      lastError: args.lastError,
-      lastFailureAt: Date.now(),
-      updatedAt: Date.now(),
-    });
-    if (shouldOpen && existing.state !== "open") {
-      console.error(`[breaker] ${args.provider} OPENED after ${failures} consecutive failures`);
-    }
-  },
-});
-
-export const internalLogCall = internalMutation({
-  args: {
-    provider: v.string(),
-    operation: v.string(),
-    ok: v.boolean(),
-    latencyMs: v.number(),
-    statusCode: v.optional(v.number()),
-    attempts: v.optional(v.number()),
-    fallbackUsed: v.optional(v.boolean()),
-    errorCode: v.optional(v.string()),
-  },
-  handler: async (ctx, args) => {
-    await ctx.db.insert("externalApiLogs", { ...args, createdAt: Date.now() });
-  },
-});
-
-// ---------------------------------------------------------------------------
-// Per-user rate limiting for EXPENSIVE operations (AI chat, quiz generation,
-// transcription, TTS…). DB-backed fixed-window counters — safe across
-// concurrent instances because Convex serializes writes to one document.
-// ---------------------------------------------------------------------------
-
-export const internalConsumeRateLimit = internalMutation({
-  args: { key: v.string(), limit: v.number(), windowMs: v.number() },
-  handler: async (ctx, args) => {
-    const now = Date.now();
-    const existing = await ctx.db
-      .query("rateLimits")
-      .withIndex("by_key", (q) => q.eq("key", args.key))
-      .first();
-    if (!existing) {
-      await ctx.db.insert("rateLimits", { key: args.key, windowStart: now, count: 1 });
-      return true;
-    }
-    if (now - existing.windowStart >= args.windowMs) {
-      await ctx.db.patch(existing._id, { windowStart: now, count: 1 });
-      return true;
-    }
-    if (existing.count >= args.limit) return false;
-    await ctx.db.patch(existing._id, { count: existing.count + 1 });
-    return true;
-  },
-});
 
 /**
  * Enforce a per-user limit on an expensive operation. Throws a friendly
@@ -704,7 +552,7 @@ export async function enforceUserLimit(
   limit: number,
   windowMs: number,
 ): Promise<void> {
-  const ok = await ctx.runMutation(internal.resilienceGateway.internalConsumeRateLimit, {
+  const ok = await ctx.runMutation(internal.resilienceData.internalConsumeRateLimit, {
     key: `ai:${operation}:${userId}`,
     limit,
     windowMs,
