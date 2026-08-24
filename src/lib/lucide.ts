@@ -180,6 +180,8 @@ export { default as Volume2 } from "lucide-react/dist/esm/icons/volume-2.js";
 export { default as VolumeX } from "lucide-react/dist/esm/icons/volume-x.js";
 export { default as Wand2 } from "lucide-react/dist/esm/icons/wand-2.js";
 export { default as Wrench } from "lucide-react/dist/esm/icons/wrench.js";
+export { default as Wifi } from "lucide-react/dist/esm/icons/wifi.js";
+export { default as WifiOff } from "lucide-react/dist/esm/icons/wifi-off.js";
 export { default as X } from "lucide-react/dist/esm/icons/x.js";
 export { default as XCircle } from "lucide-react/dist/esm/icons/x-circle.js";
 export { default as XIcon } from "lucide-react/dist/esm/icons/x.js";
