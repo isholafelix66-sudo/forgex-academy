@@ -129,6 +129,10 @@ const GEMINI_TTS_VOICE = process.env.GEMINI_TTS_VOICE ?? "Kore";
 // Gemini handles long input well; ~1000 chars ≈ 60 s of audio per request
 // keeps responses fast and comfortably inside provider limits.
 const MAX_TTS_CHUNK_CHARS = 1000;
+// The FIRST chunk is deliberately short (~2 sentences) so speech starts
+// within seconds of the reply arriving — later chunks are longer and are
+// generated on the server WHILE the lead audio is already playing.
+const LEAD_TTS_CHUNK_CHARS = 260;
 
 function geminiApiKey(): string {
   const key = process.env.GEMINI_API_KEY ?? process.env.GOOGLE_API_KEY;
@@ -158,25 +162,34 @@ function pcmToWav(pcm: Buffer, sampleRate: number): Buffer {
   return Buffer.concat([header, pcm]);
 }
 
-/** Split long text at sentence/paragraph boundaries within limits. */
+/**
+ * Split long text at sentence/paragraph boundaries.
+ * Chunk 1 is SHORT (fast to generate → speech starts quickly);
+ * remaining chunks are full-size and are prefetched during playback.
+ */
 function splitForTts(text: string): string[] {
-  if (text.length <= MAX_TTS_CHUNK_CHARS) return [text];
   const chunks: string[] = [];
-  let rest = text;
-  while (rest.length > MAX_TTS_CHUNK_CHARS) {
+  let rest = text.trim();
+  let isFirst = true;
+  while (rest.length > 0) {
+    const limit = isFirst ? LEAD_TTS_CHUNK_CHARS : MAX_TTS_CHUNK_CHARS;
+    if (rest.length <= limit) {
+      chunks.push(rest);
+      break;
+    }
     let cut = -1;
     for (const sep of ["\n\n", ". ", "! ", "? ", "\n", "; ", ", "]) {
-      const idx = rest.lastIndexOf(sep, MAX_TTS_CHUNK_CHARS);
-      if (idx > MAX_TTS_CHUNK_CHARS * 0.4) {
+      const idx = rest.lastIndexOf(sep, limit);
+      if (idx > limit * 0.4) {
         cut = idx + sep.length;
         break;
       }
     }
-    if (cut <= 0) cut = MAX_TTS_CHUNK_CHARS;
+    if (cut <= 0) cut = limit;
     chunks.push(rest.slice(0, cut).trim());
     rest = rest.slice(cut).trim();
+    isFirst = false;
   }
-  if (rest) chunks.push(rest);
   return chunks.filter((c) => c.length > 0);
 }
 

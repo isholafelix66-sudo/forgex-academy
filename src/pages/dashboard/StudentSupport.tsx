@@ -979,39 +979,57 @@ export default function StudentSupport() {
       try {
         const trimmed = text.trim();
         if (!trimmed) return; // empty AI response → nothing to speak
-        const first = (await speak({ text: trimmed, chunkIndex: 0 })) as unknown as {
-          storageId: string;
-          chunkCount: number;
-        };
-        const ids: string[] = [first.storageId];
-        for (let i = 1; i < first.chunkCount; i++) {
-          const next = (await speak({ text: trimmed, chunkIndex: i })) as unknown as {
-            storageId: string;
-          };
-          ids.push(next.storageId);
-        }
-        for (const sid of ids) {
-          if (!unlockedRef.current || !voiceOnRef.current) return;
-          let url: string | null = null;
+
+        const resolveUrl = async (storageId: string): Promise<string | null> => {
           try {
-            url = await convex.query(api.aiSupportData.getAudioUrl, {
-              storageId: sid as never,
+            return await convex.query(api.aiSupportData.getAudioUrl, {
+              storageId: storageId as never,
             });
           } catch (err) {
             console.warn("[voiceEngine] URL resolve failed", err); // logs only
+            return null;
           }
-          if (!url) continue; // skip unresolvable chunk
-          const outcome = await enginePlayUrl(url);
-          if (outcome === "blocked") {
-            // Browser blocked autoplay → ask ONCE for a tap.
-            unlockedRef.current = false;
-            try {
-              sessionStorage.removeItem(VOICE_UNLOCK_KEY);
-            } catch {
-              // ignore
+        };
+
+        const speakChunk = (i: number) =>
+          speak({ text: trimmed, chunkIndex: i }) as Promise<{
+            storageId: string;
+            chunkCount: number;
+          }>;
+
+        // Wait ONLY for the short lead chunk — speech starts within seconds.
+        let current = await speakChunk(0);
+        let index = 0;
+        // Prefetch chunk 2 in parallel WHILE chunk 1 plays.
+        let prefetch: Promise<{ storageId: string; chunkCount: number } | null> =
+          current.chunkCount > 1 ? speakChunk(1).catch(() => null) : Promise.resolve(null);
+
+        while (current) {
+          if (!unlockedRef.current || !voiceOnRef.current) return;
+          const url = await resolveUrl(current.storageId);
+          if (url && unlockedRef.current && voiceOnRef.current) {
+            const outcome = await enginePlayUrl(url); // resolves when chunk finishes
+            if (outcome === "blocked") {
+              // Browser blocked autoplay → ask ONCE for a tap.
+              unlockedRef.current = false;
+              try {
+                sessionStorage.removeItem(VOICE_UNLOCK_KEY);
+              } catch {
+                // ignore
+              }
+              setNeedsUnlock(true);
+              return;
             }
-            setNeedsUnlock(true);
-            return;
+          }
+          // Advance to the prefetched chunk (already generated during playback).
+          const next = prefetch ? await prefetch : null;
+          prefetch = null;
+          if (!next) break;
+          current = next;
+          index += 1;
+          // Keep the pipeline full — fetch the following chunk while this plays.
+          if (index + 1 < current.chunkCount) {
+            prefetch = speakChunk(index + 1).catch(() => null);
           }
         }
       } catch (err) {
