@@ -1001,7 +1001,7 @@ export default function StudentSupport() {
         let current = await speakChunk(0);
         let index = 0;
         // Prefetch chunk 2 in parallel WHILE chunk 1 plays.
-        let prefetch: Promise<{ storageId: string; chunkCount: number } | null> =
+        let prefetch: Promise<{ storageId: string; chunkCount: number } | null> | null =
           current.chunkCount > 1 ? speakChunk(1).catch(() => null) : Promise.resolve(null);
 
         while (current) {
