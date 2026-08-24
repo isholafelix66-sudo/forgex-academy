@@ -1,0 +1,1 @@
+import{u as i}from"./convex-upload-OoljoT9v.js";async function u(t,a,o,r){const{storageId:e}=await i(t,o);return{kind:a,storageId:e,fileName:t.name,fileSize:t.size,mimeType:t.type||"application/octet-stream",...r!==void 0?{duration:r}:{}}}function m(t){if(!t||t<=0)return"";const a=Math.floor(t/60),o=Math.round(t%60);return`${a}:${o.toString().padStart(2,"0")}`}export{m as f,u};
