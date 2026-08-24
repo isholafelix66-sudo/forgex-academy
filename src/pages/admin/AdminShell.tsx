@@ -30,6 +30,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { AppShell } from "@/components/dash/AppShell";
 import { clearAdminToken, getAdminToken, setAdminToken } from "@/lib/admin-session";
+import { toast } from "sonner";
 
 /** Password gate — /admin is reachable only with the admin access password.
  *  No user account is required: the password mints a session token. */
@@ -91,6 +92,8 @@ function AdminGate({ onUnlocked }: { onUnlocked: (token: string) => void }) {
   );
 }
 
+import { useIdleAdminLock } from "@/lib/use-idle-admin-lock";
+
 export default function AdminShell() {
   const [token, setToken] = useState<string | null>(() => getAdminToken());
   const unlocked = useQuery(
@@ -114,6 +117,17 @@ export default function AdminShell() {
     setAdminToken(t);
     setToken(t);
   };
+
+  // Auto-lock: after ADMIN_IDLE_LOCK_MS with no user activity, the admin
+  // session is cleared and the password gate is shown again.
+  useIdleAdminLock({
+    enabled: !!token && unlocked === true,
+    onLock: () => {
+      clearAdminToken();
+      setToken(null);
+      toast.info("Admin dashboard locked due to inactivity.");
+    },
+  });
 
   if (unlocked === undefined && token) {
     return (

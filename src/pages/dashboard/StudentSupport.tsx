@@ -39,28 +39,67 @@ type VoicePhase = "idle" | "recording" | "transcribing" | "speaking";
 // ---------------------------------------------------------------------------
 // Voice engine — record → transcribe (server) → speak reply (server)
 // Recordings live only in memory; nothing is persisted.
+// The waveform is driven by REAL microphone levels via AnalyserNode.
 // ---------------------------------------------------------------------------
 
-function useVoiceChat(onTranscribed: (text: string) => Promise<string | null>) {
+/** Normalized RMS above which we consider the mic to be "hearing sound". */
+const SOUND_THRESHOLD = 0.015;
+
+function useVoiceChat(
+  onTranscribed: (text: string) => Promise<string | null>,
+  echoTranscriptToInput: (text: string) => void,
+) {
   const transcribe = useAction(api.aiVoice.transcribeVoice);
   const speak = useAction(api.aiVoice.speakText);
 
   const [phase, setPhase] = useState<VoicePhase>("idle");
   const [transcriptPreview, setTranscriptPreview] = useState("");
+  const [soundDetected, setSoundDetected] = useState(false); // live mic feedback
   const recorderRef = useRef<MediaRecorder | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const chunksRef = useRef<Blob[]>([]);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  // Real-time audio analysis
+  const audioCtxRef = useRef<AudioContext | null>(null);
+  const analyserRef = useRef<AnalyserNode | null>(null);
+  const rafRef = useRef<number | null>(null);
+  /** Live normalized mic level (0..1), read by the waveform at 60fps. */
+  const levelRef = useRef(0);
+  /** Highest level seen this recording — used to reject true silence. */
+  const peakLevelRef = useRef(0);
+  const soundDetectedRef = useRef(false);
+  const bytesRef = useRef(0); // actual audio bytes captured so far
+
+  const stopLevelMetering = useCallback(() => {
+    if (rafRef.current !== null) cancelAnimationFrame(rafRef.current);
+    rafRef.current = null;
+    analyserRef.current?.disconnect();
+    analyserRef.current = null;
+    try {
+      void audioCtxRef.current?.close();
+    } catch {
+      // ignore
+    }
+    audioCtxRef.current = null;
+    levelRef.current = 0;
+  }, []);
+
   const cleanupRecording = useCallback(() => {
     if (timerRef.current) clearTimeout(timerRef.current);
     timerRef.current = null;
-    streamRef.current?.getTracks().forEach((t) => t.stop());
+    stopLevelMetering();
+    // Always release the microphone tracks.
+    streamRef.current?.getTracks().forEach((t) => {
+      if (t.readyState !== "ended") t.stop();
+    });
     streamRef.current = null;
     recorderRef.current = null;
     chunksRef.current = [];
-  }, []);
+    bytesRef.current = 0;
+    setSoundDetected(false);
+  }, [stopLevelMetering]);
 
   const stopAudio = useCallback(() => {
     if (audioRef.current) {
@@ -109,41 +148,92 @@ function useVoiceChat(onTranscribed: (text: string) => Promise<string | null>) {
     }
     let stream: MediaStream;
     try {
-      stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      stream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true,
+        },
+      });
     } catch (err: any) {
-      if (err?.name === "NotAllowedError" || err?.name === "PermissionDeniedError") {
-        toast.error("Microphone permission denied. Enable it in your browser settings, or simply type your message.");
-      } else if (err?.name === "NotFoundError" || err?.name === "DevicesNotFoundError") {
-        toast.error("No microphone detected on this device. Please type your message instead.");
+      if (err?.name === "NotAllowedError" || err?.name === "PermissionDeniedError" || err?.name === "SecurityError") {
+        toast.error("Microphone permission denied. Allow mic access in your browser settings, or type your message.");
+      } else if (err?.name === "NotFoundError" || err?.name === "DevicesNotFoundError" || err?.name === "OverconstrainedError") {
+        toast.error("Microphone unavailable — no mic was found on this device. Please type your message instead.");
+      } else if (err?.name === "NotReadableError" || err?.name === "TrackStartError") {
+        toast.error("Your microphone is in use by another app. Close it and try again, or type your message.");
       } else {
-        toast.error("Couldn't start recording. Please try again or type your message.");
+        toast.error(`Couldn't access the microphone${err?.name ? ` (${err.name})` : ""}. Please try again or type your message.`);
       }
       return;
     }
 
+    // Verify the track is actually live before wiring anything up.
+    const track = stream.getAudioTracks()[0];
+    if (!track || track.readyState !== "live" || track.muted) {
+      stream.getTracks().forEach((t) => t.stop());
+      toast.error("Microphone unavailable — the audio track did not start. Please check your device and try again.");
+      return;
+    }
+
     try {
-      const mime = MediaRecorder.isTypeSupported("audio/webm")
-        ? "audio/webm"
-        : MediaRecorder.isTypeSupported("audio/mp4")
-          ? "audio/mp4"
-          : MediaRecorder.isTypeSupported("audio/ogg")
-            ? "audio/ogg"
-            : "";
+      const mime = MediaRecorder.isTypeSupported("audio/webm;codecs=opus")
+        ? "audio/webm;codecs=opus"
+        : MediaRecorder.isTypeSupported("audio/webm")
+          ? "audio/webm"
+          : MediaRecorder.isTypeSupported("audio/mp4")
+            ? "audio/mp4"
+            : MediaRecorder.isTypeSupported("audio/ogg;codecs=opus")
+              ? "audio/ogg;codecs=opus"
+              : "";
       const recorder = mime ? new MediaRecorder(stream, { mimeType: mime }) : new MediaRecorder(stream);
       streamRef.current = stream;
       chunksRef.current = [];
-      recorder.ondataavailable = (e) => e.data.size > 0 && chunksRef.current.push(e.data);
-      recorder.onstop = async () => {
-        const mimeType = recorder.mimeType || "audio/webm";
+      bytesRef.current = 0;
+      peakLevelRef.current = 0;
+      soundDetectedRef.current = false;
+      setSoundDetected(false);
+
+      let started = false;
+      recorder.onstart = () => {
+        started = true;
+        setPhase("recording"); // only show "recording" once capture truly began
+      };
+      recorder.ondataavailable = (e) => {
+        if (e.data && e.data.size > 0) {
+          chunksRef.current.push(e.data);
+          bytesRef.current += e.data.size;
+        }
+      };
+      recorder.onerror = () => {
         cleanupRecording();
+        setPhase("idle");
+        toast.error("Recording failed unexpectedly. Please try again or type your message.");
+      };
+      recorder.onstop = async () => {
+        const mimeType = (recorder.mimeType || "audio/webm").replace(/;.*$/, "");
+
+        // Snapshot everything we need BEFORE cleanup wipes the buffers.
         const blob = new Blob(chunksRef.current.slice(), { type: mimeType });
-        chunksRef.current = [];
-        if (blob.size === 0) {
+        const capturedBytes = bytesRef.current;
+        const peakLevel = peakLevelRef.current;
+        cleanupRecording();
+        setPhase((p) => (p === "recording" ? "transcribing" : p));
+
+        // 1) Did MediaRecorder actually capture bytes?
+        if (capturedBytes === 0 || blob.size === 0) {
           setPhase("idle");
-          toast.error("Nothing was captured from your microphone. Please try again.");
+          toast.error("No audio was captured from your microphone. Please try again.");
           return;
         }
-        setPhase("transcribing");
+        // 2) Did the microphone actually hear anything (real level metering)?
+        if (peakLevel < SOUND_THRESHOLD) {
+          setPhase("idle");
+          toast.error("No sound detected. Please try again — speak a little closer to the microphone.");
+          return;
+        }
+
+        // 3) Transcribe — any duration accepted, even a single word.
         try {
           const base64: string = await new Promise((resolve, reject) => {
             const reader = new FileReader();
@@ -151,30 +241,87 @@ function useVoiceChat(onTranscribed: (text: string) => Promise<string | null>) {
             reader.onerror = () => reject(new Error("Could not process the recording."));
             reader.readAsDataURL(blob);
           });
-          const out = (await transcribe({ audioBase64: base64, mimeType })) as { text: string };
-          setTranscriptPreview(out.text); // show what we heard before sending
-          const reply = await onTranscribed(out.text);
+          let out: { text: string };
+          try {
+            out = (await transcribe({ audioBase64: base64, mimeType })) as { text: string };
+          } catch (err: any) {
+            const msg = String(err?.message ?? "");
+            throw new Error(
+              /network|fetch|failed to fetch/i.test(msg)
+                ? "Network error while transcribing. Check your connection and try again."
+                : msg || "Transcription failed. Please try again or type your message.",
+            );
+          }
+          const text = out.text.trim();
+          if (!text) {
+            setPhase("idle");
+            toast.error("I couldn't hear any speech. Please try again.");
+            return;
+          }
+          echoTranscriptToInput(text); // transcript lands in the chat input
+          setTranscriptPreview(text); // …and is shown on the status strip
+          const reply = await onTranscribed(text);
           if (reply) await speakReply(reply);
           else setPhase("idle");
         } catch (err: any) {
           setPhase("idle");
-          toast.error(err?.message ?? "Speech-to-text failed. Please type your message instead.");
+          toast.error(err?.message ?? "Transcription failed. Please try again or type your message.");
         } finally {
           setTimeout(() => setTranscriptPreview(""), 4000);
         }
       };
+
       recorderRef.current = recorder;
       recorder.start();
-      setPhase("recording");
-      // Hard cap at 2 minutes so uploads stay small.
+      // Safari/Firefox sometimes never fire onstart if capture fails — guard it.
+      setTimeout(() => {
+        if (!started) {
+          cleanupRecording();
+          setPhase("idle");
+          toast.error("Recording failed to start. Please try again or type your message.");
+        }
+      }, 2000);
+
+      // ---- REAL live level metering (AnalyserNode → levelRef → waveform) ----
+      const Ctx = window.AudioContext ?? (window as any).webkitAudioContext;
+      const ctx = new Ctx();
+      audioCtxRef.current = ctx;
+      const source = ctx.createMediaStreamSource(stream);
+      const analyser = ctx.createAnalyser();
+      analyser.fftSize = 512;
+      source.connect(analyser);
+      analyserRef.current = analyser;
+      const buf = new Float32Array(analyser.fftSize);
+      const tick = () => {
+        if (!analyserRef.current || !streamRef.current) return;
+        analyserRef.current.getFloatTimeDomainData(buf);
+        let sum = 0;
+        for (let i = 0; i < buf.length; i++) sum += buf[i] * buf[i];
+        const rms = Math.min(1, Math.sqrt(sum / buf.length) * 4); // perceptual boost
+        levelRef.current = rms;
+        if (rms > peakLevelRef.current) peakLevelRef.current = rms;
+        if (rms >= SOUND_THRESHOLD && !soundDetectedRef.current) {
+          soundDetectedRef.current = true;
+          setSoundDetected(true);
+        }
+        rafRef.current = requestAnimationFrame(tick);
+      };
+      rafRef.current = requestAnimationFrame(tick);
+
+      // Hard cap at 2 minutes so uploads stay small (maximum, not minimum).
       timerRef.current = setTimeout(() => {
         if (recorderRef.current?.state === "recording") recorder.stop();
       }, 120_000);
-    } catch {
+    } catch (err: any) {
       cleanupRecording();
-      toast.error("Recording failed to start. Please try again or type your message.");
+      setPhase("idle");
+      toast.error(
+        err instanceof Error
+          ? `Recording failed: ${err.message}. Please try again or type your message.`
+          : "Recording failed to start. Please try again or type your message.",
+      );
     }
-  }, [cleanupRecording, onTranscribed, speakReply, transcribe]);
+  }, [cleanupRecording, echoTranscriptToInput, onTranscribed, speakReply, transcribe]);
 
   const stopRecording = useCallback(() => {
     if (recorderRef.current?.state === "recording") recorderRef.current.stop();
@@ -187,11 +334,74 @@ function useVoiceChat(onTranscribed: (text: string) => Promise<string | null>) {
     stopRecording,
     stopAudio,
     busy: phase !== "idle",
+    levelRef,
+    soundDetected,
   };
 }
 
-export default function StudentSupport() {
-  // Reactive subscription — every message, status change and team reply
+// ---------------------------------------------------------------------------
+// Live waveform — canvas bars driven by REAL microphone RMS levels.
+// This is not decorative: it renders levelRef, which AnalyserNode updates
+// from the actual mic signal 60 times per second.
+// ---------------------------------------------------------------------------
+
+function VoiceWaveform({ levelRef, active }: { levelRef: React.MutableRefObject<number>; active: boolean }) {
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+
+  useEffect(() => {
+    if (!active) return;
+    const canvas = canvasRef.current;
+    const ctx2d = canvas?.getContext("2d");
+    if (!canvas || !ctx2d) return;
+    const BARS = 28;
+    const history = new Array<number>(BARS).fill(0);
+    let raf: number | null = null;
+
+    const draw = () => {
+      // Push the current real mic level into the bar history.
+      history.push(Math.max(0.04, Math.min(1, levelRef.current)));
+      history.shift();
+
+      const dpr = window.devicePixelRatio || 1;
+      const w = canvas.clientWidth;
+      const h = canvas.clientHeight;
+      if (canvas.width !== w * dpr || canvas.height !== h * dpr) {
+        canvas.width = w * dpr;
+        canvas.height = h * dpr;
+      }
+      ctx2d.setTransform(dpr, 0, 0, dpr, 0, 0);
+      ctx2d.clearRect(0, 0, w, h);
+
+      const gap = 2;
+      const barW = (w - gap * (BARS - 1)) / BARS;
+      for (let i = 0; i < BARS; i++) {
+        const v = history[i];
+        const barH = Math.max(3, v * (h - 4));
+        const x = i * (barW + gap);
+        const y = (h - barH) / 2;
+        ctx2d.fillStyle = v > 0.6 ? "rgba(163,230,53,0.95)" : v > 0.25 ? "rgba(163,230,53,0.65)" : "rgba(163,230,53,0.3)";
+        ctx2d.beginPath();
+        ctx2d.roundRect(x, y, barW, barH, 2);
+        ctx2d.fill();
+      }
+      raf = requestAnimationFrame(draw);
+    };
+    raf = requestAnimationFrame(draw);
+    return () => {
+      if (raf !== null) cancelAnimationFrame(raf);
+    };
+  }, [active, levelRef]);
+
+  return (
+    <canvas
+      ref={canvasRef}
+      className="h-8 w-36 shrink-0 sm:w-48"
+      aria-hidden="true"
+    />
+  );
+}
+
+export default function StudentSupport() {  // Reactive subscription — every message, status change and team reply
   // appears here instantly without refreshing the page.
   const latest = useQuery(api.aiSupportData.getMyLatestSession);
   const myTickets = useQuery(api.aiSupportData.myTickets, {});
@@ -244,7 +454,11 @@ export default function StudentSupport() {
   };
 
   // Voice pipeline: transcribed text flows through the SAME AI support system.
-  const voice = useVoiceChat(async (spoken) => handleSend(spoken, { voice: true }));
+  // The transcript first lands in the chat input, then is sent automatically.
+  const voice = useVoiceChat(
+    async (spoken) => handleSend(spoken, { voice: true }),
+    (text) => setInput(text),
+  );
 
   const handleStartNew = async () => {
     try {
@@ -492,18 +706,26 @@ export default function StudentSupport() {
               {sessionId && latest!.status === "active" && voice.phase !== "idle" && (
                 <div className="border-t border-white/10 bg-black/20 p-3">
                   {voice.phase === "recording" && (
-                    <div className="flex items-center justify-between gap-3">
-                      <p className="flex min-w-0 items-center gap-2 text-xs font-medium text-rose-300">
-                        <span className="size-2 shrink-0 animate-pulse rounded-full bg-rose-400" />
-                        🎙️ Listening… tap the square when you're done speaking
-                      </p>
-                      <button
-                        type="button"
-                        onClick={voice.stopRecording}
-                        className="inline-flex shrink-0 items-center gap-1.5 rounded-lg bg-rose-400/15 px-3 py-1.5 text-xs font-semibold text-rose-200 hover:bg-rose-400/25"
-                      >
-                        <Square className="size-3" /> Stop &amp; send
-                      </button>
+                    <div className="space-y-2">
+                      <div className="flex flex-wrap items-center justify-between gap-3">
+                        <p className="flex min-w-0 items-center gap-2 text-xs font-medium text-rose-300">
+                          <span className="size-2 shrink-0 animate-pulse rounded-full bg-rose-400" />
+                          🎙️ Microphone active — speak now (short answers are fine)
+                        </p>
+                        <VoiceWaveform levelRef={voice.levelRef} active />
+                        <button
+                          type="button"
+                          onClick={voice.stopRecording}
+                          className="inline-flex shrink-0 items-center gap-1.5 rounded-lg bg-rose-400/15 px-3 py-1.5 text-xs font-semibold text-rose-200 hover:bg-rose-400/25"
+                        >
+                          <Square className="size-3" /> Stop &amp; send
+                        </button>
+                      </div>
+                      {!voice.soundDetected && (
+                        <p className="text-[11px] text-amber-300/80">
+                          No sound detected yet — please check your mic and speak a little louder.
+                        </p>
+                      )}
                     </div>
                   )}
                   {voice.phase === "transcribing" && (
