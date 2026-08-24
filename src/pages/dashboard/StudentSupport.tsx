@@ -121,6 +121,12 @@ function useVoiceChat(
   const speakReply = useCallback(
     async (text: string) => {
       setPhase("speaking");
+      const owner: AudioOwner = {
+        stop: () => {
+          audioRef.current?.pause();
+        },
+      };
+      claimAudio(owner); // stops any SpeakButton playback app-wide
       try {
         // New backend contract: array of sequential audio chunks.
         const res = (await speak({ text })) as unknown as { chunks: { audioBase64: string }[]; mimeType: string };
@@ -148,6 +154,8 @@ function useVoiceChat(
         setPhase("idle");
         // Friendly, fixed message — NEVER surface raw Convex/server errors.
         toast.error("Audio couldn’t be played. You can still read the reply above.");
+      } finally {
+        releaseAudio(owner);
       }
     },
     [speak],
@@ -429,151 +437,352 @@ function base64ToBlobUrl(b64: string, mime: string): string {
   return URL.createObjectURL(new Blob([bytes], { type: mime }));
 }
 
+// ---------------------------------------------------------------------------
+// Global audio ownership — exactly ONE audio may play app-wide.
+// Starting a new playback stops whoever owned the audio before.
+// ---------------------------------------------------------------------------
+
+type AudioOwner = { stop: () => void };
+let currentOwner: AudioOwner | null = null;
+
+function claimAudio(owner: AudioOwner) {
+  if (currentOwner && currentOwner !== owner) {
+    try {
+      currentOwner.stop();
+    } catch {
+      // ignore
+    }
+  }
+  currentOwner = owner;
+}
+
+function releaseAudio(owner: AudioOwner) {
+  if (currentOwner === owner) currentOwner = null;
+}
+
+// ---------------------------------------------------------------------------
+// SpeakButton — "Play text as audio" under AI replies.
+//
+// State machine: idle → generating → loading → playing ⇄ paused → idle
+//                                                     ↘ blocked / error
+//
+// Correctness rules enforced here:
+//  - play() resolving = playback STARTED = success. Never an error later.
+//  - AbortError is NOT a failure (it's our own stop/new-source interrupt).
+//  - Every async continuation checks its request ID first — stale requests
+//    can never overwrite the state of a newer one.
+//  - Chunks play strictly sequentially (wait for 'ended').
+// ---------------------------------------------------------------------------
+
 function SpeakButton({ text }: { text: string }) {
   const speak = useAction(api.aiVoice.speakText);
-  const [phase, setPhase] = useState<"idle" | "loading" | "playing" | "blocked">("idle");
-  const [failed, setFailed] = useState(false);
-  const stopFlagRef = useRef(false);
-  const currentAudioRef = useRef<HTMLAudioElement | null>(null);
+  const [phase, setPhase] = useState<
+    "idle" | "generating" | "loading" | "playing" | "paused" | "blocked" | "error"
+  >("idle");
 
-  // Different message → reset local UI state.
-  useEffect(() => {
-    setPhase("idle");
-    setFailed(false);
+  const reqIdRef = useRef(0); // request identity — stale requests can't write state
+  const audioRef = useRef<HTMLAudioElement | null>(null); // ONE stable element
+  const urlRef = useRef<string | null>(null); // current object URL (revoked properly)
+  const resultRef = useRef<TtsResult | null>(null); // cached generation for this session
+  const chunkIdxRef = useRef(0);
+  const everPlayedRef = useRef(false); // distinguishes "Play" vs "Play again"
+  const stopFlagRef = useRef(false); // user-requested stop of current run
+  const startedRef = useRef(false); // did THIS chunk actually start playing?
+
+  /** Only the current request may touch UI state. */
+  const isCurrent = useCallback((id: number) => reqIdRef.current === id, []);
+
+  /** Tear down the audio element + object URL completely. */
+  const destroyAudio = useCallback(() => {
+    const el = audioRef.current;
+    if (el) {
+      el.onplay = null;
+      el.onpause = null;
+      el.onended = null;
+      el.onerror = null;
+      el.pause();
+      audioRef.current = null;
+    }
+    if (urlRef.current) {
+      URL.revokeObjectURL(urlRef.current);
+      urlRef.current = null;
+    }
+  }, []);
+
+  /** Stop whatever this button is doing right now (used by global takeover). */
+  const stopCurrentRun = useCallback(() => {
+    reqIdRef.current += 1; // invalidate everything in flight
     stopFlagRef.current = true;
-    currentAudioRef.current?.pause();
-    currentAudioRef.current = null;
-  }, [text]);
+    destroyAudio();
+  }, [destroyAudio]);
 
+  // Stable per-instance owner object — same identity across runs so that
+  // re-claiming audio for a second playback never self-aborts.
+  const ownerRef = useRef<AudioOwner | null>(null);
+  if (!ownerRef.current) {
+    ownerRef.current = { stop: () => {} };
+  }
+  ownerRef.current.stop = stopCurrentRun;
+
+  // Unmount: always stop + clean up listeners/object URLs.
   useEffect(
     () => () => {
-      stopFlagRef.current = true;
-      currentAudioRef.current?.pause();
+      reqIdRef.current += 1;
+      releaseAudio({ stop: () => {} });
+      destroyAudio();
     },
-    [],
+    [destroyAudio],
   );
 
-  const stopPlayback = useCallback(() => {
-    stopFlagRef.current = true;
-    if (currentAudioRef.current) {
-      currentAudioRef.current.pause();
-      currentAudioRef.current = null;
-    }
-    setPhase("idle");
+  /** Create/refresh the single Audio element for a chunk source. */
+  const prepareChunk = useCallback((b64: string, mime: string): HTMLAudioElement => {
+    if (!audioRef.current) audioRef.current = new Audio();
+    const audio = audioRef.current;
+    // Reset previous source & handlers before assigning the new one.
+    audio.onplay = null;
+    audio.onpause = null;
+    audio.onended = null;
+    audio.onerror = null;
+    audio.pause();
+    if (urlRef.current) URL.revokeObjectURL(urlRef.current);
+    urlRef.current = base64ToBlobUrl(b64, mime);
+    audio.src = urlRef.current;
+    audio.load(); // explicit load of the new source
+    return audio;
   }, []);
 
-  const playFromCache = useCallback(async (result: TtsResult): Promise<"done" | "blocked"> => {
-    stopFlagRef.current = false;
-    setPhase("playing");
-    try {
-      for (const chunkB64 of result.chunks) {
-        if (stopFlagRef.current) return "done";
-        const url = base64ToBlobUrl(chunkB64, result.mimeType);
-        try {
-          await new Promise<void>((resolve, reject) => {
-            const audio = new Audio(url);
-            currentAudioRef.current = audio;
-            audio.onended = () => {
-              URL.revokeObjectURL(url);
-              resolve();
-            };
-            audio.onerror = () => {
-              URL.revokeObjectURL(url);
-              resolve(); // skip a bad chunk rather than failing the rest
-            };
-            audio.play().then(resolve).catch(reject);
-          });
-        } catch (err: any) {
-          URL.revokeObjectURL(url);
-          if (err?.name === "NotAllowedError") return "blocked"; // mobile autoplay policy
-          throw err;
+  /** Play one chunk fully. Resolves ONLY when the chunk ends or is stopped. */
+  const playChunkToCompletion = useCallback(
+    (id: number, b64: string, mime: string): Promise<"done" | "stopped" | "blocked" | "failed"> =>
+      new Promise((resolve) => {
+        if (!isCurrent(id)) return resolve("stopped");
+        startedRef.current = false;
+        stopFlagRef.current = false;
+        const audio = prepareChunk(b64, mime);
+
+        let settled = false;
+        const finish = (outcome: "done" | "stopped" | "blocked" | "failed") => {
+          if (settled || !isCurrent(id)) {
+            settled = true;
+            return;
+          }
+          settled = true;
+          resolve(outcome);
+        };
+
+        audio.onplay = () => {
+          if (!isCurrent(id)) return;
+          startedRef.current = true;
+          everPlayedRef.current = true;
+          setPhase("playing"); // success — playback confirmed by the browser
+        };
+
+        audio.onended = () => finish("done");
+
+        audio.onerror = () => {
+          // Only a genuine failure if playback NEVER started. An error after
+          // successful playback start must not flag the whole run as broken.
+          finish(startedRef.current ? "done" : "failed");
+        };
+
+        audio.play().then(
+          () => {
+            // Playback STARTED successfully. Do nothing further here —
+            // 'onended'/'onplay'/stop drive the rest. Never an error after this.
+          },
+          (err: DOMException) => {
+            if (err?.name === "NotAllowedError") {
+              finish("blocked"); // mobile autoplay policy — needs another tap
+            } else if (err?.name === "AbortError") {
+              // Interrupted by our own stop/new source. If sound had already
+              // begun, treat as success-completed; otherwise just stopped.
+              finish(startedRef.current ? "done" : "stopped");
+            } else if (err?.name === "NotSupportedError") {
+              finish("failed");
+            } else {
+              // Unknown rejection before start → genuine playback failure.
+              console.warn("[speakText] play() rejected:", err?.name, err?.message);
+              finish("failed");
+            }
+          },
+        );
+      }),
+    [isCurrent, prepareChunk],
+  );
+
+  /** Full sequential playback of every chunk in the cached result. */
+  const runPlayback = useCallback(
+    async (id: number, result: TtsResult): Promise<void> => {
+      // Take over app-wide audio (stops any other playing reply/mic audio).
+      claimAudio(ownerRef.current!);
+      try {
+        setPhase("loading");
+        for (let i = 0; i < result.chunks.length; i++) {
+          if (!isCurrent(id)) return; // superseded — touch nothing
+          chunkIdxRef.current = i;
+          const outcome = await playChunkToCompletion(id, result.chunks[i], result.mimeType);
+          if (!isCurrent(id)) return;
+          if (outcome === "stopped") return; // user stop / superseded — stay quiet
+          if (outcome === "blocked") {
+            setPhase("blocked"); // one more tap starts from loaded audio
+            return;
+          }
+          if (outcome === "failed") throw new Error("chunk-failed");
+          // "done" → move to the next chunk (strictly sequential).
         }
+        if (isCurrent(id)) setPhase("idle"); // finished naturally → Play again
+      } catch (err) {
+        // Genuine generation/load/playback failure — and ONLY that lands here.
+        console.warn("[speakText] playback failed", err);
+        if (isCurrent(id)) {
+          destroyAudio();
+          setPhase("error");
+        }
+      } finally {
+        // Natural finish / stop / blocked: free global ownership.
+        releaseAudio(ownerRef.current!);
       }
-      return "done";
-    } finally {
-      if (!stopFlagRef.current) setPhase("idle");
-      currentAudioRef.current = null;
-    }
-  }, []);
+    },
+    [destroyAudio, isCurrent, ownerRef, playChunkToCompletion],
+  );
 
-  const handlePlay = useCallback(async () => {
-    if (phase === "playing") {
-      stopPlayback();
-      return;
+  const handleTap = useCallback(async () => {
+    switch (phase) {
+      case "generating":
+        return; // repeated taps: no duplicate requests
+      case "loading":
+        return; // buffering — avoid double-starting the same element
+      case "playing": {
+        // Pause (element survives; resume continues from position).
+        audioRef.current?.pause();
+        setPhase("paused");
+        return;
+      }
+      case "paused": {
+        const id = ++reqIdRef.current;
+        const audio = audioRef.current;
+        if (audio) {
+          setPhase("loading");
+          try {
+            await audio.play(); // resumes from paused position
+            if (isCurrent(id)) setPhase("playing");
+          } catch {
+            if (isCurrent(id)) setPhase("paused");
+          }
+        } else {
+          setPhase("idle");
+        }
+        return;
+      }
+      default:
+        break;
     }
-    if (phase === "loading") return; // repeated taps: no duplicate requests
+
     const trimmed = (text ?? "").trim();
     if (!trimmed) return; // empty handled gracefully — nothing to read
 
+    // Fresh request identity — invalidates any older run instantly.
+    const id = ++reqIdRef.current;
+    stopFlagRef.current = false;
+
     // Replay from cache without hitting the server again.
     const cached = ttsCache.get(trimmed);
-    if (cached) {
-      const outcome = await playFromCache(cached);
-      if (outcome === "blocked") setPhase("blocked");
+    if (cached && cached.chunks.length > 0) {
+      resultRef.current = cached;
+      void runPlayback(id, cached);
       return;
     }
 
-    setFailed(false);
-    setPhase("loading");
+    setPhase("generating");
     try {
       const res = (await speak({ text: trimmed })) as unknown as TtsResult;
+      if (!isCurrent(id)) return; // stale response — ignore entirely
       const result: TtsResult = { chunks: res.chunks ?? [], mimeType: res.mimeType ?? "audio/wav" };
       if (result.chunks.length === 0) throw new Error("no audio returned");
       ttsCache.set(trimmed, result);
-      const outcome = await playFromCache(result);
-      if (outcome === "blocked") setPhase("blocked");
+      resultRef.current = result;
+      if (!isCurrent(id)) return;
+      await runPlayback(id, result);
     } catch (err) {
-      console.warn("[speakText] playback failed", err); // technical detail: console only
-      setPhase("idle");
-      setFailed(true); // small non-blocking inline retry — never a raw error
+      console.warn("[speakText] generation failed", err); // technical: console only
+      if (isCurrent(id)) setPhase("error");
     }
-  }, [phase, playFromCache, speak, stopPlayback, text]);
+  }, [isCurrent, phase, runPlayback, speak, text]);
+
+  const label = (() => {
+    switch (phase) {
+      case "generating":
+        return (
+          <>
+            <Loader2 className="size-3 animate-spin" /> Generating…
+          </>
+        );
+      case "loading":
+        return (
+          <>
+            <Loader2 className="size-3 animate-spin" /> Loading audio…
+          </>
+        );
+      case "playing":
+        return (
+          <>
+            <Square className="size-3" /> Pause
+          </>
+        );
+      case "paused":
+        return (
+          <>
+            <Volume2 className="size-3" /> Resume
+          </>
+        );
+      case "blocked":
+        return (
+          <>
+            <Volume2 className="size-3" /> Tap to play
+          </>
+        );
+      case "error":
+        return (
+          <>
+            <Volume2 className="size-3" /> Try again
+          </>
+        );
+      default:
+        return (
+          <>
+            <Volume2 className="size-3" /> {everPlayedRef.current ? "Play again" : "Play"}
+          </>
+        );
+    }
+  })();
 
   return (
     <div className="mt-1 flex flex-wrap items-center gap-2">
       <button
         type="button"
-        onClick={() => void handlePlay()}
-        disabled={phase === "loading"}
-        aria-label={phase === "playing" ? "Stop audio" : "Play this reply as audio"}
+        onClick={() => void handleTap()}
+        disabled={phase === "generating"}
+        aria-label={
+          phase === "playing" ? "Pause audio" : phase === "paused" ? "Resume audio" : "Play this reply as audio"
+        }
         className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[10px] font-semibold transition-colors disabled:opacity-50 ${
-          phase === "playing"
+          phase === "playing" || phase === "paused"
             ? "border-lime-400/40 bg-lime-400/15 text-lime-300"
-            : "border-white/10 bg-black/20 text-white/50 hover:border-lime-400/30 hover:text-lime-300"
+            : phase === "error"
+              ? "border-amber-400/30 bg-amber-400/10 text-amber-300 hover:bg-amber-400/20"
+              : "border-white/10 bg-black/20 text-white/50 hover:border-lime-400/30 hover:text-lime-300"
         }`}
       >
-        {phase === "loading" ? (
-          <>
-            <Loader2 className="size-3 animate-spin" /> Generating…
-          </>
-        ) : phase === "playing" ? (
-          <>
-            <Square className="size-3" /> Stop audio
-          </>
-        ) : phase === "blocked" ? (
-          <>
-            <Volume2 className="size-3" /> Tap to play
-          </>
-        ) : (
-          <>
-            <Volume2 className="size-3" /> Play text as audio
-          </>
-        )}
+        {label}
       </button>
-      {failed && (
-        <button
-          type="button"
-          onClick={() => void handlePlay()}
-          className="text-[10px] font-medium text-amber-300/80 underline-offset-2 hover:underline"
-        >
-          Couldn’t play audio. Tap to retry.
-        </button>
+      {phase === "error" && (
+        <span className="text-[10px] font-medium text-amber-300/80">Couldn’t play audio. Tap “Try again”.</span>
       )}
     </div>
   );
 }
 
-export default function StudentSupport() {  // Reactive subscription — every message, status change and team reply
+export default function StudentSupport() {
   // appears here instantly without refreshing the page.
   const latest = useQuery(api.aiSupportData.getMyLatestSession);
   const myTickets = useQuery(api.aiSupportData.myTickets, {});
