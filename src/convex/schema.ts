@@ -1614,6 +1614,7 @@ const schema = defineSchema(
         v.literal("closed"),
       ),
       resolvedAt: v.optional(v.number()),
+      userLastSeenAt: v.optional(v.number()),
       createdAt: v.number(),
       updatedAt: v.number(),
     })

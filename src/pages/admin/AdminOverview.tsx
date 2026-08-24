@@ -20,6 +20,7 @@ import { StatusChip } from "@/pages/tutor/status";
 import { formatDateShort, timeAgo } from "@/lib/format";
 import { getAdminToken } from "@/lib/admin-session";
 import { useMutation } from "convex/react";
+import AiEscalatedTickets from "@/components/team/AiEscalatedTickets";
 
 export default function AdminOverview() {
   const token = getAdminToken() ?? "";
@@ -190,6 +191,23 @@ export default function AdminOverview() {
           </div>
         </section>
       </div>
+
+      {/* AI Support escalation log — live, with inline reply */}
+      <section className="rounded-2xl border border-white/10 bg-card p-4 sm:p-5">
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <h2 className="font-display text-base font-semibold">AI Support escalations</h2>
+            <p className="text-xs text-muted-foreground">
+              Issues the AI assistant couldn't resolve — live log, reply inline. Full queue in{" "}
+              <Link to="/admin/ai-support" className="text-lime-300 hover:underline">
+                AI Support
+              </Link>
+              .
+            </p>
+          </div>
+        </div>
+        <AiEscalatedTickets />
+      </section>
 
       {/* Demo data control */}
       <section className="flex flex-col gap-4 rounded-2xl border border-rose-400/20 bg-rose-400/5 p-6 sm:flex-row sm:items-center">

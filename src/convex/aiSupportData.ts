@@ -54,6 +54,74 @@ export const getMyActiveSession = query({
   },
 });
 
+/** The user's most recent session regardless of status, with live ticket
+ *  context so the UI can offer "continue previous conversation?" and show
+ *  team replies in realtime. */
+export const getMyLatestSession = query({
+  args: {},
+  handler: async (ctx) => {
+    const userId = await getAuthUserId(ctx);
+    if (userId === null) return null;
+    const session = await ctx.db
+      .query("aiSupportSessions")
+      .withIndex("by_user", (q) => q.eq("userId", userId))
+      .order("desc")
+      .first();
+    if (!session) return null;
+
+    const ticket = session.ticketId ? await ctx.db.get(session.ticketId) : null;
+    let hasUnseenTeamReply = false;
+    let lastTeamReplyAt: number | null = null;
+    let lastMessagePreview: string | undefined;
+    if (ticket) {
+      const msgs = await ctx.db
+        .query("aiSupportTicketMessages")
+        .withIndex("by_ticket", (q) => q.eq("ticketId", ticket._id))
+        .order("desc")
+        .take(50);
+      for (const m of msgs) {
+        if (m.senderType === "team" && !m.isInternalNote && lastTeamReplyAt === null) {
+          lastTeamReplyAt = m.createdAt;
+        }
+        if (!lastMessagePreview && !m.isInternalNote && m.senderType !== "system") {
+          lastMessagePreview = m.body.slice(0, 140);
+        }
+      }
+      hasUnseenTeamReply =
+        lastTeamReplyAt !== null &&
+        lastTeamReplyAt > (ticket.userLastSeenAt ?? 0) &&
+        ticket.status !== "closed";
+    } else if (session.messages.length > 1) {
+      const last = session.messages[session.messages.length - 1];
+      lastMessagePreview = last.body.slice(0, 140);
+    }
+
+    return {
+      _id: session._id,
+      status: session.status,
+      messages: session.messages,
+      suggestedCategory: session.suggestedCategory,
+      summary: session.summary,
+      rating: session.rating,
+      updatedAt: session.updatedAt,
+      createdAt: session.createdAt,
+      ticket: ticket
+        ? {
+            _id: ticket._id,
+            ticketNumber: ticket.ticketNumber,
+            status: ticket.status,
+            assignedTeam: ticket.assignedTeam,
+            teamLabel: TEAM_LABELS[ticket.assignedTeam] ?? ticket.assignedTeam,
+            subject: ticket.subject,
+            hasUnseenTeamReply,
+            lastTeamReplyAt,
+            lastMessagePreview,
+          }
+        : null,
+    };
+  },
+});
+
 export const startSession = mutation({
   args: {},
   handler: async (ctx) => {
@@ -234,16 +302,51 @@ export const internalCreateEscalatedTicket = internalMutation({
 // User-side ticket views & replies
 // ---------------------------------------------------------------------------
 
+/** Owner marks a ticket thread as read so unseen-reply badges clear. */
+export const markTicketSeen = mutation({
+  args: { ticketId: v.id("aiSupportTickets") },
+  handler: async (ctx, args) => {
+    const userId = await getAuthUserId(ctx);
+    if (userId === null) throw new Error("Not authenticated.");
+    const ticket = await ctx.db.get(args.ticketId);
+    if (!ticket || ticket.userId !== userId) throw new Error("No access.");
+    await ctx.db.patch(args.ticketId, { userLastSeenAt: Date.now() });
+    return true;
+  },
+});
+
 export const myTickets = query({
   args: {},
   handler: async (ctx) => {
     const userId = await getAuthUserId(ctx);
     if (userId === null) return [];
-    return ctx.db
+    const tickets = await ctx.db
       .query("aiSupportTickets")
       .withIndex("by_user", (q) => q.eq("userId", userId))
       .order("desc")
       .take(25);
+    // Attach live unseen-team-reply flags (internal notes never count).
+    return Promise.all(
+      tickets.map(async (t) => {
+        const msgs = await ctx.db
+          .query("aiSupportTicketMessages")
+          .withIndex("by_ticket", (q) => q.eq("ticketId", t._id))
+          .order("desc")
+          .take(30);
+        let lastTeamReplyAt: number | null = null;
+        for (const m of msgs) {
+          if (m.senderType === "team" && !m.isInternalNote) {
+            lastTeamReplyAt = m.createdAt;
+            break;
+          }
+        }
+        const hasUnseenTeamReply =
+          lastTeamReplyAt !== null &&
+          lastTeamReplyAt > (t.userLastSeenAt ?? 0) &&
+          t.status !== "closed";
+        return { ...t, hasUnseenTeamReply };
+      }),
+    );
   },
 });
 
