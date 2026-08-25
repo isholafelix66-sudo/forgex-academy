@@ -90,6 +90,15 @@ function TeamAccessPanel() {
 
   useEffect(() => { if (users !== undefined) setQueryError(null); }, [users]);
 
+  // Early return AFTER all hooks so the hook order stays stable across renders.
+  if (!isAuthenticated) {
+    return (
+      <p className="rounded-xl border border-amber-400/25 bg-amber-400/8 p-4 text-sm text-amber-300">
+        Sign in with an administrator account to manage team roles.
+      </p>
+    );
+  }
+
   const handleAssign = async (userId: string, role: string) => {
     if (!role) return;
     setSaving(true);

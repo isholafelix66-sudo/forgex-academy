@@ -1,11 +1,17 @@
 import { useState } from "react";
-import { useQuery, useMutation } from "convex/react";
+import { useQuery, useMutation, useConvexAuth } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import { Loader2, X, CheckCircle2, ArrowUpCircle, Play, ExternalLink } from "lucide-react";
 import { toast } from "sonner";
 
 export default function CoursePreviewModal({ courseId, onClose }: { courseId: string; onClose: () => void }) {
-  const preview = useQuery(api.teamWorkspace.getCoursePreview, { courseId: courseId as any });
+  // getCoursePreview requires a signed-in user (requireAuth). Password-gated
+  // admins have no user session — skip instead of throwing mid-render.
+  const { isAuthenticated } = useConvexAuth();
+  const preview = useQuery(
+    api.teamWorkspace.getCoursePreview,
+    isAuthenticated ? { courseId: courseId as any } : "skip",
+  );
   const approveCourse = useMutation(api.teamWorkspace.approveCourse);
   const requestRevision = useMutation(api.teamWorkspace.requestCourseRevision);
   const [activeTab, setActiveTab] = useState<"overview" | "lessons" | "quizzes">("overview");
@@ -27,8 +33,14 @@ export default function CoursePreviewModal({ courseId, onClose }: { courseId: st
 
   if (!preview) return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" onClick={onClose}>
-      <div className="rounded-2xl border border-white/10 bg-card p-8" onClick={(e) => e.stopPropagation()}>
-        <Loader2 className="size-6 animate-spin text-lime-400" />
+      <div className="rounded-2xl border border-white/10 bg-card p-8 text-center" onClick={(e) => e.stopPropagation()}>
+        {!isAuthenticated ? (
+          <p className="max-w-xs text-sm text-amber-300">
+            Sign in with an administrator account to preview courses.
+          </p>
+        ) : (
+          <Loader2 className="size-6 animate-spin text-lime-400" />
+        )}
       </div>
     </div>
   );
