@@ -26,14 +26,16 @@ import {
 } from "./emailTemplates";
 
 export function smtpConfigured(): boolean {
-  return !!(process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMTP_PASS);
+  const pass = process.env.SMTP_PASS || process.env.SMTP_PASSWORD;
+  return !!(process.env.SMTP_HOST && process.env.SMTP_USER && pass);
 }
 
 function transport() {
   const host = process.env.SMTP_HOST || "smtp.gmail.com";
   const port = Number(process.env.SMTP_PORT || "587");
   const user = process.env.SMTP_USER;
-  const pass = process.env.SMTP_PASS;
+  // Accept both naming conventions used in the Keys panel.
+  const pass = process.env.SMTP_PASS || process.env.SMTP_PASSWORD;
   if (!user || !pass) throw new Error("SMTP_NOT_CONFIGURED");
 
   return nodemailer.createTransport({
@@ -52,8 +54,9 @@ function transport() {
 }
 
 function fromAddress(): string {
-  const addr = process.env.EMAIL_FROM || process.env.SMTP_USER || "no-reply@forgex.academy";
-  const name = process.env.EMAIL_FROM_NAME || "ForgeX Academy";
+  const addr =
+    process.env.EMAIL_FROM || process.env.SMTP_FROM_EMAIL || process.env.SMTP_USER || "no-reply@forgex.academy";
+  const name = process.env.EMAIL_FROM_NAME || process.env.SMTP_FROM_NAME || "ForgeX Academy";
   return `"${name.replace(/"/g, "")}" <${addr}>`;
 }
 
