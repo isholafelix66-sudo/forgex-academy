@@ -49,10 +49,41 @@ export const questionValidator = v.object({
   question: v.string(),
   options: v.optional(v.array(v.string())),
   answer: v.optional(v.string()),
+  // Short-answer: extra accepted answers matched case-insensitively.
+  acceptedAnswers: v.optional(v.array(v.string())),
   points: v.optional(v.number()),
   explanation: v.optional(v.string()),
 });
 export type Question = Infer<typeof questionValidator>;
+
+/** One structured question inside an assignment builder document. */
+export const assignmentQuestionValidator = v.object({
+  type: v.union(
+    v.literal("short-text"),
+    v.literal("long-text"),
+    v.literal("file"),
+    v.literal("link"),
+    v.literal("text-and-file"),
+  ),
+  question: v.string(),
+  maxMarks: v.optional(v.number()),
+  modelAnswer: v.optional(v.string()),
+  markingInstructions: v.optional(v.string()),
+});
+export type AssignmentQuestion = Infer<typeof assignmentQuestionValidator>;
+
+/** Instructor-configured completion rules for a course. Absent fields fall
+ *  back to the defaults in `courseRequirements` (learn.ts). */
+export const courseCompletionRequirementsValidator = v.object({
+  videoWatchPercent: v.number(), // default 90; allowed 70/80/90/95/100
+  requireQuizzes: v.boolean(),
+  quizPassPercent: v.number(), // required passing score for course quizzes
+  requireAssignments: v.boolean(),
+  requireAllLessons: v.boolean(),
+});
+export type CourseCompletionRequirements = Infer<
+  typeof courseCompletionRequirementsValidator
+>;
 
 export const resourceValidator = v.object({
   name: v.string(),
@@ -197,6 +228,10 @@ const schema = defineSchema(
       reviewNote: v.optional(v.string()),
       enrolledCount: v.number(),
       archived: v.optional(v.boolean()), // soft-deleted by an admin
+      // LMS completion rules configured by the tutor/admin in the builder.
+      completionRequirements: v.optional(
+        courseCompletionRequirementsValidator,
+      ),
       createdAt: v.number(),
     })
       .index("by_slug", ["slug"])
@@ -242,6 +277,10 @@ const schema = defineSchema(
       deadline: v.optional(v.number()),
       maxScore: v.number(),
       files: v.array(resourceValidator),
+      // Assignment Builder: structured questions. Legacy assignments keep an
+      // empty array and behave exactly as before (single text submission).
+      questions: v.optional(v.array(assignmentQuestionValidator)),
+      published: v.optional(v.boolean()),
       createdAt: v.number(),
     }).index("by_course", ["courseId"]),
 
@@ -256,6 +295,30 @@ const schema = defineSchema(
       grade: v.optional(v.number()),
       feedback: v.optional(v.string()),
       gradedAt: v.optional(v.number()),
+      // Per-question answers + grading for built assignments.
+      answers: v.optional(
+        v.array(
+          v.object({
+            questionIndex: v.number(),
+            text: v.optional(v.string()),
+            url: v.optional(v.string()),
+            fileName: v.optional(v.string()),
+            fileUrl: v.optional(v.string()),
+          }),
+        ),
+      ),
+      questionGrades: v.optional(
+        v.array(
+          v.object({
+            questionIndex: v.number(),
+            score: v.number(),
+            comment: v.optional(v.string()),
+          }),
+        ),
+      ),
+      status: v.optional(
+        v.union(v.literal("submitted"), v.literal("graded")),
+      ),
     })
       .index("by_assignment", ["assignmentId"])
       .index("by_student", ["studentId"])
@@ -268,6 +331,12 @@ const schema = defineSchema(
       description: v.string(),
       timeLimitMinutes: v.number(),
       questions: v.array(questionValidator),
+      // Quiz Builder settings (optional → legacy quizzes behave as before:
+      // auto-published, 70% pass, unlimited attempts).
+      passingScorePercent: v.optional(v.number()), // default 70
+      attemptLimit: v.optional(v.number()), // 0/undefined = unlimited retakes
+      published: v.optional(v.boolean()),
+      updatedAt: v.optional(v.number()),
       createdAt: v.number(),
     }).index("by_course", ["courseId"]),
 
@@ -352,13 +421,22 @@ const schema = defineSchema(
       .index("by_student", ["studentId"])
       .index("by_exam", ["examId"]),
 
-    /** Continuous watch progress per (student, lesson). The 90% watch gate
-     *  for lesson quizzes reads this table. */
+    /** Continuous watch progress per (student, lesson). The watch gate for
+     *  lesson quizzes reads this table. Anti-cheat: `watchedRanges` stores
+     *  the unique [start,end] seconds segments genuinely played through,
+     *  merged server-side with wall-clock validation — seeking to the end
+     *  without playing credits nothing. `percent` is derived from those
+     *  ranges, never from client-supplied values. */
     watchProgress: defineTable({
       studentId: v.id("users"),
       courseId: v.id("courses"),
       lessonId: v.id("lessons"),
-      percent: v.number(), // 0-100 of the video watched
+      percent: v.number(), // 0-100 unique coverage of the video
+      watchedRanges: v.optional(v.array(v.number())), // flattened pairs [s0,e0,s1,e1,…]
+      positionSeconds: v.optional(v.number()), // resume point
+      durationSeconds: v.optional(v.number()),
+      lastPosition: v.optional(v.number()), // last validated heartbeat position
+      lastSeenAt: v.optional(v.number()), // wall clock of that heartbeat
       updatedAt: v.number(),
     })
       .index("by_student_course", ["studentId", "courseId"])

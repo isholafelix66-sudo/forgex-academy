@@ -33,6 +33,8 @@ import type * as jobs from "../jobs.js";
 import type * as learn from "../learn.js";
 import type * as lessonquizzes from "../lessonquizzes.js";
 import type * as lib from "../lib.js";
+import type * as lms from "../lms.js";
+import type * as lmsShared from "../lmsShared.js";
 import type * as media from "../media.js";
 import type * as messages from "../messages.js";
 import type * as mux from "../mux.js";
@@ -89,6 +91,8 @@ declare const fullApi: ApiFromModules<{
   learn: typeof learn;
   lessonquizzes: typeof lessonquizzes;
   lib: typeof lib;
+  lms: typeof lms;
+  lmsShared: typeof lmsShared;
   media: typeof media;
   messages: typeof messages;
   mux: typeof mux;
