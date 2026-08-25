@@ -1721,6 +1721,31 @@ const schema = defineSchema(
       .index("by_status_next", ["status", "nextAttemptAt"])
       .index("by_idempotency", ["idempotencyKey"])
       .index("by_type", ["type"]),
+
+    /** Transactional email log (Gmail SMTP). One row per recipient per send.
+     *  OTP codes / auth secrets are NEVER stored here — only metadata and the
+     *  rendered HTML for admin resend of non-auth emails. */
+    emailLogs: defineTable({
+      to: v.string(), // recipient email
+      subject: v.string(),
+      emailType: v.string(), // otp | welcome | password_reset | enrollment | quiz | exam | certificate | support | admin_broadcast
+      status: v.union(
+        v.literal("pending"),
+        v.literal("sent"),
+        v.literal("failed"),
+      ),
+      automated: v.boolean(), // system-triggered vs admin-composed
+      sentBy: v.optional(v.id("users")), // admin who composed it, if any
+      html: v.optional(v.string()), // rendered body (never contains OTP)
+      retryCount: v.number(),
+      lastError: v.optional(v.string()), // safe classification only
+      createdAt: v.number(),
+      sentAt: v.optional(v.number()),
+      failedAt: v.optional(v.number()),
+    })
+      .index("by_status_created", ["status", "createdAt"])
+      .index("by_type_created", ["emailType", "createdAt"])
+      .index("by_created", ["createdAt"]),
   },
   {
     schemaValidation: false,

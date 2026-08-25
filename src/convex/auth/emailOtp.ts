@@ -16,6 +16,35 @@ export const emailOtp = Email({
     return generateRandomString(random, alphabet, 6);
   },
   async sendVerificationRequest({ identifier: email, token }) {
+    // Primary path: ForgeX Gmail SMTP (branded template, sender "ForgeX
+    // Academy"). The relay runs inside this deployment — the code never
+    // leaves our infrastructure and is never persisted.
+    const siteUrl =
+      process.env.CONVEX_SITE_URL || process.env.VITE_CONVEX_SITE_URL;
+    if (siteUrl) {
+      try {
+        const res = await axios.post(
+          `${siteUrl}/api/internal/email-relay`,
+          JSON.stringify({ to: email, code: token, kind: "otp" }),
+          {
+            headers: {
+              "Content-Type": "application/json",
+              "x-internal-key":
+                process.env.INTERNAL_EMAIL_KEY ?? "fx-internal-relay-v1",
+            },
+            timeout: 20_000,
+          },
+        );
+        const data = res.data as { sent?: boolean; fallback?: boolean };
+        if (res.status === 200 && data.sent) return; // delivered via Gmail SMTP
+        // Not configured or send failed → fall through to the platform
+        // sender so sign-in NEVER breaks because of email delivery.
+      } catch (error) {
+        console.error("[otp] gmail relay failed, using fallback:", error);
+      }
+    }
+
+    // Fallback: platform OTP sender (keeps auth working without SMTP keys).
     try {
       await axios.post(
         "https://auth.freebuff.app/send_otp",
