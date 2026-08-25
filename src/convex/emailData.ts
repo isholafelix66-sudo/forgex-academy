@@ -156,6 +156,24 @@ function safeProjection(r: any) {
   };
 }
 
+/** Recipient picker data for Compose (id/name/email/role only). */
+export const adminListRecipients = query({
+  args: { token: v.string() },
+  handler: async (ctx, args) => {
+    await requireAdminSession(ctx, args.token);
+    const users = await ctx.db.query("users").collect();
+    return users
+      .filter((u) => "email" in u && !!u.email)
+      .map((u) => ({
+        id: u._id,
+        name: u.name || "(no name)",
+        email: String(u.email),
+        role: u.role ?? "student",
+        teamRole: ("teamRole" in u ? String(u.teamRole ?? "") : "") || null,
+      }));
+  },
+});
+
 export const adminStats = query({
   args: { token: v.string() },
   handler: async (ctx, args) => {

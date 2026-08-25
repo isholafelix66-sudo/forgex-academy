@@ -59,6 +59,14 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [info, setInfo] = useState<string | null>(null);
+  const [resendIn, setResendIn] = useState(0); // 60s anti-abuse cooldown
+
+  // Countdown for the resend cooldown while the code step is visible.
+  useEffect(() => {
+    if (resendIn <= 0) return;
+    const t = setTimeout(() => setResendIn((s) => s - 1), 1000);
+    return () => clearTimeout(t);
+  }, [resendIn]);
 
   // Onboarding: once signed in, initialize the account (role + name). The
   // role is assigned once and never overwritten, so a tutor account stays a
@@ -102,16 +110,21 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
       }
       await signIn("email-otp", formData);
       setStep("code");
+      setResendIn(60);
       setInfo(
         mode === "reset"
           ? "If that email has an account, a recovery code is on its way."
-          : `We sent a 6-digit code to ${email}.`,
+          : "📧 A verification code has been sent to your email address. Please check your inbox.",
       );
       setIsLoading(false);
     } catch (err) {
       console.error("Email sign-in error:", err);
+      // Never surface SMTP/technical details — friendly message only.
       setError(
-        friendlyError(err, "Failed to send code. Try again."),
+        friendlyError(
+          err,
+          "We couldn't send your verification code right now. Please try again.",
+        ),
       );
       setIsLoading(false);
     }
@@ -131,6 +144,34 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
       console.error("OTP verification error:", err);
       setError("That code isn't right. Double-check and try again.");
       setOtp("");
+      setIsLoading(false);
+    }
+  };
+
+  /** Resend while on the code step — same signIn call, distinct messaging. */
+  const resendCode = async () => {
+    if (resendIn > 0 || isLoading) return;
+    setIsLoading(true);
+    setError(null);
+    try {
+      const formData = new FormData();
+      formData.set("email", email);
+      await signIn("email-otp", formData);
+      setResendIn(60);
+      setInfo(
+        mode === "reset"
+          ? "📧 A new recovery code has been sent. Please check your Inbox, Spam, or Junk folder."
+          : "📧 A new verification code has been sent. Please check your Inbox, Spam, or Junk folder.",
+      );
+    } catch (err) {
+      console.error("OTP resend error:", err);
+      setError(
+        friendlyError(
+          err,
+          "We couldn't send your verification code right now. Please try again.",
+        ),
+      );
+    } finally {
       setIsLoading(false);
     }
   };
@@ -281,7 +322,10 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
                         : "Check your email"}
                   </p>
                   <p className="mt-1 text-xs text-muted-foreground">
-                    {info ?? `Enter the 6-digit code sent to ${email}`}
+                    {info ?? "📧 A verification code has been sent to your email address. Please check your inbox."}
+                  </p>
+                  <p className="mt-2 text-[11px] leading-relaxed text-muted-foreground/80">
+                    Didn't receive it? Check your Spam or Junk folder, wait a few minutes, or request a new code below.
                   </p>
                 </div>
 
@@ -339,16 +383,32 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
                 >
                   Use a different email
                 </button>
-                <p className="text-center text-xs text-muted-foreground">
-                  Didn't receive it?{" "}
-                  <button
-                    type="button"
-                    onClick={() => void sendCode()}
-                    className="font-medium text-lime-300 hover:underline"
-                  >
-                    Resend code
-                  </button>
-                </p>
+                <div className="flex flex-col items-center gap-1">
+                  {resendIn > 0 ? (
+                    <span className="text-xs text-muted-foreground">
+                      Resend code in {resendIn} seconds
+                    </span>
+                  ) : (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      disabled={isLoading}
+                      onClick={() => void resendCode()}
+                      className="gap-1.5 border-white/15 bg-black/20 text-lime-300 hover:bg-black/40 hover:text-lime-200"
+                    >
+                      {isLoading ? (
+                        <Loader2 className="size-3.5 animate-spin" />
+                      ) : null}
+                      Resend code
+                    </Button>
+                  )}
+                  {info && !error && (
+                    <span className="text-[11px] text-lime-300/80" role="status">
+                      {info.startsWith("📧") ? info : null}
+                    </span>
+                  )}
+                </div>
               </form>
             )}
           </div>
