@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useMutation, useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import {
@@ -101,18 +101,34 @@ export default function AdminShell() {
     api.admin.isAdminUnlocked,
     token ? { token } : "skip",
   );
+
+  // IMPORTANT: gate every privileged subscription behind a *verified* session.
+  // requireAdminSession THROWS for stale/expired tokens — if these queries ran
+  // with an unverified token they would throw during render and crash the
+  // entire /admin tree (the "hit a snag" bug affecting all admin pages).
+  const sessionValid = token !== null && unlocked === true;
   const pendingApps = useQuery(
     api.admin.tutorApplications,
-    token ? { token } : "skip",
+    sessionValid ? { token } : "skip",
   );
   const pendingCourses = useQuery(
     api.admin.coursesPendingReview,
-    token ? { token } : "skip",
+    sessionValid ? { token } : "skip",
   );
   const supportStats = useQuery(
     api.tutorSupport.adminSupportStats,
-    token ? { token } : "skip",
+    sessionValid ? { token } : "skip",
   );
+
+  // A stored token that the backend rejects (expired 12h TTL, cleared
+  // sessions, DB reset) must be purged immediately so no page ever renders
+  // with credentials the server will reject.
+  useEffect(() => {
+    if (token && unlocked === false) {
+      clearAdminToken();
+      setToken(null);
+    }
+  }, [token, unlocked]);
 
   const handleUnlocked = (t: string) => {
     setAdminToken(t);
