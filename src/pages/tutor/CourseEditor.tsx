@@ -74,6 +74,7 @@ type QuestionDraft = {
   answer: string;
   points: number;
   explanation: string;
+  acceptedAnswers?: string[];
 };
 
 type QuizDraft = {
@@ -81,7 +82,18 @@ type QuizDraft = {
   title: string;
   description: string;
   timeLimitMinutes: number;
+  passingScorePercent: number;
+  attemptLimit: number; // 0 = unlimited retakes
+  published: boolean;
   questions: QuestionDraft[];
+};
+
+type AssignmentQuestionDraft = {
+  type: "short-text" | "long-text" | "file" | "link" | "text-and-file";
+  question: string;
+  maxMarks: number;
+  modelAnswer: string;
+  markingNotes: string;
 };
 
 type AssignmentDraft = {
@@ -92,6 +104,8 @@ type AssignmentDraft = {
   deadline: string;
   maxScore: number;
   files: Resource[];
+  published: boolean;
+  questions: AssignmentQuestionDraft[];
 };
 
 const emptyLesson = (order: number): LessonDraft => ({
@@ -110,7 +124,18 @@ const emptyQuiz: QuizDraft = {
   title: "",
   description: "",
   timeLimitMinutes: 10,
+  passingScorePercent: 70,
+  attemptLimit: 0,
+  published: true,
   questions: [],
+};
+
+const emptyAssignmentQuestion: AssignmentQuestionDraft = {
+  type: "long-text",
+  question: "",
+  maxMarks: 10,
+  modelAnswer: "",
+  markingNotes: "",
 };
 
 const emptyAssignment: AssignmentDraft = {
@@ -120,6 +145,8 @@ const emptyAssignment: AssignmentDraft = {
   deadline: "",
   maxScore: 100,
   files: [],
+  published: true,
+  questions: [],
 };
 
 type LessonQuizDraft = {
@@ -1434,6 +1461,9 @@ function QuizzesTab({ courseId }: { courseId: string }) {
             title: q.title,
             description: q.description,
             timeLimitMinutes: q.timeLimitMinutes,
+            passingScorePercent: q.passingScorePercent ?? 70,
+            attemptLimit: q.attemptLimit ?? 0,
+            published: q.published !== false,
             questions: q.questions.map((x) => ({
               type: x.type as QuestionDraft["type"],
               question: x.question,
@@ -1441,35 +1471,94 @@ function QuizzesTab({ courseId }: { courseId: string }) {
               answer: x.answer ?? "",
               points: x.points ?? 1,
               explanation: x.explanation ?? "",
+              acceptedAnswers: (x.acceptedAnswers ?? []).map(String),
             })),
           }
         : emptyQuiz,
     );
   };
 
+  /** Client-side mirror of the backend publish rules so tutors get instant
+   *  feedback; the backend re-validates authoritatively on save. */
+  const validateDraft = (): string | null => {
+    if (!draft) return null;
+    if (!draft.title.trim()) return "Give the quiz a title.";
+    const qs = draft.questions.filter((q) => q.question.trim());
+    if (qs.length === 0) return "Add at least one question with text.";
+    for (const [i, q] of draft.questions.entries()) {
+      if (!q.question.trim()) continue;
+      if (q.type === "multiple-choice") {
+        const opts = q.options.filter((o) => o.trim());
+        if (opts.length < 2) return `Question ${i + 1}: needs at least two answer options.`;
+        if (!q.answer.trim() || !opts.includes(q.answer))
+          return `Question ${i + 1}: select the correct answer.`;
+      }
+      if (q.type === "true-false" && !q.answer.trim())
+        return `Question ${i + 1}: choose True or False as the correct answer.`;
+    }
+    return null;
+  };
+
   const saveQuiz = async () => {
     if (!draft || !draft.title) return;
+    const problem = validateDraft();
+    if (problem) {
+      toast.error(problem);
+      return;
+    }
     setSaving(true);
-    await upsertQuiz({
-      id: draft.id ? (draft.id as never) : undefined,
-      courseId: courseId as never,
-      title: draft.title,
-      description: draft.description,
-      timeLimitMinutes: Number(draft.timeLimitMinutes) || 10,
-      questions: draft.questions
-        .filter((q) => q.question.trim())
-        .map((q) => ({
-          type: q.type,
-          question: q.question,
-          options: q.type === "multiple-choice" ? q.options.filter(Boolean) : undefined,
-          answer: q.answer || undefined,
-          points: Number(q.points) || 1,
-          explanation: q.explanation || undefined,
-        })),
-    });
-    setSaving(false);
-    setDraft(null);
+    try {
+      await upsertQuiz({
+        id: draft.id ? (draft.id as never) : undefined,
+        courseId: courseId as never,
+        title: draft.title,
+        description: draft.description,
+        timeLimitMinutes: Number(draft.timeLimitMinutes) || 10,
+        passingScorePercent: Math.max(1, Math.min(100, Number(draft.passingScorePercent) || 70)),
+        attemptLimit: Math.max(0, Math.round(Number(draft.attemptLimit) || 0)),
+        published: draft.published,
+        questions: draft.questions
+          .filter((q) => q.question.trim())
+          .map((q) => ({
+            type: q.type,
+            question: q.question,
+            options: q.type === "multiple-choice" ? q.options.filter(Boolean) : undefined,
+            answer: q.answer || undefined,
+            points: Number(q.points) || 1,
+            explanation: q.explanation || undefined,
+            acceptedAnswers:
+              q.acceptedAnswers && q.acceptedAnswers.some((a) => a.trim())
+                ? q.acceptedAnswers.filter(Boolean)
+                : undefined,
+          })),
+      });
+      toast.success(draft.published ? "Quiz saved & live for students" : "Quiz saved as draft");
+      setSaving(false);
+      setDraft(null);
+    } catch (err) {
+      setSaving(false);
+      toast.error(isBackendRejection(err) ? friendlyError(err) : "Couldn't save the quiz. Please try again.");
+    }
   };
+
+  const duplicateQuestion = (i: number) =>
+    setDraft((d) => {
+      if (!d) return d;
+      const copy = { ...d.questions[i], answer: "", acceptedAnswers: [] };
+      const questions = [...d.questions];
+      questions.splice(i + 1, 0, copy);
+      return { ...d, questions };
+    });
+
+  const moveQuestion = (i: number, dir: -1 | 1) =>
+    setDraft((d) => {
+      if (!d) return d;
+      const j = i + dir;
+      if (j < 0 || j >= d.questions.length) return d;
+      const questions = [...d.questions];
+      [questions[i], questions[j]] = [questions[j], questions[i]];
+      return { ...d, questions };
+    });
 
   const patchQuestion = (i: number, patch: Partial<QuestionDraft>) =>
     setDraft((d) =>
@@ -1495,7 +1584,13 @@ function QuizzesTab({ courseId }: { courseId: string }) {
           <div className="min-w-0 flex-1">
             <p className="truncate text-sm font-medium">{qz.title}</p>
             <p className="text-xs text-muted-foreground">
-              {qz.questions.length} questions · {qz.timeLimitMinutes} min
+              {qz.questions.length} questions · {qz.timeLimitMinutes} min · pass {qz.passingScorePercent ?? 70}% ·{" "}
+              {qz.published === false ? (
+                <span className="text-amber-300">Draft</span>
+              ) : (
+                <span className="text-lime-300">Published</span>
+              )}
+              {(qz.attemptLimit ?? 0) > 0 ? ` · ${qz.attemptLimit} attempt(s)` : " · unlimited retakes"}
             </p>
           </div>
           <Button variant="ghost" size="sm" onClick={() => open(qz)}>Edit</Button>
