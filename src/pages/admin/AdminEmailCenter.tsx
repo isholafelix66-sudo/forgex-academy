@@ -170,7 +170,7 @@ export default function AdminEmailCenter() {
         token,
         subject,
         messageHtml,
-        userIds: audience === "single" || audience === "multi" ? selectedUsers : undefined,
+        userIds: audience === "single" || audience === "multi" ? (selectedUsers as never[]) : undefined,
         audience:
           audience === "all_students" || audience === "all_tutors" || audience === "all_team"
             ? audience
