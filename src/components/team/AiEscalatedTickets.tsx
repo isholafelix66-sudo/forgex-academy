@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { useMutation, useQuery } from "convex/react";
+import { useMutation, useQuery, useConvexAuth } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import { Loader2, Bot, Send, ChevronDown } from "@/lib/lucide";
 import { toast } from "sonner";
@@ -34,7 +34,11 @@ function statusBadge(s: string) {
 
 /** Full AI-ticket queue for support teams & admins (role-scoped server-side). */
 export default function AiEscalatedTickets() {
-  const tickets = useQuery(api.aiSupportData.listTeamTickets, {});
+  // IMPORTANT: this query requires a signed-in user (getAuthUserId). The admin
+  // dashboard is PASSWORD-gated with no user account, so subscribing there
+  // would throw "Not authenticated" mid-render and crash the page.
+  const { isAuthenticated } = useConvexAuth();
+  const tickets = useQuery(api.aiSupportData.listTeamTickets, isAuthenticated ? {} : "skip");
   const [openId, setOpenId] = useState<string | null>(null);
 
   const safeTickets = Array.isArray(tickets) ? tickets : [];
@@ -48,7 +52,7 @@ export default function AiEscalatedTickets() {
           escalated by the support assistant · full AI conversation attached
         </span>
       </div>
-      {tickets === undefined ? (
+      {isAuthenticated && tickets === undefined ? (
         <div className="flex justify-center py-8">
           <Loader2 className="size-5 animate-spin text-lime-400" />
         </div>

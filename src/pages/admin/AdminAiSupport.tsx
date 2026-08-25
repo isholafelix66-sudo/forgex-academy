@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useMutation, useQuery } from "convex/react";
+import { useMutation, useQuery, useConvexAuth } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import {
   Loader2,
@@ -70,7 +70,11 @@ export default function AdminAiSupport() {
 // ---------------------------------------------------------------------------
 
 function KnowledgePanel() {
-  const entries = useQuery(api.aiSupportData.listKnowledgeAdmin, {});
+  // These functions require a signed-in user (requireKbEditor). The admin
+  // dashboard itself is password-gated with no user account — skip instead of
+  // throwing mid-render (which crashes the whole page).
+  const { isAuthenticated } = useConvexAuth();
+  const entries = useQuery(api.aiSupportData.listKnowledgeAdmin, isAuthenticated ? {} : "skip");
   const save = useMutation(api.aiSupportData.saveKnowledgeEntry);
   const remove = useMutation(api.aiSupportData.deleteKnowledgeEntry);
   const seed = useMutation(api.aiSupportData.seedDefaultKnowledge);
@@ -348,7 +352,15 @@ function KnowledgePanel() {
 // ---------------------------------------------------------------------------
 
 function AnalyticsPanel() {
-  const stats = useQuery(api.aiSupportData.aiSupportAnalytics, {});
+  const { isAuthenticated } = useConvexAuth();
+  const stats = useQuery(api.aiSupportData.aiSupportAnalytics, isAuthenticated ? {} : "skip");
+  if (!isAuthenticated) {
+    return (
+      <p className="rounded-xl border border-amber-400/25 bg-amber-400/8 p-4 text-sm text-amber-300">
+        Sign in with an administrator account to view AI support analytics.
+      </p>
+    );
+  }
   if (stats === undefined) {
     return (
       <div className="flex justify-center py-12">

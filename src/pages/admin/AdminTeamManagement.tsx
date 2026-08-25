@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { useQuery, useMutation } from "convex/react";
+import { useQuery, useMutation, useConvexAuth } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import { useAuth } from "@/hooks/use-auth";
 import {
@@ -78,7 +78,10 @@ export default function AdminTeamManagement() {
 
 // ===================== TEAM ACCESS PANEL =====================
 function TeamAccessPanel() {
-  const users = useQuery(api.teamAccess.adminListUsers);
+  // Requires a signed-in admin USER (getAuthUserId). Password-gated admins
+  // have no user session — skip the query instead of crashing the panel.
+  const { isAuthenticated } = useConvexAuth();
+  const users = useQuery(api.teamAccess.adminListUsers, isAuthenticated ? {} : "skip");
   const setTeamRole = useMutation(api.teamAccess.setTeamRole);
   const [search, setSearch] = useState("");
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -247,9 +250,21 @@ function TeamAccessPanel() {
 
 // ===================== SUPPORT LOGS PANEL =====================
 function SupportLogsPanel() {
-  const cases = useQuery(api.teamWorkspace.adminAllSupportCases);
+  // adminAllSupportCases requires a signed-in user (requireAuth). The password-
+  // gated admin dashboard has no user session — skip the query instead of
+  // letting it throw mid-render and crash the page.
+  const { isAuthenticated } = useConvexAuth();
+  const cases = useQuery(api.teamWorkspace.adminAllSupportCases, isAuthenticated ? {} : "skip");
   const [filter, setFilter] = useState<"all" | "student" | "tutor">("all");
   const [statusFilter, setStatusFilter] = useState<string>("");
+
+  if (!isAuthenticated) {
+    return (
+      <p className="rounded-xl border border-amber-400/25 bg-amber-400/8 p-4 text-sm text-amber-300">
+        Sign in with an administrator account to view support logs.
+      </p>
+    );
+  }
 
   const safeCases = Array.isArray(cases) ? cases : [];
   const filtered = safeCases.filter((c: any) => {
@@ -333,8 +348,10 @@ function SupportLogsPanel() {
 // ===================== MESSAGES PANEL =====================
 function AdminMessagesPanel() {
   const { user } = useAuth();
-  const conversations = useQuery(api.teamWorkspace.myConversations);
-  const directory = useQuery(api.teamWorkspace.listTeamDirectory);
+  // All of these require a signed-in user — skip (never throw) without one.
+  const { isAuthenticated } = useConvexAuth();
+  const conversations = useQuery(api.teamWorkspace.myConversations, isAuthenticated ? {} : "skip");
+  const directory = useQuery(api.teamWorkspace.listTeamDirectory, isAuthenticated ? {} : "skip");
   const sendMessage = useMutation(api.teamWorkspace.adminSendDirectMessage);
   const sendConvMsg = useMutation(api.teamWorkspace.sendConversationMessage);
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -347,7 +364,7 @@ function AdminMessagesPanel() {
 
   const messages = useQuery(
     api.teamWorkspace.getConversationMessagesDetailed,
-    selectedId ? { conversationId: selectedId as any } : "skip"
+    isAuthenticated && selectedId ? { conversationId: selectedId as any } : "skip"
   );
 
   const safeDirectory = Array.isArray(directory) ? directory : [];
@@ -381,6 +398,14 @@ function AdminMessagesPanel() {
       setSearchUser("");
     } catch (err: any) { toast.error(err.message); }
   };
+
+  if (!isAuthenticated) {
+    return (
+      <p className="rounded-xl border border-amber-400/25 bg-amber-400/8 p-4 text-sm text-amber-300">
+        Sign in with an administrator account to use team messaging.
+      </p>
+    );
+  }
 
   return (
     <div className="flex gap-4" style={{ height: "calc(100vh - 280px)" }}>
