@@ -5,6 +5,7 @@ import { internal } from "./_generated/api";
 import { checkRateLimit, requireUser, requireUserDoc, hydrateCourses, hydrateCourse, notify, yyyymmdd, makeCertificateId } from "./lib";
 import { addMembership, ensureCommunityForCourse } from "./community";
 import { enrollmentEmail, certificateEmail } from "./emailTemplates";
+import { courseRequirements, effectiveWatchedPercent, sanitizeWatchPercent, type Requirements } from "./lmsShared";
 
 // ---------------------------------------------------------------------------
 // Shared learning helpers (imported by lessonquizzes.ts / exams.ts)
@@ -97,7 +98,11 @@ export async function finishCourseInternal(
 }
 
 /** Shared lesson-completion path. The manual "Mark complete" button, the
- *  90%-watch auto-complete, and passing a lesson quiz all land here. */
+ *  watch-gate auto-complete, and passing a lesson quiz all land here.
+ *
+ *  Backend-authoritative: video lessons can only complete once the credited
+ *  (range-based) watch coverage meets the course's required percentage —
+ *  client-supplied state is never trusted. */
 export async function completeLessonInternal(
   ctx: MutationCtx,
   user: Doc<"users">,
@@ -107,6 +112,32 @@ export async function completeLessonInternal(
   if (!lesson) throw new Error("Lesson not found.");
   const enrollment = await enrollmentFor(ctx, user._id, lesson.courseId);
   if (!enrollment) throw new Error("Enroll in this course first.");
+  const course = await ctx.db.get(lesson.courseId);
+  const req = course ? courseRequirements(course) : null;
+
+  // Watch requirement for video lessons (applies to manual completion too —
+  // students cannot force a video lesson to "complete" without watching).
+  const hasVideo = !!(
+    lesson.muxPlaybackId ||
+    lesson.videoType === "youtube" ||
+    lesson.videoType === "mp4" ||
+    lesson.videoType === "vimeo"
+  );
+  if (hasVideo && req && !enrollment.completedLessons.includes(lessonId)) {
+    const rows = await ctx.db
+      .query("watchProgress")
+      .withIndex("by_student_course", (q) =>
+        q.eq("studentId", user._id).eq("courseId", lesson.courseId),
+      )
+      .collect();
+    const wp = rows.find((r) => r.lessonId === lessonId);
+    const watched = effectiveWatchedPercent(wp);
+    if (watched < req.videoWatchPercent) {
+      throw new Error(
+        `Watch at least ${req.videoWatchPercent}% of this video first (${Math.floor(watched)}% so far).`,
+      );
+    }
+  }
 
   if (!enrollment.completedLessons.includes(lessonId)) {
     // A published per-lesson quiz must be passed first — passing the quiz is
@@ -139,19 +170,7 @@ export async function completeLessonInternal(
     const allDone =
       progress >= 100 && completedLessons.length >= allLessons.length;
 
-    // A published final exam holds the course open until it's passed — the
-    // certificate only unlocks after the exam.
-    const exam = allDone
-      ? await ctx.db
-          .query("finalExams")
-          .withIndex("by_course", (q) => q.eq("courseId", lesson.courseId))
-          .first()
-      : null;
-    const examPending = !!exam?.published;
-    const status =
-      allDone && !examPending ? ("completed" as const) : ("in-progress" as const);
-
-    await ctx.db.patch(enrollment._id, { completedLessons, progress, status });
+    await ctx.db.patch(enrollment._id, { completedLessons, progress });
 
     // streak
     const today = yyyymmdd(Date.now());
@@ -163,16 +182,18 @@ export async function completeLessonInternal(
       await ctx.db.patch(user._id, { streak, streakLastDay: today });
     }
 
-    if (allDone && !examPending) {
-      const course = await ctx.db.get(lesson.courseId);
-      if (course) {
-        await finishCourseInternal(ctx, user, course, {
-          ...enrollment,
-          completedLessons,
-          progress,
-          status: "completed",
-        });
-      }
+    let status: "in-progress" | "completed" = "in-progress";
+    let examPending = false;
+    if (allDone) {
+      // Backend-authoritative completion: quizzes / assignments / final exam
+      // requirements are evaluated here (never by the client).
+      const result = await tryCompleteCourseInternal(ctx, user, lesson.courseId);
+      status = result.completed ? "completed" : "in-progress";
+      const exam = await ctx.db
+        .query("finalExams")
+        .withIndex("by_course", (q) => q.eq("courseId", lesson.courseId))
+        .first();
+      examPending = !!exam?.published && !result.completed;
     }
     return { progress, status, allLessonsComplete: allDone, examPending };
   }
@@ -275,6 +296,21 @@ export const myEnrollments = query({
 // Watch progress → lesson completion → progress → certificate
 // ---------------------------------------------------------------------------
 
+/** Auto-complete helper used by lms.watchHeartbeat once credited coverage
+ *  reaches the required percentage. Enforces the same gates as manual
+ *  completion (sequential order + lesson quiz). */
+export async function autoCompleteWatchedLesson(
+  ctx: MutationCtx,
+  user: Doc<"users">,
+  lessonId: Id<"lessons">,
+) {
+  await completeLessonInternal(ctx, user, lessonId);
+}
+
+/** Legacy compatibility shim for older clients: stores the reported percent
+ *  but NEVER completes anything or unlocks quizzes on its own — credited
+ *  range tracking (lms.watchHeartbeat) is the only path that earns progress.
+ *  Existing rows keep their historical values; nothing is reset. */
 export const reportWatchProgress = mutation({
   args: { lessonId: v.id("lessons"), percent: v.number() },
   handler: async (ctx, { lessonId, percent }) => {
@@ -283,7 +319,6 @@ export const reportWatchProgress = mutation({
     if (!lesson) return;
     const enrollment = await enrollmentFor(ctx, user._id, lesson.courseId);
     if (!enrollment) return;
-    // Cheap throttled writes — never block playback on the limiter.
     const ok = await checkRateLimit(
       ctx,
       `watch:${user._id}`,
@@ -301,32 +336,12 @@ export const reportWatchProgress = mutation({
       )
       .collect();
     const existing = rows.find((r) => r.lessonId === lessonId);
-    if (existing) {
+    // Legacy rows (no ranges yet) keep their max-reported percent for
+    // backward compatibility; rows with real ranges are heartbeat-managed
+    // and ignore raw client percentages entirely.
+    if (existing && existing.watchedRanges === undefined) {
       if (clamped <= existing.percent) return;
       await ctx.db.patch(existing._id, { percent: clamped, updatedAt: Date.now() });
-    } else {
-      await ctx.db.insert("watchProgress", {
-        studentId: user._id,
-        courseId: lesson.courseId,
-        lessonId,
-        percent: clamped,
-        updatedAt: Date.now(),
-      });
-    }
-    // Lessons without a quiz auto-complete once ≥90% watched (the sequential
-    // gate still applies — the previous lesson must be done first).
-    if (clamped >= 90) {
-      const quiz = await ctx.db
-        .query("lessonQuizzes")
-        .withIndex("by_lesson", (q) => q.eq("lessonId", lessonId))
-        .first();
-      if (!quiz || !quiz.published) {
-        try {
-          await completeLessonInternal(ctx, user, lessonId);
-        } catch {
-          // previous lesson not complete yet — fine, they'll finish in order
-        }
-      }
     }
   },
 });
@@ -336,6 +351,8 @@ export const completeLesson = mutation({
   handler: async (ctx, { lessonId }) => {
     const user = await requireUserDoc(ctx);
     await checkRateLimit(ctx, `learn:${user._id}`, 60, 60 * 60 * 1000);
+    // Backend verifies every requirement (watch %, quiz pass, sequence) —
+    // forged requests are rejected here, never trusted from the frontend.
     await completeLessonInternal(ctx, user, lessonId);
     return true;
   },
