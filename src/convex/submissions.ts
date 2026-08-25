@@ -1,6 +1,8 @@
 import { mutation, query } from "./_generated/server";
 import { v } from "convex/values";
+import type { Doc } from "./_generated/dataModel";
 import { checkRateLimit, notify, requireUser, requireUserDoc } from "./lib";
+import { tryCompleteCourseInternal } from "./learn";
 
 export const assignmentsByCourse = query({
   args: { courseId: v.id("courses") },
@@ -15,9 +17,8 @@ export const assignmentsByCourse = query({
       .withIndex("by_student", (q) => q.eq("studentId", userId))
       .collect();
     return assignments
-      .sort(
-        (a, b) => (a.deadline ?? Infinity) - (b.deadline ?? Infinity),
-      )
+      .filter((a) => a.published !== false)
+      .sort((a, b) => (a.deadline ?? Infinity) - (b.deadline ?? Infinity))
       .map((a) => ({
         ...a,
         submission:
@@ -26,14 +27,62 @@ export const assignmentsByCourse = query({
   },
 });
 
+/** Validate per-question answers against the built questions before accepting
+ *  a submission. Legacy assignments (no questions) skip this entirely. */
+function validateAnswers(
+  questions: NonNullable<Doc<"assignments">["questions"]>,
+  answers: Array<{
+    questionIndex: number;
+    text?: string;
+    url?: string;
+    fileName?: string;
+    fileUrl?: string;
+  }>,
+) {
+  const byIdx = new Map(answers.map((a) => [a.questionIndex, a]));
+  questions.forEach((q, i) => {
+    const a = byIdx.get(i);
+    const hasText = !!a?.text?.trim();
+    const hasFile = !!a?.fileUrl;
+    const hasLink = !!a?.url?.trim();
+    if (!a || (!hasText && !hasFile && !hasLink)) {
+      throw new Error(`Question ${i + 1} needs an answer before you can submit.`);
+    }
+    if ((q.type === "file" || q.type === "text-and-file") && !hasFile) {
+      throw new Error(`Question ${i + 1}: attach the required file.`);
+    }
+    if (
+      (q.type === "short-text" || q.type === "long-text" || q.type === "text-and-file") &&
+      !hasText
+    ) {
+      throw new Error(`Question ${i + 1}: write your answer.`);
+    }
+    if (q.type === "link" && !hasLink) {
+      throw new Error(`Question ${i + 1}: add your link.`);
+    }
+  });
+}
+
 export const submitAssignment = mutation({
   args: {
     assignmentId: v.id("assignments"),
     text: v.string(),
     links: v.array(v.string()),
     files: v.array(v.object({ name: v.string(), url: v.string() })),
+    // Per-question answers for built assignments.
+    answers: v.optional(
+      v.array(
+        v.object({
+          questionIndex: v.number(),
+          text: v.optional(v.string()),
+          url: v.optional(v.string()),
+          fileName: v.optional(v.string()),
+          fileUrl: v.optional(v.string()),
+        }),
+      ),
+    ),
   },
-  handler: async (ctx, { assignmentId, text, links, files }) => {
+  handler: async (ctx, { assignmentId, text, links, files, answers }) => {
     const user = await requireUserDoc(ctx);
     // Spam guard: max 20 assignment submissions per user per hour.
     await checkRateLimit(
@@ -44,7 +93,12 @@ export const submitAssignment = mutation({
       "You're submitting assignments very quickly — please slow down.",
     );
     const assignment = await ctx.db.get(assignmentId);
-    if (!assignment) throw new Error("Assignment not found.");
+    if (!assignment || assignment.published === false) {
+      throw new Error("Assignment not found.");
+    }
+    const qs = assignment.questions ?? [];
+    if (qs.length > 0) validateAnswers(qs, answers ?? []);
+
     const existing = await ctx.db
       .query("submissions")
       .withIndex("by_assignment", (q) => q.eq("assignmentId", assignmentId))
@@ -56,10 +110,13 @@ export const submitAssignment = mutation({
         text,
         links,
         files,
+        answers,
         submittedAt: Date.now(),
         grade: undefined,
         feedback: undefined,
         gradedAt: undefined,
+        questionGrades: undefined,
+        status: "submitted",
       });
       await notify(ctx, {
         userId: assignment.tutorId,
@@ -77,7 +134,9 @@ export const submitAssignment = mutation({
       text,
       links,
       files,
+      answers,
       submittedAt: Date.now(),
+      status: "submitted",
     });
     await notify(ctx, {
       userId: assignment.tutorId,
@@ -86,6 +145,10 @@ export const submitAssignment = mutation({
       type: "submission",
       link: "/tutor",
     });
+
+    // Backend-authoritative completion: submitting a required assignment may
+    // complete the course right here.
+    await tryCompleteCourseInternal(ctx, user, assignment.courseId);
     return id;
   },
 });
@@ -163,8 +226,18 @@ export const gradeSubmission = mutation({
     submissionId: v.id("submissions"),
     grade: v.number(),
     feedback: v.string(),
+    // Optional per-question grading — total is recomputed server-side.
+    questionGrades: v.optional(
+      v.array(
+        v.object({
+          questionIndex: v.number(),
+          score: v.number(),
+          comment: v.optional(v.string()),
+        }),
+      ),
+    ),
   },
-  handler: async (ctx, { submissionId, grade, feedback }) => {
+  handler: async (ctx, { submissionId, grade, feedback, questionGrades }) => {
     const user = await requireUserDoc(ctx);
     const submission = await ctx.db.get(submissionId);
     if (!submission) throw new Error("Submission not found.");
@@ -176,15 +249,30 @@ export const gradeSubmission = mutation({
     ) {
       throw new Error("Only the course tutor can grade this.");
     }
+
+    let finalGrade = grade;
+    if (questionGrades && questionGrades.length > 0) {
+      const qs = assignment.questions ?? [];
+      // Clamp each question score to its max marks, then total server-side so
+      // the stored grade can never exceed the assignment maximum.
+      finalGrade = questionGrades.reduce((sum, g) => {
+        const maxMarks = qs[g.questionIndex]?.maxMarks ?? 0;
+        return sum + Math.max(0, Math.min(g.score, maxMarks || g.score));
+      }, 0);
+    }
+    finalGrade = Math.max(0, Math.min(finalGrade, assignment.maxScore));
+
     await ctx.db.patch(submission._id, {
-      grade: Math.max(0, Math.min(grade, assignment.maxScore)),
+      grade: finalGrade,
       feedback,
+      questionGrades,
       gradedAt: Date.now(),
+      status: "graded",
     });
     await notify(ctx, {
       userId: submission.studentId,
       title: "Assignment graded",
-      body: `"${assignment.title}" — ${grade}/${assignment.maxScore}${feedback ? ". Read your feedback." : ""}`,
+      body: `"${assignment.title}" — ${finalGrade}/${assignment.maxScore}${feedback ? ". Read your feedback." : ""}`,
       type: "grade",
       link: "/dashboard/assignments",
     });

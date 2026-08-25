@@ -12,8 +12,7 @@ import {
 } from "./lib";
 import { questionValidator, type Question } from "./schema";
 import { completeLessonInternal, enrollmentFor } from "./learn";
-
-const WATCH_GATE = 90;
+import { courseRequirements, effectiveWatchedPercent } from "./lmsShared";
 
 const normalize = (s: string) => s.trim().toLowerCase().replace(/\s+/g, " ");
 
@@ -81,9 +80,11 @@ export const submitLessonQuiz = mutation({
         )
         .collect();
       const wp = rows.find((r) => r.lessonId === lesson._id);
-      if (!wp || wp.percent < WATCH_GATE) {
+      const course = await ctx.db.get(quiz.courseId);
+      const gate = course ? courseRequirements(course).videoWatchPercent : 90;
+      if (!wp || effectiveWatchedPercent(wp) < gate) {
         throw new Error(
-          `Watch at least ${WATCH_GATE}% of the video to unlock this quiz.`,
+          `Watch at least ${gate}% of the video to unlock this quiz.`,
         );
       }
     }

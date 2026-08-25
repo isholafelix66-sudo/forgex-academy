@@ -10,7 +10,58 @@ import {
   requireTutorPreview,
   slugify,
 } from "./lib";
-import { difficultyValidator, questionValidator, resourceValidator, ROLES } from "./schema";
+import {
+  assignmentQuestionValidator,
+  difficultyValidator,
+  questionValidator,
+  resourceValidator,
+  ROLES,
+  type AssignmentQuestion,
+  type Question,
+} from "./schema";
+
+// ---------------------------------------------------------------------------
+// Builder validation — publishing rules enforced server-side.
+// Drafts may be saved incomplete; publishing never can be.
+// ---------------------------------------------------------------------------
+
+/** Throws with a precise message if a quiz cannot go live. */
+export function validateQuizForPublish(questions: Question[], publishing: boolean) {
+  if (!publishing) return;
+  if (questions.length === 0) {
+    throw new Error("Add at least one question before publishing this quiz.");
+  }
+  questions.forEach((q, i) => {
+    const label = `Question ${i + 1}`;
+    if (!q.question.trim()) throw new Error(`${label}: the question text is missing.`);
+    if (q.type === "multiple-choice") {
+      const opts = (q.options ?? []).filter((o) => o.trim());
+      if (opts.length < 2)
+        throw new Error(`${label}: multiple choice needs at least two answer options.`);
+      if (!q.answer?.trim() || !opts.some((o) => o.trim().toLowerCase() === q.answer!.trim().toLowerCase()))
+        throw new Error(`${label}: select which option is the correct answer.`);
+    } else if (q.type === "true-false") {
+      if (!q.answer?.trim())
+        throw new Error(`${label}: choose whether the correct answer is True or False.`);
+    } else if (q.type === "short-answer") {
+      const hasKey =
+        (q.answer ?? "").trim() !== "" || (q.acceptedAnswers ?? []).some((a) => a.trim());
+      if (!hasKey)
+        throw new Error(`${label}: provide an expected answer (plus any acceptable alternatives).`);
+    }
+  });
+}
+
+/** Throws if an assignment cannot go live. Legacy assignments (no structured
+ *  questions) remain publishable — they keep the classic text submission. */
+export function validateAssignmentForPublish(questions: AssignmentQuestion[]) {
+  if (questions.length === 0) return;
+  questions.forEach((q, i) => {
+    if (!q.question.trim())
+      throw new Error(`Question ${i + 1}: the question text is missing.`);
+    if ((q.maxMarks ?? 0) < 0) throw new Error(`Question ${i + 1}: marks can't be negative.`);
+  });
+}
 
 // ---------------------------------------------------------------------------
 // Overview
@@ -483,6 +534,10 @@ export const upsertQuiz = mutation({
     description: v.string(),
     timeLimitMinutes: v.number(),
     questions: v.array(questionValidator),
+    // Quiz Builder settings
+    passingScorePercent: v.optional(v.number()),
+    attemptLimit: v.optional(v.number()),
+    published: v.optional(v.boolean()),
     token: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
@@ -499,22 +554,34 @@ export const upsertQuiz = mutation({
     ) {
       throw new Error("Not your course.");
     }
+    validateQuizForPublish(args.questions, args.published !== false);
+    const patch = {
+      title: args.title,
+      description: args.description,
+      timeLimitMinutes: Math.max(0, Math.round(args.timeLimitMinutes)),
+      questions: args.questions,
+      passingScorePercent:
+        args.passingScorePercent === undefined
+          ? undefined
+          : Math.max(1, Math.min(100, Math.round(args.passingScorePercent))),
+      attemptLimit:
+        args.attemptLimit === undefined
+          ? undefined
+          : Math.max(0, Math.round(args.attemptLimit)),
+      updatedAt: Date.now(),
+    };
     if (args.id) {
       await ctx.db.patch(args.id, {
-        title: args.title,
-        description: args.description,
-        timeLimitMinutes: args.timeLimitMinutes,
-        questions: args.questions,
+        ...patch,
+        published: args.published,
       });
       return args.id;
     }
     return await ctx.db.insert("quizzes", {
       courseId: args.courseId,
       tutorId: course.tutorId,
-      title: args.title,
-      description: args.description,
-      timeLimitMinutes: args.timeLimitMinutes,
-      questions: args.questions,
+      ...patch,
+      published: args.published ?? true, // legacy default: live immediately
       createdAt: Date.now(),
     });
   },
@@ -567,6 +634,9 @@ export const upsertAssignment = mutation({
     deadline: v.optional(v.number()),
     maxScore: v.number(),
     files: v.array(resourceValidator),
+    // Assignment Builder settings
+    questions: v.optional(v.array(assignmentQuestionValidator)),
+    published: v.optional(v.boolean()),
     token: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
@@ -583,14 +653,17 @@ export const upsertAssignment = mutation({
     ) {
       throw new Error("Not your course.");
     }
+    if (args.published !== false) validateAssignmentForPublish(args.questions ?? []);
     if (args.id) {
       await ctx.db.patch(args.id, {
         title: args.title,
         description: args.description,
         instructions: args.instructions,
         deadline: args.deadline,
-        maxScore: args.maxScore,
+        maxScore: Math.max(1, Math.round(args.maxScore)),
         files: args.files,
+        questions: args.questions ?? [],
+        published: args.published,
       });
       return args.id;
     }
@@ -601,8 +674,10 @@ export const upsertAssignment = mutation({
       description: args.description,
       instructions: args.instructions,
       deadline: args.deadline,
-      maxScore: args.maxScore,
+      maxScore: Math.max(1, Math.round(args.maxScore)),
       files: args.files,
+      questions: args.questions ?? [],
+      published: args.published ?? true, // legacy default: live immediately
       createdAt: Date.now(),
     });
   },

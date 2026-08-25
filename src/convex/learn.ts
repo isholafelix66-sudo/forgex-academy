@@ -47,6 +47,125 @@ async function assertPreviousCompleted(
   }
 }
 
+/** Backend-authoritative course completion evaluation — THE single path to
+ *  status "completed". Called automatically after lesson / quiz / assignment
+ *  state changes; client-supplied completion values are never trusted.
+ *  Returns which requirement groups still block completion. */
+export async function tryCompleteCourseInternal(
+  ctx: MutationCtx,
+  user: Doc<"users">,
+  courseId: Id<"courses">,
+): Promise<{ completed: boolean; blockers: string[] }> {
+  const course = await ctx.db.get(courseId);
+  if (!course) return { completed: false, blockers: ["course"] };
+  const enrollment = await enrollmentFor(ctx, user._id, courseId);
+  if (!enrollment || enrollment.status === "completed") {
+    return { completed: enrollment?.status === "completed", blockers: [] };
+  }
+  const req = courseRequirements(course);
+  const blockers: string[] = [];
+
+  // 1) Every lesson completed (module-level rule: all required activities done).
+  const lessons = await ctx.db
+    .query("lessons")
+    .withIndex("by_courseId", (q) => q.eq("courseId", courseId))
+    .collect();
+  const lessonsDone =
+    lessons.length > 0 &&
+    lessons.every((l) => enrollment.completedLessons.includes(l._id));
+  if (req.requireAllLessons && !lessonsDone) blockers.push("lessons");
+
+  // 2) Every published course quiz passed at the configured score.
+  if (req.requireQuizzes) {
+    const quizzes = await ctx.db
+      .query("quizzes")
+      .withIndex("by_course", (q) => q.eq("courseId", courseId))
+      .collect();
+    const attempts =
+      blockers.length === 0
+        ? await ctx.db
+            .query("quizAttempts")
+            .withIndex("by_student", (s) => s.eq("studentId", user._id))
+            .collect()
+        : [];
+    for (const qz of quizzes.filter((q) => q.published !== false && q.questions.length > 0)) {
+      const best = attempts
+        .filter((a) => a.quizId === qz._id)
+        .sort((a, b) => b.score - a.score)[0];
+      const autoGradableMax = qz.questions.reduce((sum, q) => {
+        if (q.type === "short-answer") {
+          const hasKey = (q.answer ?? "").trim() !== "" || (q.acceptedAnswers?.length ?? 0) > 0;
+          return sum + (hasKey ? q.points ?? 1 : 0);
+        }
+        return sum + (q.points ?? 1);
+      }, 0);
+      const ok =
+        autoGradableMax > 0 &&
+        (best?.score ?? 0) / autoGradableMax >= req.quizPassPercent / 100;
+      if (!ok) blockers.push(`quiz:${qz.title}`);
+    }
+  }
+
+  // 3) Every published assignment submitted.
+  if (req.requireAssignments && blockers.length === 0) {
+    const assignments = await ctx.db
+      .query("assignments")
+      .withIndex("by_course", (q) => q.eq("courseId", courseId))
+      .collect();
+    for (const a of assignments.filter((x) => x.published !== false)) {
+      const submitted = await ctx.db
+        .query("submissions")
+        .withIndex("by_assignment", (q) => q.eq("assignmentId", a._id))
+        .collect()
+        .then((rows) => rows.some((s) => s.studentId === user._id));
+      if (!submitted) blockers.push(`assignment:${a.title}`);
+    }
+  }
+
+  // 4) Published final exam still gates the certificate (preserved behaviour).
+  let examPassed = false;
+  let examPending = false;
+  const exam = await ctx.db
+    .query("finalExams")
+    .withIndex("by_course", (q) => q.eq("courseId", courseId))
+    .first();
+  if (exam?.published) {
+    examPassed = await ctx.db
+      .query("finalExamAttempts")
+      .withIndex("by_student", (q) => q.eq("studentId", user._id))
+      .collect()
+      .then((rows) => rows.some((a) => a.examId === exam._id && a.passed));
+    examPending = !examPassed;
+    if (!examPassed) blockers.push("exam");
+  }
+
+  // Keep progress% consistent with lesson completions either way.
+  const progress = lessons.length
+    ? Math.min(
+        100,
+        Math.round(
+          (enrollment.completedLessons.filter((id) => lessons.some((l) => l._id === id)).length /
+            lessons.length) *
+            100,
+        ),
+      )
+    : enrollment.progress;
+  await ctx.db.patch(enrollment._id, { progress });
+
+  if (blockers.length === 0) {
+    await finishCourseInternal(ctx, user, course, {
+      ...enrollment,
+      progress: 100,
+      status: "completed",
+    });
+    return { completed: true, blockers: [] };
+  }
+  return { completed: false, examPending, blockers } as {
+    completed: boolean;
+    blockers: string[];
+  };
+}
+
 /** Issue a certificate + badge + notification when a course is truly finished. */
 export async function finishCourseInternal(
   ctx: MutationCtx,
@@ -433,6 +552,216 @@ export const lessonStates = query({
       allLessonsComplete:
         sorted.length > 0 && completedSet.size >= sorted.length,
     };
+  },
+});
+
+/**
+ * One centralized completion-requirements readout used by the Learn page,
+ * dashboards and completion screen: per-lesson watch %, quiz pass state,
+ * assignment submission state, and what remains before completion.
+ */
+export const courseCompletionStatus = query({
+  args: { courseId: v.id("courses") },
+  handler: async (ctx, { courseId }) => {
+    const user = await requireUser(ctx);
+    const course = await ctx.db.get(courseId);
+    if (!course) return null;
+    const enrollment = await enrollmentFor(ctx, user, courseId);
+    const req = courseRequirements(course);
+    const lessons = await ctx.db
+      .query("lessons")
+      .withIndex("by_course", (q) => q.eq("courseId", courseId))
+      .collect();
+    const sorted = [...lessons].sort((a, b) => a.order - b.order);
+    const completedSet = new Set(enrollment?.completedLessons ?? []);
+
+    const watchRows = enrollment
+      ? await ctx.db
+          .query("watchProgress")
+          .withIndex("by_student_course", (q) =>
+            q.eq("studentId", user).eq("courseId", courseId),
+          )
+          .collect()
+      : [];
+
+    const quizzes = await ctx.db
+      .query("quizzes")
+      .withIndex("by_course", (q) => q.eq("courseId", courseId))
+      .collect();
+    const quizAttempts = await ctx.db
+      .query("quizAttempts")
+      .withIndex("by_student", (q) => q.eq("studentId", user))
+      .collect();
+
+    const assignments = await ctx.db
+      .query("assignments")
+      .withIndex("by_course", (q) => q.eq("courseId", courseId))
+      .collect();
+    const submissions = await ctx.db
+      .query("submissions")
+      .withIndex("by_student", (q) => q.eq("studentId", user))
+      .collect();
+
+    const hasVideo = (l: Doc<"lessons">) =>
+      !!(
+        l.muxPlaybackId ||
+        l.videoType === "youtube" ||
+        l.videoType === "mp4" ||
+        l.videoType === "vimeo"
+      );
+
+    // Centralized activity list — every required learning activity with its
+    // completion state. Progress = completed activities / total activities.
+    type Activity = {
+      kind: "lesson-video" | "lesson-reading" | "lesson-quiz" | "quiz" | "assignment";
+      refId: string;
+      title: string;
+      completed: boolean;
+      detail?: string;
+    };
+    const activities: Activity[] = sorted.map((l) => {
+      if (hasVideo(l)) {
+        const wp = watchRows.find((r) => r.lessonId === l._id);
+        const watched = effectiveWatchedPercent(wp);
+        const done = completedSet.has(l._id);
+        return {
+          kind: "lesson-video",
+          refId: l._id,
+          title: l.title,
+          completed: done,
+          detail: done
+            ? undefined
+            : `${Math.floor(watched)}% watched — requires ${req.videoWatchPercent}%`,
+        };
+      }
+      return {
+        kind: "lesson-reading",
+        refId: l._id,
+        title: l.title,
+        completed: completedSet.has(l._id),
+      };
+    });
+
+    const publishedQuizzes = quizzes.filter(
+      (q) => q.published !== false && q.questions.length > 0,
+    );
+    for (const qz of publishedQuizzes) {
+      const attempts = quizAttempts.filter((a) => a.quizId === qz._id);
+      const best = [...attempts].sort((a, b) => b.score - a.score)[0];
+      const autoGradableMax = qz.questions.reduce((sum, q) => {
+        if (q.type === "short-answer") {
+          const hasKey = (q.answer ?? "").trim() !== "" || (q.acceptedAnswers?.length ?? 0) > 0;
+          return sum + (hasKey ? q.points ?? 1 : 0);
+        }
+        return sum + (q.points ?? 1);
+      }, 0);
+      const passed =
+        autoGradableMax > 0 &&
+        (best?.score ?? 0) / autoGradableMax >= req.quizPassPercent / 100;
+      activities.push({
+        kind: "quiz",
+        refId: qz._id,
+        title: qz.title,
+        completed: passed,
+        detail: passed
+          ? undefined
+          : best
+            ? `Best score ${best.score}/${autoGradableMax} — pass mark ${req.quizPassPercent}%`
+            : req.requireQuizzes
+              ? "Required — not yet taken"
+              : undefined,
+      });
+    }
+
+    for (const a of assignments.filter((x) => x.published !== false)) {
+      const submitted = submissions.some((s) => s.assignmentId === a._id);
+      activities.push({
+        kind: "assignment",
+        refId: a._id,
+        title: a.title,
+        completed: submitted,
+        detail: submitted ? undefined : req.requireAssignments ? "Required — not submitted" : undefined,
+      });
+    }
+
+    // Only count activities that actually gate completion toward progress.
+    const gating = activities.filter((act) => {
+      if (act.kind === "quiz") return req.requireQuizzes;
+      if (act.kind === "assignment") return req.requireAssignments;
+      return true;
+    });
+    const doneCount = gating.filter((a) => a.completed).length;
+    const progress = gating.length
+      ? Math.round((doneCount / gating.length) * 100)
+      : 100;
+
+    const exam = await ctx.db
+      .query("finalExams")
+      .withIndex("by_course", (q) => q.eq("courseId", courseId))
+      .first();
+    const examPassed = exam?.published
+      ? await ctx.db
+          .query("finalExamAttempts")
+          .withIndex("by_student", (q) => q.eq("studentId", user))
+          .collect()
+          .then((rows) => rows.some((r) => r.examId === exam._id && r.passed))
+      : false;
+    if (exam?.published && !examPassed) {
+      activities.push({
+        kind: "quiz",
+        refId: exam._id,
+        title: exam.title || "Final exam",
+        completed: false,
+        detail: `Final exam — pass mark ${exam.passPercent}%`,
+      });
+    }
+
+    const completed = enrollment?.status === "completed";
+    return {
+      requirements: req,
+      enrollment: enrollment
+        ? { status: enrollment.status, progress: enrollment.progress, enrolledAt: enrollment.enrolledAt }
+        : null,
+      lessonsTotal: sorted.length,
+      lessonsCompleted: sorted.filter((l) => completedSet.has(l._id)).length,
+      activities,
+      remaining: activities.filter((a) => !a.completed),
+      progress,
+      completed,
+      certificateUnlocked:
+        completed ||
+        (gating.every((a) => a.completed) && (!exam?.published || examPassed)),
+    };
+  },
+});
+
+/** Instructor/admin: save the Course Completion Requirements block. */
+export const setCourseRequirements = mutation({
+  args: {
+    videoWatchPercent: v.number(),
+    requireQuizzes: v.boolean(),
+    quizPassPercent: v.number(),
+    requireAssignments: v.boolean(),
+    requireAllLessons: v.boolean(),
+    courseId: v.id("courses"),
+  },
+  handler: async (ctx, args) => {
+    const user = await requireUserDoc(ctx);
+    const course = await ctx.db.get(args.courseId);
+    if (!course) throw new Error("Course not found.");
+    if (user.role !== "admin" && (user.role !== "tutor" || course.tutorId !== user._id)) {
+      throw new Error("Only the course tutor can change completion settings.");
+    }
+    await ctx.db.patch(course._id, {
+      completionRequirements: {
+        videoWatchPercent: sanitizeWatchPercent(args.videoWatchPercent),
+        requireQuizzes: args.requireQuizzes,
+        quizPassPercent: Math.max(1, Math.min(100, Math.round(args.quizPassPercent))),
+        requireAssignments: args.requireAssignments,
+        requireAllLessons: args.requireAllLessons,
+      },
+    });
+    return true;
   },
 });
 
