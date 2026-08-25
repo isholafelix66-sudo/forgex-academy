@@ -1,8 +1,10 @@
 import { mutation, query, MutationCtx, QueryCtx } from "./_generated/server";
 import { v } from "convex/values";
 import { Doc, Id } from "./_generated/dataModel";
+import { internal } from "./_generated/api";
 import { checkRateLimit, requireUser, requireUserDoc, hydrateCourses, hydrateCourse, notify, yyyymmdd, makeCertificateId } from "./lib";
 import { addMembership, ensureCommunityForCourse } from "./community";
+import { enrollmentEmail, certificateEmail } from "./emailTemplates";
 
 // ---------------------------------------------------------------------------
 // Shared learning helpers (imported by lessonquizzes.ts / exams.ts)
@@ -77,6 +79,20 @@ export async function finishCourseInternal(
       type: "certificate",
       link: "/dashboard/certificates",
     });
+    // Transactional email: certificate notification via Gmail SMTP.
+    const email = "email" in user ? String(user.email ?? "") : "";
+    if (email) {
+      await ctx.runMutation(internal.emailData.queueSystemEmail, {
+        to: email,
+        subject: `🎓 Certificate earned: ${course.title}`,
+        html: certificateEmail({
+          name: user.name || "Student",
+          courseTitle: course.title,
+          certificateId,
+        }).html,
+        emailType: "certificate",
+      });
+    }
   }
 }
 
@@ -215,6 +231,17 @@ export const enroll = mutation({
         body: `${user.name || "A student"} enrolled in "${course.title}".`,
         type: "enrollment",
         link: `/tutor`,
+      });
+    }
+
+    // Transactional email: enrollment confirmation to the student.
+    const studentEmail = "email" in user ? String(user.email ?? "") : "";
+    if (studentEmail) {
+      await ctx.runMutation(internal.emailData.queueSystemEmail, {
+        to: studentEmail,
+        subject: `You're enrolled in "${course.title}"`,
+        html: enrollmentEmail({ name: user.name || "there", courseTitle: course.title }).html,
+        emailType: "enrollment",
       });
     }
     return id;

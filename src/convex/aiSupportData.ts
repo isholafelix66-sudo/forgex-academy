@@ -10,6 +10,8 @@ import { v } from "convex/values";
 import { mutation, query, internalMutation, internalQuery } from "./_generated/server";
 import { getAuthUserId } from "@convex-dev/auth/server";
 import type { Id } from "./_generated/dataModel";
+import { internal } from "./_generated/api";
+import { supportNotificationEmail } from "./emailTemplates";
 
 export const WELCOME_MESSAGE =
   "Hi! 👋 I'm the ForgeX Support Assistant. Tell me what you're experiencing, and I'll do my best to help you resolve it. If I can't solve the problem, you can request help from our support team.";
@@ -321,6 +323,27 @@ async function createEscalatedTicketCore(
       read: false,
       createdAt: now,
     });
+  }
+
+  // Transactional email: support-ticket confirmation to the requester.
+  const requester = await ctx.db.get(args.userId);
+  const requesterEmail =
+    requester && "email" in requester ? String(requester.email ?? "") : "";
+  if (requesterEmail) {
+    try {
+      await ctx.runMutation(internal.emailData.queueSystemEmail, {
+        to: requesterEmail,
+        subject: `Support ticket ${ticketNumber} received`,
+        html: supportNotificationEmail({
+          ticketId: ticketNumber,
+          category: TEAM_LABELS[args.assignedTeam] ?? args.assignedTeam,
+          summary: args.subject,
+        }).html,
+        emailType: "support",
+      });
+    } catch {
+      // email must never break escalation
+    }
   }
 
   return { ticketId, ticketNumber };

@@ -4,6 +4,7 @@ import { internalQuery, mutation, query, QueryCtx } from "./_generated/server";
 import { v } from "convex/values";
 import { ROLES, socialsValidator } from "./schema";
 import { checkRateLimit, notify, publicUser, requireUser, requireUserDoc } from "./lib";
+import { welcomeEmail } from "./emailTemplates";
 
 /**
  * Get the current signed in user. Returns null if the user is not signed in.
@@ -158,7 +159,24 @@ export const initializeUser = mutation({
           ? ROLES.TUTOR
           : ROLES.STUDENT;
     }
-    if (!user.onboarded) patch.onboarded = true;
+    if (!user.onboarded) {
+      patch.onboarded = true;
+      // Transactional email: one-time welcome via Gmail SMTP (never blocks
+      // onboarding — failures are logged, not thrown).
+      const email = "email" in user ? String(user.email ?? "") : "";
+      if (email) {
+        try {
+          await ctx.runMutation(internal.emailData.queueSystemEmail, {
+            to: email,
+            subject: "Welcome to ForgeX Academy 🎉",
+            html: welcomeEmail({ name: name || "there" }).html,
+            emailType: "welcome",
+          });
+        } catch {
+          // email must never break onboarding
+        }
+      }
+    }
     if (name && !user.name) patch.name = name;
     if (Object.keys(patch).length > 0) {
       await ctx.db.patch(user._id, patch);
