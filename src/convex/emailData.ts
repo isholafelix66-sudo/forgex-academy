@@ -162,7 +162,7 @@ export const internalClaimBatch = internalMutation({
       .order("asc")
       .take(BATCH_SIZE * 4);
     // Due retries.
-    const retryingRows = (await ctx.db
+    const retryingRows = await ctx.db
       .query("emailLogs")
       .withIndex("by_retrying_next", (q) => q.eq("status", "retrying"))
       .order("asc")

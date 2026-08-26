@@ -835,6 +835,15 @@ export const reviewTutorApplication = mutation({
       reviewNote: reason,
     });
 
+    // Automated email: decision notice fires only on an actual status change
+    // (once per approval event — duplicates are impossible).
+    await ctx.scheduler.runAfter(0, internal.emailTriggers.notifyTutorDecision, {
+      applicationId,
+      prevStatus: app.status,
+      nextStatus,
+      decisionNote: reason,
+    });
+
     // Tutor profile flags: the application data itself is never touched.
     const user = await ctx.db.get(tutorId);
     if (user) {
@@ -1001,6 +1010,11 @@ export const reviewCourse = mutation({
           : `"${course.title}" was not approved.`,
       type: "course",
       link: "/tutor/courses",
+    });
+    await ctx.scheduler.runAfter(0, internal.emailTriggers.notifyCourseDecisionToTutor, {
+      courseId,
+      approved: approve,
+      note,
     });
     return true;
   },

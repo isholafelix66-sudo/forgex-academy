@@ -27,6 +27,7 @@ import type * as email from "../email.js";
 import type * as emailData from "../emailData.js";
 import type * as emailService from "../emailService.js";
 import type * as emailTemplates from "../emailTemplates.js";
+import type * as emailTriggers from "../emailTriggers.js";
 import type * as exams from "../exams.js";
 import type * as http from "../http.js";
 import type * as jobs from "../jobs.js";
@@ -85,6 +86,7 @@ declare const fullApi: ApiFromModules<{
   emailData: typeof emailData;
   emailService: typeof emailService;
   emailTemplates: typeof emailTemplates;
+  emailTriggers: typeof emailTriggers;
   exams: typeof exams;
   http: typeof http;
   jobs: typeof jobs;

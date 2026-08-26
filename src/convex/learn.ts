@@ -353,6 +353,8 @@ export const enroll = mutation({
       status: "in-progress",
       completedLessons: [],
       progress: 0,
+      lastActivityAt: Date.now(),
+      inactivityStage: 0,
     });
     await ctx.db.patch(courseId, { enrolledCount: course.enrolledCount + 1 });
 
@@ -371,6 +373,9 @@ export const enroll = mutation({
         body: `${user.name || "A student"} enrolled in "${course.title}".`,
         type: "enrollment",
         link: `/tutor`,
+      });
+      await ctx.scheduler.runAfter(0, internal.emailTriggers.notifyNewEnrollmentToTutor, {
+        enrollmentId: id,
       });
     }
 

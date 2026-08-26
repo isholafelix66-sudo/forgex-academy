@@ -297,6 +297,7 @@ export const saveTutorApplication = mutation({
       reviewNote: undefined,
     };
 
+    let appId = existing?._id as never; // set below for brand-new applications
     const confirmSubmitted = async () => {
       await notify(ctx, {
         userId: user._id,
@@ -305,9 +306,19 @@ export const saveTutorApplication = mutation({
         type: "tutor",
         link: "/become-tutor",
       });
-      if (fields.email) {
+      // Staff alert: a new tutor application is awaiting review.
+      await ctx.scheduler.runAfter(0, internal.emailTriggers.notifyStaffNewTutorApplication, {
+        applicationId: appId,
+        applicantName: fields.fullName || user.name || "A tutor",
+      });
+      // Respect the Email Center toggle for this automation.
+      const regAuto = await ctx.db
+        .query("emailAutomations")
+        .withIndex("by_key", (q) => q.eq("key", "tutor_registration_received"))
+        .first();
+      if (fields.email && regAuto?.enabled !== false) {
         const site = (process.env.SITE_URL ?? "https://forgex.academy").replace(/\/$/, "");
-        await ctx.scheduler.runAfter(0, internal.email.sendEmail, {
+        await ctx.runMutation(internal.emailData.queueSystemEmail, {
           to: fields.email,
           subject: "We received your tutor application 📬",
           html: `
@@ -342,6 +353,7 @@ export const saveTutorApplication = mutation({
       status: nextStatus,
       wasVerified: false,
     });
+    appId = id as never;
     if (submit) await confirmSubmitted();
     return id;
   },
