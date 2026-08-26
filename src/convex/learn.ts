@@ -234,31 +234,6 @@ export async function completeLessonInternal(
   const course = await ctx.db.get(lesson.courseId);
   const req = course ? courseRequirements(course) : null;
 
-  // Watch requirement for video lessons (applies to manual completion too —
-  // students cannot force a video lesson to "complete" without watching).
-  const hasVideo = !!(
-    lesson.muxPlaybackId ||
-    lesson.videoType === "youtube" ||
-    lesson.videoType === "mp4" ||
-    lesson.videoType === "vimeo" ||
-    lesson.videoType === "mux"
-  );
-  if (hasVideo && req && !enrollment.completedLessons.includes(lessonId)) {
-    const rows = await ctx.db
-      .query("watchProgress")
-      .withIndex("by_student_course", (q) =>
-        q.eq("studentId", user._id).eq("courseId", lesson.courseId),
-      )
-      .collect();
-    const wp = rows.find((r) => r.lessonId === lessonId);
-    const watched = effectiveWatchedPercent(wp);
-    if (watched < req.videoWatchPercent) {
-      throw new Error(
-        `Watch at least ${req.videoWatchPercent}% of this video first (${Math.floor(watched)}% so far).`,
-      );
-    }
-  }
-
   if (!enrollment.completedLessons.includes(lessonId)) {
     // A published per-lesson quiz must be passed first — passing the quiz is
     // what marks the lesson complete (see submitLessonQuiz).
@@ -701,9 +676,7 @@ export const courseCompletionStatus = query({
           refId: l._id,
           title: l.title,
           completed: done,
-          detail: done
-            ? undefined
-            : `${Math.floor(watched)}% watched — requires ${req.videoWatchPercent}%`,
+          detail: done ? undefined : `${Math.floor(watched)}% watched`,
         };
       }
       return {

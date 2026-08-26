@@ -38,7 +38,8 @@ import { cn } from "@/lib/utils";
 import { formatHours } from "@/lib/format";
 import { friendlyError } from "@/lib/errors";
 
-const DEFAULT_WATCH_GATE = 90;
+// Video watch percentage is no longer a gate for lesson completion.
+// Students can mark lessons complete freely; quizzes/assessments are the gate for certificates.
 
 type LessonQuizPayload = {
   _id: string;
@@ -168,10 +169,9 @@ export default function Learn() {
     activeLesson?.videoType === "vimeo" ||
     activeLesson?.videoType === "mux";
 
-  // Use the higher of local or server progress — local is instant, server is authoritative
+  // Video progress is informational only — no longer gates lesson completion.
   const watchPercent = Math.max(localWatchPercent, serverWatchPercent);
-  const watchGate = states?.completionRequirements?.videoWatchPercent ?? DEFAULT_WATCH_GATE;
-  const watchOk = !trackable || watchPercent >= watchGate;
+  const watchOk = true; // Always enabled — mark complete is free
 
   /** Reset local progress when switching lessons. */
   useEffect(() => {
@@ -493,9 +493,7 @@ export default function Learn() {
                               "inline-flex items-center gap-1",
                               st.quizPassed
                                 ? "text-lime-300"
-                                : st.watchedPercent >= (states?.completionRequirements?.videoWatchPercent ?? DEFAULT_WATCH_GATE)
-                                  ? "text-amber-300"
-                                  : "text-muted-foreground/70",
+                                : "text-amber-300",
                             )}
                           >
                             · <ListChecks className="size-3" /> quiz
@@ -505,7 +503,7 @@ export default function Learn() {
                     </div>
                     {st.quiz && st.quizPassed ? (
                       <CheckCircle2 className="size-4 shrink-0 text-lime-400" />
-                    ) : st.quiz && st.watchedPercent >= (states?.completionRequirements?.videoWatchPercent ?? DEFAULT_WATCH_GATE) ? (
+                    ) : st.quiz ? (
                       <ListChecks className="size-4 shrink-0 text-amber-300" />
                     ) : st.locked ? (
                       <Lock className="size-4 shrink-0 text-muted-foreground/50" />
@@ -612,7 +610,7 @@ export default function Learn() {
                 onPlayerPause={handlePlayerPause}
               />
 
-              {/* Watch progress bar — always shown for video lessons */}
+              {/* Video progress — informational, no longer gates completion */}
               {trackable && (
                 <div className="rounded-2xl border border-white/10 bg-card p-4">
                   <div className="flex items-center justify-between gap-3">
@@ -620,22 +618,15 @@ export default function Learn() {
                       <p className="text-sm font-medium">
                         {activeState.completed
                           ? "Lesson completed ✓"
-                          : watchOk
-                            ? activeState.quiz
-                              ? "Quiz unlocked — well watched! 🎯"
-                              : "Watch requirement met — mark complete"
-                            : `Watch ${watchGate - Math.min(watchPercent, 100)}% more to ${activeState.quiz ? "unlock the quiz" : "complete"}`}
+                          : activeState.quiz
+                            ? "Quiz available — ready to test your knowledge"
+                            : "Mark complete when you're ready"}
                       </p>
                       <p className="text-xs text-muted-foreground">
-                        Video progress: {Math.min(watchPercent, 100)}% — requires {watchGate}%{watchOk ? " ✓" : ""}.
+                        Video progress: {Math.min(watchPercent, 100)}%.
                       </p>
                     </div>
-                    <span
-                      className={cn(
-                        "shrink-0 rounded-full px-2.5 py-1 text-xs font-bold",
-                        watchOk ? "bg-lime-400/15 text-lime-300" : "bg-amber-400/10 text-amber-300",
-                      )}
-                    >
+                    <span className="shrink-0 rounded-full bg-lime-400/15 px-2.5 py-1 text-xs font-bold text-lime-300">
                       {Math.min(watchPercent, 100)}%
                     </span>
                   </div>
@@ -653,9 +644,7 @@ export default function Learn() {
                     {activeState.completed
                       ? "Lesson completed ✓"
                       : activeState.quiz
-                        ? watchOk
-                          ? "Ready to test your knowledge"
-                          : "Watch the video to unlock the quiz"
+                        ? "Ready to test your knowledge"
                         : "Mark this lesson as complete"}
                   </p>
                   <p className="text-xs text-muted-foreground">
@@ -673,7 +662,7 @@ export default function Learn() {
                         courseId: course._id,
                       })
                     }
-                    disabled={!watchOk || activeState.completed}
+                    disabled={activeState.completed}
                     className={cn(
                       "shrink-0 gap-2",
                       activeState.completed
@@ -685,20 +674,16 @@ export default function Learn() {
                       <>
                         <CheckCircle2 className="size-4" /> Completed
                       </>
-                    ) : watchOk ? (
-                      <>
-                        <ListChecks className="size-4" /> Take quiz
-                      </>
                     ) : (
                       <>
-                        <Lock className="size-4" /> Watch to unlock
+                        <ListChecks className="size-4" /> Take quiz
                       </>
                     )}
                   </Button>
                 ) : (
                   <Button
                     onClick={handleComplete}
-                    disabled={marking || activeState.completed || (trackable && !watchOk)}
+                    disabled={marking || activeState.completed}
                     className={cn(
                       "shrink-0 gap-2",
                       activeState.completed
