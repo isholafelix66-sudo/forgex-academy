@@ -3,6 +3,8 @@ import { useMutation, useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import {
   AlertCircle,
+  Ban,
+  Bot,
   CheckCircle2,
   Clock,
   Loader2,
@@ -27,15 +29,17 @@ import { PageHeader } from "@/components/dash/PageHeader";
 import { getAdminToken } from "@/lib/admin-session";
 import { toast } from "sonner";
 
-type Tab = "dashboard" | "compose" | "history" | "failed" | "sent" | "automated";
+type Tab = "dashboard" | "compose" | "queue" | "history" | "failed" | "sent" | "automated" | "automations";
 
 const TABS: { key: Tab; label: string }[] = [
   { key: "dashboard", label: "Dashboard" },
   { key: "compose", label: "Compose" },
+  { key: "queue", label: "Queue" },
   { key: "history", label: "History" },
   { key: "failed", label: "Failed" },
   { key: "sent", label: "Sent" },
   { key: "automated", label: "Automated" },
+  { key: "automations", label: "Automations" },
 ];
 
 const TYPE_LABELS: Record<string, string> = {
@@ -48,6 +52,25 @@ const TYPE_LABELS: Record<string, string> = {
   certificate: "Certificate",
   support: "Support",
   admin_broadcast: "Admin broadcast",
+  tutor_approved: "Tutor approved",
+  tutor_rejected: "Tutor rejected",
+  tutor_info_required: "Tutor info required",
+  tutor_registration_received: "Tutor registration received",
+  staff_tutor_pending: "Tutor awaiting approval",
+  student_inactive_3d: "Inactivity — day 3",
+  student_inactive_7d: "Inactivity — day 7",
+  student_inactive_14d: "Inactivity — day 14",
+  team_role_assigned: "Team role assigned",
+  support_ticket_staff: "Support ticket alert",
+  support_escalated_staff: "Escalated issue alert",
+  critical_error: "Critical system error",
+  admin_summary: "Admin activity summary",
+  tutor_new_enrollment: "Tutor — new enrollment",
+  tutor_submission: "Tutor — assignment submission",
+  staff_course_review: "Course awaiting review",
+  course_approved: "Course approved",
+  course_rejected: "Course rejected",
+  tutor_inactivity: "Tutor inactivity",
 };
 
 const FRIENDLY_ERRORS: Record<string, string> = {
@@ -82,6 +105,18 @@ function StatusBadge({ status }: { status: string }) {
       cls: "border-rose-400/30 bg-rose-400/10 text-rose-300",
       icon: <AlertCircle className="size-3" />,
     },
+    processing: {
+      cls: "border-sky-400/30 bg-sky-400/10 text-sky-300",
+      icon: <Loader2 className="size-3 animate-spin" />,
+    },
+    retrying: {
+      cls: "border-amber-400/30 bg-amber-400/10 text-amber-300",
+      icon: <RefreshCw className="size-3" />,
+    },
+    cancelled: {
+      cls: "border-white/15 bg-white/5 text-muted-foreground",
+      icon: <Ban className="size-3" />,
+    },
   };
   const s = map[status] ?? map.pending;
   return (
@@ -112,6 +147,9 @@ export default function AdminEmailCenter() {
   const [previewing, setPreviewing] = useState(false);
   const [confirmingSend, setConfirmingSend] = useState(false);
   const [sending, setSending] = useState(false);
+  const [automationFilter, setAutomationFilter] = useState("");
+  const [editingSubjectKey, setEditingSubjectKey] = useState<string | null>(null);
+  const [subjectDraft, setSubjectDraft] = useState("");
 
   const stats = useQuery(api.emailData.adminStats, authed ? { token } : "skip");
   const emails = useQuery(
@@ -127,12 +165,27 @@ export default function AdminEmailCenter() {
   const compose = useMutation(api.emailData.adminCompose);
   const retryEmail = useMutation(api.emailData.adminRetryEmail);
   const resendEmail = useMutation(api.emailData.adminResendEmail);
+  const cancelEmail = useMutation(api.emailData.adminCancelEmail);
+
+  // Automations tab
+  const automations = useQuery(
+    api.emailData.adminListAutomations,
+    authed ? { token } : "skip",
+  );
+  const automationEmails = useQuery(
+    api.emailData.adminListAutomationEmails,
+    authed ? { token, automationKey: automationFilter || undefined } : "skip",
+  );
+  const setAutomationEnabled = useMutation(api.emailData.adminSetAutomationEnabled);
+  const setAutomationSubject = useMutation(api.emailData.adminSetAutomationSubject);
 
   const filtered = useMemo(() => {
     if (!emails) return [];
     return emails.filter((e) => {
       if (tab === "failed") return e.status === "failed";
       if (tab === "sent") return e.status === "sent";
+      if (tab === "queue")
+        return ["pending", "processing", "retrying", "cancelled"].includes(e.status);
       if (tab === "automated") return e.automated;
       if (statusFilter) return e.status === statusFilter;
       return true;
@@ -201,6 +254,34 @@ export default function AdminEmailCenter() {
       toast.success("Re-queued for sending.");
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Couldn't retry that email.");
+    }
+  };
+
+  const handleCancel = async (id: string) => {
+    try {
+      await cancelEmail({ token, id: id as never });
+      toast.success("Email cancelled — it will not be sent.");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Could not cancel that email.");
+    }
+  };
+
+  const handleToggleAutomation = async (key: string, enabled: boolean) => {
+    try {
+      await setAutomationEnabled({ token, key, enabled });
+      toast.success(enabled ? "Automation enabled." : "Automation disabled.");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Could not update the automation.");
+    }
+  };
+
+  const handleSaveSubject = async (key: string) => {
+    try {
+      await setAutomationSubject({ token, key, subject: subjectDraft });
+      toast.success(subjectDraft.trim() ? "Custom subject saved." : "Reverted to the default subject.");
+      setEditingSubjectKey(null);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Could not save the subject.");
     }
   };
 
@@ -457,10 +538,134 @@ export default function AdminEmailCenter() {
         </div>
       )}
 
-      {/* Lists (history / failed / sent / automated share one table) */}
-      {tab !== "dashboard" && tab !== "compose" && (
+      {/* Automations */}
+      {tab === "automations" && (
+        <div className="space-y-4">
+          <p className="rounded-2xl border border-white/10 bg-card p-4 text-sm text-muted-foreground">
+            Every automation below runs through the ForgeX email queue. Disable a
+            trigger to stop its emails, or override the default subject line —
+            no code changes required.
+          </p>
+          {automations === undefined ? (
+            <div className="space-y-2">
+              {Array.from({ length: 5 }).map((_, i) => (
+                <div key={i} className="h-20 animate-pulse rounded-2xl border border-white/8 bg-card" />
+              ))}
+            </div>
+          ) : (
+            <div className="grid gap-3 lg:grid-cols-2">
+              {automations.map((a) => (
+                <div key={a.key} className="rounded-2xl border border-white/10 bg-card p-4">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="flex items-center gap-2 text-sm font-semibold">
+                        <Bot className={"size-4 " + (a.enabled ? "text-lime-300" : "text-muted-foreground")} />
+                        {a.label}
+                      </p>
+                      <p className="mt-1 text-xs leading-relaxed text-muted-foreground">{a.description}</p>
+                      <p className="mt-1.5 font-mono text-[10px] text-muted-foreground/60">{a.key} · audience: {a.audience}</p>
+                    </div>
+                    <label className="flex shrink-0 cursor-pointer items-center gap-2">
+                      <input
+                        type="checkbox"
+                        checked={a.enabled}
+                        onChange={(e) => void handleToggleAutomation(a.key, e.target.checked)}
+                        className="size-4 accent-lime-400"
+                      />
+                      <span className="text-[11px] text-muted-foreground">{a.enabled ? "On" : "Off"}</span>
+                    </label>
+                  </div>
+                  {editingSubjectKey === a.key ? (
+                    <div className="mt-3 flex gap-2">
+                      <Input
+                        value={subjectDraft}
+                        onChange={(e) => setSubjectDraft(e.target.value)}
+                        placeholder={a.defaultSubject}
+                        className="h-9 border-white/10 bg-black/30"
+                      />
+                      <Button size="sm" className="shrink-0 bg-lime-400 font-semibold text-black hover:bg-lime-300" onClick={() => void handleSaveSubject(a.key)}>
+                        Save
+                      </Button>
+                      <Button size="sm" variant="ghost" className="shrink-0" onClick={() => setEditingSubjectKey(null)}>
+                        Cancel
+                      </Button>
+                    </div>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setEditingSubjectKey(a.key);
+                        setSubjectDraft(a.subjectOverride ?? "");
+                      }}
+                      className="mt-3 w-full rounded-lg border border-white/10 bg-black/20 px-3 py-2 text-left text-xs text-muted-foreground hover:border-lime-400/30 hover:text-foreground"
+                    >
+                      <span className="font-medium">Subject:</span>{" "}
+                      {a.subjectOverride ?? a.defaultSubject}
+                      {!a.subjectOverride && <span className="ml-1 opacity-60">(default)</span>}
+                    </button>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Automation log */}
+          <div className="rounded-2xl border border-white/10 bg-card p-4">
+            <div className="mb-3 flex flex-wrap items-center gap-2">
+              <h3 className="text-sm font-semibold">Automation log</h3>
+              <select
+                value={automationFilter}
+                onChange={(e) => setAutomationFilter(e.target.value)}
+                className="h-8 appearance-none rounded-lg border border-white/10 bg-black/30 px-2 text-xs focus:border-lime-400/40 focus:outline-none"
+              >
+                <option value="">All automations</option>
+                {(automations ?? []).map((a) => (
+                  <option key={a.key} value={a.key}>{a.label}</option>
+                ))}
+              </select>
+            </div>
+            {automationEmails === undefined ? (
+              <Loader2 className="mx-auto my-6 size-5 animate-spin text-muted-foreground" />
+            ) : automationEmails.length === 0 ? (
+              <p className="py-4 text-center text-sm text-muted-foreground">
+                No automation emails yet — they will appear here as triggers fire.
+              </p>
+            ) : (
+              <div className="divide-y divide-white/5">
+                {automationEmails.map((e) => (
+                  <button key={e._id} onClick={() => setDetailId(e._id)} className="flex w-full items-center gap-3 px-1 py-2.5 text-left">
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-sm">{e.subject}</p>
+                      <p className="truncate text-xs text-muted-foreground">
+                        {e.to} · {TYPE_LABELS[e.emailType] ?? e.emailType} · created {fmtDate(e.createdAt)}
+                        {e.sentAt ? ` · sent ${fmtDate(e.sentAt)}` : ""}
+                      </p>
+                    </div>
+                    <StatusBadge status={e.status} />
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Lists (queue / history / failed / sent / automated share one table) */}
+      {(tab === "queue" || tab === "history" || tab === "failed" || tab === "sent" || tab === "automated") && (
         <>
-          {tab === "history" && (
+          {tab === "queue" && (
+            <div className="flex flex-wrap items-center gap-3 rounded-2xl border border-white/10 bg-card p-4 text-xs text-muted-foreground">
+              <span className="font-medium text-foreground">Live queue</span>
+              <span>Pending: {stats?.pending ?? 0}</span>
+              <span>Processing: {stats?.processing ?? 0}</span>
+              <span>Retrying: {stats?.retrying ?? 0}</span>
+              <span>Cancelled: {stats?.cancelled ?? 0}</span>
+              <span>Last sent: {stats?.lastSentAt ? fmtDate(stats.lastSentAt) : "—"}</span>
+              <span className="ml-auto">Delivered in rate-limited batches · failed temporary deliveries retry automatically</span>
+            </div>
+          )}
+
+          {(tab === "history" || tab === "queue") && (
             <div className="flex flex-wrap items-center gap-2">
               <div className="relative min-w-56 flex-1">
                 <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
@@ -478,8 +683,11 @@ export default function AdminEmailCenter() {
               >
                 <option value="">All statuses</option>
                 <option value="pending">Pending</option>
+                <option value="processing">Processing</option>
+                <option value="retrying">Retrying</option>
                 <option value="sent">Sent</option>
                 <option value="failed">Failed</option>
+                <option value="cancelled">Cancelled</option>
               </select>
             </div>
           )}
@@ -492,7 +700,7 @@ export default function AdminEmailCenter() {
             </div>
           ) : filtered.length === 0 ? (
             <p className="rounded-2xl border border-white/10 bg-card p-10 text-center text-sm text-muted-foreground">
-              No emails here{tab === "failed" ? " — everything delivered 🎉" : " yet"}.
+              No emails here{tab === "failed" ? " — everything delivered 🎉" : tab === "queue" ? " in the queue right now" : " yet"}.
             </p>
           ) : (
             <div className="overflow-hidden rounded-2xl border border-white/10 bg-card">
@@ -507,12 +715,30 @@ export default function AdminEmailCenter() {
                       <p className="truncate text-xs text-muted-foreground">
                         {e.to} · {TYPE_LABELS[e.emailType] ?? e.emailType} · {fmtDate(e.createdAt)}
                         {e.retryCount > 0 ? ` · retried ${e.retryCount}×` : ""}
+                        {e.scheduledAt ? ` · scheduled ${fmtDate(e.scheduledAt)}` : ""}
+                        {e.lastError ? ` · ${FRIENDLY_ERRORS[e.lastError] ?? e.lastError}` : ""}
                       </p>
                     </button>
+                    {e.priority !== "normal" && (
+                      <span
+                        className={`shrink-0 rounded-full border px-2 py-0.5 text-[10px] font-bold uppercase ${
+                          e.priority === "critical"
+                            ? "border-rose-400/30 bg-rose-400/10 text-rose-300"
+                            : "border-amber-400/30 bg-amber-400/10 text-amber-300"
+                        }`}
+                      >
+                        {e.priority}
+                      </span>
+                    )}
                     <StatusBadge status={e.status} />
-                    {e.status === "failed" && (
+                    {(e.status === "failed" || e.status === "retrying" || e.status === "cancelled") && (
                       <Button size="sm" variant="outline" className="gap-1.5 border-white/15 bg-black/20" onClick={() => void handleRetry(e._id)}>
                         <RefreshCw className="size-3.5" /> Retry
+                      </Button>
+                    )}
+                    {(e.status === "pending" || e.status === "retrying") && (
+                      <Button size="sm" variant="ghost" className="text-muted-foreground hover:text-rose-300" onClick={() => void handleCancel(e._id)}>
+                        <Ban className="size-3.5" /> Cancel
                       </Button>
                     )}
                     {e.status === "sent" && (

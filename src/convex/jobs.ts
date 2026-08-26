@@ -349,6 +349,18 @@ export const cleanupResilience = internalMutation({
       );
     for (const row of doneJobs.slice(0, 500)) await ctx.db.delete(row._id);
 
+    // Critical system error notification — dead-lettered jobs mean real
+    // faults. Deduped per day inside the email trigger.
+    const deadJobs = stuck.filter((j) => j.status === "dead").length;
+    if (deadJobs > 0) {
+      await ctx.runMutation(internal.emailTriggers.criticalSystemError, {
+        title: "Background jobs dead-lettered",
+        detail:
+          deadJobs +
+          " background job(s) crashed and exhausted all attempts. Check the resilience dashboard.",
+      });
+    }
+
     return {
       logsPruned: oldLogs.length,
       limitsPruned: Math.min(staleLimits.length, 500),
