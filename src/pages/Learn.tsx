@@ -38,7 +38,7 @@ import { cn } from "@/lib/utils";
 import { formatHours } from "@/lib/format";
 import { friendlyError } from "@/lib/errors";
 
-const WATCH_GATE = 90;
+const DEFAULT_WATCH_GATE = 90;
 
 type LessonQuizPayload = {
   _id: string;
@@ -157,7 +157,8 @@ export default function Learn() {
     activeLesson?.videoType === "mp4" ||
     activeLesson?.videoType === "vimeo";
   const watchPercent = activeState?.watchedPercent ?? 0;
-  const watchOk = !trackable || watchPercent >= WATCH_GATE;
+  const watchGate = states?.completionRequirements?.videoWatchPercent ?? DEFAULT_WATCH_GATE;
+  const watchOk = !trackable || watchPercent >= watchGate;
 
   const handleProgress = (pct: number) => {
     if (!activeLesson) return;
@@ -298,7 +299,7 @@ export default function Learn() {
                               "inline-flex items-center gap-1",
                               st.quizPassed
                                 ? "text-lime-300"
-                                : st.watchedPercent >= WATCH_GATE
+                                : st.watchedPercent >= (states?.completionRequirements?.videoWatchPercent ?? DEFAULT_WATCH_GATE)
                                   ? "text-amber-300"
                                   : "text-muted-foreground/70",
                             )}
@@ -310,7 +311,7 @@ export default function Learn() {
                     </div>
                     {st.quiz && st.quizPassed ? (
                       <CheckCircle2 className="size-4 shrink-0 text-lime-400" />
-                    ) : st.quiz && st.watchedPercent >= WATCH_GATE ? (
+                    ) : st.quiz && st.watchedPercent >= (states?.completionRequirements?.videoWatchPercent ?? DEFAULT_WATCH_GATE) ? (
                       <ListChecks className="size-4 shrink-0 text-amber-300" />
                     ) : st.locked ? (
                       <Lock className="size-4 shrink-0 text-muted-foreground/50" />
@@ -418,7 +419,7 @@ export default function Learn() {
                         {watchOk ? "Quiz unlocked — well watched! 🎯" : "Keep watching to unlock the quiz"}
                       </p>
                       <p className="text-xs text-muted-foreground">
-                        You've watched {Math.min(watchPercent, 100)}% — quizzes unlock at {WATCH_GATE}%.
+                        You've watched {Math.min(watchPercent, 100)}% — quizzes unlock at {watchGate}%.
                       </p>
                     </div>
                     <span

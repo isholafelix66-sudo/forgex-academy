@@ -1864,6 +1864,121 @@ function AssignmentsTab({ courseId }: { courseId: string }) {
                   className="border-white/10 bg-black/20"
                 />
               </div>
+              {/* Assignment Questions Builder */}
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <Label>Questions ({draft.questions.length})</Label>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="gap-1 border-white/15"
+                    onClick={() =>
+                      setDraft({
+                        ...draft,
+                        questions: [...draft.questions, { ...emptyAssignmentQuestion }],
+                      })
+                    }
+                  >
+                    <Plus className="size-3.5" /> Add question
+                  </Button>
+                </div>
+                {draft.questions.map((q, i) => (
+                  <div key={i} className="rounded-xl border border-white/10 bg-black/20 p-4">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-xs font-semibold uppercase tracking-wider text-amber-300/80">Q{i + 1}</span>
+                      <div className="flex items-center gap-2">
+                        <select
+                          value={q.type}
+                          onChange={(e) =>
+                            setDraft({
+                              ...draft,
+                              questions: draft.questions.map((qq, j) =>
+                                j === i ? { ...qq, type: e.target.value as AssignmentQuestionDraft["type"] } : qq,
+                              ),
+                            })
+                          }
+                          className="h-8 rounded-lg border border-white/10 bg-black/30 px-2 text-xs outline-none"
+                        >
+                          <option value="short-text">Short text</option>
+                          <option value="long-text">Long text</option>
+                          <option value="file">File upload</option>
+                          <option value="link">Link</option>
+                          <option value="text-and-file">Text + File</option>
+                        </select>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="size-8 text-muted-foreground hover:text-rose-300"
+                          onClick={() =>
+                            setDraft({
+                              ...draft,
+                              questions: draft.questions.filter((_, j) => j !== i),
+                            })
+                          }
+                        >
+                          <Trash2 className="size-3.5" />
+                        </Button>
+                      </div>
+                    </div>
+                    <Input
+                      value={q.question}
+                      onChange={(e) =>
+                        setDraft({
+                          ...draft,
+                          questions: draft.questions.map((qq, j) =>
+                            j === i ? { ...qq, question: e.target.value } : qq,
+                          ),
+                        })
+                      }
+                      placeholder="Question text..."
+                      className="mt-2 border-white/10 bg-black/30"
+                    />
+                    <div className="mt-2 grid grid-cols-[90px_1fr] gap-2">
+                      <Input
+                        type="number"
+                        value={q.maxMarks}
+                        onChange={(e) =>
+                          setDraft({
+                            ...draft,
+                            questions: draft.questions.map((qq, j) =>
+                              j === i ? { ...qq, maxMarks: Number(e.target.value) } : qq,
+                            ),
+                          })
+                        }
+                        placeholder="Max marks"
+                        className="border-white/10 bg-black/30"
+                      />
+                      <Input
+                        value={q.modelAnswer}
+                        onChange={(e) =>
+                          setDraft({
+                            ...draft,
+                            questions: draft.questions.map((qq, j) =>
+                              j === i ? { ...qq, modelAnswer: e.target.value } : qq,
+                            ),
+                          })
+                        }
+                        placeholder="Model answer (optional)"
+                        className="border-white/10 bg-black/30"
+                      />
+                    </div>
+                    <Input
+                      value={q.markingNotes}
+                      onChange={(e) =>
+                        setDraft({
+                          ...draft,
+                          questions: draft.questions.map((qq, j) =>
+                            j === i ? { ...qq, markingNotes: e.target.value } : qq,
+                          ),
+                        })
+                      }
+                      placeholder="Marking instructions (optional)"
+                      className="mt-2 border-white/10 bg-black/30"
+                    />
+                  </div>
+                ))}
+              </div>
+
               <Button onClick={() => void saveAssignment()} disabled={saving || !draft.title} className="w-full gap-2 bg-lime-400 font-semibold text-black hover:bg-lime-300">
                 {saving ? <Loader2 className="size-4 animate-spin" /> : <Save className="size-4" />}
                 Save assignment

@@ -282,9 +282,70 @@ export async function completeLessonInternal(
       .query("lessons")
       .withIndex("by_courseId", (q) => q.eq("courseId", lesson.courseId))
       .collect();
+    // Comprehensive progress: count all required learning activities
+    // (lessons + quizzes if required + assignments if required).
+    let totalActivities = allLessons.length;
+    let completedActivities = completedLessons.length;
+    if (req) {
+      if (req.requireQuizzes) {
+        const courseQuizzes = await ctx.db
+          .query("quizzes")
+          .withIndex("by_course", (q) => q.eq("courseId", lesson.courseId))
+          .collect();
+        const publishedQuizzes = courseQuizzes.filter(
+          (q) => q.published !== false && q.questions.length > 0,
+        );
+        totalActivities += publishedQuizzes.length;
+        if (publishedQuizzes.length > 0) {
+          const quizAttempts = await ctx.db
+            .query("quizAttempts")
+            .withIndex("by_student", (q) => q.eq("studentId", user._id))
+            .collect();
+          for (const qz of publishedQuizzes) {
+            const best = quizAttempts
+              .filter((a) => a.quizId === qz._id)
+              .sort((a, b) => b.score - a.score)[0];
+            const autoMax = qz.questions.reduce((sum, q) => {
+              if (q.type === "short-answer") {
+                const hasKey = (q.answer ?? "").trim() !== "" || (q.acceptedAnswers?.length ?? 0) > 0;
+                return sum + (hasKey ? q.points ?? 1 : 0);
+              }
+              return sum + (q.points ?? 1);
+            }, 0);
+            if (
+              autoMax > 0 &&
+              (best?.score ?? 0) / autoMax >= req.quizPassPercent / 100
+            ) {
+              completedActivities++;
+            }
+          }
+        }
+      }
+      if (req.requireAssignments) {
+        const courseAssignments = await ctx.db
+          .query("assignments")
+          .withIndex("by_course", (q) => q.eq("courseId", lesson.courseId))
+          .collect();
+        const publishedAssignments = courseAssignments.filter(
+          (a) => a.published !== false,
+        );
+        totalActivities += publishedAssignments.length;
+        if (publishedAssignments.length > 0) {
+          const subs = await ctx.db
+            .query("submissions")
+            .withIndex("by_student", (q) => q.eq("studentId", user._id))
+            .collect();
+          for (const a of publishedAssignments) {
+            if (subs.some((s) => s.assignmentId === a._id)) {
+              completedActivities++;
+            }
+          }
+        }
+      }
+    }
     const progress = Math.min(
       100,
-      Math.round((completedLessons.length / Math.max(1, allLessons.length)) * 100),
+      Math.round((completedActivities / Math.max(1, totalActivities)) * 100),
     );
     const allDone =
       progress >= 100 && completedLessons.length >= allLessons.length;
@@ -491,6 +552,7 @@ export const lessonStates = query({
   handler: async (ctx, { courseId }) => {
     const user = await requireUser(ctx);
     const enrollment = await enrollmentFor(ctx, user, courseId);
+    const course = await ctx.db.get(courseId);
     const lessons = await ctx.db
       .query("lessons")
       .withIndex("by_course", (q) => q.eq("courseId", courseId))
@@ -528,7 +590,7 @@ export const lessonStates = query({
         const quiz = quizzes.find((qz) => qz.lessonId === l._id);
         return {
           lesson: l,
-          watchedPercent: watchRows.find((w) => w.lessonId === l._id)?.percent ?? 0,
+          watchedPercent: effectiveWatchedPercent(watchRows.find((w) => w.lessonId === l._id)),
           quiz:
             quiz?.published
               ? {
@@ -556,6 +618,7 @@ export const lessonStates = query({
           : null,
       allLessonsComplete:
         sorted.length > 0 && completedSet.size >= sorted.length,
+      completionRequirements: course ? courseRequirements(course) : undefined,
     };
   },
 });
