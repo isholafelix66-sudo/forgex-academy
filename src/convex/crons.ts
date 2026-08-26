@@ -20,7 +20,7 @@ crons.interval("resilience-cleanup", { minutes: 30 }, internal.jobs.cleanupResil
 // platform — each trigger catches its own errors).
 // ---------------------------------------------------------------------------
 /** Background drain of the shared email queue (rate-limited batches). */
-crons.interval("email-queue-drain", { minutes: 1 }, internal.emailService.processPendingBatch, {});
+crons.interval("email-queue-drain", { minutes: 5 }, internal.emailService.processPendingBatch, {});
 /** Student course-inactivity reminders (3 / 7 / 14 days). */
 crons.interval("email-student-inactivity", { hours: 6 }, internal.emailTriggers.scanStudentInactivity, {});
 /** Tutor inactivity check-in. */
