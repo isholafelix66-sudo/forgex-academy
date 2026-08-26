@@ -240,7 +240,8 @@ export async function completeLessonInternal(
     lesson.muxPlaybackId ||
     lesson.videoType === "youtube" ||
     lesson.videoType === "mp4" ||
-    lesson.videoType === "vimeo"
+    lesson.videoType === "vimeo" ||
+    lesson.videoType === "mux"
   );
   if (hasVideo && req && !enrollment.completedLessons.includes(lessonId)) {
     const rows = await ctx.db
@@ -588,9 +589,11 @@ export const lessonStates = query({
       enrollment: enrollment ?? null,
       lessons: sorted.map((l, idx) => {
         const quiz = quizzes.find((qz) => qz.lessonId === l._id);
+        const wp = watchRows.find((w) => w.lessonId === l._id);
         return {
           lesson: l,
-          watchedPercent: effectiveWatchedPercent(watchRows.find((w) => w.lessonId === l._id)),
+          watchedPercent: effectiveWatchedPercent(wp),
+          resumePosition: wp?.positionSeconds ?? 0,
           quiz:
             quiz?.published
               ? {
@@ -675,7 +678,8 @@ export const courseCompletionStatus = query({
         l.muxPlaybackId ||
         l.videoType === "youtube" ||
         l.videoType === "mp4" ||
-        l.videoType === "vimeo"
+        l.videoType === "vimeo" ||
+        l.videoType === "mux"
       );
 
     // Centralized activity list — every required learning activity with its

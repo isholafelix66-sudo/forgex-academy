@@ -18,6 +18,7 @@ export function MuxTracked({
   playbackId,
   title,
   emit,
+  resumePosition,
   onHeartbeat,
   onPause,
   onEnded,
@@ -25,6 +26,8 @@ export function MuxTracked({
 }: {
   playbackId: string;
   title: string;
+  /** Saved resume position in seconds. */
+  resumePosition?: number;
   /** Percentage + position progress (0–100, currentTime, duration) for instant UI updates. */
   emit: (pct: number, currentTime: number, duration: number) => void;
   /** Heartbeat: fires with current position and duration every ~12s while playing. */
@@ -47,6 +50,8 @@ export function MuxTracked({
   onEndedRef.current = onEnded;
   const onMetaRef = useRef(onLoadedMetadata);
   onMetaRef.current = onLoadedMetadata;
+  const resumeRef = useRef(resumePosition);
+  resumeRef.current = resumePosition;
 
   useEffect(() => {
     const el = ref.current as any;
@@ -118,8 +123,13 @@ export function MuxTracked({
     const onMeta = () => {
       try {
         const dur = el.duration;
-        if (dur > 0 && onMetaRef.current) {
-          onMetaRef.current(dur);
+        if (dur > 0) {
+          // Resume from saved position if available
+          const rp = resumeRef.current;
+          if (rp && rp > 2 && rp < dur - 2) {
+            el.currentTime = rp;
+          }
+          if (onMetaRef.current) onMetaRef.current(dur);
         }
       } catch {
         // ignore

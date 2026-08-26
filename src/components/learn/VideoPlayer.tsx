@@ -32,11 +32,13 @@ export function loomId(url: string): string | null {
 function YouTubeEmbed({
   id,
   title,
+  resumePosition,
   onEmit,
   onHeartbeat,
 }: {
   id: string;
   title?: string;
+  resumePosition?: number;
   onEmit: (pct: number, currentTime: number, duration: number) => void;
   onHeartbeat?: (currentTime: number, duration: number, playing: boolean) => void;
 }) {
@@ -81,7 +83,7 @@ function YouTubeEmbed({
 
   return (
     <iframe
-      src={`https://www.youtube.com/embed/${id}?rel=0&playsinline=1`}
+      src={`https://www.youtube.com/embed/${id}?rel=0&playsinline=1${resumePosition && resumePosition > 2 ? `&start=${Math.floor(resumePosition)}` : ""}`}
       title={title ?? "Lesson video"}
       allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share; fullscreen"
       allowFullScreen
@@ -96,6 +98,7 @@ export function VideoPlayer({
   title,
   muxPlaybackId,
   image,
+  resumePosition,
   onProgress,
   onHeartbeat,
   onPause,
@@ -111,6 +114,8 @@ export function VideoPlayer({
   muxPlaybackId?: string | null;
   /** Lesson cover image (Cloudinary) shown when the lesson has no video. */
   image?: string | null;
+  /** Saved playback position in seconds — player seeks here on mount. */
+  resumePosition?: number;
   /** Emits watch progress (0–100, best value so far) + position for instant UI updates. */
   onProgress?: (percent: number, currentTime: number, duration: number) => void;
   /** Heartbeat: fires with current position and duration every ~12s while playing. */
@@ -158,7 +163,7 @@ export function VideoPlayer({
   if (yt) {
     return (
       <div className="aspect-video w-full overflow-hidden rounded-2xl border border-white/10 bg-black">
-        <YouTubeEmbed id={yt} title={title} onEmit={emit} onHeartbeat={hbRef.current} />
+        <YouTubeEmbed id={yt} title={title} resumePosition={resumePosition} onEmit={emit} onHeartbeat={hbRef.current} />
       </div>
     );
   }
@@ -207,6 +212,7 @@ export function VideoPlayer({
           playbackId={muxPlaybackId}
           title={title ?? "Lesson video"}
           emit={emit}
+          resumePosition={resumePosition}
           onHeartbeat={hbRef.current}
           onPause={pauseRef.current}
           onLoadedMetadata={(dur) => {
@@ -246,6 +252,7 @@ export function VideoPlayer({
       poster={image ?? undefined}
       title={title ?? "Lesson video"}
       emit={emit}
+      resumePosition={resumePosition}
       onHeartbeat={hbRef.current}
       onSavePosition={saveRef.current}
       onDurationReady={durationReadyRef.current}
@@ -265,6 +272,7 @@ function NativeVideo({
   poster,
   title,
   emit,
+  resumePosition,
   onHeartbeat,
   onSavePosition,
   onDurationReady,
@@ -275,6 +283,7 @@ function NativeVideo({
   poster?: string;
   title: string;
   emit: (pct: number, currentTime: number, duration: number) => void;
+  resumePosition?: number;
   onHeartbeat?: (currentTime: number, duration: number, playing: boolean) => void;
   onSavePosition?: (positionSeconds: number, durationSeconds: number) => void;
   onDurationReady?: (duration: number) => void;
@@ -371,6 +380,10 @@ function NativeVideo({
           const v = e.currentTarget;
           if (v.duration > 0) {
             if (durationReadyRef.current) durationReadyRef.current(v.duration);
+            // Resume from saved position (skip if already near the end)
+            if (resumePosition && resumePosition > 2 && resumePosition < v.duration - 2) {
+              v.currentTime = resumePosition;
+            }
             if (saveRef.current) saveRef.current(v.currentTime, v.duration);
           }
         }}

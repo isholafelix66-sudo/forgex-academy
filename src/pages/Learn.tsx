@@ -95,6 +95,8 @@ export default function Learn() {
 
   /** Server-side watched percent (reactive from Convex). */
   const serverWatchPercent = activeState?.watchedPercent ?? 0;
+  /** Saved resume position in seconds — player seeks here on mount. */
+  const resumePosition = activeState?.resumePosition ?? 0;
   const activeLesson = activeState?.lesson ?? null;
   const completedIds = useMemo(
     () => new Set(states?.lessons.filter((l) => l.completed).map((l) => l.lesson._id) ?? []),
@@ -594,11 +596,13 @@ export default function Learn() {
               </div>
 
               <VideoPlayer
+                key={activeLesson._id}
                 url={activeLesson.videoUrl}
                 type={activeLesson.videoType}
                 muxPlaybackId={activeLesson.muxPlaybackId}
                 image={activeLesson.image}
                 title={activeLesson.title}
+                resumePosition={resumePosition}
                 onProgress={handleProgress}
                 onHeartbeat={handleHeartbeat}
                 onPause={handlePause}
