@@ -449,9 +449,12 @@ const schema = defineSchema(
       status: v.union(v.literal("in-progress"), v.literal("completed")),
       completedLessons: v.array(v.id("lessons")),
       progress: v.number(), // 0-100
+      lastActivityAt: v.optional(v.number()), // ms epoch of last learning activity
+      inactivityStage: v.optional(v.number()), // highest reminder stage sent (0|3|7|14 days)
     })
       .index("by_student", ["studentId"])
-      .index("by_course", ["courseId"]),
+      .index("by_course", ["courseId"])
+      .index("by_inactivity", ["status", "inactivityStage"]),
 
     /** Learner reviews + ratings for a course (one review per user per course).
      *  The course's `rating` / `ratingCount` fields are derived from these
@@ -1809,8 +1812,11 @@ const schema = defineSchema(
       emailType: v.string(), // otp | welcome | password_reset | enrollment | quiz | exam | certificate | support | admin_broadcast
       status: v.union(
         v.literal("pending"),
+        v.literal("processing"),
         v.literal("sent"),
         v.literal("failed"),
+        v.literal("retrying"),
+        v.literal("cancelled"),
       ),
       automated: v.boolean(), // system-triggered vs admin-composed
       sentBy: v.optional(v.id("users")), // admin who composed it, if any
@@ -1820,10 +1826,37 @@ const schema = defineSchema(
       createdAt: v.number(),
       sentAt: v.optional(v.number()),
       failedAt: v.optional(v.number()),
+      // --- queue extensions ---
+      priority: v.optional(
+        v.union(v.literal("normal"), v.literal("high"), v.literal("critical")),
+      ), // default normal; critical (system/escalation) drains first
+      scheduledAt: v.optional(v.number()), // send only at/after this time
+      lastRetryAt: v.optional(v.number()),
+      nextRetryAt: v.optional(v.number()), // when a "retrying" row becomes due
+      dedupeKey: v.optional(v.string()), // prevents duplicate automated sends
+      automationKey: v.optional(v.string()), // which email automation produced it
     })
       .index("by_status_created", ["status", "createdAt"])
       .index("by_type_created", ["emailType", "createdAt"])
-      .index("by_created", ["createdAt"]),
+      .index("by_created", ["createdAt"])
+      .index("by_dedupe", ["dedupeKey"])
+      .index("by_retrying_next", ["status", "nextRetryAt"]),
+
+    /** Per-automation configuration for the Email Center — enable/disable each
+     *  trigger and override its subject line. Missing row = enabled defaults. */
+    emailAutomations: defineTable({
+      key: v.string(), // see AUTOMATIONS in emailTriggers.ts
+      enabled: v.boolean(),
+      subjectOverride: v.optional(v.string()),
+      updatedAt: v.number(),
+    }).index("by_key", ["key"]),
+
+    /** Queue settings singleton (row key "queue") — configurable retry limit. */
+    emailSettings: defineTable({
+      key: v.string(), // always "queue"
+      maxRetries: v.number(), // default 3
+      updatedAt: v.number(),
+    }).index("by_key", ["key"]),
   },
   {
     schemaValidation: false,
