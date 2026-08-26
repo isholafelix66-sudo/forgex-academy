@@ -25,8 +25,8 @@ export function MuxTracked({
 }: {
   playbackId: string;
   title: string;
-  /** Legacy percentage-only progress (0–100) — kept for backward compat. */
-  emit: (pct: number) => void;
+  /** Percentage + position progress (0–100, currentTime, duration) for instant UI updates. */
+  emit: (pct: number, currentTime: number, duration: number) => void;
   /** Heartbeat: fires with current position and duration every ~12s while playing. */
   onHeartbeat?: (currentTime: number, duration: number, playing: boolean) => void;
   /** Fires when the student pauses. */
@@ -52,7 +52,7 @@ export function MuxTracked({
     const el = ref.current as any;
     if (!el) return;
 
-    // --- timeupdate → percentage (legacy) + heartbeat ---
+    // --- timeupdate → percentage + position (for instant UI) + heartbeat ---
     let lastHeartbeat = 0;
     const HEARTBEAT_INTERVAL_MS = 12_000;
 
@@ -62,8 +62,8 @@ export function MuxTracked({
         const dur = el.duration;
         if (!dur || dur <= 0) return;
 
-        // Legacy percentage callback
-        emitRef.current((ct / dur) * 100);
+        // Percentage + position callback for instant UI updates
+        emitRef.current((ct / dur) * 100, ct, dur);
 
         // Heartbeat every ~12s while playing
         const now = Date.now();

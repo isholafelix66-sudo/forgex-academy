@@ -37,7 +37,7 @@ function YouTubeEmbed({
 }: {
   id: string;
   title?: string;
-  onEmit: (pct: number) => void;
+  onEmit: (pct: number, currentTime: number, duration: number) => void;
   onHeartbeat?: (currentTime: number, duration: number, playing: boolean) => void;
 }) {
   const emitRef = useRef(onEmit);
@@ -66,7 +66,7 @@ function YouTubeEmbed({
       ) {
         const ct = d.info.currentTime;
         const dur = d.info.duration;
-        emitRef.current((ct / dur) * 100);
+        emitRef.current((ct / dur) * 100, ct, dur);
         // Heartbeat every ~12s
         const now = Date.now();
         if (now - lastHb >= 12_000 && hbRef.current) {
@@ -100,6 +100,9 @@ export function VideoPlayer({
   onHeartbeat,
   onPause,
   onSavePosition,
+  onDurationReady,
+  onPlay,
+  onPlayerPause,
 }: {
   url?: string | null;
   type?: string | null;
@@ -108,25 +111,31 @@ export function VideoPlayer({
   muxPlaybackId?: string | null;
   /** Lesson cover image (Cloudinary) shown when the lesson has no video. */
   image?: string | null;
-  /** Emits watch progress (0–100, best value so far) for the quiz gate. */
-  onProgress?: (percent: number) => void;
+  /** Emits watch progress (0–100, best value so far) + position for instant UI updates. */
+  onProgress?: (percent: number, currentTime: number, duration: number) => void;
   /** Heartbeat: fires with current position and duration every ~12s while playing. */
   onHeartbeat?: (currentTime: number, duration: number, playing: boolean) => void;
   /** Fires when the student pauses or navigates away. */
   onPause?: (currentTime: number, duration: number) => void;
   /** Fires on pause/unload to save resume position. */
   onSavePosition?: (positionSeconds: number, durationSeconds: number) => void;
+  /** Fires when the video duration becomes known. */
+  onDurationReady?: (duration: number) => void;
+  /** Fires when the player starts playing. */
+  onPlay?: () => void;
+  /** Fires when the player pauses. */
+  onPlayerPause?: () => void;
 }) {
   // Only ever report the highest percent seen — the server stores the max.
   const bestRef = useRef(0);
   const onProgressRef = useRef(onProgress);
   onProgressRef.current = onProgress;
-  const emit = (pct: number) => {
+  const emit = (pct: number, currentTime: number, duration: number) => {
     if (!onProgressRef.current) return;
     const rounded = Math.round(pct);
     if (rounded > bestRef.current) {
       bestRef.current = rounded;
-      onProgressRef.current(rounded);
+      onProgressRef.current(rounded, currentTime, duration);
     }
   };
 
@@ -136,6 +145,12 @@ export function VideoPlayer({
   pauseRef.current = onPause;
   const saveRef = useRef(onSavePosition);
   saveRef.current = onSavePosition;
+  const durationReadyRef = useRef(onDurationReady);
+  durationReadyRef.current = onDurationReady;
+  const playRef = useRef(onPlay);
+  playRef.current = onPlay;
+  const playerPauseRef = useRef(onPlayerPause);
+  playerPauseRef.current = onPlayerPause;
 
   // Recognized embed URLs (YouTube / Vimeo / Loom) always win — a stale Mux
   // playback ID must never shadow the video URL a tutor actually saved.
@@ -157,6 +172,9 @@ export function VideoPlayer({
         emit={emit}
         onHeartbeat={hbRef.current}
         onSavePosition={saveRef.current}
+        onDurationReady={durationReadyRef.current}
+        onPlay={playRef.current}
+        onPlayerPause={playerPauseRef.current}
       />
     );
   }
@@ -192,7 +210,7 @@ export function VideoPlayer({
           onHeartbeat={hbRef.current}
           onPause={pauseRef.current}
           onLoadedMetadata={(dur) => {
-            // Save initial resume point metadata once the video loads
+            if (durationReadyRef.current) durationReadyRef.current(dur);
             if (saveRef.current) saveRef.current(0, dur);
           }}
         />
@@ -230,6 +248,9 @@ export function VideoPlayer({
       emit={emit}
       onHeartbeat={hbRef.current}
       onSavePosition={saveRef.current}
+      onDurationReady={durationReadyRef.current}
+      onPlay={playRef.current}
+      onPlayerPause={playerPauseRef.current}
     />
   );
 }
@@ -246,13 +267,19 @@ function NativeVideo({
   emit,
   onHeartbeat,
   onSavePosition,
+  onDurationReady,
+  onPlay,
+  onPlayerPause,
 }: {
   url: string;
   poster?: string;
   title: string;
-  emit: (pct: number) => void;
+  emit: (pct: number, currentTime: number, duration: number) => void;
   onHeartbeat?: (currentTime: number, duration: number, playing: boolean) => void;
   onSavePosition?: (positionSeconds: number, durationSeconds: number) => void;
+  onDurationReady?: (duration: number) => void;
+  onPlay?: () => void;
+  onPlayerPause?: () => void;
 }) {
   const [failed, setFailed] = useState(false);
   const [attempt, setAttempt] = useState(0);
@@ -260,6 +287,12 @@ function NativeVideo({
   hbRef.current = onHeartbeat;
   const saveRef = useRef(onSavePosition);
   saveRef.current = onSavePosition;
+  const durationReadyRef = useRef(onDurationReady);
+  durationReadyRef.current = onDurationReady;
+  const playRef = useRef(onPlay);
+  playRef.current = onPlay;
+  const playerPauseRef = useRef(onPlayerPause);
+  playerPauseRef.current = onPlayerPause;
   const lastHbRef = useRef(0);
 
   if (failed) {
@@ -301,8 +334,8 @@ function NativeVideo({
         onTimeUpdate={(e) => {
           const v = e.currentTarget;
           if (v.duration > 0) {
-            emit((v.currentTime / v.duration) * 100);
-            // Heartbeat every ~12s
+            emit((v.currentTime / v.duration) * 100, v.currentTime, v.duration);
+            // Heartbeat every ~12s while playing
             const now = Date.now();
             if (now - lastHbRef.current >= 12_000 && !v.paused && hbRef.current) {
               lastHbRef.current = now;
@@ -310,7 +343,16 @@ function NativeVideo({
             }
           }
         }}
+        onPlay={(e) => {
+          if (playRef.current) playRef.current();
+          const v = e.currentTarget;
+          if (v.duration > 0 && hbRef.current) {
+            lastHbRef.current = Date.now();
+            hbRef.current(v.currentTime, v.duration, true);
+          }
+        }}
         onPause={(e) => {
+          if (playerPauseRef.current) playerPauseRef.current();
           const v = e.currentTarget;
           if (v.duration > 0 && hbRef.current) {
             hbRef.current(v.currentTime, v.duration, false);
@@ -327,8 +369,9 @@ function NativeVideo({
         }}
         onLoadedMetadata={(e) => {
           const v = e.currentTarget;
-          if (saveRef.current && v.duration > 0) {
-            saveRef.current(0, v.duration);
+          if (v.duration > 0) {
+            if (durationReadyRef.current) durationReadyRef.current(v.duration);
+            if (saveRef.current) saveRef.current(v.currentTime, v.duration);
           }
         }}
       >
@@ -344,12 +387,18 @@ function VimeoTracked({
   emit,
   onHeartbeat,
   onSavePosition,
+  onDurationReady,
+  onPlay,
+  onPlayerPause,
 }: {
   vimeo: string;
   title: string;
-  emit: (pct: number) => void;
+  emit: (pct: number, currentTime: number, duration: number) => void;
   onHeartbeat?: (currentTime: number, duration: number, playing: boolean) => void;
   onSavePosition?: (positionSeconds: number, durationSeconds: number) => void;
+  onDurationReady?: (duration: number) => void;
+  onPlay?: () => void;
+  onPlayerPause?: () => void;
 }) {
   const emitRef = useRef(emit);
   emitRef.current = emit;
@@ -357,6 +406,12 @@ function VimeoTracked({
   hbRef.current = onHeartbeat;
   const saveRef = useRef(onSavePosition);
   saveRef.current = onSavePosition;
+  const durationReadyRef = useRef(onDurationReady);
+  durationReadyRef.current = onDurationReady;
+  const playRef = useRef(onPlay);
+  playRef.current = onPlay;
+  const playerPauseRef = useRef(onPlayerPause);
+  playerPauseRef.current = onPlayerPause;
   const lastHbRef = useRef(0);
 
   useEffect(() => {
@@ -373,7 +428,8 @@ function VimeoTracked({
       ) {
         const ct = d.data.seconds ?? 0;
         const dur = d.data.duration;
-        emitRef.current((ct / dur) * 100);
+        emitRef.current((ct / dur) * 100, ct, dur);
+        if (durationReadyRef.current) durationReadyRef.current(dur);
         const now = Date.now();
         if (now - lastHbRef.current >= 12_000 && hbRef.current) {
           lastHbRef.current = now;

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router";
 import { useMutation, useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
@@ -83,12 +83,18 @@ export default function Learn() {
   const [examOpen, setExamOpen] = useState(false);
   const [marking, setMarking] = useState(false);
   const [justCompleted, setJustCompleted] = useState<string | null>(null);
-  const lastReportRef = useRef<{ t: number; pct: number }>({ t: 0, pct: 0 });
-  const videoPosRef = useRef<{ currentTime: number; duration: number }>({ currentTime: 0, duration: 0 });
+
+  /** Local progress for instant UI updates — the server is the source of
+   *  truth for "is the lesson complete", but the local percent drives the
+   *  progress bar so it never sits at 0% while the video is playing. */
+  const [localWatchPercent, setLocalWatchPercent] = useState(0);
 
   const lessonStates = states?.lessons ?? [];
   const activeState =
     lessonStates.find((l) => l.lesson._id === activeLessonId) ?? lessonStates[0] ?? null;
+
+  /** Server-side watched percent (reactive from Convex). */
+  const serverWatchPercent = activeState?.watchedPercent ?? 0;
   const activeLesson = activeState?.lesson ?? null;
   const completedIds = useMemo(
     () => new Set(states?.lessons.filter((l) => l.completed).map((l) => l.lesson._id) ?? []),
@@ -159,48 +165,163 @@ export default function Learn() {
     activeLesson?.videoType === "mp4" ||
     activeLesson?.videoType === "vimeo" ||
     activeLesson?.videoType === "mux";
-  const watchPercent = activeState?.watchedPercent ?? 0;
+
+  // Use the higher of local or server progress — local is instant, server is authoritative
+  const watchPercent = Math.max(localWatchPercent, serverWatchPercent);
   const watchGate = states?.completionRequirements?.videoWatchPercent ?? DEFAULT_WATCH_GATE;
   const watchOk = !trackable || watchPercent >= watchGate;
 
-  const handleHeartbeat = (currentTime: number, duration: number, playing: boolean) => {
-    if (!activeLesson) return;
-    // Track position for resume
-    videoPosRef.current = { currentTime, duration };
-    void watchHeartbeat({
-      lessonId: activeLesson._id as never,
-      positionSeconds: currentTime,
-      durationSeconds: duration,
-      playing,
-    });
-  };
+  /** Reset local progress when switching lessons. */
+  useEffect(() => {
+    setLocalWatchPercent(0);
+  }, [activeLessonId]);
 
-  const handlePause = (currentTime: number, duration: number) => {
-    if (!activeLesson) return;
-    videoPosRef.current = { currentTime, duration };
-    void saveWatchPosition({
-      lessonId: activeLesson._id as never,
-      positionSeconds: currentTime,
-      durationSeconds: duration,
-    });
-  };
+  /** Sync local progress from server when server catches up. */
+  useEffect(() => {
+    if (serverWatchPercent > localWatchPercent) {
+      setLocalWatchPercent(serverWatchPercent);
+    }
+  }, [serverWatchPercent]);
 
-  const handleSavePosition = (positionSeconds: number, durationSeconds: number) => {
-    if (!activeLesson) return;
-    videoPosRef.current = { currentTime: positionSeconds, duration: durationSeconds };
-    void saveWatchPosition({
-      lessonId: activeLesson._id as never,
-      positionSeconds,
-      durationSeconds,
-    });
-  };
+  /** Video position for resume — latest known position from the player. */
+  const videoPosRef = useRef<{ currentTime: number; duration: number }>({ currentTime: 0, duration: 0 });
+  /** Track whether the player is currently playing. */
+  const playingRef = useRef(false);
+  /** Rate-limit heartbeats to every 5 seconds (not 12). */
+  const lastHbTimeRef = useRef(0);
+  /** The video's duration once known. */
+  const durationRef = useRef(0);
 
-  // Save resume position when leaving the page
+  /**
+   * Send a heartbeat to the server. Rate-limited to every ~5s while playing,
+   * but always fires immediately on pause/unload.
+   */
+  const fireHeartbeat = useCallback(
+    (opts?: { force?: boolean }) => {
+      if (!activeLesson) return;
+      const { currentTime, duration } = videoPosRef.current;
+      if (duration <= 0) return;
+      const now = Date.now();
+      const elapsed = now - lastHbTimeRef.current;
+      if (!opts?.force && elapsed < 5_000) return;
+      lastHbTimeRef.current = now;
+      void watchHeartbeat({
+        lessonId: activeLesson._id as never,
+        positionSeconds: currentTime,
+        durationSeconds: duration,
+        playing: playingRef.current,
+      });
+    },
+    [activeLesson, watchHeartbeat],
+  );
+
+  /**
+   * Called by the VideoPlayer on every timeupdate (multiple times per second).
+   * Updates the local progress bar instantly and fires a heartbeat every 5s.
+   */
+  const handleProgress = useCallback(
+    (pct: number, currentTime: number, duration: number) => {
+      videoPosRef.current = { currentTime, duration };
+      if (duration > 0) durationRef.current = duration;
+      const rounded = Math.round(Math.min(100, Math.max(0, pct)));
+      setLocalWatchPercent((prev) => Math.max(prev, rounded));
+
+      // Fire heartbeat periodically
+      const now = Date.now();
+      if (now - lastHbTimeRef.current >= 5_000 && activeLesson && duration > 0) {
+        lastHbTimeRef.current = now;
+        void watchHeartbeat({
+          lessonId: activeLesson._id as never,
+          positionSeconds: currentTime,
+          durationSeconds: duration,
+          playing: true,
+        });
+      }
+    },
+    [activeLesson, watchHeartbeat],
+  );
+
+  const handleHeartbeat = useCallback(
+    (currentTime: number, duration: number, playing: boolean) => {
+      if (!activeLesson) return;
+      videoPosRef.current = { currentTime, duration };
+      playingRef.current = playing;
+      if (duration > 0) durationRef.current = duration;
+      lastHbTimeRef.current = Date.now();
+      void watchHeartbeat({
+        lessonId: activeLesson._id as never,
+        positionSeconds: currentTime,
+        durationSeconds: duration,
+        playing,
+      });
+    },
+    [activeLesson, watchHeartbeat],
+  );
+
+  const handlePause = useCallback(
+    (currentTime: number, duration: number) => {
+      if (!activeLesson) return;
+      videoPosRef.current = { currentTime, duration };
+      playingRef.current = false;
+      // Fire a final heartbeat on pause so the server gets the latest position
+      void watchHeartbeat({
+        lessonId: activeLesson._id as never,
+        positionSeconds: currentTime,
+        durationSeconds: duration,
+        playing: false,
+      });
+      void saveWatchPosition({
+        lessonId: activeLesson._id as never,
+        positionSeconds: currentTime,
+        durationSeconds: duration,
+      });
+    },
+    [activeLesson, watchHeartbeat, saveWatchPosition],
+  );
+
+  const handleSavePosition = useCallback(
+    (positionSeconds: number, durationSeconds: number) => {
+      if (!activeLesson) return;
+      videoPosRef.current = { currentTime: positionSeconds, duration: durationSeconds };
+      durationRef.current = durationSeconds;
+      void saveWatchPosition({
+        lessonId: activeLesson._id as never,
+        positionSeconds,
+        durationSeconds,
+      });
+    },
+    [activeLesson, saveWatchPosition],
+  );
+
+  /** Called when the video duration becomes known (loadedmetadata). */
+  const handleDurationReady = useCallback((duration: number) => {
+    durationRef.current = duration;
+  }, []);
+
+  /** Called when the player starts playing. */
+  const handlePlay = useCallback(() => {
+    playingRef.current = true;
+  }, []);
+
+  /** Called when the player pauses. */
+  const handlePlayerPause = useCallback(() => {
+    playingRef.current = false;
+  }, []);
+
+  /** Save resume position + fire final heartbeat when leaving the page. */
   useEffect(() => {
     const handleBeforeUnload = () => {
       if (!activeLesson) return;
       const { currentTime, duration } = videoPosRef.current;
       if (duration > 0) {
+        // Fire a forced heartbeat (bypass rate limit)
+        lastHbTimeRef.current = 0;
+        void watchHeartbeat({
+          lessonId: activeLesson._id as never,
+          positionSeconds: currentTime,
+          durationSeconds: duration,
+          playing: false,
+        });
         void saveWatchPosition({
           lessonId: activeLesson._id as never,
           positionSeconds: currentTime,
@@ -210,7 +331,32 @@ export default function Learn() {
     };
     window.addEventListener("beforeunload", handleBeforeUnload);
     return () => window.removeEventListener("beforeunload", handleBeforeUnload);
-  }, [activeLesson]);
+  }, [activeLesson, watchHeartbeat, saveWatchPosition]);
+
+  /** Save position when the browser tab becomes hidden (user switches tabs). */
+  useEffect(() => {
+    const handleVisibility = () => {
+      if (document.visibilityState === "hidden" && activeLesson) {
+        const { currentTime, duration } = videoPosRef.current;
+        if (duration > 0) {
+          lastHbTimeRef.current = 0;
+          void watchHeartbeat({
+            lessonId: activeLesson._id as never,
+            positionSeconds: currentTime,
+            durationSeconds: duration,
+            playing: false,
+          });
+          void saveWatchPosition({
+            lessonId: activeLesson._id as never,
+            positionSeconds: currentTime,
+            durationSeconds: duration,
+          });
+        }
+      }
+    };
+    document.addEventListener("visibilitychange", handleVisibility);
+    return () => document.removeEventListener("visibilitychange", handleVisibility);
+  }, [activeLesson, watchHeartbeat, saveWatchPosition]);
 
   const advanceAfterComplete = (lessonId: string) => {
     setJustCompleted(lessonId);
@@ -225,6 +371,9 @@ export default function Learn() {
     if (!activeLesson) return;
     setMarking(true);
     try {
+      // Fire one last heartbeat before completing so server has latest progress
+      lastHbTimeRef.current = 0;
+      fireHeartbeat({ force: true });
       await completeLesson({ lessonId: activeLesson._id as never });
       advanceAfterComplete(activeLesson._id);
     } catch (err) {
@@ -450,10 +599,13 @@ export default function Learn() {
                 muxPlaybackId={activeLesson.muxPlaybackId}
                 image={activeLesson.image}
                 title={activeLesson.title}
+                onProgress={handleProgress}
                 onHeartbeat={handleHeartbeat}
                 onPause={handlePause}
                 onSavePosition={handleSavePosition}
-                onProgress={() => {}}
+                onDurationReady={handleDurationReady}
+                onPlay={handlePlay}
+                onPlayerPause={handlePlayerPause}
               />
 
               {/* Watch progress bar — always shown for video lessons */}

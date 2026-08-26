@@ -81,11 +81,16 @@ export function effectiveWatchedPercent(
     | null,
 ): number {
   if (!row) return 0;
-  if (row.watchedRanges && row.watchedRanges.length > 0 && row.durationSeconds) {
-    return Math.min(
-      100,
-      Math.round((coveredSeconds(row.watchedRanges) / row.durationSeconds) * 100),
-    );
+  // If we have real watched ranges AND a known duration, compute from ranges (anti-cheat).
+  if (row.watchedRanges && row.watchedRanges.length > 0 && row.durationSeconds && row.durationSeconds > 0) {
+    const covered = coveredSeconds(row.watchedRanges);
+    if (covered > 0) {
+      return Math.min(
+        100,
+        Math.round((covered / row.durationSeconds) * 100),
+      );
+    }
   }
+  // Fallback: use stored percent (legacy rows or first-seed rows).
   return Math.min(100, Math.round(row.percent));
 }
