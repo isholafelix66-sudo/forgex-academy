@@ -252,6 +252,7 @@ const schema = defineSchema(
           v.literal("mp4"),
           v.literal("vimeo"),
           v.literal("loom"),
+          v.literal("mux"),
         ),
       ),
       // Lesson cover image — stored on Cloudinary (never binary data).

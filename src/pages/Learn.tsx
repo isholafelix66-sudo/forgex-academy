@@ -73,7 +73,8 @@ export default function Learn() {
     isAuthenticated && course ? { courseId: course._id } : "skip",
   );
   const completeLesson = useMutation(api.learn.completeLesson);
-  const reportWatchProgress = useMutation(api.learn.reportWatchProgress);
+  const watchHeartbeat = useMutation(api.lms.watchHeartbeat);
+  const saveWatchPosition = useMutation(api.lms.saveWatchPosition);
   const submitLessonQuiz = useMutation(api.lessonquizzes.submitLessonQuiz);
   const submitFinalExam = useMutation(api.exams.submitFinalExam);
 
@@ -83,6 +84,7 @@ export default function Learn() {
   const [marking, setMarking] = useState(false);
   const [justCompleted, setJustCompleted] = useState<string | null>(null);
   const lastReportRef = useRef<{ t: number; pct: number }>({ t: 0, pct: 0 });
+  const videoPosRef = useRef<{ currentTime: number; duration: number }>({ currentTime: 0, duration: 0 });
 
   const lessonStates = states?.lessons ?? [];
   const activeState =
@@ -155,19 +157,60 @@ export default function Learn() {
     !!activeLesson?.muxPlaybackId ||
     activeLesson?.videoType === "youtube" ||
     activeLesson?.videoType === "mp4" ||
-    activeLesson?.videoType === "vimeo";
+    activeLesson?.videoType === "vimeo" ||
+    activeLesson?.videoType === "mux";
   const watchPercent = activeState?.watchedPercent ?? 0;
   const watchGate = states?.completionRequirements?.videoWatchPercent ?? DEFAULT_WATCH_GATE;
   const watchOk = !trackable || watchPercent >= watchGate;
 
-  const handleProgress = (pct: number) => {
+  const handleHeartbeat = (currentTime: number, duration: number, playing: boolean) => {
     if (!activeLesson) return;
-    const now = Date.now();
-    const last = lastReportRef.current;
-    if (now - last.t < 2000 && pct - last.pct < 2) return;
-    lastReportRef.current = { t: now, pct };
-    void reportWatchProgress({ lessonId: activeLesson._id as never, percent: pct });
+    // Track position for resume
+    videoPosRef.current = { currentTime, duration };
+    void watchHeartbeat({
+      lessonId: activeLesson._id as never,
+      positionSeconds: currentTime,
+      durationSeconds: duration,
+      playing,
+    });
   };
+
+  const handlePause = (currentTime: number, duration: number) => {
+    if (!activeLesson) return;
+    videoPosRef.current = { currentTime, duration };
+    void saveWatchPosition({
+      lessonId: activeLesson._id as never,
+      positionSeconds: currentTime,
+      durationSeconds: duration,
+    });
+  };
+
+  const handleSavePosition = (positionSeconds: number, durationSeconds: number) => {
+    if (!activeLesson) return;
+    videoPosRef.current = { currentTime: positionSeconds, duration: durationSeconds };
+    void saveWatchPosition({
+      lessonId: activeLesson._id as never,
+      positionSeconds,
+      durationSeconds,
+    });
+  };
+
+  // Save resume position when leaving the page
+  useEffect(() => {
+    const handleBeforeUnload = () => {
+      if (!activeLesson) return;
+      const { currentTime, duration } = videoPosRef.current;
+      if (duration > 0) {
+        void saveWatchPosition({
+          lessonId: activeLesson._id as never,
+          positionSeconds: currentTime,
+          durationSeconds: duration,
+        });
+      }
+    };
+    window.addEventListener("beforeunload", handleBeforeUnload);
+    return () => window.removeEventListener("beforeunload", handleBeforeUnload);
+  }, [activeLesson]);
 
   const advanceAfterComplete = (lessonId: string) => {
     setJustCompleted(lessonId);
@@ -407,19 +450,28 @@ export default function Learn() {
                 muxPlaybackId={activeLesson.muxPlaybackId}
                 image={activeLesson.image}
                 title={activeLesson.title}
-                onProgress={handleProgress}
+                onHeartbeat={handleHeartbeat}
+                onPause={handlePause}
+                onSavePosition={handleSavePosition}
+                onProgress={() => {}}
               />
 
-              {/* Watch progress + quiz gate */}
-              {trackable && activeState.quiz && (
+              {/* Watch progress bar — always shown for video lessons */}
+              {trackable && (
                 <div className="rounded-2xl border border-white/10 bg-card p-4">
                   <div className="flex items-center justify-between gap-3">
                     <div className="min-w-0">
                       <p className="text-sm font-medium">
-                        {watchOk ? "Quiz unlocked — well watched! 🎯" : "Keep watching to unlock the quiz"}
+                        {activeState.completed
+                          ? "Lesson completed ✓"
+                          : watchOk
+                            ? activeState.quiz
+                              ? "Quiz unlocked — well watched! 🎯"
+                              : "Watch requirement met — mark complete"
+                            : `Watch ${watchGate - Math.min(watchPercent, 100)}% more to ${activeState.quiz ? "unlock the quiz" : "complete"}`}
                       </p>
                       <p className="text-xs text-muted-foreground">
-                        You've watched {Math.min(watchPercent, 100)}% — quizzes unlock at {watchGate}%.
+                        Video progress: {Math.min(watchPercent, 100)}% — requires {watchGate}%{watchOk ? " ✓" : ""}.
                       </p>
                     </div>
                     <span
@@ -490,7 +542,7 @@ export default function Learn() {
                 ) : (
                   <Button
                     onClick={handleComplete}
-                    disabled={marking || activeState.completed}
+                    disabled={marking || activeState.completed || (trackable && !watchOk)}
                     className={cn(
                       "shrink-0 gap-2",
                       activeState.completed

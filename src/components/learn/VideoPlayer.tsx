@@ -33,15 +33,20 @@ function YouTubeEmbed({
   id,
   title,
   onEmit,
+  onHeartbeat,
 }: {
   id: string;
   title?: string;
   onEmit: (pct: number) => void;
+  onHeartbeat?: (currentTime: number, duration: number, playing: boolean) => void;
 }) {
   const emitRef = useRef(onEmit);
   emitRef.current = onEmit;
+  const hbRef = useRef(onHeartbeat);
+  hbRef.current = onHeartbeat;
 
   useEffect(() => {
+    let lastHb = 0;
     const handler = (e: MessageEvent) => {
       if (
         e.origin !== "https://www.youtube.com" &&
@@ -59,7 +64,15 @@ function YouTubeEmbed({
         typeof d.info?.duration === "number" &&
         d.info.duration > 0
       ) {
-        emitRef.current((d.info.currentTime / d.info.duration) * 100);
+        const ct = d.info.currentTime;
+        const dur = d.info.duration;
+        emitRef.current((ct / dur) * 100);
+        // Heartbeat every ~12s
+        const now = Date.now();
+        if (now - lastHb >= 12_000 && hbRef.current) {
+          lastHb = now;
+          hbRef.current(ct, dur, true);
+        }
       }
     };
     window.addEventListener("message", handler);
@@ -84,6 +97,9 @@ export function VideoPlayer({
   muxPlaybackId,
   image,
   onProgress,
+  onHeartbeat,
+  onPause,
+  onSavePosition,
 }: {
   url?: string | null;
   type?: string | null;
@@ -94,6 +110,12 @@ export function VideoPlayer({
   image?: string | null;
   /** Emits watch progress (0–100, best value so far) for the quiz gate. */
   onProgress?: (percent: number) => void;
+  /** Heartbeat: fires with current position and duration every ~12s while playing. */
+  onHeartbeat?: (currentTime: number, duration: number, playing: boolean) => void;
+  /** Fires when the student pauses or navigates away. */
+  onPause?: (currentTime: number, duration: number) => void;
+  /** Fires on pause/unload to save resume position. */
+  onSavePosition?: (positionSeconds: number, durationSeconds: number) => void;
 }) {
   // Only ever report the highest percent seen — the server stores the max.
   const bestRef = useRef(0);
@@ -108,13 +130,20 @@ export function VideoPlayer({
     }
   };
 
+  const hbRef = useRef(onHeartbeat);
+  hbRef.current = onHeartbeat;
+  const pauseRef = useRef(onPause);
+  pauseRef.current = onPause;
+  const saveRef = useRef(onSavePosition);
+  saveRef.current = onSavePosition;
+
   // Recognized embed URLs (YouTube / Vimeo / Loom) always win — a stale Mux
   // playback ID must never shadow the video URL a tutor actually saved.
   const yt = url ? youtubeId(url) : null;
   if (yt) {
     return (
       <div className="aspect-video w-full overflow-hidden rounded-2xl border border-white/10 bg-black">
-        <YouTubeEmbed id={yt} title={title} onEmit={emit} />
+        <YouTubeEmbed id={yt} title={title} onEmit={emit} onHeartbeat={hbRef.current} />
       </div>
     );
   }
@@ -122,7 +151,13 @@ export function VideoPlayer({
   const vimeo = url ? vimeoId(url) : null;
   if (vimeo) {
     return (
-      <VimeoTracked vimeo={vimeo} title={title ?? "Lesson video"} emit={emit} />
+      <VimeoTracked
+        vimeo={vimeo}
+        title={title ?? "Lesson video"}
+        emit={emit}
+        onHeartbeat={hbRef.current}
+        onSavePosition={saveRef.current}
+      />
     );
   }
 
@@ -150,7 +185,17 @@ export function VideoPlayer({
           </div>
         }
       >
-        <MuxTracked playbackId={muxPlaybackId} title={title ?? "Lesson video"} emit={emit} />
+        <MuxTracked
+          playbackId={muxPlaybackId}
+          title={title ?? "Lesson video"}
+          emit={emit}
+          onHeartbeat={hbRef.current}
+          onPause={pauseRef.current}
+          onLoadedMetadata={(dur) => {
+            // Save initial resume point metadata once the video loads
+            if (saveRef.current) saveRef.current(0, dur);
+          }}
+        />
       </Suspense>
     );
   }
@@ -177,7 +222,16 @@ export function VideoPlayer({
     );
   }
 
-  return <NativeVideo url={url} poster={image ?? undefined} title={title ?? "Lesson video"} emit={emit} />;
+  return (
+    <NativeVideo
+      url={url}
+      poster={image ?? undefined}
+      title={title ?? "Lesson video"}
+      emit={emit}
+      onHeartbeat={hbRef.current}
+      onSavePosition={saveRef.current}
+    />
+  );
 }
 
 /**
@@ -190,14 +244,23 @@ function NativeVideo({
   poster,
   title,
   emit,
+  onHeartbeat,
+  onSavePosition,
 }: {
   url: string;
   poster?: string;
   title: string;
   emit: (pct: number) => void;
+  onHeartbeat?: (currentTime: number, duration: number, playing: boolean) => void;
+  onSavePosition?: (positionSeconds: number, durationSeconds: number) => void;
 }) {
   const [failed, setFailed] = useState(false);
   const [attempt, setAttempt] = useState(0);
+  const hbRef = useRef(onHeartbeat);
+  hbRef.current = onHeartbeat;
+  const saveRef = useRef(onSavePosition);
+  saveRef.current = onSavePosition;
+  const lastHbRef = useRef(0);
 
   if (failed) {
     return (
@@ -237,10 +300,39 @@ function NativeVideo({
         onError={() => setFailed(true)}
         onTimeUpdate={(e) => {
           const v = e.currentTarget;
-          if (v.duration > 0) emit((v.currentTime / v.duration) * 100);
+          if (v.duration > 0) {
+            emit((v.currentTime / v.duration) * 100);
+            // Heartbeat every ~12s
+            const now = Date.now();
+            if (now - lastHbRef.current >= 12_000 && !v.paused && hbRef.current) {
+              lastHbRef.current = now;
+              hbRef.current(v.currentTime, v.duration, true);
+            }
+          }
+        }}
+        onPause={(e) => {
+          const v = e.currentTarget;
+          if (v.duration > 0 && hbRef.current) {
+            hbRef.current(v.currentTime, v.duration, false);
+          }
+          if (saveRef.current && v.duration > 0) {
+            saveRef.current(v.currentTime, v.duration);
+          }
+        }}
+        onEnded={(e) => {
+          const v = e.currentTarget;
+          if (v.duration > 0 && hbRef.current) {
+            hbRef.current(v.currentTime, v.duration, false);
+          }
+        }}
+        onLoadedMetadata={(e) => {
+          const v = e.currentTarget;
+          if (saveRef.current && v.duration > 0) {
+            saveRef.current(0, v.duration);
+          }
         }}
       >
-        Your browser doesn't support video playback.
+        Your browser doesn&apos;t support video playback.
       </video>
     </div>
   );
@@ -250,13 +342,22 @@ function VimeoTracked({
   vimeo,
   title,
   emit,
+  onHeartbeat,
+  onSavePosition,
 }: {
   vimeo: string;
   title: string;
   emit: (pct: number) => void;
+  onHeartbeat?: (currentTime: number, duration: number, playing: boolean) => void;
+  onSavePosition?: (positionSeconds: number, durationSeconds: number) => void;
 }) {
   const emitRef = useRef(emit);
   emitRef.current = emit;
+  const hbRef = useRef(onHeartbeat);
+  hbRef.current = onHeartbeat;
+  const saveRef = useRef(onSavePosition);
+  saveRef.current = onSavePosition;
+  const lastHbRef = useRef(0);
 
   useEffect(() => {
     const handler = (e: MessageEvent) => {
@@ -270,7 +371,14 @@ function VimeoTracked({
         d.data?.duration &&
         d.data.duration > 0
       ) {
-        emitRef.current(((d.data.seconds ?? 0) / d.data.duration) * 100);
+        const ct = d.data.seconds ?? 0;
+        const dur = d.data.duration;
+        emitRef.current((ct / dur) * 100);
+        const now = Date.now();
+        if (now - lastHbRef.current >= 12_000 && hbRef.current) {
+          lastHbRef.current = now;
+          hbRef.current(ct, dur, true);
+        }
       }
     };
     window.addEventListener("message", handler);

@@ -430,6 +430,7 @@ export const upsertLesson = mutation({
         v.literal("mp4"),
         v.literal("vimeo"),
         v.literal("loom"),
+        v.literal("mux"),
       ),
     ),
     image: v.optional(v.string()),

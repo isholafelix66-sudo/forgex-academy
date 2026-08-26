@@ -50,7 +50,7 @@ import {
 // ---------------------------------------------------------------------------
 type Resource = { name: string; url: string };
 
-type VideoSource = "youtube" | "mp4" | "vimeo" | "loom";
+type VideoSource = "youtube" | "mp4" | "vimeo" | "loom" | "mux";
 
 type LessonDraft = {
   id?: string;
@@ -1388,13 +1388,29 @@ function LessonsTab({ courseId }: { courseId: string }) {
 
               {mediaMode === "url" && (
                 <div className="grid grid-cols-[1fr_130px] gap-3 items-end">
-                  <div className="space-y-2">
-                    <Label>Video URL (YouTube / Vimeo / Loom / MP4)</Label>
-                    <Input value={draft.videoUrl} onChange={(e) => setDraft({ ...draft, videoUrl: e.target.value })} placeholder="https://youtube.com/watch?v=… or https://…/lesson.mp4" className="border-white/10 bg-black/20" />
-                  </div>
+                  {draft.videoType === "mux" && !draft.muxPlaybackId ? (
+                    <div className="space-y-2">
+                      <Label>Mux Playback ID</Label>
+                      <Input
+                        value={draft.muxPlaybackId ?? ""}
+                        onChange={(e) => setDraft({ ...draft, muxPlaybackId: e.target.value.trim() || undefined })}
+                        placeholder="abc123xyz — from your Mux dashboard"
+                        className="border-white/10 bg-black/20"
+                      />
+                      <p className="text-[11px] text-muted-foreground">
+                        Paste the Playback ID from your Mux video asset. The player will load automatically.
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="space-y-2">
+                      <Label>Video URL (YouTube / Vimeo / Loom / MP4)</Label>
+                      <Input value={draft.videoUrl} onChange={(e) => setDraft({ ...draft, videoUrl: e.target.value })} placeholder="https://youtube.com/watch?v=… or https://…/lesson.mp4" className="border-white/10 bg-black/20" />
+                    </div>
+                  )}
                   <div className="space-y-2">
                     <Label>Video type</Label>
                     <select value={draft.videoType} onChange={(e) => setDraft({ ...draft, videoType: e.target.value as VideoSource })} className="h-10 w-full rounded-xl border border-white/10 bg-black/20 px-3 text-sm outline-none">
+                      <option value="mux">Mux (recommended)</option>
                       <option value="youtube">YouTube</option>
                       <option value="vimeo">Vimeo</option>
                       <option value="loom">Loom</option>
