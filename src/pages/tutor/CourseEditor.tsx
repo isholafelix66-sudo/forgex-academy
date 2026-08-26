@@ -1743,6 +1743,20 @@ function AssignmentsTab({ courseId }: { courseId: string }) {
             deadline: a.deadline ? new Date(a.deadline).toISOString().slice(0, 16) : "",
             maxScore: a.maxScore,
             files: a.files,
+            published: (a as { published?: boolean }).published ?? false,
+            questions: ((a as { questions?: AssignmentQuestionDraft[] }).questions ?? []).map(
+              (q) => ({
+                type: q.type,
+                question: q.question,
+                maxMarks: q.maxMarks ?? 10,
+                modelAnswer: String(q.modelAnswer ?? ""),
+                markingNotes: String(
+                  (q as { markingInstructions?: string }).markingInstructions ??
+                    (q as { markingNotes?: string }).markingNotes ??
+                    "",
+                ),
+              }),
+            ),
           }
         : emptyAssignment,
     );
@@ -1760,6 +1774,14 @@ function AssignmentsTab({ courseId }: { courseId: string }) {
       deadline: draft.deadline ? new Date(draft.deadline).getTime() : undefined,
       maxScore: Number(draft.maxScore) || 100,
       files: draft.files.filter((f) => f.name && f.url),
+      published: draft.published,
+      questions: draft.questions.map((q) => ({
+        type: q.type,
+        question: q.question,
+        maxMarks: Number(q.maxMarks) || 0,
+        modelAnswer: q.modelAnswer || undefined,
+        markingInstructions: q.markingNotes || undefined,
+      })),
     });
     setSaving(false);
     setDraft(null);
