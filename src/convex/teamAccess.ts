@@ -1,6 +1,7 @@
 import { v } from "convex/values";
 import { query, mutation } from "./_generated/server";
 import { getAuthUserId } from "@convex-dev/auth/server";
+import { internal } from "./_generated/api";
 
 const teamRoleValidator = v.union(
   v.literal("academic"),
@@ -72,6 +73,16 @@ export const setTeamRole = mutation({
       teamRole: args.teamRole as any,
       teamRoleAssignedAt: args.teamRole ? Date.now() : undefined,
     });
+
+    // Automated email: notify the user about the team/role change.
+    const prevRole = (user.teamRole ?? null);
+    if ((args.teamRole ?? null) !== prevRole) {
+      await ctx.scheduler.runAfter(0, internal.emailTriggers.notifyTeamRoleAssigned, {
+        userId: args.userId,
+        roleLabel: String(args.teamRole ?? ""),
+        removed: !args.teamRole,
+      });
+    }
 
     return { success: true };
   },

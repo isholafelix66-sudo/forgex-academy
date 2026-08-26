@@ -1,4 +1,5 @@
 import { mutation, query } from "./_generated/server";
+import { internal } from "./_generated/api";
 import { v } from "convex/values";
 import {
   checkRateLimit,
@@ -385,6 +386,11 @@ export const submitCourseForReview = mutation({
       status: "pending",
       published: false,
       reviewNote: undefined,
+    });
+    await ctx.scheduler.runAfter(0, internal.emailTriggers.notifyCourseSubmittedToStaff, {
+      courseId,
+      courseTitle: course.title,
+      tutorName: tutor?.name ?? "A tutor",
     });
     return true;
   },

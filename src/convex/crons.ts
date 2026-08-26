@@ -14,4 +14,18 @@ crons.interval("resilience-requeue-retries", { minutes: 5 }, internal.jobs.inter
 crons.interval("resilience-process-jobs", { minutes: 5 }, internal.jobs.runDueJobAction, {});
 crons.interval("resilience-cleanup", { minutes: 30 }, internal.jobs.cleanupResilience, {});
 
+// ---------------------------------------------------------------------------
+// Email queue + automations (extend the existing email system; every job is
+// a cheap no-op when there is nothing to do, and failures never crash the
+// platform — each trigger catches its own errors).
+// ---------------------------------------------------------------------------
+/** Background drain of the shared email queue (rate-limited batches). */
+crons.interval("email-queue-drain", { minutes: 1 }, internal.emailService.processPendingBatch, {});
+/** Student course-inactivity reminders (3 / 7 / 14 days). */
+crons.interval("email-student-inactivity", { hours: 6 }, internal.emailTriggers.scanStudentInactivity, {});
+/** Tutor inactivity check-in. */
+crons.interval("email-tutor-inactivity", { hours: 24 }, internal.emailTriggers.scanTutorInactivity, {});
+/** Daily admin activity summary. */
+crons.interval("email-admin-summary", { hours: 24 }, internal.emailTriggers.sendAdminDailySummary, {});
+
 export default crons;

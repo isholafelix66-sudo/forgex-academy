@@ -150,7 +150,7 @@ export async function tryCompleteCourseInternal(
         ),
       )
     : enrollment.progress;
-  await ctx.db.patch(enrollment._id, { progress });
+  await ctx.db.patch(enrollment._id, { progress, lastActivityAt: Date.now() });
 
   if (blockers.length === 0) {
     await finishCourseInternal(ctx, user, course, {
@@ -289,7 +289,7 @@ export async function completeLessonInternal(
     const allDone =
       progress >= 100 && completedLessons.length >= allLessons.length;
 
-    await ctx.db.patch(enrollment._id, { completedLessons, progress });
+    await ctx.db.patch(enrollment._id, { completedLessons, progress, lastActivityAt: Date.now() });
 
     // streak
     const today = yyyymmdd(Date.now());

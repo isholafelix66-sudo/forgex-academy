@@ -346,6 +346,26 @@ async function createEscalatedTicketCore(
     }
   }
 
+  // Automated emails: staff alert for every new ticket — escalated issues
+  // (AI fallback / manual escalation) go out as CRITICAL priority instead.
+  const ticketRequester = await ctx.db.get(args.userId);
+  if (args.escalationReason) {
+    await ctx.scheduler.runAfter(0, internal.emailTriggers.notifyEscalatedTicket, {
+      ticketNumber,
+      category: args.category,
+      subject: args.subject,
+      summary: args.aiSummary,
+      assignedTeam: args.assignedTeam,
+    });
+  } else {
+    await ctx.scheduler.runAfter(0, internal.emailTriggers.notifySupportTicketCreated, {
+      ticketNumber,
+      category: args.category,
+      subject: args.subject,
+      requesterName: (ticketRequester?.name as string) ?? "A user",
+    });
+  }
+
   return { ticketId, ticketNumber };
 }
 

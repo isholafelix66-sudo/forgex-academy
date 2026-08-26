@@ -320,6 +320,9 @@ export const saveTutorApplication = mutation({
         const site = (process.env.SITE_URL ?? "https://forgex.academy").replace(/\/$/, "");
         await ctx.runMutation(internal.emailData.queueSystemEmail, {
           to: fields.email,
+          emailType: "tutor_registration_received",
+          automationKey: "tutor_registration_received",
+          priority: "high",
           subject: "We received your tutor application 📬",
           html: `
             <div style="background:#0d0f0c;color:#e7e5e4;font-family:Segoe UI,Arial,sans-serif;padding:32px 16px">

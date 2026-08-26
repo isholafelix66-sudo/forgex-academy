@@ -84,6 +84,7 @@ export const queueSystemEmail = internalMutation({
     to: v.string(),
     subject: v.string(),
     html: v.string(),
+    text: v.optional(v.string()), // ignored by the queue sender; accepted for legacy callers
     emailType: v.string(),
     priority: v.optional(
       v.union(v.literal("normal"), v.literal("high"), v.literal("critical")),

@@ -1,5 +1,6 @@
 import { mutation, query } from "./_generated/server";
 import { v } from "convex/values";
+import { internal } from "./_generated/api";
 import type { Doc } from "./_generated/dataModel";
 import { checkRateLimit, notify, requireUser, requireUserDoc } from "./lib";
 import { tryCompleteCourseInternal } from "./learn";
@@ -144,6 +145,9 @@ export const submitAssignment = mutation({
       body: `${user.name || "A student"} submitted "${assignment.title}".`,
       type: "submission",
       link: "/tutor",
+    });
+    await ctx.scheduler.runAfter(0, internal.emailTriggers.notifyAssignmentSubmissionToTutor, {
+      submissionId: id,
     });
 
     // Backend-authoritative completion: submitting a required assignment may
