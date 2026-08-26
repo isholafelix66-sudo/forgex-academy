@@ -80,10 +80,28 @@ async function enqueue(ctx: any, args: EnqueueArgs) {
   await ctx.runMutation(internal.emailData.queueSystemEmail, args);
 }
 
-/** All admins + anyone holding a team role. */
+/**
+ * All admins + anyone holding a team role — resolved live from the database.
+ * Every returned address is that member registered account email; members
+ * without one are skipped rather than sent to any fallback address.
+ */
 async function staffRecipients(ctx: any): Promise<{ id: string; email: string; name?: string; role?: string }[]> {
   const users = await ctx.db.query("users").collect();
-  return users.filter((u: any) => u.role === "admin" || !!u.teamRole);
+  return users
+    .filter((u: any) => !u.suspended && (u.role === "admin" || !!u.teamRole))
+    .map((u: any) => ({ ...u, email: accountEmailOf(u) }))
+    .filter((u: any) => !!u.email);
+}
+
+/**
+ * Recipient resolution — the ONE rule for who receives an automated email:
+ * the exact email address stored on the registered account record in the
+ * database. Returns an empty string when there is no valid registered email
+ * (the caller then skips that recipient instead of guessing).
+ */
+function accountEmailOf(user: any): string {
+  const email = typeof user?.email === "string" ? user.email.trim() : "";
+  return email.includes("@") ? email : "";
 }
 
 function dayBucket(now = Date.now()): string {
@@ -112,9 +130,12 @@ export const notifyTutorDecision = internalMutation({
       if (!app) return;
       if (args.prevStatus === args.nextStatus) return; // no state change → no email
 
+      // Registered account email first; the application email is the same
+      // address captured at tutor registration (fallback only if the account
+      // record has none yet).
       const user = await ctx.db.get(app.userId);
-      const email = app.email || (user && "email" in user ? String(user.email ?? "") : "");
-      if (!email) return;
+      const email = accountEmailOf(user) || app.email.trim();
+      if (!email.includes("@")) return;
       const name = app.fullName || (user?.name as string | undefined) || "there";
 
       if (args.nextStatus === "approved" || args.nextStatus === "verified") {
@@ -207,7 +228,7 @@ export const notifyNewEnrollmentToTutor = internalMutation({
       ]);
       if (!course) return;
       const tutor = await ctx.db.get(course.tutorId);
-      const email = tutor && "email" in tutor ? String(tutor.email ?? "") : "";
+      const email = accountEmailOf(tutor);
       if (!email) return;
       await enqueue(ctx, {
         to: email,
@@ -241,7 +262,7 @@ export const notifyAssignmentSubmissionToTutor = internalMutation({
       ]);
       if (!assignment) return;
       const tutor = await ctx.db.get(assignment.tutorId);
-      const email = tutor && "email" in tutor ? String(tutor.email ?? "") : "";
+      const email = accountEmailOf(tutor);
       if (!email) return;
       let courseTitle = "";
       if (assignment.courseId) {
@@ -311,7 +332,7 @@ export const notifyCourseDecisionToTutor = internalMutation({
       const course = await ctx.db.get(args.courseId);
       if (!course) return;
       const tutor = await ctx.db.get(course.tutorId);
-      const email = tutor && "email" in tutor ? String(tutor.email ?? "") : "";
+      const email = accountEmailOf(tutor);
       if (!email) return;
       await enqueue(ctx, {
         to: email,
@@ -341,7 +362,7 @@ export const notifyTeamRoleAssigned = internalMutation({
   handler: async (ctx, args) => {
     try {
       const user = await ctx.db.get(args.userId);
-      const email = user && "email" in user ? String(user.email ?? "") : "";
+      const email = accountEmailOf(user);
       if (!email) return;
       await enqueue(ctx, {
         to: email,
@@ -524,7 +545,7 @@ export const scanStudentInactivity = internalMutation({
           ctx.db.get(enrollment.studentId),
           ctx.db.get(enrollment.courseId),
         ]);
-        const email = student && "email" in student ? String(student.email ?? "") : "";
+        const email = accountEmailOf(student);
         if (!student || !email || !course) continue;
         if (progress >= 100) continue;
 
@@ -565,7 +586,7 @@ export const scanTutorInactivity = internalMutation({
       const week = dayBucket().slice(0, 7); // YYYY-MM so at most one per month
       for (const u of users) {
         if (u.role !== "tutor" || u.suspended) continue;
-        const email = "email" in u ? String(u.email ?? "") : "";
+        const email = accountEmailOf(u);
         if (!email) continue;
         const lastActivity = u.lastActivity ?? 0;
         if (!lastActivity) continue;
