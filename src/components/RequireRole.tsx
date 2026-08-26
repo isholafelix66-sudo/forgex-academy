@@ -25,6 +25,7 @@ export type TutorAccessInput = {
   role?: string | null;
   verified?: boolean | null;
   applicationStatus?: string | null;
+  teamRole?: string | null;
 };
 
 /**
@@ -50,7 +51,9 @@ export function resolveTutorAccess(input: TutorAccessInput): TutorAccessState {
   // stale admin token they may be carrying.
   const isTutor = input.role === "tutor" && !!input.verified;
   const isAdminUser = input.role === "admin";
-  if (input.isAuthenticated && (isTutor || isAdminUser)) {
+  // Team members with academic or content roles can access the course builder
+  const isTeamContentCreator = input.teamRole === "academic" || input.teamRole === "content";
+  if (input.isAuthenticated && (isTutor || isAdminUser || isTeamContentCreator)) {
     return { kind: "render" };
   }
 
@@ -132,6 +135,7 @@ export function RequireTutor({ children }: { children: ReactNode }) {
     role: user?.role,
     verified: user?.verified,
     applicationStatus: application?.status,
+    teamRole: ("teamRole" in (user ?? {}) ? String((user as any)?.teamRole ?? "") : "") || null,
   });
 
   switch (state.kind) {

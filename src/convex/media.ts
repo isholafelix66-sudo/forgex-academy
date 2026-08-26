@@ -42,8 +42,9 @@ export const recordVideo = mutation({
       const user = await ctx.db.get(userId);
       if (!user) throw new Error("Account not found.");
       const isTutor = user.role === "tutor" && !!user.verified;
-      if (user.role !== "admin" && !isTutor) {
-        throw new Error("A verified tutor account is required to upload videos.");
+      const isTeamCreator = user.teamRole === "academic" || user.teamRole === "content";
+      if (user.role !== "admin" && !isTutor && !isTeamCreator) {
+        throw new Error("You do not have permission to upload videos. Admins, verified tutors, and team members with academic or content roles can upload.");
       }
     }
 

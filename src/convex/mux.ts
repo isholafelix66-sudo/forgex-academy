@@ -35,16 +35,19 @@ async function muxFetch(path: string, init?: RequestInit): Promise<any> {
   return res.json();
 }
 
-/** Require the caller to be an active (verified) tutor or admin. */
+/** Require the caller to be an authorized course-content creator:
+ *  admin, verified tutor, or team member with academic/content role. */
 async function requireActiveTutor(ctx: any) {
   const userId = await getAuthUserId(ctx);
   if (userId === null) throw new Error("You must be signed in to do that.");
   const user = await ctx.runQuery(internal.users.internalCurrentUser);
   if (!user) throw new Error("Account not found.");
   if (user.role === "admin") return;
-  if (user.role !== "tutor" || !user.verified) {
-    throw new Error("A verified tutor account is required to upload videos.");
-  }
+  if (user.role === "tutor" && user.verified) return;
+  // Team members with course/content management permissions
+  const teamRole = user.teamRole;
+  if (teamRole === "academic" || teamRole === "content") return;
+  throw new Error("You do not have permission to upload videos. Admins, verified tutors, and team members with academic or content roles can upload.");
 }
 
 /**
