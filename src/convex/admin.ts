@@ -3,7 +3,7 @@ import { mutation, query, MutationCtx } from "./_generated/server";
 import { Doc, Id } from "./_generated/dataModel";
 import { v } from "convex/values";
 import { hydrateCourse, hydrateCourses, makeAdminToken, notify, publicUser, requireAdminSession, slugify } from "./lib";
-import { difficultyValidator, ROLES, roleValidator } from "./schema";
+import { difficultyValidator, ROLES, roleValidator, questionValidator, assignmentQuestionValidator, resourceValidator } from "./schema";
 import { messagePreview } from "./messages";
 
 // ---------------------------------------------------------------------------
@@ -1743,23 +1743,42 @@ export const adminUpsertQuiz = mutation({
     title: v.string(),
     description: v.string(),
     timeLimitMinutes: v.number(),
+    questions: v.array(questionValidator),
+    passingScorePercent: v.optional(v.number()),
+    attemptLimit: v.optional(v.number()),
+    published: v.optional(v.boolean()),
     token: v.string(),
   },
   handler: async (ctx, args) => {
     await requireAdminSession(ctx, args.token);
-    const { token, id, courseId, title, description, timeLimitMinutes } = args;
+    const { id, courseId, title, description, timeLimitMinutes, questions, passingScorePercent, attemptLimit, published } = args;
+    const patch = {
+      title,
+      description,
+      timeLimitMinutes: Math.max(0, Math.round(timeLimitMinutes)),
+      questions,
+      passingScorePercent:
+        passingScorePercent === undefined
+          ? undefined
+          : Math.max(1, Math.min(100, Math.round(passingScorePercent))),
+      attemptLimit:
+        attemptLimit === undefined
+          ? undefined
+          : Math.max(0, Math.round(attemptLimit)),
+      published,
+      updatedAt: Date.now(),
+    };
     if (id) {
-      await ctx.db.patch(id, { title, description, timeLimitMinutes });
+      await ctx.db.patch(id, patch);
       return id;
     }
     const course = await ctx.db.get(courseId);
     return await ctx.db.insert("quizzes", {
       courseId,
       tutorId: course?.tutorId ?? ("" as Id<"users">),
-      title,
-      description,
-      timeLimitMinutes,
-      questions: [],
+      ...patch,
+      questions,
+      published: published ?? true,
       createdAt: Date.now(),
     });
   },
@@ -1788,25 +1807,37 @@ export const adminUpsertAssignment = mutation({
     instructions: v.string(),
     deadline: v.optional(v.number()),
     maxScore: v.number(),
+    files: v.array(resourceValidator),
+    questions: v.optional(v.array(assignmentQuestionValidator)),
+    published: v.optional(v.boolean()),
     token: v.string(),
   },
   handler: async (ctx, args) => {
     await requireAdminSession(ctx, args.token);
-    const { token, id, courseId, title, description, instructions, deadline, maxScore } = args;
+    const { id, courseId, title, description, instructions, deadline, maxScore, files, questions, published } = args;
+    const patch = {
+      title,
+      description,
+      instructions,
+      deadline,
+      maxScore: Math.max(1, Math.round(maxScore)),
+      files,
+      questions: questions ?? [],
+      published,
+      updatedAt: Date.now(),
+    };
     if (id) {
-      await ctx.db.patch(id, { title, description, instructions, deadline, maxScore });
+      await ctx.db.patch(id, patch);
       return id;
     }
     const course = await ctx.db.get(courseId);
     return await ctx.db.insert("assignments", {
       courseId,
       tutorId: course?.tutorId ?? ("" as Id<"users">),
-      title,
-      description,
-      instructions,
-      deadline,
-      maxScore,
-      files: [],
+      ...patch,
+      files,
+      questions: questions ?? [],
+      published: published ?? true,
       createdAt: Date.now(),
     });
   },

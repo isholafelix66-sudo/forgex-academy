@@ -108,8 +108,8 @@ export default function AdminCourses() {
   } | null>(null);
 
   // Quiz / assignment mini-editors
-  const [quizDraft, setQuizDraft] = useState<{ id?: string; title: string; description: string; timeLimitMinutes: number } | null>(null);
-  const [assignDraft, setAssignDraft] = useState<{ id?: string; title: string; description: string; instructions: string; maxScore: number; deadline: string } | null>(null);
+  const [quizDraft, setQuizDraft] = useState<{ id?: string; title: string; description: string; timeLimitMinutes: number; passingScorePercent: number; attemptLimit: number; published: boolean; questions: { type: string; question: string; options: string[]; answer: string; points: number; explanation: string; acceptedAnswers: string[] }[] } | null>(null);
+  const [assignDraft, setAssignDraft] = useState<{ id?: string; title: string; description: string; instructions: string; maxScore: number; deadline: string; published: boolean; questions: { type: string; question: string; maxMarks: number; modelAnswer: string; markingInstructions: string }[]; files: { name: string; url: string }[] } | null>(null);
 
   // Lesson video upload from device (Convex file storage, admin token flow)
   const [lessonVideoBusy, setLessonVideoBusy] = useState(false);
@@ -386,14 +386,29 @@ export default function AdminCourses() {
 
   const saveQuiz = async () => {
     if (!editor?.course || !quizDraft?.title.trim()) return;
+    const qs = quizDraft.questions.filter((q) => q.question.trim());
+    if (qs.length === 0) { toast.error("Add at least one question."); return; }
     await adminUpsertQuiz({
       id: quizDraft.id ? (quizDraft.id as never) : undefined,
       courseId: editor.course._id as never,
       title: quizDraft.title,
       description: quizDraft.description,
       timeLimitMinutes: quizDraft.timeLimitMinutes,
+      questions: qs.map((q) => ({
+        type: q.type as "multiple-choice" | "true-false" | "short-answer",
+        question: q.question,
+        options: q.type === "multiple-choice" ? q.options.filter(Boolean) : undefined,
+        answer: q.answer || undefined,
+        points: Number(q.points) || 1,
+        explanation: q.explanation || undefined,
+        acceptedAnswers: q.acceptedAnswers && q.acceptedAnswers.some((a) => a.trim()) ? q.acceptedAnswers.filter(Boolean) : undefined,
+      })),
+      passingScorePercent: Math.max(1, Math.min(100, quizDraft.passingScorePercent || 70)),
+      attemptLimit: Math.max(0, Math.round(quizDraft.attemptLimit || 0)),
+      published: quizDraft.published,
       token,
     });
+    toast.success("Quiz saved!");
     setQuizDraft(null);
   };
 
@@ -407,8 +422,18 @@ export default function AdminCourses() {
       instructions: assignDraft.instructions,
       deadline: assignDraft.deadline ? new Date(assignDraft.deadline).getTime() : undefined,
       maxScore: assignDraft.maxScore,
+      files: (assignDraft.files ?? []).filter((f) => f.name && f.url),
+      questions: (assignDraft.questions ?? []).map((q) => ({
+        type: q.type as "short-text" | "long-text" | "file" | "link" | "text-and-file",
+        question: q.question,
+        maxMarks: Number(q.maxMarks) || 0,
+        modelAnswer: q.modelAnswer || undefined,
+        markingInstructions: q.markingInstructions || undefined,
+      })),
+      published: assignDraft.published,
       token,
     });
+    toast.success("Assignment saved!");
     setAssignDraft(null);
   };
 
@@ -893,15 +918,21 @@ export default function AdminCourses() {
                 </TabsContent>
 
                 <TabsContent value="quizzes" className="space-y-3 pt-4">
+                  <div className="flex items-center justify-between">
+                    <p className="text-sm text-muted-foreground">{content?.quizzes?.length ?? 0} quizzes</p>
+                    <Button variant="outline" size="sm" className="gap-1.5 border-white/15" onClick={() => setQuizDraft({ title: "", description: "", timeLimitMinutes: 10, passingScorePercent: 70, attemptLimit: 0, published: true, questions: [] })}>
+                      <Plus className="size-3.5" /> New quiz
+                    </Button>
+                  </div>
                   {(content?.quizzes ?? []).map((q) => (
                     <div key={q._id} className="flex items-center gap-3 rounded-xl border border-white/10 bg-black/20 px-4 py-2.5">
                       <div className="min-w-0 flex-1">
                         <p className="truncate text-sm font-medium">{q.title}</p>
                         <p className="truncate text-xs text-muted-foreground">
-                          {q.timeLimitMinutes} min · {q.questions.length} questions
+                          {q.timeLimitMinutes} min · {q.questions.length} questions · pass {q.passingScorePercent ?? 70}% · {q.published === false ? <span className="text-amber-300">Draft</span> : <span className="text-lime-300">Published</span>}
                         </p>
                       </div>
-                      <Button variant="ghost" size="icon" onClick={() => setQuizDraft({ id: q._id as string, title: q.title, description: q.description, timeLimitMinutes: q.timeLimitMinutes })}>
+                      <Button variant="ghost" size="icon" onClick={() => setQuizDraft({ id: q._id as string, title: q.title, description: q.description, timeLimitMinutes: q.timeLimitMinutes, passingScorePercent: q.passingScorePercent ?? 70, attemptLimit: q.attemptLimit ?? 0, published: q.published !== false, questions: (q.questions ?? []).map((x) => ({ type: x.type, question: x.question, options: x.options ?? [], answer: x.answer ?? "", points: x.points ?? 1, explanation: x.explanation ?? "", acceptedAnswers: (x.acceptedAnswers ?? []).map(String) })) })}>
                         <Pencil className="size-4" />
                       </Button>
                       <Button variant="ghost" size="icon" className="text-muted-foreground hover:text-rose-300" onClick={() => void adminDeleteQuiz({ id: q._id as never, token })}>
@@ -909,18 +940,72 @@ export default function AdminCourses() {
                       </Button>
                     </div>
                   ))}
-                  <div className="space-y-3 rounded-xl border border-white/10 bg-black/20 p-4">
-                    <p className="text-sm font-semibold">{quizDraft?.id ? "Edit quiz" : "Add quiz"}</p>
-                    <Input placeholder="Quiz title *" value={quizDraft?.title ?? ""} onChange={(e) => setQuizDraft((d) => ({ ...(d ?? { title: "", description: "", timeLimitMinutes: 10 }), title: e.target.value }))} className="border-white/10 bg-black/30" />
-                    <Input placeholder="Description" value={quizDraft?.description ?? ""} onChange={(e) => setQuizDraft((d) => ({ ...(d ?? { title: "", description: "", timeLimitMinutes: 10 }), description: e.target.value }))} className="border-white/10 bg-black/30" />
-                    <Input type="number" placeholder="Time limit (minutes)" value={quizDraft?.timeLimitMinutes ?? 10} onChange={(e) => setQuizDraft((d) => ({ ...(d ?? { title: "", description: "", timeLimitMinutes: 10 }), timeLimitMinutes: Number(e.target.value) }))} className="border-white/10 bg-black/30" />
-                    <div className="flex gap-2">
-                      {quizDraft && <Button variant="ghost" onClick={() => setQuizDraft(null)}>Cancel</Button>}
-                      <Button className="gap-1.5 bg-lime-400 font-semibold text-black hover:bg-lime-300" onClick={() => void saveQuiz()}>
-                        <Plus className="size-4" /> {quizDraft?.id ? "Save quiz" : "Add quiz"}
-                      </Button>
+                  {quizDraft && (
+                    <div className="space-y-3 rounded-xl border border-white/10 bg-black/20 p-4">
+                      <p className="text-sm font-semibold">{quizDraft.id ? "Edit quiz" : "Add quiz"}</p>
+                      <Input placeholder="Quiz title *" value={quizDraft.title} onChange={(e) => setQuizDraft((d) => d ? { ...d, title: e.target.value } : d)} className="border-white/10 bg-black/30" />
+                      <Input placeholder="Description" value={quizDraft.description} onChange={(e) => setQuizDraft((d) => d ? { ...d, description: e.target.value } : d)} className="border-white/10 bg-black/30" />
+                      <div className="grid grid-cols-3 gap-3">
+                        <Input type="number" placeholder="Time (min)" value={quizDraft.timeLimitMinutes} onChange={(e) => setQuizDraft((d) => d ? { ...d, timeLimitMinutes: Number(e.target.value) } : d)} className="border-white/10 bg-black/30" />
+                        <Input type="number" placeholder="Pass %" value={quizDraft.passingScorePercent} onChange={(e) => setQuizDraft((d) => d ? { ...d, passingScorePercent: Number(e.target.value) } : d)} className="border-white/10 bg-black/30" />
+                        <Input type="number" placeholder="Max attempts (0=∞)" value={quizDraft.attemptLimit} onChange={(e) => setQuizDraft((d) => d ? { ...d, attemptLimit: Number(e.target.value) } : d)} className="border-white/10 bg-black/30" />
+                      </div>
+                      {/* Questions */}
+                      <div className="space-y-2">
+                        <div className="flex items-center justify-between">
+                          <Label>Questions ({quizDraft.questions.length})</Label>
+                          <Button variant="outline" size="sm" className="gap-1 border-white/15" onClick={() => setQuizDraft((d) => d ? { ...d, questions: [...d.questions, { type: "multiple-choice", question: "", options: ["", "", "", ""], answer: "", points: 1, explanation: "", acceptedAnswers: [] }] } : d)}>
+                            <Plus className="size-3.5" /> Add question
+                          </Button>
+                        </div>
+                        {quizDraft.questions.map((q, i) => (
+                          <div key={i} className="rounded-xl border border-white/10 bg-black/30 p-3 space-y-2">
+                            <div className="flex items-center justify-between gap-2">
+                              <span className="text-xs font-semibold uppercase tracking-wider text-lime-300/80">Q{i + 1}</span>
+                              <div className="flex items-center gap-2">
+                                <select value={q.type} onChange={(e) => setQuizDraft((d) => d ? { ...d, questions: d.questions.map((qq, j) => j === i ? { ...qq, type: e.target.value } : qq) } : d)} className="h-8 rounded-lg border border-white/10 bg-black/40 px-2 text-xs outline-none">
+                                  <option value="multiple-choice">Multiple choice</option>
+                                  <option value="true-false">True / False</option>
+                                  <option value="short-answer">Short answer</option>
+                                </select>
+                                <Button variant="ghost" size="icon" className="size-7 text-muted-foreground hover:text-rose-300" onClick={() => setQuizDraft((d) => d ? { ...d, questions: d.questions.filter((_, j) => j !== i) } : d)}>
+                                  <Trash2 className="size-3.5" />
+                                </Button>
+                              </div>
+                            </div>
+                            <Input value={q.question} onChange={(e) => setQuizDraft((d) => d ? { ...d, questions: d.questions.map((qq, j) => j === i ? { ...qq, question: e.target.value } : qq) } : d)} placeholder="Question text…" className="border-white/10 bg-black/40" />
+                            {q.type === "multiple-choice" && (
+                              <div className="space-y-1">
+                                {q.options.map((opt, oi) => (
+                                  <div key={oi} className="flex gap-1.5">
+                                    <Input value={opt} onChange={(e) => setQuizDraft((d) => d ? { ...d, questions: d.questions.map((qq, j) => j === i ? { ...qq, options: qq.options.map((o, k) => k === oi ? e.target.value : o) } : qq) } : d)} placeholder={`Option ${String.fromCharCode(65 + oi)}`} className="border-white/10 bg-black/40" />
+                                    {q.answer === opt ? (
+                                      <span className="flex items-center rounded-lg bg-lime-400/15 px-2 text-xs font-bold text-lime-300">✓</span>
+                                    ) : (
+                                      <Button variant="ghost" size="sm" className="text-[11px] text-muted-foreground" onClick={() => setQuizDraft((d) => d ? { ...d, questions: d.questions.map((qq, j) => j === i ? { ...qq, answer: opt } : qq) } : d)}>Set</Button>
+                                    )}
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                            {q.type !== "multiple-choice" && (
+                              <Input value={q.answer} onChange={(e) => setQuizDraft((d) => d ? { ...d, questions: d.questions.map((qq, j) => j === i ? { ...qq, answer: e.target.value } : qq) } : d)} placeholder={q.type === "true-false" ? "True or False" : "Correct answer (reference)"} className="border-white/10 bg-black/40" />
+                            )}
+                            <div className="grid grid-cols-[80px_1fr] gap-2">
+                              <Input type="number" value={q.points} onChange={(e) => setQuizDraft((d) => d ? { ...d, questions: d.questions.map((qq, j) => j === i ? { ...qq, points: Number(e.target.value) } : qq) } : d)} placeholder="Pts" className="border-white/10 bg-black/40" />
+                              <Input value={q.explanation} onChange={(e) => setQuizDraft((d) => d ? { ...d, questions: d.questions.map((qq, j) => j === i ? { ...qq, explanation: e.target.value } : qq) } : d)} placeholder="Explanation (optional)" className="border-white/10 bg-black/40" />
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                      <div className="flex gap-2">
+                        <Button variant="ghost" onClick={() => setQuizDraft(null)}>Cancel</Button>
+                        <Button className="gap-1.5 bg-lime-400 font-semibold text-black hover:bg-lime-300" onClick={() => void saveQuiz()}>
+                          <Save className="size-4" /> {quizDraft.id ? "Save quiz" : "Add quiz"}
+                        </Button>
+                      </div>
                     </div>
-                  </div>
+                  )}
                   <div className="flex items-center justify-between gap-3 border-t border-white/10 pt-4">
                     <Button variant="outline" className="gap-1.5 border-white/15" onClick={() => setTab("lessons")}>
                       <ArrowLeft className="size-3.5" /> Back
@@ -1064,13 +1149,19 @@ export default function AdminCourses() {
                 </TabsContent>
 
                 <TabsContent value="assignments" className="space-y-3 pt-4">
+                  <div className="flex items-center justify-between">
+                    <p className="text-sm text-muted-foreground">{content?.assignments?.length ?? 0} assignments</p>
+                    <Button variant="outline" size="sm" className="gap-1.5 border-white/15" onClick={() => setAssignDraft({ title: "", description: "", instructions: "", maxScore: 100, deadline: "", published: true, questions: [], files: [] })}>
+                      <Plus className="size-3.5" /> New assignment
+                    </Button>
+                  </div>
                   {(content?.assignments ?? []).map((a) => (
                     <div key={a._id} className="flex items-center gap-3 rounded-xl border border-white/10 bg-black/20 px-4 py-2.5">
                       <div className="min-w-0 flex-1">
                         <p className="truncate text-sm font-medium">{a.title}</p>
                         <p className="truncate text-xs text-muted-foreground">Max {a.maxScore} pts</p>
                       </div>
-                      <Button variant="ghost" size="icon" onClick={() => setAssignDraft({ id: a._id as string, title: a.title, description: a.description, instructions: a.instructions, maxScore: a.maxScore, deadline: a.deadline ? new Date(a.deadline).toISOString().slice(0, 10) : "" })}>
+                      <Button variant="ghost" size="icon" onClick={() => setAssignDraft({ id: a._id as string, title: a.title, description: a.description, instructions: a.instructions, maxScore: a.maxScore, deadline: a.deadline ? new Date(a.deadline).toISOString().slice(0, 10) : "", published: a.published ?? false, questions: ((a.questions ?? []) as { type: string; question: string; maxMarks?: number; modelAnswer?: string; markingInstructions?: string }[]).map((q) => ({ type: q.type ?? "short-text", question: q.question, maxMarks: q.maxMarks ?? 10, modelAnswer: q.modelAnswer ?? "", markingInstructions: q.markingInstructions ?? "" })), files: ((a.files ?? []) as { name: string; url: string }[]) })}>
                         <Pencil className="size-4" />
                       </Button>
                       <Button variant="ghost" size="icon" className="text-muted-foreground hover:text-rose-300" onClick={() => void adminDeleteAssignment({ id: a._id as never, token })}>
@@ -1078,22 +1169,57 @@ export default function AdminCourses() {
                       </Button>
                     </div>
                   ))}
-                  <div className="space-y-3 rounded-xl border border-white/10 bg-black/20 p-4">
-                    <p className="text-sm font-semibold">{assignDraft?.id ? "Edit assignment" : "Add assignment"}</p>
-                    <Input placeholder="Assignment title *" value={assignDraft?.title ?? ""} onChange={(e) => setAssignDraft((d) => ({ ...(d ?? { title: "", description: "", instructions: "", maxScore: 100, deadline: "" }), title: e.target.value }))} className="border-white/10 bg-black/30" />
-                    <Input placeholder="Description" value={assignDraft?.description ?? ""} onChange={(e) => setAssignDraft((d) => ({ ...(d ?? { title: "", description: "", instructions: "", maxScore: 100, deadline: "" }), description: e.target.value }))} className="border-white/10 bg-black/30" />
-                    <Textarea placeholder="Instructions" rows={2} value={assignDraft?.instructions ?? ""} onChange={(e) => setAssignDraft((d) => ({ ...(d ?? { title: "", description: "", instructions: "", maxScore: 100, deadline: "" }), instructions: e.target.value }))} className="border-white/10 bg-black/30" />
-                    <div className="grid grid-cols-2 gap-3">
-                      <Input type="number" placeholder="Max score" value={assignDraft?.maxScore ?? 100} onChange={(e) => setAssignDraft((d) => ({ ...(d ?? { title: "", description: "", instructions: "", maxScore: 100, deadline: "" }), maxScore: Number(e.target.value) }))} className="border-white/10 bg-black/30" />
-                      <Input type="date" value={assignDraft?.deadline ?? ""} onChange={(e) => setAssignDraft((d) => ({ ...(d ?? { title: "", description: "", instructions: "", maxScore: 100, deadline: "" }), deadline: e.target.value }))} className="border-white/10 bg-black/30" />
+                  {assignDraft && (
+                    <div className="space-y-3 rounded-xl border border-white/10 bg-black/20 p-4">
+                      <p className="text-sm font-semibold">{assignDraft.id ? "Edit assignment" : "Add assignment"}</p>
+                      <Input placeholder="Assignment title *" value={assignDraft.title} onChange={(e) => setAssignDraft((d) => d ? { ...d, title: e.target.value } : d)} className="border-white/10 bg-black/30" />
+                      <Input placeholder="Description" value={assignDraft.description} onChange={(e) => setAssignDraft((d) => d ? { ...d, description: e.target.value } : d)} className="border-white/10 bg-black/30" />
+                      <Textarea placeholder="Instructions" rows={2} value={assignDraft.instructions} onChange={(e) => setAssignDraft((d) => d ? { ...d, instructions: e.target.value } : d)} className="border-white/10 bg-black/30" />
+                      <div className="grid grid-cols-2 gap-3">
+                        <Input type="number" placeholder="Max score" value={assignDraft.maxScore} onChange={(e) => setAssignDraft((d) => d ? { ...d, maxScore: Number(e.target.value) } : d)} className="border-white/10 bg-black/30" />
+                        <Input type="date" value={assignDraft.deadline} onChange={(e) => setAssignDraft((d) => d ? { ...d, deadline: e.target.value } : d)} className="border-white/10 bg-black/30" />
+                      </div>
+                      {/* Questions */}
+                      <div className="space-y-2">
+                        <div className="flex items-center justify-between">
+                          <Label>Questions ({assignDraft.questions.length})</Label>
+                          <Button variant="outline" size="sm" className="gap-1 border-white/15" onClick={() => setAssignDraft((d) => d ? { ...d, questions: [...d.questions, { type: "short-text", question: "", maxMarks: 10, modelAnswer: "", markingInstructions: "" }] } : d)}>
+                            <Plus className="size-3.5" /> Add question
+                          </Button>
+                        </div>
+                        {assignDraft.questions.map((q, i) => (
+                          <div key={i} className="rounded-xl border border-white/10 bg-black/30 p-3 space-y-2">
+                            <div className="flex items-center justify-between gap-2">
+                              <span className="text-xs font-semibold uppercase tracking-wider text-amber-300/80">Q{i + 1}</span>
+                              <div className="flex items-center gap-2">
+                                <select value={q.type} onChange={(e) => setAssignDraft((d) => d ? { ...d, questions: d.questions.map((qq, j) => j === i ? { ...qq, type: e.target.value } : qq) } : d)} className="h-8 rounded-lg border border-white/10 bg-black/40 px-2 text-xs outline-none">
+                                  <option value="short-text">Short text</option>
+                                  <option value="long-text">Long text</option>
+                                  <option value="file">File upload</option>
+                                  <option value="link">Link</option>
+                                  <option value="text-and-file">Text + File</option>
+                                </select>
+                                <Button variant="ghost" size="icon" className="size-7 text-muted-foreground hover:text-rose-300" onClick={() => setAssignDraft((d) => d ? { ...d, questions: d.questions.filter((_, j) => j !== i) } : d)}>
+                                  <Trash2 className="size-3.5" />
+                                </Button>
+                              </div>
+                            </div>
+                            <Input value={q.question} onChange={(e) => setAssignDraft((d) => d ? { ...d, questions: d.questions.map((qq, j) => j === i ? { ...qq, question: e.target.value } : qq) } : d)} placeholder="Question text…" className="border-white/10 bg-black/40" />
+                            <div className="grid grid-cols-[80px_1fr] gap-2">
+                              <Input type="number" value={q.maxMarks} onChange={(e) => setAssignDraft((d) => d ? { ...d, questions: d.questions.map((qq, j) => j === i ? { ...qq, maxMarks: Number(e.target.value) } : qq) } : d)} placeholder="Marks" className="border-white/10 bg-black/40" />
+                              <Input value={q.modelAnswer} onChange={(e) => setAssignDraft((d) => d ? { ...d, questions: d.questions.map((qq, j) => j === i ? { ...qq, modelAnswer: e.target.value } : qq) } : d)} placeholder="Model answer (optional)" className="border-white/10 bg-black/40" />
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                      <div className="flex gap-2">
+                        <Button variant="ghost" onClick={() => setAssignDraft(null)}>Cancel</Button>
+                        <Button className="gap-1.5 bg-lime-400 font-semibold text-black hover:bg-lime-300" onClick={() => void saveAssignment()}>
+                          <Save className="size-4" /> {assignDraft.id ? "Save assignment" : "Add assignment"}
+                        </Button>
+                      </div>
                     </div>
-                    <div className="flex gap-2">
-                      {assignDraft && <Button variant="ghost" onClick={() => setAssignDraft(null)}>Cancel</Button>}
-                      <Button className="gap-1.5 bg-lime-400 font-semibold text-black hover:bg-lime-300" onClick={() => void saveAssignment()}>
-                        <Plus className="size-4" /> {assignDraft?.id ? "Save assignment" : "Add assignment"}
-                      </Button>
-                    </div>
-                  </div>
+                  )}
                   <div className="flex items-center justify-between gap-3 border-t border-white/10 pt-4">
                     <Button variant="outline" className="gap-1.5 border-white/15" onClick={() => setTab("quizzes")}>
                       <ArrowLeft className="size-3.5" /> Back
