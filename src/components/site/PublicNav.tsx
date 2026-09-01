@@ -15,9 +15,9 @@ import {
   Sparkles,
   FileText,
   Bell,
-  BookMarked,
+  Bookmark,
   Mail,
-  Info,
+  InfoIcon,
   ChevronDown,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -61,12 +61,12 @@ const EXPLORE_ITEMS: NavItemDef[] = [
   { to: "/ai-hub", label: "AI Hub", icon: Sparkles },
   { to: "/prompts", label: "Prompt Library", icon: FileText },
   { to: "/updates", label: "Updates", icon: Bell },
-  { to: "/stories", label: "Stories", icon: BookMarked },
+  { to: "/stories", label: "Stories", icon: Bookmark },
 ];
 
 const MORE_ITEMS: NavItemDef[] = [
   { to: "/contact", label: "Contact", icon: Mail },
-  { to: "/about", label: "About", icon: Info },
+  { to: "/about", label: "About", icon: InfoIcon },
 ];
 
 /* ── Reusable mobile link ────────────────────────────────────────────── */
@@ -339,7 +339,7 @@ export function PublicNav() {
             <div className="mt-1">
               <CollapsibleSection
                 label="More"
-                icon={Info}
+                icon={InfoIcon}
                 items={MORE_ITEMS}
                 onNavigate={closeMenu}
               />
