@@ -111,30 +111,28 @@ export default function Landing() {
 
               <motion.h1
                 variants={item}
-                className="font-display mt-6 max-w-4xl text-5xl font-bold leading-[1.05] tracking-tight sm:text-7xl"
+                className="font-display mt-8 max-w-4xl text-[2.5rem] font-bold leading-[1.08] tracking-tight sm:mt-10 sm:text-6xl lg:text-7xl"
               >
                 Discover. <span className="text-gradient">Express.</span> Build.
               </motion.h1>
 
               <motion.p
                 variants={item}
-                className="mt-6 max-w-2xl text-lg leading-relaxed text-muted-foreground"
+                className="mt-5 max-w-xl text-base leading-relaxed text-muted-foreground sm:mt-6 sm:text-lg"
               >
                 {hero?.subtitle ??
-                  "ForgeX Academy turns curiosity into career-ready skills — structured roadmaps, hands-on projects, expert tutors and verifiable certificates. Free to start, forever useful."}
+                  "Turn curiosity into career-ready skills. Learn through structured roadmaps, hands-on projects, expert tutors, and verifiable certificates."}
               </motion.p>
 
-              <motion.div variants={item} className="mt-9 flex flex-wrap items-center justify-center gap-3 lg:justify-start">
-                {/* data-hero-cta lets the robot subtly watch these buttons —
-                    purely visual, never intercepting clicks or navigation. */}
-                <span data-hero-cta>
-                  <AnimatedCta to={hero?.primaryCta?.link ?? "/courses"}>
+              <motion.div variants={item} className="mt-8 flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:justify-center lg:justify-start">
+                <span data-hero-cta className="w-full sm:w-auto">
+                  <AnimatedCta to={hero?.primaryCta?.link ?? "/courses"} className="w-full justify-center sm:w-auto">
                     {hero?.primaryCta?.label ?? "Start learning free"}
                     <ArrowRight className="size-4 transition-transform group-hover:translate-x-0.5" />
                   </AnimatedCta>
                 </span>
-                <span data-hero-cta>
-                  <AnimatedCta to={hero?.secondaryCta?.link ?? "/roadmap"} variant="outline">
+                <span data-hero-cta className="w-full sm:w-auto">
+                  <AnimatedCta to={hero?.secondaryCta?.link ?? "/roadmap"} variant="outline" className="w-full justify-center sm:w-auto">
                     <Map className="size-4" />
                     {hero?.secondaryCta?.label ?? "Explore roadmaps"}
                   </AnimatedCta>
@@ -143,7 +141,7 @@ export default function Landing() {
 
               <motion.div
                 variants={item}
-                className="mt-10 flex flex-wrap items-center justify-center gap-x-8 gap-y-3 text-sm text-muted-foreground lg:justify-start"
+                className="mt-8 grid max-w-xs grid-cols-2 gap-x-6 gap-y-3 text-sm text-muted-foreground sm:mt-10 sm:max-w-none sm:flex sm:flex-wrap sm:justify-center lg:justify-start"
               >
                 <span className="inline-flex items-center gap-2">
                   <CheckCircle2 className="size-4 text-lime-400" /> Free to start
@@ -151,7 +149,7 @@ export default function Landing() {
                 <span className="inline-flex items-center gap-2">
                   <Award className="size-4 text-lime-400" /> Verifiable certificates
                 </span>
-                <span className="inline-flex items-center gap-2">
+                <span className="col-span-2 inline-flex items-center justify-center gap-2 sm:col-span-1 sm:justify-start">
                   <Users className="size-4 text-lime-400" /> Learn at your pace
                 </span>
               </motion.div>

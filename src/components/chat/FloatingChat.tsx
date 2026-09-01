@@ -192,7 +192,7 @@ export function FloatingChat() {
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 24, scale: 0.98 }}
             transition={{ duration: 0.2, ease: "easeOut" }}
-            className="fixed bottom-24 right-4 z-50 flex h-[min(600px,calc(100dvh-7rem))] w-[calc(100vw-2rem)] max-w-[380px] flex-col overflow-hidden rounded-3xl border border-white/10 bg-card shadow-2xl shadow-black/50 sm:right-6"
+            className="fixed bottom-24 right-5 z-50 flex h-[min(600px,calc(100dvh-7rem))] w-[calc(100vw-2.5rem)] max-w-[380px] flex-col overflow-hidden rounded-3xl border border-white/10 bg-card shadow-2xl shadow-black/50 sm:right-7"
           >
             {/* Header */}
             <div className="flex items-center gap-2.5 border-b border-white/10 bg-gradient-to-r from-lime-400/15 to-transparent px-3.5 py-3">
@@ -493,7 +493,7 @@ export function FloatingChat() {
       {/* Floating action button */}
       <button
         onClick={() => setOpen((o) => !o)}
-        className="fixed bottom-5 right-4 z-50 flex size-14 items-center justify-center rounded-full bg-lime-400 text-black shadow-xl shadow-lime-400/25 transition-transform hover:scale-105 active:scale-95 sm:right-6"
+        className="fixed bottom-6 right-5 z-50 flex size-14 items-center justify-center rounded-full bg-lime-400 text-black shadow-xl shadow-lime-400/25 transition-transform hover:scale-105 active:scale-95 sm:right-7"
         title={open ? "Close chat" : "Open chat"}
       >
         {open ? <X className="size-6" /> : <MessageSquare className="size-6" />}
