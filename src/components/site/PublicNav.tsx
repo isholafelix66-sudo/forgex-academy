@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link, NavLink, useLocation, useNavigate } from "react-router";
 import { useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
@@ -22,26 +22,20 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { useAuth } from "@/hooks/use-auth";
 import logo from "@/assets/logo.svg";
 import { Avatar } from "./Avatar";
 
-/* ── Desktop link list (unchanged) ──────────────────────────────────── */
-
-const DESKTOP_LINKS: Array<{ to: string; label: string; end?: boolean }> = [
-  { to: "/", label: "Home", end: true },
-  { to: "/courses", label: "Courses" },
-  { to: "/tutors", label: "Tutors" },
-  { to: "/roadmap", label: "Roadmap" },
-  { to: "/updates", label: "Updates" },
-  { to: "/ai-hub", label: "AI Hub" },
-  { to: "/prompts", label: "Prompt Library" },
-  { to: "/stories", label: "Stories" },
-  { to: "/contact", label: "Contact" },
-  { to: "/about", label: "About" },
-];
-
-/* ── Mobile nav structure ────────────────────────────────────────────── */
+/* ═══════════════════════════════════════════════════════════════════════
+   NAV DATA
+   ═══════════════════════════════════════════════════════════════════════ */
 
 type NavItemDef = {
   to: string;
@@ -50,7 +44,7 @@ type NavItemDef = {
   end?: boolean;
 };
 
-const MAIN_NAV: NavItemDef[] = [
+const PRIMARY_NAV: NavItemDef[] = [
   { to: "/", label: "Home", icon: Home, end: true },
   { to: "/courses", label: "Courses", icon: BookOpen },
   { to: "/tutors", label: "Tutors", icon: GraduationCap },
@@ -69,7 +63,102 @@ const MORE_ITEMS: NavItemDef[] = [
   { to: "/about", label: "About", icon: InfoIcon },
 ];
 
-/* ── Reusable mobile link ────────────────────────────────────────────── */
+/* ═══════════════════════════════════════════════════════════════════════
+   DESKTOP HOVER DROPDOWN
+   ═══════════════════════════════════════════════════════════════════════ */
+
+function DesktopHoverDropdown({
+  label,
+  items,
+  hasActiveChild,
+}: {
+  label: string;
+  items: NavItemDef[];
+  hasActiveChild: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+  const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const openMenu = () => {
+    if (timeoutRef.current) clearTimeout(timeoutRef.current);
+    setOpen(true);
+  };
+
+  const closeMenu = () => {
+    timeoutRef.current = setTimeout(() => setOpen(false), 120);
+  };
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      if (timeoutRef.current) clearTimeout(timeoutRef.current);
+    };
+  }, []);
+
+  return (
+    <div
+      className="relative"
+      onMouseEnter={openMenu}
+      onMouseLeave={closeMenu}
+    >
+      {/* Trigger button */}
+      <button
+        className={cn(
+          "flex items-center gap-1 rounded-full px-3 py-2 text-sm font-medium transition-colors",
+          hasActiveChild || open
+            ? "bg-lime-400/10 text-lime-300"
+            : "text-muted-foreground hover:bg-white/5 hover:text-foreground",
+        )}
+      >
+        {label}
+        <ChevronDown
+          className={cn(
+            "size-3.5 transition-transform duration-200",
+            open && "rotate-180",
+          )}
+        />
+      </button>
+
+      {/* Dropdown panel */}
+      <div
+        className={cn(
+          "absolute left-0 top-full z-50 mt-1.5 min-w-[200px] overflow-hidden rounded-xl border border-white/10 bg-[#111311]/95 shadow-xl shadow-black/30 backdrop-blur-xl transition-all duration-150",
+          open
+            ? "opacity-100 translate-y-0"
+            : "opacity-0 -translate-y-1 pointer-events-none",
+        )}
+        onMouseEnter={openMenu}
+        onMouseLeave={closeMenu}
+      >
+        <div className="py-1.5">
+          {items.map((item) => (
+            <NavLink
+              key={item.to}
+              to={item.to}
+              end={item.end}
+              onClick={() => setOpen(false)}
+              className={({ isActive }) =>
+                cn(
+                  "flex items-center gap-2.5 px-3.5 py-2 text-sm transition-colors",
+                  isActive
+                    ? "bg-lime-400/10 text-lime-300"
+                    : "text-muted-foreground hover:bg-white/5 hover:text-foreground",
+                )
+              }
+            >
+              <item.icon className="size-4 shrink-0" />
+              {item.label}
+            </NavLink>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   MOBILE NAV LINK
+   ═══════════════════════════════════════════════════════════════════════ */
 
 function MobileNavLink({
   item,
@@ -98,9 +187,11 @@ function MobileNavLink({
   );
 }
 
-/* ── Collapsible section ─────────────────────────────────────────────── */
+/* ═══════════════════════════════════════════════════════════════════════
+   MOBILE COLLAPSIBLE SECTION
+   ═══════════════════════════════════════════════════════════════════════ */
 
-function CollapsibleSection({
+function MobileCollapsibleSection({
   label,
   icon: Icon,
   items,
@@ -114,10 +205,8 @@ function CollapsibleSection({
   const [open, setOpen] = useState(false);
   const location = useLocation();
 
-  // Auto-close on route change
   useEffect(() => setOpen(false), [location.pathname]);
 
-  // Check if any child is active — keep section open if so
   const hasActive = items.some(
     (item) =>
       location.pathname === item.to ||
@@ -162,14 +251,16 @@ function CollapsibleSection({
   );
 }
 
-/* ── Main component ──────────────────────────────────────────────────── */
+/* ═══════════════════════════════════════════════════════════════════════
+   MAIN COMPONENT
+   ═══════════════════════════════════════════════════════════════════════ */
 
 export function PublicNav() {
   const { isAuthenticated, user, signOut } = useAuth();
   const content = useQuery(api.public.siteContentAll);
   const navigate = useNavigate();
   const location = useLocation();
-  const [open, setOpen] = useState(false);
+  const [mobileOpen, setMobileOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
 
   const brandLogo = (content?.logo as string | undefined) || logo;
@@ -189,20 +280,33 @@ export function PublicNav() {
     return () => window.removeEventListener("scroll", onScroll);
   }, []);
 
-  useEffect(() => setOpen(false), [location.pathname]);
+  // Close mobile menu on route change
+  useEffect(() => setMobileOpen(false), [location.pathname]);
 
   const handleSignOut = async () => {
     await signOut();
     navigate("/");
   };
 
-  const closeMenu = () => setOpen(false);
+  const closeMobile = () => setMobileOpen(false);
 
-  /* ── Desktop link class (unchanged) ──────────────────────────────── */
+  // Check if any child of Explore/More is active
+  const exploreHasActive = EXPLORE_ITEMS.some(
+    (i) =>
+      location.pathname === i.to ||
+      (!i.end && location.pathname.startsWith(i.to + "/")),
+  );
+  const moreHasActive = MORE_ITEMS.some(
+    (i) =>
+      location.pathname === i.to ||
+      (!i.end && location.pathname.startsWith(i.to + "/")),
+  );
 
-  const linkClass = ({ isActive }: { isActive: boolean }) =>
+  /* ── Desktop nav link class ──────────────────────────────────────── */
+
+  const desktopLinkClass = ({ isActive }: { isActive: boolean }) =>
     cn(
-      "rounded-full px-3.5 py-2 text-sm font-medium transition-colors",
+      "rounded-full px-3 py-2 text-[13px] font-medium transition-colors whitespace-nowrap",
       isActive
         ? "bg-lime-400/10 text-lime-300"
         : "text-muted-foreground hover:bg-white/5 hover:text-foreground",
@@ -217,68 +321,110 @@ export function PublicNav() {
           : "border-transparent bg-transparent",
       )}
     >
-      <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-4 sm:px-6">
+      <div className="mx-auto flex h-14 max-w-7xl items-center justify-between px-4 sm:px-6 lg:h-16">
         {/* ── Logo ─────────────────────────────────────────────────── */}
-        <Link to="/" className="flex items-center gap-2.5">
-          <img src={brandLogo} alt="ForgeX Academy" className="size-9 rounded-xl" />
-          <span className="font-display text-lg font-bold tracking-tight">
+        <Link to="/" className="flex shrink-0 items-center gap-2.5">
+          <img
+            src={brandLogo}
+            alt="ForgeX Academy"
+            className="size-8 rounded-lg lg:size-9 lg:rounded-xl"
+          />
+          <span className="font-display text-base font-bold tracking-tight lg:text-lg">
             ForgeX<span className="text-lime-400"> Academy</span>
           </span>
         </Link>
 
-        {/* ── Desktop nav (hidden < lg) ────────────────────────────── */}
-        <nav className="hidden items-center gap-1 lg:flex">
-          {DESKTOP_LINKS.map((l) => (
-            <NavLink key={l.to} to={l.to} end={l.end} className={linkClass}>
+        {/* ═══════════════════════════════════════════════════════════════
+            DESKTOP NAV (≥ lg)
+            Home | Courses | Tutors | Roadmap | Explore ▾ | More ▾
+            ═══════════════════════════════════════════════════════════════ */}
+        <nav className="hidden items-center gap-0.5 lg:flex">
+          {PRIMARY_NAV.map((l) => (
+            <NavLink key={l.to} to={l.to} end={l.end} className={desktopLinkClass}>
               {l.label}
             </NavLink>
           ))}
+          <DesktopHoverDropdown
+            label="Explore"
+            items={EXPLORE_ITEMS}
+            hasActiveChild={exploreHasActive}
+          />
+          <DesktopHoverDropdown
+            label="More"
+            items={MORE_ITEMS}
+            hasActiveChild={moreHasActive}
+          />
         </nav>
 
-        {/* ── Desktop account buttons (hidden < md) ────────────────── */}
-        <div className="hidden items-center gap-2 md:flex">
+        {/* ═══════════════════════════════════════════════════════════════
+            RIGHT SIDE: Dashboard + Account
+            ═══════════════════════════════════════════════════════════════ */}
+        <div className="flex items-center gap-2">
+          {/* Dashboard button — visible on tablet+ when signed in */}
+          {isAuthenticated && (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="hidden h-8 gap-1.5 text-xs font-medium md:inline-flex"
+              data-prefetch={dashboardTo}
+              onClick={() => navigate(dashboardTo)}
+            >
+              <LayoutDashboard className="size-3.5" />
+              <span className="hidden lg:inline">Dashboard</span>
+            </Button>
+          )}
+
+          {/* ── Auth: Account dropdown (desktop + tablet) ──────────── */}
           {isAuthenticated ? (
-            <>
-              <Button
-                variant="ghost"
-                size="sm"
-                data-prefetch={dashboardTo}
-                onClick={() => navigate(dashboardTo)}
-              >
-                <LayoutDashboard className="mr-2 size-4" />
-                Dashboard
-              </Button>
-              <Button
-                variant="ghost"
-                size="sm"
-                data-prefetch={profileTo}
-                onClick={() => navigate(profileTo)}
-              >
-                <User className="mr-2 size-4" />
-                Profile
-              </Button>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="rounded-full"
-                onClick={handleSignOut}
-                title="Sign out"
-              >
-                <LogOut className="size-4" />
-              </Button>
-              <Link to={profileTo}>
-                <Avatar
-                  name={user?.name ?? "Student"}
-                  image={user?.image}
-                  className="size-8"
-                />
-              </Link>
-            </>
+            <div className="hidden md:block">
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <button className="rounded-full outline-none ring-offset-2 ring-offset-transparent transition-shadow focus-visible:ring-2 focus-visible:ring-lime-400/50">
+                    <Avatar
+                      name={user?.name ?? "Student"}
+                      image={user?.image}
+                      className="size-8 cursor-pointer"
+                    />
+                  </button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent
+                  align="end"
+                  className="w-48 border-white/10 bg-[#111311]/95 backdrop-blur-xl"
+                >
+                  <div className="px-3 py-2">
+                    <p className="truncate text-sm font-semibold">
+                      {user?.name ?? "Student"}
+                    </p>
+                    <p className="truncate text-xs text-muted-foreground">
+                      {user?.email ?? ""}
+                    </p>
+                  </div>
+                  <DropdownMenuSeparator className="bg-white/10" />
+                  <DropdownMenuItem
+                    className="cursor-pointer gap-2 text-sm"
+                    onClick={() => navigate(profileTo)}
+                  >
+                    <User className="size-4" />
+                    Profile
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator className="bg-white/10" />
+                  <DropdownMenuItem
+                    className="cursor-pointer gap-2 text-sm text-rose-400 focus:bg-rose-400/10 focus:text-rose-300"
+                    onClick={handleSignOut}
+                  >
+                    <LogOut className="size-4" />
+                    Logout
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
           ) : (
-            <>
+            /* ── Auth: Login / Sign up (tablet+) ──────────────────── */
+            <div className="hidden items-center gap-2 md:flex">
               <Button
                 variant="ghost"
                 size="sm"
+                className="h-8 text-xs font-medium"
                 data-prefetch="/auth"
                 onClick={() => navigate("/auth?mode=signin")}
               >
@@ -286,62 +432,92 @@ export function PublicNav() {
               </Button>
               <Button
                 size="sm"
+                className="h-8 bg-lime-400 text-xs font-semibold text-black hover:bg-lime-300 glow-lime-soft"
                 data-prefetch="/auth"
-                className="bg-lime-400 font-semibold text-black hover:bg-lime-300 glow-lime-soft"
                 onClick={() => navigate("/auth?mode=signup")}
               >
                 Sign up
               </Button>
-            </>
+            </div>
           )}
-        </div>
 
-        {/* ── Hamburger (mobile only) ──────────────────────────────── */}
-        <Button
-          variant="ghost"
-          size="icon"
-          className="md:hidden"
-          onClick={() => setOpen((v) => !v)}
-          aria-label="Toggle menu"
-        >
-          {open ? <X className="size-5" /> : <Menu className="size-5" />}
-        </Button>
+          {/* ── Mobile + tablet: Dashboard quick link (if signed in) ─ */}
+          {isAuthenticated && (
+            <Button
+              variant="ghost"
+              size="icon"
+              className="size-8 md:hidden"
+              data-prefetch={dashboardTo}
+              onClick={() => navigate(dashboardTo)}
+              title="Dashboard"
+            >
+              <LayoutDashboard className="size-4" />
+            </Button>
+          )}
+
+          {/* ── Mobile + tablet: Auth buttons ──────────────────────── */}
+          {!isAuthenticated && (
+            <Button
+              size="sm"
+              className="h-8 bg-lime-400 text-xs font-semibold text-black hover:bg-lime-300 md:hidden"
+              data-prefetch="/auth"
+              onClick={() => navigate("/auth?mode=signup")}
+            >
+              Sign up
+            </Button>
+          )}
+
+          {/* ── Hamburger toggle (visible < lg) ────────────────────── */}
+          <Button
+            variant="ghost"
+            size="icon"
+            className="size-8 lg:hidden"
+            onClick={() => setMobileOpen((v) => !v)}
+            aria-label="Toggle menu"
+          >
+            {mobileOpen ? (
+              <X className="size-5" />
+            ) : (
+              <Menu className="size-5" />
+            )}
+          </Button>
+        </div>
       </div>
 
       {/* ═══════════════════════════════════════════════════════════════
-          MOBILE DRAWER
+          MOBILE / TABLET DRAWER (< lg)
           ═══════════════════════════════════════════════════════════════ */}
-      {open && (
-        <div className="border-t border-white/10 bg-[#0d0f0c]/98 backdrop-blur-xl md:hidden">
-          <nav className="flex max-h-[calc(100dvh-5rem)] flex-col overflow-y-auto px-3 pb-5 pt-2">
-            {/* ── Main navigation ──────────────────────────────────── */}
+      {mobileOpen && (
+        <div className="border-t border-white/10 bg-[#0d0f0c]/98 backdrop-blur-xl lg:hidden">
+          <nav className="flex max-h-[calc(100dvh-4rem)] flex-col overflow-y-auto px-3 pb-5 pt-2">
+            {/* ── Primary navigation ───────────────────────────────── */}
             <div className="space-y-0.5">
-              {MAIN_NAV.map((item) => (
+              {PRIMARY_NAV.map((item) => (
                 <MobileNavLink
                   key={item.to}
                   item={item}
-                  onNavigate={closeMenu}
+                  onNavigate={closeMobile}
                 />
               ))}
             </div>
 
             {/* ── Explore (collapsible) ────────────────────────────── */}
             <div className="mt-2">
-              <CollapsibleSection
+              <MobileCollapsibleSection
                 label="Explore"
                 icon={Sparkles}
                 items={EXPLORE_ITEMS}
-                onNavigate={closeMenu}
+                onNavigate={closeMobile}
               />
             </div>
 
             {/* ── More (collapsible) ───────────────────────────────── */}
             <div className="mt-1">
-              <CollapsibleSection
+              <MobileCollapsibleSection
                 label="More"
                 icon={InfoIcon}
                 items={MORE_ITEMS}
-                onNavigate={closeMenu}
+                onNavigate={closeMobile}
               />
             </div>
 
@@ -352,37 +528,32 @@ export function PublicNav() {
               </p>
               {isAuthenticated ? (
                 <div className="space-y-0.5">
-                  {/* Dashboard */}
                   <button
                     data-prefetch={dashboardTo}
                     onClick={() => {
                       navigate(dashboardTo);
-                      closeMenu();
+                      closeMobile();
                     }}
                     className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium text-muted-foreground transition-colors hover:bg-white/5 hover:text-foreground"
                   >
                     <LayoutDashboard className="size-[18px] shrink-0" />
                     <span>Dashboard</span>
                   </button>
-
-                  {/* Profile */}
                   <button
                     data-prefetch={profileTo}
                     onClick={() => {
                       navigate(profileTo);
-                      closeMenu();
+                      closeMobile();
                     }}
                     className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium text-muted-foreground transition-colors hover:bg-white/5 hover:text-foreground"
                   >
                     <User className="size-[18px] shrink-0" />
                     <span>Profile</span>
                   </button>
-
-                  {/* Logout */}
                   <button
                     onClick={() => {
                       handleSignOut();
-                      closeMenu();
+                      closeMobile();
                     }}
                     className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium text-rose-400/80 transition-colors hover:bg-rose-400/8 hover:text-rose-300"
                   >
@@ -398,7 +569,7 @@ export function PublicNav() {
                     data-prefetch="/auth"
                     onClick={() => {
                       navigate("/auth?mode=signin");
-                      closeMenu();
+                      closeMobile();
                     }}
                   >
                     Login
@@ -408,7 +579,7 @@ export function PublicNav() {
                     data-prefetch="/auth"
                     onClick={() => {
                       navigate("/auth?mode=signup");
-                      closeMenu();
+                      closeMobile();
                     }}
                   >
                     Sign up
