@@ -22,13 +22,6 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import { useAuth } from "@/hooks/use-auth";
 import logo from "@/assets/logo.svg";
 import { Avatar } from "./Avatar";
@@ -64,17 +57,19 @@ const MORE_ITEMS: NavItemDef[] = [
 ];
 
 /* ═══════════════════════════════════════════════════════════════════════
-   DESKTOP HOVER DROPDOWN
+   DESKTOP HOVER DROPDOWN (lightweight, no Radix)
    ═══════════════════════════════════════════════════════════════════════ */
 
-function DesktopHoverDropdown({
-  label,
-  items,
-  hasActiveChild,
+function HoverDropdown({
+  trigger,
+  children,
+  align = "left",
+  triggerClassName,
 }: {
-  label: string;
-  items: NavItemDef[];
-  hasActiveChild: boolean;
+  trigger: React.ReactNode;
+  children: React.ReactNode;
+  align?: "left" | "right";
+  triggerClassName?: string;
 }) {
   const [open, setOpen] = useState(false);
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -88,7 +83,6 @@ function DesktopHoverDropdown({
     timeoutRef.current = setTimeout(() => setOpen(false), 120);
   };
 
-  // Cleanup on unmount
   useEffect(() => {
     return () => {
       if (timeoutRef.current) clearTimeout(timeoutRef.current);
@@ -96,33 +90,12 @@ function DesktopHoverDropdown({
   }, []);
 
   return (
-    <div
-      className="relative"
-      onMouseEnter={openMenu}
-      onMouseLeave={closeMenu}
-    >
-      {/* Trigger button */}
-      <button
-        className={cn(
-          "flex items-center gap-1 rounded-full px-3 py-2 text-sm font-medium transition-colors",
-          hasActiveChild || open
-            ? "bg-lime-400/10 text-lime-300"
-            : "text-muted-foreground hover:bg-white/5 hover:text-foreground",
-        )}
-      >
-        {label}
-        <ChevronDown
-          className={cn(
-            "size-3.5 transition-transform duration-200",
-            open && "rotate-180",
-          )}
-        />
-      </button>
-
-      {/* Dropdown panel */}
+    <div className="relative" onMouseEnter={openMenu} onMouseLeave={closeMenu}>
+      <button className={triggerClassName}>{trigger}</button>
       <div
         className={cn(
-          "absolute left-0 top-full z-50 mt-1.5 min-w-[200px] overflow-hidden rounded-xl border border-white/10 bg-[#111311]/95 shadow-xl shadow-black/30 backdrop-blur-xl transition-all duration-150",
+          "absolute top-full z-50 mt-1.5 min-w-[200px] overflow-hidden rounded-xl border border-white/10 bg-[#111311]/95 shadow-xl shadow-black/30 backdrop-blur-xl transition-all duration-150",
+          align === "right" ? "right-0" : "left-0",
           open
             ? "opacity-100 translate-y-0"
             : "opacity-0 -translate-y-1 pointer-events-none",
@@ -130,27 +103,7 @@ function DesktopHoverDropdown({
         onMouseEnter={openMenu}
         onMouseLeave={closeMenu}
       >
-        <div className="py-1.5">
-          {items.map((item) => (
-            <NavLink
-              key={item.to}
-              to={item.to}
-              end={item.end}
-              onClick={() => setOpen(false)}
-              className={({ isActive }) =>
-                cn(
-                  "flex items-center gap-2.5 px-3.5 py-2 text-sm transition-colors",
-                  isActive
-                    ? "bg-lime-400/10 text-lime-300"
-                    : "text-muted-foreground hover:bg-white/5 hover:text-foreground",
-                )
-              }
-            >
-              <item.icon className="size-4 shrink-0" />
-              {item.label}
-            </NavLink>
-          ))}
-        </div>
+        {children}
       </div>
     </div>
   );
@@ -280,7 +233,6 @@ export function PublicNav() {
     return () => window.removeEventListener("scroll", onScroll);
   }, []);
 
-  // Close mobile menu on route change
   useEffect(() => setMobileOpen(false), [location.pathname]);
 
   const handleSignOut = async () => {
@@ -290,7 +242,6 @@ export function PublicNav() {
 
   const closeMobile = () => setMobileOpen(false);
 
-  // Check if any child of Explore/More is active
   const exploreHasActive = EXPLORE_ITEMS.some(
     (i) =>
       location.pathname === i.to ||
@@ -301,8 +252,6 @@ export function PublicNav() {
       location.pathname === i.to ||
       (!i.end && location.pathname.startsWith(i.to + "/")),
   );
-
-  /* ── Desktop nav link class ──────────────────────────────────────── */
 
   const desktopLinkClass = ({ isActive }: { isActive: boolean }) =>
     cn(
@@ -336,7 +285,6 @@ export function PublicNav() {
 
         {/* ═══════════════════════════════════════════════════════════════
             DESKTOP NAV (≥ lg)
-            Home | Courses | Tutors | Roadmap | Explore ▾ | More ▾
             ═══════════════════════════════════════════════════════════════ */}
         <nav className="hidden items-center gap-0.5 lg:flex">
           {PRIMARY_NAV.map((l) => (
@@ -344,23 +292,87 @@ export function PublicNav() {
               {l.label}
             </NavLink>
           ))}
-          <DesktopHoverDropdown
-            label="Explore"
-            items={EXPLORE_ITEMS}
-            hasActiveChild={exploreHasActive}
-          />
-          <DesktopHoverDropdown
-            label="More"
-            items={MORE_ITEMS}
-            hasActiveChild={moreHasActive}
-          />
+
+          {/* Explore dropdown */}
+          <HoverDropdown
+            trigger={
+              <>
+                Explore
+                <ChevronDown className="ml-1 size-3.5" />
+              </>
+            }
+            triggerClassName={cn(
+              "flex items-center rounded-full px-3 py-2 text-[13px] font-medium transition-colors whitespace-nowrap",
+              exploreHasActive
+                ? "bg-lime-400/10 text-lime-300"
+                : "text-muted-foreground hover:bg-white/5 hover:text-foreground",
+            )}
+          >
+            <div className="py-1.5">
+              {EXPLORE_ITEMS.map((item) => (
+                <NavLink
+                  key={item.to}
+                  to={item.to}
+                  end={item.end}
+                  className={({ isActive }) =>
+                    cn(
+                      "flex items-center gap-2.5 px-3.5 py-2 text-sm transition-colors",
+                      isActive
+                        ? "bg-lime-400/10 text-lime-300"
+                        : "text-muted-foreground hover:bg-white/5 hover:text-foreground",
+                    )
+                  }
+                >
+                  <item.icon className="size-4 shrink-0" />
+                  {item.label}
+                </NavLink>
+              ))}
+            </div>
+          </HoverDropdown>
+
+          {/* More dropdown */}
+          <HoverDropdown
+            trigger={
+              <>
+                More
+                <ChevronDown className="ml-1 size-3.5" />
+              </>
+            }
+            triggerClassName={cn(
+              "flex items-center rounded-full px-3 py-2 text-[13px] font-medium transition-colors whitespace-nowrap",
+              moreHasActive
+                ? "bg-lime-400/10 text-lime-300"
+                : "text-muted-foreground hover:bg-white/5 hover:text-foreground",
+            )}
+          >
+            <div className="py-1.5">
+              {MORE_ITEMS.map((item) => (
+                <NavLink
+                  key={item.to}
+                  to={item.to}
+                  end={item.end}
+                  className={({ isActive }) =>
+                    cn(
+                      "flex items-center gap-2.5 px-3.5 py-2 text-sm transition-colors",
+                      isActive
+                        ? "bg-lime-400/10 text-lime-300"
+                        : "text-muted-foreground hover:bg-white/5 hover:text-foreground",
+                    )
+                  }
+                >
+                  <item.icon className="size-4 shrink-0" />
+                  {item.label}
+                </NavLink>
+              ))}
+            </div>
+          </HoverDropdown>
         </nav>
 
         {/* ═══════════════════════════════════════════════════════════════
-            RIGHT SIDE: Dashboard + Account
+            RIGHT SIDE
             ═══════════════════════════════════════════════════════════════ */}
         <div className="flex items-center gap-2">
-          {/* Dashboard button — visible on tablet+ when signed in */}
+          {/* Dashboard — tablet+ when signed in */}
           {isAuthenticated && (
             <Button
               variant="ghost"
@@ -374,52 +386,49 @@ export function PublicNav() {
             </Button>
           )}
 
-          {/* ── Auth: Account dropdown (desktop + tablet) ──────────── */}
+          {/* Account dropdown — desktop + tablet (hover/click, no Radix) */}
           {isAuthenticated ? (
             <div className="hidden md:block">
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <button className="rounded-full outline-none ring-offset-2 ring-offset-transparent transition-shadow focus-visible:ring-2 focus-visible:ring-lime-400/50">
-                    <Avatar
-                      name={user?.name ?? "Student"}
-                      image={user?.image}
-                      className="size-8 cursor-pointer"
-                    />
-                  </button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent
-                  align="end"
-                  className="w-48 border-white/10 bg-[#111311]/95 backdrop-blur-xl"
-                >
-                  <div className="px-3 py-2">
-                    <p className="truncate text-sm font-semibold">
-                      {user?.name ?? "Student"}
-                    </p>
-                    <p className="truncate text-xs text-muted-foreground">
-                      {user?.email ?? ""}
-                    </p>
-                  </div>
-                  <DropdownMenuSeparator className="bg-white/10" />
-                  <DropdownMenuItem
-                    className="cursor-pointer gap-2 text-sm"
+              <HoverDropdown
+                align="right"
+                trigger={
+                  <Avatar
+                    name={user?.name ?? "Student"}
+                    image={user?.image}
+                    className="size-8 cursor-pointer"
+                  />
+                }
+                triggerClassName="rounded-full outline-none"
+              >
+                <div className="px-3 py-2.5">
+                  <p className="truncate text-sm font-semibold">
+                    {user?.name ?? "Student"}
+                  </p>
+                  <p className="truncate text-xs text-muted-foreground">
+                    {user?.email ?? ""}
+                  </p>
+                </div>
+                <div className="h-px bg-white/10" />
+                <div className="py-1.5">
+                  <button
+                    data-prefetch={profileTo}
                     onClick={() => navigate(profileTo)}
+                    className="flex w-full items-center gap-2.5 px-3.5 py-2 text-sm text-muted-foreground transition-colors hover:bg-white/5 hover:text-foreground"
                   >
                     <User className="size-4" />
                     Profile
-                  </DropdownMenuItem>
-                  <DropdownMenuSeparator className="bg-white/10" />
-                  <DropdownMenuItem
-                    className="cursor-pointer gap-2 text-sm text-rose-400 focus:bg-rose-400/10 focus:text-rose-300"
+                  </button>
+                  <button
                     onClick={handleSignOut}
+                    className="flex w-full items-center gap-2.5 px-3.5 py-2 text-sm text-rose-400 transition-colors hover:bg-rose-400/8 hover:text-rose-300"
                   >
                     <LogOut className="size-4" />
                     Logout
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
+                  </button>
+                </div>
+              </HoverDropdown>
             </div>
           ) : (
-            /* ── Auth: Login / Sign up (tablet+) ──────────────────── */
             <div className="hidden items-center gap-2 md:flex">
               <Button
                 variant="ghost"
@@ -441,7 +450,7 @@ export function PublicNav() {
             </div>
           )}
 
-          {/* ── Mobile + tablet: Dashboard quick link (if signed in) ─ */}
+          {/* Mobile: Dashboard quick link */}
           {isAuthenticated && (
             <Button
               variant="ghost"
@@ -455,7 +464,7 @@ export function PublicNav() {
             </Button>
           )}
 
-          {/* ── Mobile + tablet: Auth buttons ──────────────────────── */}
+          {/* Mobile: Sign up */}
           {!isAuthenticated && (
             <Button
               size="sm"
@@ -467,7 +476,7 @@ export function PublicNav() {
             </Button>
           )}
 
-          {/* ── Hamburger toggle (visible < lg) ────────────────────── */}
+          {/* Hamburger (visible < lg) */}
           <Button
             variant="ghost"
             size="icon"
@@ -475,11 +484,7 @@ export function PublicNav() {
             onClick={() => setMobileOpen((v) => !v)}
             aria-label="Toggle menu"
           >
-            {mobileOpen ? (
-              <X className="size-5" />
-            ) : (
-              <Menu className="size-5" />
-            )}
+            {mobileOpen ? <X className="size-5" /> : <Menu className="size-5" />}
           </Button>
         </div>
       </div>
@@ -490,18 +495,14 @@ export function PublicNav() {
       {mobileOpen && (
         <div className="border-t border-white/10 bg-[#0d0f0c]/98 backdrop-blur-xl lg:hidden">
           <nav className="flex max-h-[calc(100dvh-4rem)] flex-col overflow-y-auto px-3 pb-5 pt-2">
-            {/* ── Primary navigation ───────────────────────────────── */}
+            {/* Primary navigation */}
             <div className="space-y-0.5">
               {PRIMARY_NAV.map((item) => (
-                <MobileNavLink
-                  key={item.to}
-                  item={item}
-                  onNavigate={closeMobile}
-                />
+                <MobileNavLink key={item.to} item={item} onNavigate={closeMobile} />
               ))}
             </div>
 
-            {/* ── Explore (collapsible) ────────────────────────────── */}
+            {/* Explore (collapsible) */}
             <div className="mt-2">
               <MobileCollapsibleSection
                 label="Explore"
@@ -511,7 +512,7 @@ export function PublicNav() {
               />
             </div>
 
-            {/* ── More (collapsible) ───────────────────────────────── */}
+            {/* More (collapsible) */}
             <div className="mt-1">
               <MobileCollapsibleSection
                 label="More"
@@ -521,7 +522,7 @@ export function PublicNav() {
               />
             </div>
 
-            {/* ── Account section ──────────────────────────────────── */}
+            {/* Account section */}
             <div className="mt-3 border-t border-white/10 pt-3">
               <p className="mb-1.5 px-3 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/60">
                 Account
