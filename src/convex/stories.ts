@@ -152,7 +152,7 @@ export const approvedStories = query({
   },
 });
 
-/** Featured stories for the homepage — approved AND admin-selected only. */
+/** Featured stories for the homepage — approved AND showOnHomepage = true. */
 export const featuredStories = query({
   args: {},
   handler: async (ctx) => {
@@ -160,9 +160,11 @@ export const featuredStories = query({
       .query("studentStories")
       .withIndex("by_status", (q) => q.eq("status", "approved"))
       .collect();
-    const featured = rows.filter((s) => s.featured);
+    const homepageStories = rows.filter(
+      (s) => s.featured && s.showOnHomepage !== false,
+    );
     const hydrated = await Promise.all(
-      featured.map(async (s) => ({
+      homepageStories.map(async (s) => ({
         ...s,
         photoUrl: await resolvePhoto(ctx, s.photoStorageId, s.photoUrl),
       })),
@@ -381,6 +383,26 @@ export const deleteAllStories = mutation({
         `Deleted all ${rows.length} student stories`,      );
     }
     return rows.length;
+  },
+});
+
+/** Toggle whether an approved story appears on the public homepage. Only
+ *  approved stories can be shown on the homepage — enforced server-side. */
+export const setStoryHomepageVisibility = mutation({
+  args: {
+    token: v.string(),
+    id: v.id("studentStories"),
+    showOnHomepage: v.boolean(),
+  },
+  handler: async (ctx, { token, id, showOnHomepage }) => {
+    await requireAdminSession(ctx, token);
+    const story = await ctx.db.get(id);
+    if (!story) throw new Error("Story not found.");
+    if (showOnHomepage && story.status !== "approved") {
+      throw new Error("Only approved stories can appear on the homepage.");
+    }
+    await ctx.db.patch(id, { showOnHomepage, updatedAt: Date.now() });
+    return await ctx.db.get(id);
   },
 });
 

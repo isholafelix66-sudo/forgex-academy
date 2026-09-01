@@ -71,6 +71,7 @@ export default function AdminUsers() {
   );
   const setUserRole = useMutation(api.admin.setUserRole);
   const setUserVerified = useMutation(api.admin.setUserVerified);
+  const setTutorHomepageFeature = useMutation(api.admin.setTutorHomepageFeature);
   const suspendUser = useMutation(api.admin.suspendUser);
   const reactivateUser = useMutation(api.admin.reactivateUser);
   const deleteUser = useMutation(api.admin.deleteUser);
@@ -243,6 +244,25 @@ export default function AdminUsers() {
                   >
                     <ShieldCheck className="size-3.5" />
                     {u.verified ? "Verified" : "Verify"}
+                  </Button>
+                )}
+                {u.role === "tutor" && u.verified && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className={cn(
+                      "gap-1.5 border-white/15",
+                      u.featuredOnHomepage && "border-lime-400/40 text-lime-300",
+                    )}
+                    onClick={() =>
+                      void setTutorHomepageFeature({
+                        userId: u._id as never,
+                        featuredOnHomepage: !u.featuredOnHomepage,
+                        token,
+                      })
+                    }
+                  >
+                    {u.featuredOnHomepage ? "★ Homepage" : "Homepage"}
                   </Button>
                 )}
                 {u.suspended ? (

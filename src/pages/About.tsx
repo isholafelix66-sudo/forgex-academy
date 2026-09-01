@@ -5,6 +5,7 @@ import {
   ArrowRight,
   Compass,
   Eye,
+  ExternalLink,
   HeartHandshake,
   Target,
 } from "lucide-react";
@@ -119,6 +120,32 @@ export default function About() {
             </div>
           </div>
         )}
+
+        {/* Social links */}
+        <Reveal className="mt-20">
+          <SectionHeading
+            eyebrow="Follow us"
+            title="Connect with ForgeX"
+          />
+          <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
+            {Object.entries(
+              (content?.socials ?? {}) as Record<string, string>,
+            )
+              .filter(([, url]) => !!url)
+              .map(([platform, url]) => (
+                <a
+                  key={platform}
+                  href={url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-5 py-2.5 text-sm font-medium text-muted-foreground transition-colors hover:border-lime-400/40 hover:text-lime-300"
+                >
+                  {platform.charAt(0).toUpperCase() + platform.slice(1)}
+                  <ExternalLink className="size-3.5" />
+                </a>
+              ))}
+          </div>
+        </Reveal>
 
         {/* CTA */}
         <Reveal className="mt-20 text-center">

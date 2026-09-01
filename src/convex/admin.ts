@@ -194,6 +194,7 @@ export const usersList = query({
           enrollments: enrollments.filter((e) => e.studentId === u._id).length,
           certificates: certificates.filter((c) => c.studentId === u._id).length,
           joinedAt: u._creationTime,
+          featuredOnHomepage: u.featuredOnHomepage ?? false,
         };
       })
       .filter((u) => {
@@ -1733,6 +1734,23 @@ export const adminCourseStudents = query({
     return hydrated.sort(
       (a, b) => b.progress - a.progress || a.enrolledAt - b.enrolledAt,
     );
+  },
+});
+
+
+/** Toggle whether a verified tutor appears on the public homepage. */
+export const setTutorHomepageFeature = mutation({
+  args: {
+    token: v.string(),
+    userId: v.id("users"),
+    featuredOnHomepage: v.boolean(),
+  },
+  handler: async (ctx, { token, userId, featuredOnHomepage }) => {
+    await requireAdminSession(ctx, token);
+    const user = await ctx.db.get(userId);
+    if (!user) throw new Error("User not found.");
+    await ctx.db.patch(userId, { featuredOnHomepage });
+    return await ctx.db.get(userId);
   },
 });
 

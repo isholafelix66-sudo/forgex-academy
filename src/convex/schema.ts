@@ -149,6 +149,7 @@ const schema = defineSchema(
       // Public tutor page slug — e.g. /tutor/david-ogunleye. Assigned when
       // a tutor application is approved/verified; unique per user.
       slug: v.optional(v.string()),
+      featuredOnHomepage: v.optional(v.boolean()),
       // Team Workspace — role-based team access (admin-assigned).
       teamRole: v.optional(
         v.union(
@@ -541,6 +542,7 @@ const schema = defineSchema(
         v.literal("rejected"),
       ),
       featured: v.boolean(),
+      showOnHomepage: v.optional(v.boolean()),
       reviewedAt: v.optional(v.number()),
       reviewedBy: v.optional(v.id("users")),
       adminNote: v.optional(v.string()),

@@ -46,8 +46,41 @@ export const featuredCourses = query({
     const published = courses.filter((c) => c.published && c.featured);
     return hydrateCourses(
       ctx,
-      published.sort((a, b) => b.rating - a.rating).slice(0, 6),
+      published.sort((a, b) => b.rating - a.rating).slice(0, 3),
     );
+  },
+});
+
+/** Featured tutors — only those with featuredOnHomepage = true. */
+export const featuredTutors = query({
+  args: {},
+  handler: async (ctx) => {
+    const users = await ctx.db.query("users").collect();
+    const tutors = users.filter(
+      (u) =>
+        u.role === ROLES.TUTOR &&
+        !!u.verified &&
+        u.featuredOnHomepage === true,
+    );
+    const hydrated = await Promise.all(
+      tutors.map(async (t) => {
+        const courses = (await ctx.db.query("courses").collect()).filter(
+          (c) => c.tutorId === t._id && c.published,
+        );
+        return {
+          ...publicUser(t),
+          slug: t.slug ?? null,
+          bio: t.bio ?? "",
+          socials: t.socials ?? null,
+          courseCount: courses.length,
+          avgRating: courses.length
+            ? courses.reduce((s, c) => s + c.rating, 0) / courses.length
+            : 0,
+          studentCount: courses.reduce((s, c) => s + c.enrolledCount, 0),
+        };
+      }),
+    );
+    return hydrated.sort((a, b) => b.avgRating - a.avgRating).slice(0, 4);
   },
 });
 

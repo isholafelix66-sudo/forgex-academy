@@ -81,6 +81,7 @@ function StoriesManager() {
   );
   const reviewStory = useMutation(api.stories.reviewStory);
   const setStoryFeatured = useMutation(api.stories.setStoryFeatured);
+  const setStoryHomepageVisibility = useMutation(api.stories.setStoryHomepageVisibility);
   const deleteStory = useMutation(api.stories.deleteStory);
   const deleteAllStories = useMutation(api.stories.deleteAllStories);
   const updateStory = useMutation(api.stories.updateStory);
@@ -344,6 +345,29 @@ function StoriesManager() {
                     <Star className={`size-4 ${s.featured ? "fill-lime-400" : ""}`} />
                     <span className="hidden sm:inline">{s.featured ? "Featured" : "Feature"}</span>
                   </Button>
+
+                  {/* Show on Homepage toggle */}
+                  {s.status === "approved" && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      title={s.showOnHomepage !== false ? "Hide from homepage" : "Show on homepage"}
+                      onClick={() =>
+                        void setStoryHomepageVisibility({
+                          token,
+                          id: s._id as never,
+                          showOnHomepage: s.showOnHomepage === false,
+                        })
+                      }
+                      className={
+                        s.showOnHomepage !== false
+                          ? "gap-1.5 text-lime-300 hover:text-lime-200"
+                          : "gap-1.5 text-muted-foreground hover:text-lime-300"
+                      }
+                    >
+                      {s.showOnHomepage !== false ? "On Homepage" : "Homepage OFF"}
+                    </Button>
+                  )}
 
                   {s.status === "pending" && (
                     <Button
