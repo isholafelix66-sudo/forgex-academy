@@ -52,8 +52,10 @@ function run(step, bin, args, memoryMb) {
   if (res.status !== 0) process.exit(res.status ?? 1);
 }
 
+const convexBin = resolvePackageBin("convex");
 const tscBin = resolvePackageBin("typescript");
 const viteBin = resolvePackageBin("vite");
 
+run("convex codegen", convexBin, ["codegen"], 1024);
 run("tsc -b", tscBin, ["-b"], 2048);
 run("vite build", viteBin, ["build"], 1536);
