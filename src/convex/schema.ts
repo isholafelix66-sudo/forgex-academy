@@ -229,6 +229,9 @@ const schema = defineSchema(
       reviewNote: v.optional(v.string()),
       enrolledCount: v.number(),
       archived: v.optional(v.boolean()), // soft-deleted by an admin
+      /** When true the course issues a verifiable certificate on completion.
+       *  Admins/tutors toggle this per course — certificates are NOT auto-issued. */
+      hasCertificate: v.optional(v.boolean()),
       // LMS completion rules configured by the tutor/admin in the builder.
       completionRequirements: v.optional(
         courseCompletionRequirementsValidator,

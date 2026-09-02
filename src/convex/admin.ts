@@ -1546,6 +1546,7 @@ export const adminUpsertCourse = mutation({
     skills: v.array(v.string()),
     featured: v.boolean(),
     published: v.boolean(),
+    hasCertificate: v.optional(v.boolean()),
     token: v.string(),
   },
   handler: async (ctx, args) => {

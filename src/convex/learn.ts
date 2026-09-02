@@ -174,27 +174,29 @@ export async function finishCourseInternal(
   enrollment: Doc<"enrollments">,
 ) {
   await ctx.db.patch(enrollment._id, { status: "completed", progress: 100 });
-  const existing = await ctx.db
-    .query("certificates")
-    .withIndex("by_student", (q) => q.eq("studentId", user._id))
-    .collect()
-    .then((rows) => rows.find((c) => c.courseId === course._id));
-  if (!existing) {
-    const certificateId = makeCertificateId();
-    await ctx.db.insert("certificates", {
-      certificateId,
-      studentId: user._id,
-      courseId: course._id,
-      issuedAt: Date.now(),
-      studentName: user.name || "Student",
-      courseTitle: course.title,
-    });
-    await ctx.db.patch(user._id, {
-      badges: [...(user.badges ?? []).filter((b) => b !== course.title), course.title],
-    });
-    await notify(ctx, {
-      userId: user._id,
-      title: "Course completed! 🎉",
+  // Only issue a certificate when the admin/tutor explicitly enabled it.
+  if (course.hasCertificate) {
+    const existing = await ctx.db
+      .query("certificates")
+      .withIndex("by_student", (q) => q.eq("studentId", user._id))
+      .collect()
+      .then((rows) => rows.find((c) => c.courseId === course._id));
+    if (!existing) {
+      const certificateId = makeCertificateId();
+      await ctx.db.insert("certificates", {
+        certificateId,
+        studentId: user._id,
+        courseId: course._id,
+        issuedAt: Date.now(),
+        studentName: user.name || "Student",
+        courseTitle: course.title,
+      });
+      await ctx.db.patch(user._id, {
+        badges: [...(user.badges ?? []).filter((b) => b !== course.title), course.title],
+      });
+      await notify(ctx, {
+        userId: user._id,
+        title: "Course completed! 🎉",
       body: `You earned a certificate for "${course.title}". Show it off — it's verifiable.`,
       type: "certificate",
       link: "/dashboard/certificates",

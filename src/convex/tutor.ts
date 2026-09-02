@@ -265,6 +265,7 @@ export const upsertCourse = mutation({
     skills: v.array(v.string()),
     featured: v.boolean(),
     published: v.optional(v.boolean()),
+    hasCertificate: v.optional(v.boolean()),
     // Admin-session preview (password gate, no account) can build courses too.
     token: v.optional(v.string()),
   },
@@ -338,6 +339,7 @@ export const upsertCourse = mutation({
         featured: args.featured,
         published,
         status,
+        hasCertificate: args.hasCertificate,
       });
       return args.id;
     }
@@ -364,6 +366,7 @@ export const upsertCourse = mutation({
       featured: args.featured,
       published,
       status,
+      hasCertificate: args.hasCertificate,
       enrolledCount: 0,
       createdAt: Date.now(),
     });
