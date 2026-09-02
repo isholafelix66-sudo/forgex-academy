@@ -63,6 +63,7 @@ const EMPTY_DRAFT = {
   skills: "",
   featured: false,
   published: false,
+  hasCertificate: false,
 };
 
 export default function AdminCourses() {
@@ -255,6 +256,7 @@ export default function AdminCourses() {
         skills: (c.skills ?? []).join(", "),
         featured: c.featured,
         published: c.published,
+        hasCertificate: (c as any).hasCertificate ?? false,
       },
     });
     setTab("details");
@@ -283,6 +285,7 @@ export default function AdminCourses() {
       skills: editor.draft.skills.split(",").map((s) => s.trim()).filter(Boolean),
       featured: editor.draft.featured,
       published,
+      hasCertificate: editor.draft.hasCertificate,
       token,
     };
   };
@@ -774,6 +777,10 @@ export default function AdminCourses() {
                       <label className="flex items-center gap-2 text-sm">
                         <input type="checkbox" checked={editor.draft.published} onChange={(e) => setEditor({ ...editor, draft: { ...editor.draft, published: e.target.checked } })} className="size-4 accent-lime-400" />
                         Publish immediately
+                      </label>
+                      <label className="flex items-center gap-2 text-sm">
+                        <input type="checkbox" checked={editor.draft.hasCertificate} onChange={(e) => setEditor({ ...editor, draft: { ...editor.draft, hasCertificate: e.target.checked } })} className="size-4 accent-lime-400" />
+                        Issue certificate on completion
                       </label>
                     </div>
                   </div>

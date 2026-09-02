@@ -217,6 +217,7 @@ export async function finishCourseInternal(
     }
   }
 }
+}
 
 /** Shared lesson-completion path. The manual "Mark complete" button, the
  *  watch-gate auto-complete, and passing a lesson quiz all land here.

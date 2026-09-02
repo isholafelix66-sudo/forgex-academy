@@ -214,6 +214,7 @@ type CourseLike = {
   prerequisites?: string[];
   skills?: string[];
   featured?: boolean;
+  hasCertificate?: boolean;
 };
 
 function DetailsForm({
@@ -253,6 +254,7 @@ function DetailsForm({
     prerequisites: (initial?.prerequisites ?? []).join(", "),
     skills: (initial?.skills ?? []).join(", "),
     featured: initial?.featured ?? false,
+    hasCertificate: initial?.hasCertificate ?? false,
   }));
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
@@ -299,6 +301,7 @@ function DetailsForm({
         skills: form.skills.split(",").map((s) => s.trim()).filter(Boolean),
         featured: form.featured,
         published: false,
+        hasCertificate: form.hasCertificate,
       });
       // Old backends reject unknown fields one layer at a time — fall back
       // to the earliest contract that works instead of failing the save.
@@ -324,6 +327,7 @@ function DetailsForm({
             skills: form.skills.split(",").map((s) => s.trim()).filter(Boolean),
             featured: form.featured,
             published: false,
+            hasCertificate: form.hasCertificate,
           }) as Promise<string>,
       ];
       let id: string | null = null;
@@ -586,6 +590,16 @@ function DetailsForm({
           className="size-4 accent-lime-400"
         />
         Feature this course on the homepage
+      </label>
+
+      <label className="mt-3 flex items-center gap-2.5 text-sm">
+        <input
+          type="checkbox"
+          checked={form.hasCertificate}
+          onChange={(e) => set("hasCertificate", e.target.checked)}
+          className="size-4 accent-lime-400"
+        />
+        Issue certificate on completion
       </label>
 
       {error && (
