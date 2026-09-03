@@ -35,7 +35,7 @@ function resolvePackageBin(pkgName) {
   return path.join(path.dirname(pkgJsonPath), bin);
 }
 
-function run(step, bin, args, memoryMb) {
+function run(step, bin, args, memoryMb, { optional = false } = {}) {
   const env = {
     ...process.env,
     NODE_OPTIONS: `--max-old-space-size=${memoryMb}`,
@@ -46,16 +46,25 @@ function run(step, bin, args, memoryMb) {
     env,
   });
   if (res.error) {
+    if (optional) { console.warn(`[build] "${step}" failed to start (optional, continuing):`, res.error.message); return; }
     console.error(`[build] failed to start "${step}":`, res.error);
     process.exit(1);
   }
-  if (res.status !== 0) process.exit(res.status ?? 1);
+  if (res.status !== 0) {
+    if (optional) { console.warn(`[build] "${step}" exited ${res.status} (optional, continuing)`); return; }
+    process.exit(res.status ?? 1);
+  }
 }
 
 const convexBin = resolvePackageBin("convex");
 const tscBin = resolvePackageBin("typescript");
 const viteBin = resolvePackageBin("vite");
 
-run("convex codegen", convexBin, ["codegen"], 1024);
+// ── Convex codegen (best-effort) ───────────────────────────────────────
+// On Vercel / CI the Convex session may not be available, so codegen can
+// fail.  As long as the committed _generated/ files are present the build
+// will still succeed.
+run("convex codegen", convexBin, ["codegen"], 1024, { optional: true });
+
 run("tsc -b", tscBin, ["-b"], 2048);
 run("vite build", viteBin, ["build"], 1536);
