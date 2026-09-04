@@ -167,13 +167,14 @@ export function AppShell({
 
   return (
     <div className="flex min-h-screen w-full overflow-x-clip bg-background">
-      {/* Desktop sidebar */}
-      <aside className="fixed inset-y-0 left-0 z-40 hidden w-64 border-r border-white/8 bg-sidebar lg:block">
+      {/* Desktop sidebar — visible from md so tablets (768–1023px) always
+          have navigation once the mobile bottom nav is hidden. */}
+      <aside className="fixed inset-y-0 left-0 z-40 hidden w-64 border-r border-white/8 bg-sidebar md:block">
         {sidebar}
       </aside>
 
       {/* Main */}
-      <div className="flex min-w-0 flex-1 flex-col lg:pl-64">
+      <div className="flex min-w-0 flex-1 flex-col md:pl-64">
         {banner}
         <header className="sticky top-0 z-30 flex h-16 items-center justify-between border-b border-white/8 bg-background/85 px-4 backdrop-blur-xl sm:px-6">
           <div className="flex min-w-0 items-center gap-3">
@@ -197,7 +198,7 @@ export function AppShell({
           </div>
         </header>
 
-        <main className="min-w-0 flex-1 px-4 py-8 sm:px-6 lg:px-8 pb-24 md:pb-6 overflow-x-clip">
+        <main className="min-w-0 flex-1 px-4 py-8 sm:px-6 md:px-8 md:pb-6 pb-24 overflow-x-clip">
           <div className="mx-auto min-w-0 max-w-6xl">
             <Outlet />
           </div>
