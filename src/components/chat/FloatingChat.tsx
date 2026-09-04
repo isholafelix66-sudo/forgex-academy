@@ -17,6 +17,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ChatBubble } from "@/components/chat/ChatBubble";
 import { ChatComposer } from "@/components/chat/ChatComposer";
+import { DraggableFab } from "@/components/site/DraggableFab";
 import type { ChatAttachment } from "@/lib/chat-media";
 import { useAuth } from "@/hooks/use-auth";
 import { useMessageSound } from "@/hooks/use-message-notifications";
@@ -45,6 +46,9 @@ export function FloatingChat() {
   const hideFab = /^\/(?:dashboard\/(?:communities|dms|messages)|admin\/communication)/.test(
     pathname,
   );
+  // Public pages use the AI Support Assistant floating button instead —
+  // direct user-to-user messaging is a dashboard tool.
+  const isPublicPage = !/^\/(?:dashboard|tutor|admin|team)(?:\/|$)/.test(pathname);
   const conversations = useQuery(
     api.messages.myConversations,
     signedIn ? {} : "skip",
@@ -169,9 +173,9 @@ export function FloatingChat() {
   };
 
   // Admin sessions have no user account — nothing to chat with. Also hidden
-  // on chat screens that ship their own composer so the FAB never overlaps
-  // the message input (presence heartbeat still runs — hooks are above).
-  if (!user?._id || hideFab) return null;
+  // on chat screens that ship their own composer and on public pages (the AI
+  // Support Assistant button lives there instead).
+  if (!user?._id || hideFab || isPublicPage) return null;
 
   const back = () => {
     if (composing) setComposing(false);
@@ -192,7 +196,7 @@ export function FloatingChat() {
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 24, scale: 0.98 }}
             transition={{ duration: 0.2, ease: "easeOut" }}
-            className="fixed z-50 flex h-[min(600px,calc(100dvh-7rem))] w-[calc(100vw-2.5rem)] max-w-[380px] flex-col overflow-hidden rounded-3xl border border-white/10 bg-card shadow-2xl shadow-black/50 bottom-[calc(5rem+env(safe-area-inset-bottom,0px)+1rem)] right-4 md:bottom-24 md:right-5 md:sm:right-7"
+            className="fixed z-50 flex h-[min(600px,calc(100dvh-11rem))] w-[calc(100vw-2.5rem)] max-w-[380px] flex-col overflow-hidden rounded-3xl border border-white/10 bg-card shadow-2xl shadow-black/50 bottom-[calc(9rem+env(safe-area-inset-bottom,0px))] right-4 md:bottom-24 md:right-6"
           >
             {/* Header */}
             <div className="flex items-center gap-2.5 border-b border-white/10 bg-gradient-to-r from-lime-400/15 to-transparent px-3.5 py-3">
@@ -491,107 +495,19 @@ export function FloatingChat() {
       </AnimatePresence>
 
       {/* Floating action button — draggable */}
-      <DraggableChatFab
-        isOpen={open}
-        onToggle={() => setOpen((o) => !o)}
-        unreadCount={unreadTotal}
-      />
+      <DraggableFab
+        onClick={() => setOpen((o) => !o)}
+        unreadCount={open ? 0 : unreadTotal}
+        title={isOpenTitle(open)}
+        ariaLabel={isOpenTitle(open)}
+        className="fixed z-50 flex size-14 items-center justify-center rounded-full bg-lime-400 text-black shadow-xl shadow-lime-400/25 transition-[transform] hover:scale-105 active:scale-95 bottom-[calc(5.5rem+env(safe-area-inset-bottom,0px))] right-4 md:bottom-6 md:right-5"
+      >
+        {open ? <X className="size-6" /> : <MessageSquare className="size-6" />}
+      </DraggableFab>
     </>
   );
 }
 
-/* ═══════════════════════════════════════════════════════════════════
-   DRAGGABLE CHAT FAB
-   ═══════════════════════════════════════════════════════════════════
-   Pointer-driven drag with viewport clamping. A short press (< 8px move)
-   triggers the click handler (toggle chat); a drag repositions the FAB.
-   The button snaps to safe positions on mobile so it never covers the
-   bottom navigation bar.
-   ═══════════════════════════════════════════════════════════════════ */
-
-const DRAG_THRESHOLD = 8; // px — smaller than this is treated as a click
-
-function DraggableChatFab({
-  isOpen,
-  onToggle,
-  unreadCount,
-}: {
-  isOpen: boolean;
-  onToggle: () => void;
-  unreadCount: number;
-}) {
-  const [offset, setOffset] = useState({ x: 0, y: 0 });
-  const dragging = useRef(false);
-  const start = useRef({ x: 0, y: 0, ox: 0, oy: 0 });
-  const moved = useRef(false);
-
-  const onPointerDown = (e: React.PointerEvent) => {
-    // Only primary button / first touch
-    if (e.button !== 0 && e.pointerType !== "touch") return;
-    dragging.current = true;
-    moved.current = false;
-    start.current = { x: e.clientX, y: e.clientY, ox: offset.x, oy: offset.y };
-    (e.target as HTMLElement).setPointerCapture(e.pointerId);
-  };
-
-  const onPointerMove = (e: React.PointerEvent) => {
-    if (!dragging.current) return;
-    const dx = e.clientX - start.current.x;
-    const dy = e.clientY - start.current.y;
-    if (Math.abs(dx) > DRAG_THRESHOLD || Math.abs(dy) > DRAG_THRESHOLD) {
-      moved.current = true;
-    }
-    if (!moved.current) return;
-
-    const vw = window.innerWidth;
-    const vh = window.innerHeight;
-    const fabSize = 56;
-    // Default positions (match the CSS: right-4 bottom-[5rem] on mobile, right-5 bottom-6 on md+)
-    const isMobile = vw < 768;
-    const defaultRight = isMobile ? 16 : 20;
-    const defaultBottom = isMobile ? 80 : 24;
-
-    const newX = start.current.ox + dx;
-    const newY = start.current.oy + dy;
-
-    // Clamp: keep the FAB fully inside viewport
-    const maxX = vw - fabSize - defaultRight;
-    const minX = -(vw - fabSize - defaultRight);
-    const maxY = defaultBottom - fabSize;
-    const minY = -(vh - fabSize - defaultBottom);
-
-    setOffset({
-      x: Math.max(minX, Math.min(maxX, newX)),
-      y: Math.max(minY, Math.min(maxY, newY)),
-    });
-  };
-
-  const onPointerUp = () => {
-    dragging.current = false;
-    if (!moved.current) {
-      onToggle();
-    }
-  };
-
-  return (
-    <button
-      onPointerDown={onPointerDown}
-      onPointerMove={onPointerMove}
-      onPointerUp={onPointerUp}
-      className="fixed z-50 flex size-14 items-center justify-center rounded-full bg-lime-400 text-black shadow-xl shadow-lime-400/25 transition-[transform] hover:scale-105 active:scale-95 md:bottom-6 md:right-5 md:sm:right-7 bottom-[calc(5rem+env(safe-area-inset-bottom,0px))] right-4"
-      style={{
-        touchAction: "none",
-        transform: `translate(${offset.x}px, ${offset.y}px)`,
-        userSelect: "none",
-      }}
-      title={isOpen ? "Close chat" : "Open chat"}
-    >
-      {isOpen ? <X className="size-6" /> : <MessageSquare className="size-6" />}
-      {!isOpen && unreadCount > 0 && (
-        <span className="absolute -right-0.5 -top-0.5 flex size-5 items-center justify-center rounded-full bg-rose-500 text-[10px] font-bold text-white ring-2 ring-background">
-          {unreadCount > 9 ? "9+" : unreadCount}
-        </span>
-      )}
-    </button>
-  );
+function isOpenTitle(open: boolean) {
+  return open ? "Close chat" : "Open chat";
 }

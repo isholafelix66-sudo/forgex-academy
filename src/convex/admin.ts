@@ -1471,7 +1471,7 @@ async function deleteCourseData(ctx: MutationCtx, courseId: Id<"courses">) {
   await ctx.db.delete(courseId);
 }
 
-async function deleteUserData(ctx: MutationCtx, userId: Id<"users">) {
+export async function deleteUserData(ctx: MutationCtx, userId: Id<"users">) {
   const enrollments = await ctx.db
     .query("enrollments")
     .withIndex("by_student", (q) => q.eq("studentId", userId))

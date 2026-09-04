@@ -17,6 +17,7 @@ import "./index.css";
 import { attachRoutePrefetch } from "@/lib/prefetch";
 import { registerServiceWorker } from "@/lib/sw";
 import { ConnectionBanner } from "@/components/network/ConnectionBanner";
+import { AiSupportAssistant } from "@/components/site/AiSupportAssistant";
 
 
 
@@ -555,6 +556,19 @@ window.addEventListener("unhandledrejection", ensureBootFallback);
   }
 });
 
+/**
+ * Global scroll reset: whenever the route changes (header links, sidebar
+ * links, bottom navigation, programmatic navigate()…) the page jumps back to
+ * the top instantly, so a new page never opens midway down or at the footer.
+ */
+function ScrollToTop() {
+  const { pathname } = useLocation();
+  useEffect(() => {
+    window.scrollTo({ top: 0, behavior: "instant" });
+  }, [pathname]);
+  return null;
+}
+
 /** Keep Sentry's user context in sync with the signed-in Convex user. */
 function SentryUserSync() {
   const { isAuthenticated, user } = useAuth();
@@ -669,8 +683,12 @@ createRoot(document.getElementById("root")!).render(
         <OfflineBadge />
         <BrowserRouter>
           <RouteSyncer />
+          <ScrollToTop />
           <Suspense fallback={null}>
             <LazyFloatingChatWrapper />
+          </Suspense>
+          <Suspense fallback={null}>
+            <AiSupportAssistant />
           </Suspense>
           <Suspense fallback={<RouteLoading />}>
             <RouteBoundary>

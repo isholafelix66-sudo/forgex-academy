@@ -14,6 +14,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { PageHeader } from "@/components/dash/PageHeader";
 import { Avatar } from "@/components/site/Avatar";
+import { AccountManagement } from "@/components/dash/AccountManagement";
 import { useAuth } from "@/hooks/use-auth";
 import { ImageUploader } from "@/components/media/ImageUploader";
 
@@ -221,6 +222,9 @@ export default function Profile() {
           </div>
         </div>
       </div>
+
+      {/* Account management — logout + delete account (confirmation required) */}
+      <AccountManagement />
     </div>
   );
 }

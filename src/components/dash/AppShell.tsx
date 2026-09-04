@@ -1,6 +1,6 @@
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, type ReactNode } from "react";
 import { Link, NavLink, Outlet, useLocation, useNavigate } from "react-router";
-import { LogOut, Menu, X } from "lucide-react";
+import { LogOut } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/hooks/use-auth";
@@ -46,9 +46,6 @@ export function AppShell({
   const siteContent = useQuery(api.public.siteContentAll);
   const navigate = useNavigate();
   const location = useLocation();
-  const [open, setOpen] = useState(false);
-
-  useEffect(() => setOpen(false), [location.pathname]);
 
   // Password-gated admin sessions have no user account — fall back to the
   // admin profile stored in site content so the header never says "Guest".
@@ -175,30 +172,11 @@ export function AppShell({
         {sidebar}
       </aside>
 
-      {/* Mobile drawer */}
-      {open && (
-        <div className="fixed inset-0 z-50 lg:hidden">
-          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setOpen(false)} />
-          <aside className="absolute inset-y-0 left-0 w-72 bg-sidebar shadow-2xl">
-            <button
-              onClick={() => setOpen(false)}
-              className="absolute right-3 top-4 rounded-lg p-1.5 text-muted-foreground hover:bg-white/10"
-            >
-              <X className="size-5" />
-            </button>
-            {sidebar}
-          </aside>
-        </div>
-      )}
-
       {/* Main */}
       <div className="flex min-w-0 flex-1 flex-col lg:pl-64">
         {banner}
         <header className="sticky top-0 z-30 flex h-16 items-center justify-between border-b border-white/8 bg-background/85 px-4 backdrop-blur-xl sm:px-6">
           <div className="flex min-w-0 items-center gap-3">
-            <Button variant="ghost" size="icon" className="shrink-0 hidden md:inline-flex lg:hidden" onClick={() => setOpen(true)}>
-              <Menu className="size-5" />
-            </Button>
             <h1 className="font-display min-w-0 truncate text-lg font-bold">{title}</h1>
           </div>
           <div className="flex shrink-0 items-center gap-3">

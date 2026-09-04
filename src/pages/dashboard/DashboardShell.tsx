@@ -128,7 +128,7 @@ export default function DashboardShell() {
   const mobilePrimary: MobileNavItem[] = [
     { to: "/dashboard", label: "Home", icon: <LayoutDashboard className="size-5" />, end: true },
     { to: "/dashboard/my-courses", label: "Courses", icon: <BookOpen className="size-5" /> },
-    { to: "/dashboard/roadmap", label: "Roadmap", icon: <Map className="size-5" /> },
+    { to: "/dashboard/certificates", label: "Certificates", icon: <Award className="size-5" /> },
     { to: "/dashboard/profile", label: "Profile", icon: <User className="size-5" /> },
   ];
 
@@ -136,8 +136,8 @@ export default function DashboardShell() {
     {
       label: "Learning",
       items: [
+        { to: "/dashboard/roadmap", label: "Roadmap", icon: <Map className="size-4" /> },
         { to: "/dashboard/assignments", label: "Assignments", icon: <FileText className="size-4" /> },
-        { to: "/dashboard/certificates", label: "Certificates", icon: <Award className="size-4" /> },
       ],
     },
     {

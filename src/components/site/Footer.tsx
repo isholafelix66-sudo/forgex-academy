@@ -43,7 +43,7 @@ export function Footer() {
 
   return (
     <footer className="border-t border-white/10 bg-black/30">
-      <div className="mx-auto max-w-7xl px-4 py-14 sm:px-6">
+      <div className="mx-auto max-w-7xl px-4 pb-28 pt-14 sm:px-6 md:pb-14">
         <div className="grid gap-10 md:grid-cols-4">
           <div className="md:col-span-2">
             <div className="flex items-center gap-2.5">
@@ -62,6 +62,7 @@ export function Footer() {
             </p>
           </div>
 
+          {/* Quick links — desktop only; mobile uses the bottom nav + More menu */}
           <div className="hidden md:block">
             <h4 className="text-sm font-semibold text-foreground">Quick links</h4>
             <ul className="mt-4 space-y-2.5 text-sm text-muted-foreground">
@@ -77,6 +78,7 @@ export function Footer() {
             </ul>
           </div>
 
+          {/* Get in touch — compact on mobile (no bottom padding conflict) */}
           <div>
             <h4 className="text-sm font-semibold text-foreground">Get in touch</h4>
             <ul className="mt-4 space-y-2.5 text-sm text-muted-foreground">

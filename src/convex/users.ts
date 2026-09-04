@@ -5,6 +5,7 @@ import { v } from "convex/values";
 import { ROLES, socialsValidator } from "./schema";
 import { checkRateLimit, notify, publicUser, requireUser, requireUserDoc } from "./lib";
 import { welcomeEmail } from "./emailTemplates";
+import { deleteUserData } from "./admin";
 
 /**
  * Get the current signed in user. Returns null if the user is not signed in.
@@ -377,5 +378,30 @@ export const myTutorApplication = query({
       ...app,
       verified: !!user?.verified,
     };
+  },
+});
+
+// ---------------------------------------------------------------------------
+// Account self-deletion — exposed in Profile → Account Management.
+// Reuses the admin deleteUserData helper so exactly the same records are
+// removed (enrollments, certificates, submissions, attempts, applications,
+// notifications, messages, owned courses + content, auth accounts, user doc).
+// ---------------------------------------------------------------------------
+
+export const deleteMyAccount = mutation({
+  args: {},
+  handler: async (ctx) => {
+    const userId = await requireUser(ctx);
+    const user = await ctx.db.get(userId);
+    if (!user) return false;
+    // Tutors keep their application trail — only an admin may remove a tutor
+    // account so verified tutors can never self-destruct mid-course.
+    if (user.role === "tutor") {
+      throw new Error(
+        "Tutor accounts must be deleted by an administrator. Please contact support.",
+      );
+    }
+    await deleteUserData(ctx, userId);
+    return true;
   },
 });
