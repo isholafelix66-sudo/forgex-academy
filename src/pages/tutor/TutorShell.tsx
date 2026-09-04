@@ -15,6 +15,7 @@ import {
   UserCircle,
   Users,
 } from "lucide-react";
+import type { MobileNavItem, MobileNavSection } from "@/components/site/MobileBottomNav";
 import { AppShell } from "@/components/dash/AppShell";
 import { useAdminSession } from "@/hooks/use-admin-session";
 
@@ -102,5 +103,36 @@ export default function TutorShell() {
     </div>
   ) : undefined;
 
-  return <AppShell sections={sections} title="Tutor dashboard" banner={banner} />;
+  const mobilePrimary: MobileNavItem[] = [
+    { to: "/tutor", label: "Overview", icon: <LayoutDashboard className="size-5" />, end: true },
+    { to: "/tutor/courses", label: "Courses", icon: <BookOpen className="size-5" /> },
+    { to: "/tutor/grading", label: "Grading", icon: <ClipboardCheck className="size-5" /> },
+    { to: "/tutor/students", label: "Students", icon: <Users className="size-5" /> },
+  ];
+
+  const mobileMore: MobileNavSection[] = [
+    {
+      label: "Teaching",
+      items: [
+        { to: "/tutor/announcements", label: "Announcements", icon: <Megaphone className="size-4" /> },
+        { to: "/tutor/support", label: "Support", icon: <LifeBuoy className="size-4" /> },
+      ],
+    },
+    {
+      label: "Communication",
+      items: [
+        { to: "/tutor/inbox", label: "Inbox", icon: <MessageSquare className="size-4" /> },
+        { to: "/tutor/communities", label: "Communities", icon: <MessageCircle className="size-4" /> },
+      ],
+    },
+    {
+      label: "Account",
+      items: [
+        { to: "/tutor/profile", label: "Tutor Profile", icon: <UserCircle className="size-4" /> },
+        { to: "/tutor/settings", label: "Settings", icon: <Settings className="size-4" /> },
+      ],
+    },
+  ];
+
+  return <AppShell sections={sections} title="Tutor dashboard" banner={banner} mobilePrimaryItems={mobilePrimary} mobileMoreSections={mobileMore} />;
 }

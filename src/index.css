@@ -619,3 +619,8 @@
     opacity: 0.5;
   }
 }
+
+/* ── Mobile bottom nav: safe-area padding for iOS notch/home indicator ── */
+.safe-area-bottom {
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}

@@ -27,6 +27,7 @@ import {
   UserCircle,
   Users,
 } from "lucide-react";
+import type { MobileNavItem, MobileNavSection } from "@/components/site/MobileBottomNav";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { AppShell } from "@/components/dash/AppShell";
@@ -228,5 +229,53 @@ export default function AdminShell() {
     },
   ];
 
-  return <AppShell sections={sections} title="Admin dashboard" />;
+  const mobilePrimary: MobileNavItem[] = [
+    { to: "/admin", label: "Overview", icon: <LayoutDashboard className="size-5" />, end: true },
+    { to: "/admin/users", label: "Users", icon: <Users className="size-5" /> },
+    { to: "/admin/courses", label: "Courses", icon: <BookOpen className="size-5" /> },
+    { to: "/admin/inbox", label: "Inbox", icon: <Inbox className="size-5" /> },
+  ];
+
+  const mobileMore: MobileNavSection[] = [
+    {
+      label: "Platform",
+      items: [
+        { to: "/admin/applications", label: "Tutor verification", icon: <BadgeCheck className="size-4" /> },
+        { to: "/admin/chat", label: "Chat logs", icon: <MessageSquare className="size-4" /> },
+        { to: "/admin/catalog", label: "Categories & roadmaps", icon: <ListChecks className="size-4" /> },
+        { to: "/admin/teams", label: "Team Access", icon: <Users className="size-4" /> },
+        { to: "/admin/ai-support", label: "AI Support", icon: <Bot className="size-4" /> },
+        { to: "/admin/email-center", label: "Email Center", icon: <Mail className="size-4" /> },
+      ],
+    },
+    {
+      label: "Content",
+      items: [
+        { to: "/admin/updates", label: "Updates & news", icon: <Megaphone className="size-4" /> },
+        { to: "/admin/stories", label: "Student stories", icon: <Heart className="size-4" /> },
+        { to: "/admin/ai-hub", label: "AI Hub", icon: <Bot className="size-4" /> },
+        { to: "/admin/prompts", label: "Prompt Library", icon: <Braces className="size-4" /> },
+        { to: "/admin/content", label: "Website & branding", icon: <PenSquare className="size-4" /> },
+        { to: "/admin/media", label: "Media library", icon: <ImageIcon className="size-4" /> },
+        { to: "/admin/certificates", label: "Certificates", icon: <Award className="size-4" /> },
+        { to: "/admin/audit", label: "Audit log", icon: <ScrollText className="size-4" /> },
+      ],
+    },
+    {
+      label: "Communication",
+      items: [
+        { to: "/admin/communication", label: "Communities", icon: <MessageCircle className="size-4" /> },
+        { to: "/admin/communication/dms", label: "Private DMs", icon: <MessageSquare className="size-4" /> },
+        { to: "/admin/communication/reports", label: "Reports & support", icon: <Flag className="size-4" /> },
+      ],
+    },
+    {
+      label: "Account",
+      items: [
+        { to: "/admin/profile", label: "Admin profile", icon: <UserCircle className="size-4" /> },
+      ],
+    },
+  ];
+
+  return <AppShell sections={sections} title="Admin dashboard" mobilePrimaryItems={mobilePrimary} mobileMoreSections={mobileMore} />;
 }

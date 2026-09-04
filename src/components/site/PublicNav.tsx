@@ -20,11 +20,13 @@ import {
   InfoIcon,
   ChevronDown,
 } from "lucide-react";
+import { MobileBottomNav } from "./MobileBottomNav";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/hooks/use-auth";
 import logo from "@/assets/logo.svg";
 import { Avatar } from "./Avatar";
+import type { MobileNavItem, MobileNavSection } from "./MobileBottomNav";
 
 /* ═══════════════════════════════════════════════════════════════════════
    NAV DATA
@@ -261,7 +263,49 @@ export function PublicNav() {
         : "text-muted-foreground hover:bg-white/5 hover:text-foreground",
     );
 
+  /* ── Mobile bottom nav data ────────────────────────────────────── */
+  const mobilePrimary: MobileNavItem[] = [
+    { to: "/", label: "Home", icon: <Home className="size-5" />, end: true },
+    { to: "/courses", label: "Courses", icon: <BookOpen className="size-5" /> },
+    { to: "/tutors", label: "Tutors", icon: <GraduationCap className="size-5" /> },
+    { to: "/roadmap", label: "Roadmap", icon: <Map className="size-5" /> },
+  ];
+
+  const mobileMore: MobileNavSection[] = [
+    {
+      label: "Explore",
+      items: [
+        { to: "/ai-hub", label: "AI Hub", icon: <Sparkles className="size-4" /> },
+        { to: "/prompts", label: "Prompt Library", icon: <FileText className="size-4" /> },
+        { to: "/updates", label: "Updates", icon: <Bell className="size-4" /> },
+        { to: "/stories", label: "Stories", icon: <Bookmark className="size-4" /> },
+      ],
+    },
+    {
+      label: "About",
+      items: [
+        { to: "/contact", label: "Contact", icon: <Mail className="size-4" /> },
+        { to: "/about", label: "About", icon: <InfoIcon className="size-4" /> },
+      ],
+    },
+    ...(isAuthenticated
+      ? [
+          {
+            label: "Account" as const,
+            items: [
+              {
+                to: dashboardTo,
+                label: "Dashboard",
+                icon: <LayoutDashboard className="size-4" />,
+              },
+            ],
+          },
+        ]
+      : []),
+  ];
+
   return (
+    <>
     <header
       className={cn(
         "sticky top-0 z-50 border-b transition-all duration-300",
@@ -592,5 +636,7 @@ export function PublicNav() {
         </div>
       )}
     </header>
+    <MobileBottomNav primaryItems={mobilePrimary} moreSections={mobileMore} />
+    </>
   );
 }

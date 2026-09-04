@@ -8,6 +8,8 @@ import { useAdminSession } from "@/hooks/use-admin-session";
 import { useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import { Avatar } from "@/components/site/Avatar";
+import { MobileBottomNav } from "@/components/site/MobileBottomNav";
+import type { MobileNavItem, MobileNavSection } from "@/components/site/MobileBottomNav";
 import logo from "@/assets/logo.svg";
 
 export type NavItem = {
@@ -28,12 +30,16 @@ export function AppShell({
   footer,
   title,
   banner,
+  mobilePrimaryItems,
+  mobileMoreSections,
 }: {
   sections: NavSection[];
   footer?: NavItem[];
   title: string;
   /** Optional full-width strip rendered above the header (e.g. admin preview). */
   banner?: ReactNode;
+  mobilePrimaryItems?: MobileNavItem[];
+  mobileMoreSections?: MobileNavSection[];
 }) {
   const { user, signOut } = useAuth();
   const { isAdmin } = useAdminSession();
@@ -213,12 +219,17 @@ export function AppShell({
           </div>
         </header>
 
-        <main className="min-w-0 flex-1 px-4 py-8 sm:px-6 lg:px-8">
+        <main className="min-w-0 flex-1 px-4 py-8 sm:px-6 lg:px-8 lg:pb-8 pb-24">
           <div className="mx-auto min-w-0 max-w-6xl">
             <Outlet />
           </div>
         </main>
       </div>
+
+      {/* Mobile bottom navigation */}
+      {mobilePrimaryItems && mobileMoreSections && (
+        <MobileBottomNav primaryItems={mobilePrimaryItems} moreSections={mobileMoreSections} />
+      )}
     </div>
   );
 }

@@ -17,6 +17,7 @@ import {
   UserPlus,
   Users,
 } from "lucide-react";
+import type { MobileNavItem, MobileNavSection } from "@/components/site/MobileBottomNav";
 import { AppShell } from "@/components/dash/AppShell";
 import { useAuth } from "@/hooks/use-auth";
 
@@ -124,5 +125,45 @@ export default function DashboardShell() {
     },
   ];
 
-  return <AppShell sections={sections} title="Student dashboard" />;
+  const mobilePrimary: MobileNavItem[] = [
+    { to: "/dashboard", label: "Home", icon: <LayoutDashboard className="size-5" />, end: true },
+    { to: "/dashboard/my-courses", label: "Courses", icon: <BookOpen className="size-5" /> },
+    { to: "/dashboard/roadmap", label: "Roadmap", icon: <Map className="size-5" /> },
+    { to: "/dashboard/profile", label: "Profile", icon: <User className="size-5" /> },
+  ];
+
+  const mobileMore: MobileNavSection[] = [
+    {
+      label: "Learning",
+      items: [
+        { to: "/dashboard/assignments", label: "Assignments", icon: <FileText className="size-4" /> },
+        { to: "/dashboard/certificates", label: "Certificates", icon: <Award className="size-4" /> },
+      ],
+    },
+    {
+      label: "Community",
+      items: [
+        { to: "/dashboard/communities", label: "Communities", icon: <MessageCircle className="size-4" /> },
+        { to: "/dashboard/discover", label: "Discover Students", icon: <UserPlus className="size-4" /> },
+        { to: "/dashboard/connections", label: "Connections", icon: <Users className="size-4" /> },
+        { to: "/dashboard/dms", label: "Student DMs", icon: <MessageCircle className="size-4" /> },
+      ],
+    },
+    {
+      label: "Account",
+      items: [
+        { to: "/dashboard/messages", label: "Messages", icon: <MessageSquare className="size-4" /> },
+        { to: "/dashboard/notifications", label: "Notifications", icon: <Bell className="size-4" /> },
+        { to: "/dashboard/settings", label: "Settings", icon: <Settings className="size-4" /> },
+      ],
+    },
+    {
+      items: [
+        { to: "/dashboard/support", label: "Need Help?", icon: <HelpCircle className="size-4" /> },
+        { to: "/", label: "Explore ForgeX", icon: <Globe className="size-4" /> },
+      ],
+    },
+  ];
+
+  return <AppShell sections={sections} title="Student dashboard" mobilePrimaryItems={mobilePrimary} mobileMoreSections={mobileMore} />;
 }
