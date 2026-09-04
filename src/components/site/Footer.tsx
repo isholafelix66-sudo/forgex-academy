@@ -62,7 +62,7 @@ export function Footer() {
             </p>
           </div>
 
-          <div>
+          <div className="hidden md:block">
             <h4 className="text-sm font-semibold text-foreground">Quick links</h4>
             <ul className="mt-4 space-y-2.5 text-sm text-muted-foreground">
               <li><Link to="/" className="transition-colors hover:text-lime-300">Home</Link></li>
