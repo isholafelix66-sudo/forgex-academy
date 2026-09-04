@@ -196,7 +196,7 @@ export function AppShell({
         {banner}
         <header className="sticky top-0 z-30 flex h-16 items-center justify-between border-b border-white/8 bg-background/85 px-4 backdrop-blur-xl sm:px-6">
           <div className="flex min-w-0 items-center gap-3">
-            <Button variant="ghost" size="icon" className="shrink-0 lg:hidden" onClick={() => setOpen(true)}>
+            <Button variant="ghost" size="icon" className="shrink-0 hidden md:inline-flex lg:hidden" onClick={() => setOpen(true)}>
               <Menu className="size-5" />
             </Button>
             <h1 className="font-display min-w-0 truncate text-lg font-bold">{title}</h1>
@@ -219,7 +219,7 @@ export function AppShell({
           </div>
         </header>
 
-        <main className="min-w-0 flex-1 px-4 py-8 sm:px-6 lg:px-8 lg:pb-8 pb-24">
+        <main className="min-w-0 flex-1 px-4 py-8 sm:px-6 lg:px-8 pb-24 md:pb-6 overflow-x-clip">
           <div className="mx-auto min-w-0 max-w-6xl">
             <Outlet />
           </div>

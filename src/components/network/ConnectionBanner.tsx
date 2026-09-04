@@ -50,7 +50,7 @@ export function ConnectionBanner() {
 
   return (
     <div
-      className="pointer-events-none fixed inset-x-0 bottom-4 z-[70] flex justify-center px-4"
+      className="pointer-events-none fixed inset-x-0 bottom-20 md:bottom-4 z-[70] flex justify-center px-4"
       role="status"
       aria-live="polite"
     >

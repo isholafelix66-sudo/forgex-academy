@@ -19,7 +19,7 @@ export function PageShell({ children }: { children: ReactNode }) {
     <div className="relative min-h-screen bg-background">
       <BackgroundFX />
       <PublicNav />
-      <main className="pb-20 lg:pb-0">{children}</main>
+      <main className="pb-24 md:pb-6 overflow-x-clip">{children}</main>
       <Footer />
     </div>
   );

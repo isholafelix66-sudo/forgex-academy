@@ -494,12 +494,12 @@ export function PublicNav() {
             </div>
           )}
 
-          {/* Mobile: Dashboard quick link */}
+          {/* Mobile: Dashboard quick link — hidden on small mobile (bottom nav handles it), visible on tablet */}
           {isAuthenticated && (
             <Button
               variant="ghost"
               size="icon"
-              className="size-8 md:hidden"
+              className="hidden md:inline-flex lg:hidden size-8"
               data-prefetch={dashboardTo}
               onClick={() => navigate(dashboardTo)}
               title="Dashboard"
@@ -508,7 +508,7 @@ export function PublicNav() {
             </Button>
           )}
 
-          {/* Mobile: Sign up */}
+          {/* Mobile: Sign up — visible on small screens where bottom nav doesn't cover auth */}
           {!isAuthenticated && (
             <Button
               size="sm"
@@ -520,11 +520,11 @@ export function PublicNav() {
             </Button>
           )}
 
-          {/* Hamburger (visible < lg) */}
+          {/* Hamburger — visible on tablet (md–lg), hidden on mobile (bottom nav) and desktop (full nav) */}
           <Button
             variant="ghost"
             size="icon"
-            className="size-8 lg:hidden"
+            className="hidden md:inline-flex lg:hidden size-8"
             onClick={() => setMobileOpen((v) => !v)}
             aria-label="Toggle menu"
           >

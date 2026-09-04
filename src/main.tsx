@@ -637,7 +637,7 @@ function OfflineBadge() {
   if (!offline) return null;
 
   return (
-    <div className="fixed bottom-20 left-1/2 z-[70] -translate-x-1/2 rounded-full border border-lime-400/25 bg-black/90 px-4 py-1.5 text-xs font-medium text-lime-300 shadow-lg shadow-black/40 backdrop-blur">
+    <div className="fixed left-1/2 z-[70] -translate-x-1/2 rounded-full border border-lime-400/25 bg-black/90 px-4 py-1.5 text-xs font-medium text-lime-300 shadow-lg shadow-black/40 backdrop-blur bottom-[calc(5rem+env(safe-area-inset-bottom,0px)+1rem)] md:bottom-12">
       You&rsquo;re offline — showing the saved version
     </div>
   );

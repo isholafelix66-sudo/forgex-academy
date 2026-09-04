@@ -42,7 +42,7 @@ export function MobileBottomNav({
   return (
     <>
       {/* ── Fixed bottom bar ─────────────────────────────────────── */}
-      <nav className="fixed bottom-0 inset-x-0 z-50 border-t border-white/10 bg-[#0a0c0a]/95 backdrop-blur-xl lg:hidden safe-area-bottom">
+      <nav className="fixed bottom-0 inset-x-0 z-50 border-t border-white/10 bg-[#0a0c0a]/95 backdrop-blur-xl md:hidden safe-area-bottom">
         <div className="mx-auto flex h-[60px] max-w-lg items-stretch px-1">
           {primaryItems.map((item) => (
             <NavLink
@@ -96,7 +96,7 @@ export function MobileBottomNav({
 
       {/* ── More drawer (bottom sheet) ───────────────────────────── */}
       {moreOpen && (
-        <div className="fixed inset-0 z-[60] lg:hidden">
+        <div className="fixed inset-0 z-[60] md:hidden">
           {/* Backdrop */}
           <div
             className="absolute inset-0 bg-black/60 backdrop-blur-sm"
