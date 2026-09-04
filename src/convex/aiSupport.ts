@@ -148,6 +148,100 @@ function scoreEntry(entry: KbEntry, text: string): number {
 export const ESCALATION_OFFER =
   "I'm sorry I couldn't fully resolve this issue. You can request support from our team, and they will receive the details of everything we have already discussed so you won't need to start over.";
 
+// ---------------------------------------------------------------------------
+// GUEST SUPPORT — anonymous AI help, no sign-in required.
+//
+// Guests chat with the same ForgeX Support Assistant (same gateway + knowledge
+// base) without an account. Nothing account-specific is possible by design:
+// when the user's issue needs an account (saved progress, certificates,
+// enrollment…), the AI clearly says so and the UI shows a Sign In CTA. If the
+// AI cannot resolve the issue, guests get a Contact-page escalation instead of
+// a ticket (tickets require a user to route replies to).
+// ---------------------------------------------------------------------------
+
+const GUEST_SYSTEM_PROMPT = `You are the ForgeX Academy Support Assistant 🤖 — the first line of support for ForgeX Academy, an online learning platform with students, tutors, courses, quizzes, certificates, a community, and an AI Hub.
+
+You are currently helping a GUEST — someone browsing the public website WITHOUT an account.
+
+STRICT RULES (never break these):
+1. Your PRIMARY source of truth is the APPROVED KNOWLEDGE BASE provided below. If the answer is in it, follow its steps closely.
+2. NEVER invent platform features, pages, buttons, or settings that do not exist.
+3. You CANNOT take actions on any account, and the person you are helping has no account session. NEVER claim you changed, checked, or fixed anything on an account.
+4. Answer everything that does NOT require a personal account fully and helpfully: platform overview, how courses/roadmaps/certificates work, pricing/free tier, becoming a tutor, public pages, general learning advice.
+5. If the request needs an account (saved progress, certificates, enrollment, dashboards, personal data, password/account changes), say clearly in one short line that signing in is required for that part, then still help with the general part of the question.
+6. If the issue is unclear, ask ONE short clarifying question before answering.
+7. If you are not confident or the knowledge base doesn't cover it, say so honestly and suggest the Contact page for the human support team.
+8. Keep answers clear and step-by-step. Use numbered steps when giving instructions. Be friendly but concise (max ~180 words).
+
+FORMAT: Reply with plain helpful text. End with a short line offering further help or the Contact page if you're unsure.`;
+
+const GUEST_SIGNIN_REMINDER =
+  "That part needs a ForgeX account — sign in or create a free account and I (or the team) can help with it fully.";
+
+/** Cheap client-side signal: does this question look account-specific? Used
+ *  to attach the Sign In CTA to the AI reply bubble in the guest UI. */
+export function looksAccountSpecific(text: string): boolean {
+  const t = text.toLowerCase();
+  const has = (...words: string[]) => words.some((w) => t.includes(w));
+  return has(
+    "my course", "my progress", "my certificate", "my account", "my profile",
+    "my enrollment", "enroll me", "my assignment", "my grade", "my streak",
+    "my password", "reset my", "my dashboard", "refund", "my certificate",
+    "cancel my", "delete my", "change my email", "my data", "sign in",
+    "log in", "login",
+  );
+}
+
+export const sendGuestAiMessage = action({
+  args: { text: v.string() },
+  handler: async (ctx, args) => {
+    // Guests are explicitly allowed here — no auth check by design.
+    const cleanText = args.text.trim().slice(0, 2000);
+    if (!cleanText) throw new Error("Please describe your issue first.");
+
+    const kb = (await ctx.runQuery(internal.aiSupportData.internalListEnabledKb, {})) as KbEntry[];
+    const scored = kb
+      .map((entry) => ({ entry, score: scoreEntry(entry, cleanText) }))
+      .filter((s) => s.score > 0)
+      .sort((a, b) => b.score - a.score)
+      .slice(0, 4);
+
+    const kbContext = scored.length
+      ? scored.map((s, i) => `[${i + 1}] (${s.entry.category}) ${s.entry.title}\n${s.entry.content}`).join("\n\n")
+      : "(No directly matching knowledge base articles. Be honest about this and suggest the Contact page for human support if unsure.)";
+
+    // Stricter abuse protection than signed-in users (no identity to lean on).
+    await enforceUserLimit(ctx, "guest", "support-chat-guest", 6, 60_000);
+
+    try {
+      const result = await gatewayChat(ctx, {
+        operation: "support-chat-guest",
+        maxTokens: 1200,
+        messages: [
+          { role: "system", content: `${GUEST_SYSTEM_PROMPT}\n\nAPPROVED KNOWLEDGE BASE:\n${kbContext}` },
+          { role: "user", content: cleanText },
+        ],
+      });
+      return {
+        reply: result.content,
+        accountSpecific: looksAccountSpecific(cleanText),
+      };
+    } catch (err) {
+      // Gateway exhausted every provider — never surface technical errors.
+      // Guests have no ticket system (that needs an account), so point them
+      // at the Contact page escalation path.
+      const code = err instanceof GatewayUnavailableError ? err.code : "unknown_failure";
+      console.warn(`[ForgeX] Guest support gateway unavailable (${code})`);
+      return {
+        reply:
+          "I'm having trouble reaching my knowledge base right now. The human support team can still help — please use the Contact page and they'll get back to you quickly. Or try again in a minute.",
+        accountSpecific: false,
+        gatewayDown: true,
+      };
+    }
+  },
+});
+
 export const sendAiMessage = action({
   args: { sessionId: v.id("aiSupportSessions"), text: v.string(), voice: v.optional(v.boolean()) },
   handler: async (ctx, args) => {

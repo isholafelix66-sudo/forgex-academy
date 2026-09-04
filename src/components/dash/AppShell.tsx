@@ -181,13 +181,9 @@ export function AppShell({
             <h1 className="font-display min-w-0 truncate text-lg font-bold">{title}</h1>
           </div>
           <div className="flex shrink-0 items-center gap-3">
-            {roleLink && (
-              <Link to={roleLink.to} className="hidden sm:block">
-                <Button variant="outline" size="sm" className="border-lime-400/30 text-lime-300 hover:bg-lime-400/10">
-                  {roleLink.label}
-                </Button>
-              </Link>
-            )}
+            {/* roleLink intentionally NOT duplicated in the header — the
+                sidebar (≥768px) is the single source for dashboard links, so
+                desktop never shows the same Dashboard link twice. */}
             {hasAccount ? (
               <Link to="/dashboard/profile">
                 <Avatar name={identityName} image={identityImage} className="size-9" />
