@@ -270,6 +270,13 @@
     -ms-overflow-style: none;
     scrollbar-width: none;
   }
+  /* Active-card emphasis for the motion carousels — a quiet lime border
+     and soft glow on the focused card (transition lives on the card). */
+  .card-focus {
+    border-color: oklch(0.868 0.216 129.5 / 0.35);
+    box-shadow: 0 0 0 1px oklch(0.868 0.216 129.5 / 0.18),
+      0 14px 40px -18px oklch(0.868 0.216 129.5 / 0.3);
+  }
 }
 
 @keyframes marquee {

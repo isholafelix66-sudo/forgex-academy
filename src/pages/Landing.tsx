@@ -27,6 +27,7 @@ import { PageShell } from "@/components/site/PageShell";
 import { Reveal } from "@/components/site/Reveal";
 import { CourseCard } from "@/components/site/CourseCard";
 import { TutorCard } from "@/components/site/TutorCard";
+import { MotionCarousel } from "@/components/site/MotionCarousel";
 import { HowToVideo } from "@/components/site/HowToVideo";
 import { parseTutorialVideo } from "@/lib/tutorial-video";
 import { Avatar } from "@/components/site/Avatar";
@@ -66,6 +67,55 @@ const CATEGORY_ICONS: Record<string, typeof Sparkles> = {
 function CategoryIcon({ name }: { name: string }) {
   const Icon = CATEGORY_ICONS[name] ?? Sparkles;
   return <Icon className="size-3.5" />;
+}
+
+/* ── Prompt card — its own motion treatment (distinct from courses): the
+      active card eases into position with a subtle spring and the
+      "View Prompt →" CTA shifts slightly right while active. Tap gives a
+      gentle scale-down (the carousel wrapper adds the navigation scale). ── */
+function PromptMotionCard({
+  prompt,
+  active,
+}: {
+  prompt: { _id: string; slug: string; title: string; description: string };
+  active: boolean;
+}) {
+  return (
+    <motion.div
+      animate={
+        active
+          ? { opacity: 1, y: 0, scale: 1 }
+          : { opacity: 0.86, y: 6, scale: 0.97 }
+      }
+      transition={{ type: "spring", stiffness: 210, damping: 26, mass: 0.7 }}
+      className="h-full"
+    >
+      <Link
+        to={`/prompts/${prompt.slug}`}
+        className="group flex h-full flex-col rounded-2xl border p-4 transition-colors sm:p-5"
+        style={{
+          borderColor: active
+            ? "oklch(0.868 0.216 129.5 / 0.35)"
+            : "oklch(1 0 0 / 0.08)",
+          backgroundColor: "var(--card)",
+        }}
+      >
+        <h3 className="font-display text-sm font-bold leading-snug group-hover:text-lime-300 sm:text-base">
+          {prompt.title}
+        </h3>
+        <p className="mt-1 line-clamp-2 flex-1 text-sm leading-relaxed text-muted-foreground">
+          {prompt.description}
+        </p>
+        <motion.span
+          animate={{ x: active ? 3 : 0 }}
+          transition={{ type: "spring", stiffness: 260, damping: 24 }}
+          className="mt-3 inline-flex items-center gap-1 text-xs font-semibold text-lime-300"
+        >
+          View prompt <ArrowRight className="size-3.5" />
+        </motion.span>
+      </Link>
+    </motion.div>
+  );
 }
 
 /* ── Compact mobile-first section heading (left-aligned, tight). ─────── */
@@ -414,17 +464,18 @@ export default function Landing() {
               </Link>
             }
           />
-          <div className={cn(SCROLL_ROW, "mt-4 md:mt-6 md:grid-cols-2 lg:grid-cols-3")}>
-            {courseCarousel.map((c, i) => (
-              <Reveal
-                key={c._id}
-                delay={(i % 3) * 0.07}
-                className="w-[272px] shrink-0 snap-start sm:w-[300px] md:w-auto"
-              >
-                <CourseCard course={c} className="h-full" />
-              </Reveal>
-            ))}
-          </div>
+          <Reveal className="mt-4 md:mt-6">
+            <MotionCarousel
+              ariaLabel="Featured courses"
+              items={courseCarousel}
+              getKey={(c) => c._id}
+              itemClassName="w-[272px] sm:w-[300px]"
+              scrollerClassName="md:grid-cols-2 lg:grid-cols-3"
+              renderItem={(c, isActive) => (
+                <CourseCard course={c} className={cn("h-full", isActive && "card-focus")} />
+              )}
+            />
+          </Reveal>
         </section>
       )}
 
@@ -687,30 +738,19 @@ export default function Landing() {
                 </Link>
               }
             />
-            <div className={cn(SCROLL_ROW, "mt-4 md:mt-6 md:grid-cols-2 lg:grid-cols-3")}>
-              {featuredPrompts.slice(0, 3).map((p, i) => (
-                <Reveal
-                  key={p._id}
-                  delay={(i % 3) * 0.07}
-                  className="w-[272px] shrink-0 snap-start sm:w-[300px] md:w-auto"
-                >
-                  <Link
-                    to={`/prompts/${p.slug}`}
-                    className="group flex h-full flex-col rounded-2xl border border-white/10 bg-card p-4 transition-colors hover:border-lime-400/30 sm:p-5"
-                  >
-                    <h3 className="font-display text-sm font-bold leading-snug group-hover:text-lime-300 sm:text-base">
-                      {p.title}
-                    </h3>
-                    <p className="mt-1 line-clamp-2 flex-1 text-sm leading-relaxed text-muted-foreground">
-                      {p.description}
-                    </p>
-                    <span className="mt-3 inline-flex items-center gap-1 text-xs font-semibold text-lime-300">
-                      View prompt <ArrowRight className="size-3.5" />
-                    </span>
-                  </Link>
-                </Reveal>
-              ))}
-            </div>
+            <Reveal className="mt-4 md:mt-6">
+              <MotionCarousel
+                ariaLabel="Featured prompts"
+                autoplayMs={6500}
+                items={featuredPrompts.slice(0, 3)}
+                getKey={(p) => p._id}
+                itemClassName="w-[272px] sm:w-[300px]"
+                scrollerClassName="md:grid-cols-2 lg:grid-cols-3"
+                renderItem={(p, isActive) => (
+                  <PromptMotionCard prompt={p} active={isActive} />
+                )}
+              />
+            </Reveal>
             <Reveal className="mt-5 flex flex-wrap items-center gap-3">
               <AnimatedCta to="/prompts">
                 Explore the Prompt Library
