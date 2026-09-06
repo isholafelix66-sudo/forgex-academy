@@ -18,8 +18,10 @@
  * Versioned caches let us atomically drop stale entries on every deploy —
  * bump VERSION whenever sw.js behavior changes so old broken caches are
  * purged instead of being served forever.
+ * v4: purge pre-theme-era shells once so no client ever boots from a stale
+ *     app shell (which surfaced as random full-page reloads on mobile).
  */
-const VERSION = "forgex-shell-v3";
+const VERSION = "forgex-shell-v4";
 const SHELL_CACHE = `${VERSION}-shell`;
 const FONT_CACHE = `${VERSION}-fonts`;
 
