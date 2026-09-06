@@ -76,16 +76,40 @@ function lazyRetry(
         ) {
           throw err;
         }
-        const KEY = "fx_chunk_reload_at";
-        const last = Number(sessionStorage.getItem(KEY) ?? 0);
-        if (Date.now() - last > 30_000) {
-          sessionStorage.setItem(KEY, String(Date.now()));
-          window.location.reload();
+        // Reload ONLY when the site itself answers — otherwise this was a
+        // weak-signal hiccup, not a deploy, and reloading would look like a
+        // random page refresh (report: "some page is refreshing").
+        if (await siteReachable()) {
+          const KEY = "fx_chunk_reload_at";
+          const last = Number(sessionStorage.getItem(KEY) ?? 0);
+          if (Date.now() - last > 30_000) {
+            sessionStorage.setItem(KEY, String(Date.now()));
+            window.location.reload();
+          }
         }
       }
       throw err;
     }
   });
+}
+
+/**
+ * True only when the site itself is reachable right now. Distinguishes a
+ * stale deploy (the old chunk is genuinely gone — a reload picks up the new
+ * one) from a flaky mobile connection (the site is fine; a reload just reads
+ * as a random full-page refresh and loses the user's place).
+ */
+async function siteReachable(): Promise<boolean> {
+  if (typeof window === "undefined") return false;
+  try {
+    const res = await fetch(`${window.location.pathname}?fx-probe=${Date.now()}`, {
+      method: "HEAD",
+      cache: "no-store",
+    });
+    return res.ok;
+  } catch {
+    return false;
+  }
 }
 
 /** Route lazy-loader with deploy-safe retry. Use this instead of raw lazy(). */
@@ -347,12 +371,17 @@ class RootErrorBoundary extends React.Component<
         (document.visibilityState as string) !== "prerendering") &&
       typeof sessionStorage !== "undefined"
     ) {
-      const KEY = "fx_chunk_reload_at";
-      const last = Number(sessionStorage.getItem(KEY) ?? 0);
-      if (Date.now() - last > 10_000) {
-        sessionStorage.setItem(KEY, String(Date.now()));
-        window.location.reload();
-      }
+      // Same reachability gate as lazyRetry: never reload into a dead
+      // connection — the retry countdown handles those without a refresh.
+      void siteReachable().then((ok) => {
+        if (!ok || typeof sessionStorage === "undefined") return;
+        const KEY = "fx_chunk_reload_at";
+        const last = Number(sessionStorage.getItem(KEY) ?? 0);
+        if (Date.now() - last > 10_000) {
+          sessionStorage.setItem(KEY, String(Date.now()));
+          window.location.reload();
+        }
+      });
     }
   }
 
@@ -575,12 +604,17 @@ window.addEventListener("unhandledrejection", ensureBootFallback);
     typeof sessionStorage !== "undefined"
   ) {
     event.preventDefault();
-    const KEY = "fx_chunk_reload_at";
-    const last = Number(sessionStorage.getItem(KEY) ?? 0);
-    if (Date.now() - last > 10_000) {
-      sessionStorage.setItem(KEY, String(Date.now()));
-      window.location.reload();
-    }
+    // Reload only when the site itself answers; offline / flaky-signal
+    // failures must recover in place instead of visibly refreshing the page.
+    void siteReachable().then((ok) => {
+      if (!ok || typeof sessionStorage === "undefined") return;
+      const KEY = "fx_chunk_reload_at";
+      const last = Number(sessionStorage.getItem(KEY) ?? 0);
+      if (Date.now() - last > 10_000) {
+        sessionStorage.setItem(KEY, String(Date.now()));
+        window.location.reload();
+      }
+    });
   }
 });
 

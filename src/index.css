@@ -174,17 +174,19 @@
   --mode-wash-15: oklch(0.21 0.012 262 / 0.15);
   --mode-ink-15: oklch(1 0 0 / 0.9);
   --mode-wash-20: oklch(0.21 0.012 262 / 0.2);
-  --mode-ink-20: oklch(1 0 0 / 0.95);
+  --mode-ink-20: oklch(0.21 0.012 262 / 0.7);
   --mode-wash-25: oklch(0.21 0.012 262 / 0.25);
-  --mode-ink-25: oklch(1 0 0);
+  --mode-ink-25: oklch(0.21 0.012 262 / 0.75);
   --mode-wash-30: oklch(0.21 0.012 262 / 0.3);
-  --mode-ink-30: oklch(1 0 0);
+  --mode-ink-30: oklch(0.21 0.012 262 / 0.78);
+  --mode-wash-35: oklch(0.21 0.012 262 / 0.35);
+  --mode-ink-35: oklch(0.21 0.012 262 / 0.8);
   --mode-wash-40: oklch(0.21 0.012 262 / 0.4);
-  --mode-ink-40: oklch(1 0 0);
+  --mode-ink-40: oklch(0.21 0.012 262 / 0.86);
   --mode-wash-50: oklch(0.21 0.012 262 / 0.5);
-  --mode-ink-50: oklch(1 0 0);
+  --mode-ink-50: oklch(0.21 0.012 262 / 0.9);
   --mode-wash-60: oklch(0.21 0.012 262 / 0.6);
-  --mode-ink-60: oklch(1 0 0);
+  --mode-ink-60: oklch(0.21 0.012 262 / 0.94);
   --mode-wash-70: oklch(0.21 0.012 262 / 0.7);
   --mode-ink-70: oklch(1 0 0);
   --mode-wash-90: oklch(0.21 0.012 262 / 0.9);
@@ -216,6 +218,8 @@
   --mode-ink-25: oklch(0 0 0 / 0.75);
   --mode-wash-30: oklch(1 0 0 / 0.3);
   --mode-ink-30: oklch(0 0 0 / 0.8);
+  --mode-wash-35: oklch(1 0 0 / 0.35);
+  --mode-ink-35: oklch(0 0 0 / 0.82);
   --mode-wash-40: oklch(1 0 0 / 0.4);
   --mode-ink-40: oklch(0 0 0 / 0.85);
   --mode-wash-50: oklch(1 0 0 / 0.5);
@@ -242,6 +246,16 @@
 @utility text-white\/75 { color: var(--mode-ink-70); }
 @utility text-white\/80 { color: var(--mode-ink-70); }
 @utility text-white\/85 { color: var(--mode-ink-70); }
+/* Faint metadata text (timestamps, “· edited” hints, 20–35% white). In light
+   mode these must become muted DARK ink — 20–35% white on a white surface is
+   invisible, which read as “missing” details in the clarity theme. */
+@utility text-white\/20 { color: var(--mode-ink-20); }
+@utility text-white\/25 { color: var(--mode-ink-25); }
+@utility text-white\/35 { color: var(--mode-ink-35); }
+/* Input placeholder text — slightly more muted than body ink, but always
+   readable against the light input surface. */
+@utility placeholder\:text-white\/25 { &::placeholder { color: var(--mode-ink-35); } }
+@utility placeholder\:text-white\/30 { &::placeholder { color: var(--mode-ink-35); } }
 @utility text-lime-200 { color: var(--accent-foreground); }
 @utility text-lime-300 { color: var(--accent-foreground); }
 @utility hover\:text-lime-200 { &:hover { color: var(--accent-foreground); } }
