@@ -240,8 +240,8 @@ export function PublicNav() {
         className={cn(
           "sticky top-0 z-50 border-b transition-all duration-300",
           scrolled
-            ? "border-white/10 bg-[#0d0f0c]/85 backdrop-blur-xl"
-            : "border-transparent bg-transparent",
+            ? "border-white/10 bg-[#0d0f0c]/90 backdrop-blur-xl shadow-lg shadow-black/20"
+            : "border-white/8 bg-[#0d0f0c]/85 backdrop-blur-xl",
         )}
       >
         <div className="mx-auto flex h-14 max-w-7xl items-center justify-between px-4 sm:px-6 lg:h-16">

@@ -1,4 +1,5 @@
-import { getAuthUserId, query } from "./_generated/server";
+import { getAuthUserId } from "@convex-dev/auth/server";
+import { query } from "./_generated/server";
 import type { Doc, Id } from "./_generated/dataModel";
 import { v } from "convex/values";
 import { difficultyValidator, ROLES } from "./schema";
