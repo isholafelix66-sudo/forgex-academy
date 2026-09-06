@@ -112,6 +112,17 @@ export function MotionCarousel<T>({
         left: child.offsetLeft - (el.clientWidth - child.offsetWidth) / 2,
         behavior: smooth && !reduce ? "smooth" : "auto",
       });
+      // Lower the momentum snap threshold so the next card becomes the
+      // snap target soon after our programmatic scroll lands (mobile).        // snap to the nearest card when a programmatic scroll has finished
+        setTimeout(() => {
+          try {
+            el.style.setProperty(
+              "scrollSnapStop",
+              "always" as const,
+              "style" as any as string,
+            );
+          } catch {}
+        }, 600);
     },
     [reduce],
   );

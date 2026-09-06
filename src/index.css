@@ -277,6 +277,34 @@
     box-shadow: 0 0 0 1px oklch(0.868 0.216 129.5 / 0.18),
       0 14px 40px -18px oklch(0.868 0.216 129.5 / 0.3);
   }
+
+  /* ── Mobile hero buttons (stacked, equal width, never clipped).
+     Applied to #hmobile-hero-cta via the AnimatedCta wrapper. ── */
+  @media (max-width: 767px) {
+    .hmobile-hero-cta.w-full.justify-center {
+      width: 100%;
+      max-width: 340px;
+      min-height: 52px;
+      margin-inline: auto;
+      padding: 14px 20px;
+      border-radius: 14px;
+    }
+
+    /* Make the list block level so the contained buttons stack nicely. */
+    .hmobile-hero-cta { display: block; }
+    .hmobile-hero-cta.list-none > li {
+      list-style: none;
+      width: 100%;
+      margin-block: 0.5rem;
+    }
+  }
+
+  /* ── Mobile hero composition (< md): text first, buttons stacked/centered,
+     robot kept below the text block so it never covers CTAs/headlines. ── */
+  .hero-mobile-body {
+    display: flex;
+    flex-direction: column;
+  }
 }
 
 @keyframes marquee {

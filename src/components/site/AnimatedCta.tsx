@@ -4,11 +4,14 @@ import type { ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
-/**
- * Premium animated CTA — wraps a router Link + Button with a soft lift on
+/** Premium animated CTA — wraps a router Link + Button with a soft lift on
  * hover, a gentle press on tap, and a lime sheen that sweeps across primary
  * buttons. GPU-friendly (transform-only, one pseudo-element), respects
  * prefers-reduced-motion, and works on touch (whileTap feedback).
+ *
+ * Mobile-only sizing is applied via CSS so the hero buttons can be
+ * full-width, 52px-ish, with 14–20px padding — without touching the
+ * desktop button sizes.
  */
 export function AnimatedCta({
   to,
@@ -32,7 +35,7 @@ export function AnimatedCta({
     >
       <Link to={to} className="group relative inline-flex">
         <Button
-          size={size}
+          size={size === "default" ? "lg" : size}
           variant={variant === "outline" ? "outline" : "default"}
           className={cn(
             "relative overflow-hidden",

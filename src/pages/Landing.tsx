@@ -154,7 +154,9 @@ function SectionHead({
   );
 }
 
-/* Mobile: horizontal snap carousel · md+: the original grid layouts. */
+/* Mobile: horizontal snap carousel · md+: the original grid layouts.
+   This is the fallback row styling kept for desktop-friendly sections; the
+   homepage sections override it where they want a carousel. */
 const SCROLL_ROW =
   "no-scrollbar -mx-4 flex snap-x snap-mandatory gap-3.5 overflow-x-auto px-4 pb-1 sm:gap-4 md:mx-0 md:grid md:snap-none md:overflow-visible md:px-0";
 
@@ -257,7 +259,7 @@ export default function Landing() {
                 </motion.p>
                 <motion.h1
                   variants={item}
-                  className="font-display mt-2 text-[1.9rem] font-bold leading-[1.04] tracking-tight sm:text-6xl lg:text-7xl xl:text-[5.25rem]"
+                  className="font-display mt-2 text-[clamp(2.55rem,rem)] font-bold leading-[1.04] tracking-tight sm:text-6xl lg:text-7xl xl:text-[5.25rem]"
                 >
                   Discover.
                   <br />
@@ -290,69 +292,88 @@ export default function Landing() {
               </motion.div>
             </div>
 
-            {/* CTAs — full-width row, thumb-friendly on mobile */}
+            {/* CTAs — stacked on mobile, equal width, never clipped */}
             <motion.div
               variants={item}
-              className="mt-5 flex flex-wrap gap-2.5 sm:mt-7 sm:gap-3 lg:flex-nowrap"
+              className="mt-5"
             >
-              <span data-hero-cta className="min-w-[150px] flex-1 sm:flex-none">
-                <AnimatedCta
-                  to={hero?.primaryCta?.link ?? "/courses"}
-                  className="w-full justify-center px-4 sm:w-auto sm:px-5"
-                >
-                  {hero?.primaryCta?.label ?? "Start learning free"}
-                  <ArrowRight className="size-4 transition-transform group-hover:translate-x-0.5" />
-                </AnimatedCta>
-              </span>
-              <span data-hero-cta className="min-w-[150px] flex-1 sm:flex-none">
-                <AnimatedCta
-                  to={hero?.secondaryCta?.link ?? "/roadmap"}
-                  variant="outline"
-                  className="w-full justify-center px-4 sm:w-auto sm:px-5"
-                >
-                  <Map className="size-4" />
-                  {hero?.secondaryCta?.label ?? "Explore roadmaps"}
-                </AnimatedCta>
-              </span>
+              <ul className="mx-auto max-w-[340px] list-none">
+                <li>
+                  <AnimatedCta
+                    to={hero?.primaryCta?.link ?? "/courses"}
+                    className="w-full justify-center"
+                  >
+                    {hero?.primaryCta?.label ?? "Start learning free"}
+                    <ArrowRight className="size-4 transition-transform group-hover:translate-x-0.5" />
+                  </AnimatedCta>
+                </li>
+                <li>
+                  <AnimatedCta
+                    to={hero?.secondaryCta?.link ?? "/roadmap"}
+                    variant="outline"
+                    className="w-full justify-center"
+                  >
+                    <Map className="size-4" />
+                    {hero?.secondaryCta?.label ?? "Explore roadmaps"}
+                  </AnimatedCta>
+                </li>
+              </ul>
             </motion.div>
 
-            {/* Benefits — compact row beneath the CTAs */}
+            {/* Benefits — 3-item mobile list, clean & readable */}
             <motion.div
               variants={item}
-              className="mt-4 flex flex-wrap gap-x-5 gap-y-1.5 border-t border-white/8 pt-3.5 text-xs text-muted-foreground sm:mt-6 sm:gap-x-8 sm:text-sm"
+              className="mt-3"
             >
-              <span className="inline-flex items-center gap-1.5">
-                <CheckCircle2 className="size-3.5 text-lime-400" /> Free to start
-              </span>
-              <span className="inline-flex items-center gap-1.5">
-                <Award className="size-3.5 text-lime-400" /> Verifiable certificates
-              </span>
-              <span className="inline-flex items-center gap-1.5">
-                <Users className="size-3.5 text-lime-400" /> Learn at your pace
-              </span>
+              <ul className="mx-auto max-w-[340px] list-none">
+                {[
+                  { icon: CheckCircle2 as React.ElementType, text: "Free to start" },
+                  { icon: Award as React.ElementType, text: "Verifiable certificates" },
+                  { icon: Users as React.ElementType, text: "Learn at your pace" },
+                ].map((b) => (
+                  <li
+                    key={b.text}
+                    className="flex items-start gap-2.5 rounded-xl px-3 py-2.5 sm:p-5"
+                  >
+                    <span className="mt-[1px] flex size-5 shrink-0 items-center justify-center rounded-lg bg-lime-400/12 text-lime-300">
+                      <b.icon className="size-3.5" />
+                    </span>
+                    <span className="text-[13px] leading-snug text-muted-foreground">{b.text}</span>
+                  </li>
+                ))}
+              </ul>
             </motion.div>
           </motion.div>
         </div>
       </section>
 
-      {/* ────────────────────────────────────── Feature cards (dark glass) */}
-      <section className="mx-auto max-w-7xl px-4 pb-6 pt-5 sm:px-6 sm:pb-10 sm:pt-8">
-        <div className={cn(SCROLL_ROW, "md:grid-cols-4")}>
-          {FEATURES.map((f, i) => (
-            <Reveal
-              key={f.title}
-              delay={i * 0.05}
-              className="w-[168px] shrink-0 snap-start md:w-auto"
-            >
+      {/* ────────────────────────────────────── Feature cards — mobile carousel */}
+      <section className="mx-auto max-w-7xl px-4 pb-5 pt-4 sm:px-6 sm:pb-10 sm:pt-8">
+        <Reveal>
+          <div className="mx-auto mb-3 max-w-[340px]">
+            <h2 className="font-display text-lg font-bold tracking-tight text-foreground">
+              Learn with
+            </h2>
+            <p className="mt-0.5 text-xs text-muted-foreground">
+              Roadmaps, projects, tutors and certificates.
+            </p>
+          </div>
+          <MotionCarousel
+            ariaLabel="Learning paths overview"
+            autoplayMs={4500}
+            items={FEATURES}
+            getKey={(f) => f.title}
+            itemClassName="w-[220px] shrink-0"
+            showDots={true}
+            renderItem={(f) => (
               <Link
                 to={f.to}
-                className="group flex h-full flex-col gap-3 rounded-2xl border border-white/10 bg-white/[0.03] p-4 backdrop-blur-sm transition-colors hover:border-lime-400/40"
+                className="group flex h-full flex-col gap-2.5 rounded-2xl border border-white/10 bg-white/[0.02] p-4 backdrop-blur-sm transition-colors hover:border-lime-400/40"
               >
                 <span className="flex size-10 items-center justify-center rounded-xl bg-lime-400/12 text-lime-300 ring-1 ring-lime-400/20 transition-colors group-hover:bg-lime-400/20">
                   <f.icon className="size-5" />
                 </span>
-                <span className="min-w-0">
-                  <span className="block text-sm font-bold tracking-wide text-foreground">
+                <span className="min-w-0">                      <span className="block text-sm font-bold tracking-wide text-foreground">
                     {f.title}
                   </span>
                   <span className="mt-0.5 block text-xs text-muted-foreground">
@@ -360,12 +381,13 @@ export default function Landing() {
                   </span>
                 </span>
               </Link>
-            </Reveal>
-          ))}
-        </div>
+            )}
+          />
+        </Reveal>
       </section>
 
-      {/* ────────────────────────────── Continue learning (real user data only) */}
+      {/* ────────────────────────────── Continue learning (real user data only) —
+     mobile: thumbnail → info → progress → Continue button, stacked where needed. ── */}
       {continueRow && (
         <section className="mx-auto max-w-7xl px-4 pb-5 sm:px-6 sm:pb-8">
           <Reveal>
@@ -382,7 +404,7 @@ export default function Landing() {
             </div>
             <Link
               to={`/learn/${continueRow.course.slug}`}
-              className="group mt-3 flex items-center gap-3 rounded-2xl border border-white/10 bg-card p-3 shadow-lg shadow-black/20 transition-colors hover:border-lime-400/30 sm:p-4"
+              className="group mt-3 flex flex-col gap-2.5 rounded-2xl border border-white/10 bg-card p-3 shadow-lg shadow-black/20 transition-colors hover:border-lime-400/30 sm:flex-row sm:items-center sm:gap-3 sm:p-4"
             >
               <CoverArt
                 gradient={continueRow.course.gradient}
@@ -391,23 +413,23 @@ export default function Landing() {
                 className="h-14 w-14 shrink-0 rounded-xl border-0 sm:h-16 sm:w-16"
                 iconClassName="text-2xl"
               />
-              <div className="min-w-0 flex-1">
+              <div className="min-w-0 flex-1 flex flex-col gap-1">
                 <p className="truncate text-sm font-semibold transition-colors group-hover:text-lime-300 sm:text-base">
                   {continueRow.course.title}
                 </p>
-                <p className="mt-0.5 text-xs text-muted-foreground">
+                <p className="text-xs text-muted-foreground">
                   {continueRow.totalLessons > 0 &&
                     `${continueRow.completedLessons}/${continueRow.totalLessons} lessons · `}
                   {continueRow.progress}% complete
                 </p>
-                <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-white/10">
+                <div className="mt-1 h-1.5 w-full overflow-hidden rounded-full bg-white/10">
                   <div
                     className="h-full rounded-full bg-lime-400 transition-[width]"
                     style={{ width: `${Math.min(100, Math.max(0, continueRow.progress))}%` }}
                   />
                 </div>
               </div>
-              <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-lime-400 px-3 py-1.5 text-xs font-semibold text-black transition-colors group-hover:bg-lime-300">
+              <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-lime-400 px-3 py-1.5 text-xs font-semibold text-black transition-colors group-hover:bg-lime-300 self-start">
                 Continue <ArrowRight className="size-3.5" />
               </span>
             </Link>
@@ -467,6 +489,7 @@ export default function Landing() {
           <Reveal className="mt-4 md:mt-6">
             <MotionCarousel
               ariaLabel="Featured courses"
+              autoplayMs={5500}
               items={courseCarousel}
               getKey={(c) => c._id}
               itemClassName="w-[272px] sm:w-[300px]"
@@ -709,7 +732,7 @@ export default function Landing() {
               </Reveal>
             ))}
           </div>
-          <Reveal className="mt-5 flex flex-wrap items-center gap-3">
+          <Reveal className="mt-5 flex flex-wrap items-center gap-3 sm:mt-6">
             <AnimatedCta to="/ai-hub">
               Explore the AI Hub
               <ArrowRight className="size-4 transition-transform group-hover:translate-x-0.5" />
@@ -751,7 +774,7 @@ export default function Landing() {
                 )}
               />
             </Reveal>
-            <Reveal className="mt-5 flex flex-wrap items-center gap-3">
+            <Reveal className="mt-4 flex flex-wrap items-center gap-3 sm:mt-5">
               <AnimatedCta to="/prompts">
                 Explore the Prompt Library
                 <ArrowRight className="size-4 transition-transform group-hover:translate-x-0.5" />

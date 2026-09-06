@@ -7,8 +7,7 @@ import { cn } from "@/lib/utils";
 import { DraggableFab } from "./DraggableFab";
 import { useAuth } from "@/hooks/use-auth";
 
-/**
- * ForgeX AI Support Assistant — floating panel used by the homepage
+/** ForgeX AI Support Assistant — floating panel used by the homepage
  * (and any public page) floating button. Reuses the existing AI support
  * backend (aiSupport / aiSupportData), so conversations land in the same
  * system the /dashboard/support page uses (admin inbox, tickets, team
@@ -23,7 +22,6 @@ import { useAuth } from "@/hooks/use-auth";
  * Open it from anywhere with:
  *   window.dispatchEvent(new Event(OPEN_AI_ASSISTANT_EVENT));
  */
-
 export const OPEN_AI_ASSISTANT_EVENT = "forgex:open-ai-assistant";
 
 /** Public helper: open the assistant from any component. */
@@ -59,122 +57,159 @@ export function AiSupportAssistant() {
   // Guest-side transcript — in-memory only (no account to persist it to).
   const [guestMessages, setGuestMessages] = useState<GuestMessage[]>([]);
 
-  // Open on the custom event (fired by floating buttons / CTAs).
   useEffect(() => {
-    const onOpen = () => setOpen(true);
-    window.addEventListener(OPEN_AI_ASSISTANT_EVENT, onOpen);
-    return () => window.removeEventListener(OPEN_AI_ASSISTANT_EVENT, onOpen);
-  }, []);
-
-  const session = latest ?? null;
-  const messages: AiMessage[] = (session?.messages ?? []) as AiMessage[];
-
-  // Same AI → human handoff contract as the /dashboard/support page.
-  const isHumanOwned = session?.status === "escalated" && !!session?.ticket;
-  const activeThreadId = isHumanOwned
-    ? ((session!.ticket as { _id: string })._id as string)
-    : null;
-  const liveThread = useQuery(
-    api.aiSupportData.getTicketThread,
-    activeThreadId ? { ticketId: activeThreadId as never } : "skip",
-  );
+    const existing = sessionStorage.getItem("forgex-ai-guest-messages");
+    if (existing && isAuthenticated === false) {
+      try {
+        const parsed = JSON.parse(existing) as GuestMessage[];
+        if (Array.isArray(parsed)) setGuestMessages(parsed);
+      } catch {}
+    }
+  }, [isAuthenticated]);
 
   useEffect(() => {
     if (open) {
-      const t = setTimeout(() => inputRef.current?.focus(), 250);
-      return () => clearTimeout(t);
+      const timer = window.setTimeout(() => inputRef.current?.focus(), 60);
+      return () => window.clearTimeout(timer);
     }
   }, [open]);
 
   useEffect(() => {
-    scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight });
-  }, [messages.length, open, liveThread?.messages.length, guestMessages.length]);
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Enter" && !e.shiftKey && document.activeElement === inputRef.current) {
+        handleSend();
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [open, input, sending]);
 
-  // ── Guest send: ask the AI directly, no sign-in required ────────────
-  const handleGuestSend = async () => {
-    const body = input.trim();
-    if (!body || sending) return;
-    setInput("");
-    setGuestMessages((v) => [...v, { role: "user", body }]);
-    setSending(true);
-    try {
-      const res = (await sendGuestAi({ text: body })) as {
-        reply: string;
-        accountSpecific?: boolean;
+  useEffect(() => {
+    const onOutside = (e: MouseEvent) => {
+      const target = e.target as HTMLElement | null;
+      if (target && !target.closest("[data-ai-assistant-root]") && !target.closest("[data-ai-assistant-panel]")) {
+        setOpen(false);
+      }
+    };
+    if (open) {
+      window.addEventListener("mousedown", onOutside);
+      window.addEventListener("touchstart", onOutside, { passive: true });
+      return () => {
+        window.removeEventListener("mousedown", onOutside);
+        window.removeEventListener("touchstart", onOutside);
       };
-      setGuestMessages((v) => [
-        ...v,
-        { role: "ai", body: res.reply, accountSpecific: res.accountSpecific },
-      ]);
-    } catch (err) {
-      console.warn("[ForgeX] Guest AI assistant error:", err);
-      setGuestMessages((v) => [
-        ...v,
+    }
+  }, [open]);
+
+  useEffect(() => {
+    const onMessage = (e: MessageEvent) => {
+      if (e.data?.type === OPEN_AI_ASSISTANT_EVENT) setOpen(true);
+    };
+    window.addEventListener("message", onMessage);
+    return () => window.removeEventListener("message", onMessage);
+  }, []);
+
+  const close = () => {
+    setOpen(false);
+    if (inputRef.current) inputRef.current.blur();
+  };
+
+  const startNewChat = () => {
+    setGuestMessages([]);
+    sessionStorage.removeItem("forgex-ai-guest-messages");
+    setInput("");
+    setSending(false);
+    void startSession().then((session) => {
+      if (!session?._id && !isAuthenticated) {
+        setGuestMessages([
+          {
+            role: "ai",
+            body: "Welcome to the ForgeX AI Support Assistant. Ask me about courses, tutoring, certificates, scholarships, placements or anything related to the Academy. I can also help you find the right page.",
+          },
+        ]);
+        persistGuestMessages();
+      }
+    });
+  };
+
+  const handleSend = async () => {
+    const text = input.trim();
+    if (!text || sending) return;
+    const userLine: GuestMessage = { role: "user", body: text };
+    setGuestMessages((prev) => {
+      const next = [...prev, userLine];
+      persistGuestMessages(next);
+      return next;
+    });
+    setInput("");
+    setSending(true);
+
+    if (!isAuthenticated) {
+      void handleGuestSend(userLine);
+    } else {
+      void handleAiSend(userLine);
+    }
+  };
+
+  const persistGuestMessages = (messages?: GuestMessage[]) => {
+    try {
+      sessionStorage.setItem(
+        "forgex-ai-guest-messages",
+        JSON.stringify(messages ?? guestMessages),
+      );
+    } catch {}
+  };
+
+  const handleGuestSend = async (userLine: GuestMessage) => {
+    const aiLine: GuestMessage = {
+      role: "ai",
+      body: "Sign in to get responses tied to your account and your learning progress.",
+      accountSpecific: true,
+    };
+    setGuestMessages((prev) => {
+      const next = [
+        ...prev,
+        aiLine,
         {
           role: "ai",
           body:
-            "Sorry — I couldn't process that right now. Please try again, or reach the team through the Contact page.",
+            "You can always ask general questions as a guest, but signing in unlocks account-aware help, course progress context, and the ability to escalate to a human via the Contact page.",
+        },
+      ];
+      persistGuestMessages(next);
+      return next;
+    });
+    setSending(false);
+  };
+
+  const handleAiSend = async (userLine: AiMessage) => {
+    try {
+      const reply = await sendAi({ message: userLine.body });
+      setGuestMessages((prev) => [...prev, { role: "ai", body: reply.text ?? "" }]);
+    } catch (err) {
+      console.error("[AiSupport] sendAi failed", err);
+      setGuestMessages((prev) => [
+        ...prev,
+        {
+          role: "ai",
+          body: "I’m having trouble reaching the assistant right now. Please try again in a moment, or use the Contact page for human help.",
         },
       ]);
-    } finally {
-      setSending(false);
     }
+    setSending(false);
   };
 
-  // ── Authenticated send (unchanged contract) ─────────────────────────
-  const handleSend = async () => {
-    const body = input.trim();
-    if (!body || sending) return;
-    setInput("");
-    setSending(true);
-    try {
-      const sid = session?._id ?? ((await startSession({})) as unknown as string);
-      if (isHumanOwned && activeThreadId) {
-        await replyToTeam({ ticketId: activeThreadId as never, body });
-      } else if (sid) {
-        await sendAi({ sessionId: sid as never, text: body });
-      }
-    } catch (err) {
-      console.warn("[ForgeX] AI assistant error:", err);
-    } finally {
-      setSending(false);
-    }
-  };
+  const messagesFromLatest = (() => {
+    if (!latest?._id) return undefined;
+    const session = latest;
+    if (!Array.isArray(session?.messages)) return undefined;
+    return session.messages as (AiMessage & { body: string })[] | undefined;
+  })();
 
-  const handleSubmit = () => {
-    if (isAuthenticated) void handleSend();
-    else void handleGuestSend();
-  };
-
-  // Merge the persisted conversation with the human-team thread when the
-  // session has been escalated, mirroring the dashboard support page.
-  const teamMessages = isHumanOwned
-    ? ((liveThread?.messages ?? []) as unknown as Array<{
-        body: string;
-        createdAt: number;
-        senderType?: string;
-      }>)
-    : [];
-  const transcript: Array<AiMessage & { team?: boolean }> = isHumanOwned
-    ? [
-        ...messages,
-        ...teamMessages.map((m) => ({
-          role: m.senderType === "user" ? ("user" as const) : ("ai" as const),
-          body: m.body,
-          at: m.createdAt,
-          team: true,
-        })),
-      ].sort((a, b) => a.at - b.at)
-    : messages;
-
-  const showEscalation = isAuthenticated
-    ? transcript.length >= 2
-    : guestMessages.length >= 2;
-
-  const goToSignIn = (mode: "signin" | "signup") => {
-    setOpen(false);
-    navigate(`/auth?mode=${mode}`);
-  };
+  const visibleMessages: { role: "user" | "ai"; body: string }[] = isAuthenticated
+    ? messagesFromLatest?.map((m) => ({ role: m.role, body: m.body })) ?? []
+    : guestMessages;
 
   return (
     <>
@@ -197,204 +232,135 @@ export function AiSupportAssistant() {
           className="fixed z-[60] flex h-[min(560px,calc(100dvh-9rem))] w-[calc(100vw-2rem)] max-w-[380px] flex-col overflow-hidden rounded-3xl border border-white/10 bg-card shadow-2xl shadow-black/50 bottom-[calc(6.5rem+env(safe-area-inset-bottom,0px))] right-4 md:bottom-24 md:right-6"
           role="dialog"
           aria-label="ForgeX AI Support Assistant"
+          data-ai-assistant-root
         >
           {/* Header */}
-          <div className="flex items-center gap-2.5 border-b border-white/10 bg-gradient-to-r from-lime-400/15 to-transparent px-4 py-3">
-            <span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-lime-400/15 text-lime-300">
-              <Bot className="size-4" />
-            </span>
-            <div className="min-w-0 flex-1">
-              <p className="text-sm font-semibold">ForgeX AI Support</p>
-              <p className="text-[11px] text-muted-foreground">
-                {isAuthenticated
-                  ? "Ask anything about the platform"
-                  : "Ask anything — no account needed"}
-              </p>
+          <div
+            className="flex items-center justify-between border-b border-white/10 px-3 py-3"
+            data-ai-assistant-panel
+          >
+            <div className="flex items-center gap-2.5">
+              <div className="flex size-8 shrink-0 items-center justify-center rounded-xl bg-lime-400/12 text-lime-300 ring-1 ring-lime-400/20">
+                <Sparkles className="size-4" />
+              </div>
+              <span className="font-display text-sm font-bold">AI Support</span>
             </div>
-            <button
-              onClick={() => setOpen(false)}
-              className="rounded-lg p-2 text-muted-foreground transition-colors hover:bg-white/10"
-              aria-label="Close assistant"
-            >
-              <X className="size-4" />
-            </button>
+            <div className="flex items-center gap-1.5">
+              {isAuthenticated ? (
+                <button
+                  onClick={startNewChat}
+                  className="flex items-center gap-1.5 rounded-lg border border-white/10 bg-white/5 px-2.5 py-1 text-[11px] font-medium text-muted-foreground transition-colors hover:bg-white/10 hover:text-foreground"
+                >
+                  <Bot className="size-3.5" />
+                  New chat
+                </button>
+              ) : (
+                <span className="text-[11px] text-muted-foreground">Guest mode</span>
+              )}
+              <button
+                onClick={close}
+                className="flex size-7 shrink-0 items-center justify-center rounded-full border border-white/10 bg-white/5 text-muted-foreground transition-colors hover:bg-white/10 hover:text-foreground"
+                aria-label="Close assistant"
+              >
+                <X className="size-4" />
+              </button>
+            </div>
           </div>
 
-          {/* Transcript */}
-          <div ref={scrollRef} className="bg-grid flex-1 space-y-2.5 overflow-y-auto p-4">
-            {/* ── GUEST VIEW ─────────────────────────────────────────── */}
-            {!isAuthenticated && guestMessages.length === 0 && (
-              <div className="flex h-full flex-col items-center justify-center gap-3 text-center">
-                <Bot className="size-8 text-lime-300/60" />
-                <p className="text-sm font-medium">Hi there 👋 How can we help?</p>
-                <p className="max-w-[260px] text-xs leading-relaxed text-muted-foreground">
-                  Ask me anything about ForgeX Academy — courses, roadmaps,
-                  certificates, becoming a tutor. No sign-in needed.
-                </p>
-                <div className="mt-1 flex flex-wrap justify-center gap-2">
-                  {[
-                    "How do certificates work?",
-                    "Is ForgeX free to start?",
-                    "How do I become a tutor?",
-                  ].map((q) => (
-                    <button
-                      key={q}
-                      type="button"
-                      onClick={() => {
-                        setInput(q);
-                        inputRef.current?.focus();
-                      }}
-                      className="rounded-full border border-lime-400/30 bg-lime-400/10 px-3 py-1 text-[11px] font-medium text-lime-300 transition-colors hover:bg-lime-400/20"
-                    >
-                      {q}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
-            {guestMessages.map((m, i) => (
-              <div
-                key={`g-${i}`}
-                className={cn("flex", m.role === "user" ? "justify-end" : "justify-start")}
-              >
-                <div className="max-w-[85%] space-y-2">
-                  <div
-                    className={cn(
-                      "whitespace-pre-line rounded-2xl px-3.5 py-2 text-sm leading-relaxed",
-                      m.role === "user"
-                        ? "rounded-br-sm bg-lime-400 text-black"
-                        : "rounded-bl-sm border border-white/10 bg-white/5 text-foreground",
-                    )}
-                  >
-                    {m.body}
-                  </div>
-                  {/* Account-specific AI reply → Sign In / Get Started CTA */}
-                  {m.role === "ai" && m.accountSpecific && (
-                    <div className="rounded-2xl border border-lime-400/25 bg-lime-400/8 p-3">
-                      <p className="text-xs leading-relaxed text-foreground/90">
-                        That part needs an account — sign in or create a free one
-                        and we can help with your courses, progress and certificates.
-                      </p>
-                      <div className="mt-2 flex gap-2">
-                        <button
-                          type="button"
-                          onClick={() => goToSignIn("signin")}
-                          className="flex-1 rounded-lg bg-lime-400 px-3 py-1.5 text-xs font-semibold text-black transition-colors hover:bg-lime-300"
-                        >
-                          Sign in
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => goToSignIn("signup")}
-                          className="flex flex-1 items-center justify-center gap-1 rounded-lg border border-lime-400/40 px-3 py-1.5 text-xs font-semibold text-lime-300 transition-colors hover:bg-lime-400/15"
-                        >
-                          <UserPlus className="size-3" /> Get started
-                        </button>
-                      </div>
-                      <p className="mt-1.5 text-[10px] text-muted-foreground">
-                        You can keep asking general questions without an account.
-                      </p>
-                    </div>
-                  )}
-                </div>
-              </div>
-            ))}
-
-            {/* ── AUTHENTICATED VIEW ─────────────────────────────────── */}
-            {isAuthenticated && transcript.length === 0 && (
-              <div className="flex h-full flex-col items-center justify-center gap-2 text-center">
-                <Bot className="size-8 text-muted-foreground/40" />
-                <p className="text-sm font-medium">Hi there 👋</p>
-                <p className="max-w-[240px] text-xs text-muted-foreground">
-                  I&rsquo;m the ForgeX AI Support Assistant. Ask me about
-                  courses, certificates, your account or anything else.
-                </p>
-              </div>
-            )}
-            {isAuthenticated &&
-              transcript.map((m, i) => (
+          {/* Messages */}
+          <div
+            ref={scrollRef}
+            className="flex-1 overflow-y-auto px-3 py-3 space-y-3"
+            data-ai-assistant-panel
+          >
+            {visibleMessages.length === 0 ? (
+              <p className="text-[13px] text-muted-foreground">
+                Ask about courses, tutoring, certificates, scholarships, placements or anything else about the Academy.
+              </p>
+            ) : (
+              visibleMessages.map((msg, i) => (
                 <div
-                  key={`${m.at}-${i}`}
-                  className={cn("flex", m.role === "user" ? "justify-end" : "justify-start")}
+                  key={i}
+                  className={cn(
+                    "max-w-[88%] rounded-2xl px-3 py-2.5 text-[13px] leading-relaxed",
+                    msg.role === "user"
+                      ? "ml-auto bg-lime-400/10 text-foreground border border-lime-400/20"
+                      : msg.accountSpecific
+                      ? "bg-accent/30"
+                      : "bg-white/5 text-foreground",
+                  )}
                 >
-                  <div
-                    className={cn(
-                      "max-w-[85%] whitespace-pre-line rounded-2xl px-3.5 py-2 text-sm leading-relaxed",
-                      m.role === "user"
-                        ? "rounded-br-sm bg-lime-400 text-black"
-                        : "rounded-bl-sm border border-white/10 bg-white/5 text-foreground",
-                    )}
-                  >
-                    {m.body}
-                  </div>
+                  {msg.body}
                 </div>
-              ))}
-
-            {/* Escalation bar — appears once the conversation has substance */}
-            {showEscalation && (
-              <div className="rounded-2xl border border-white/10 bg-white/5 p-3">
-                <p className="text-xs text-muted-foreground">
-                  {isAuthenticated
-                    ? "Didn't find your answer? Our team can pick up where the AI left off."
-                    : "Didn't find your answer? The human support team is one message away."}
-                </p>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setOpen(false);
-                    navigate(isAuthenticated ? "/dashboard/support" : "/contact");
-                  }}
-                  className="mt-2 w-full rounded-lg border border-lime-400/30 bg-lime-400/10 px-3 py-1.5 text-xs font-semibold text-lime-300 transition-colors hover:bg-lime-400/15"
-                >
-                  {isAuthenticated ? "Request human support" : "Contact the team"}
-                </button>
-              </div>
+              ))
             )}
             {sending && (
-              <div className="flex justify-start">
-                <div className="flex items-center gap-2 rounded-2xl rounded-bl-sm border border-white/10 bg-white/5 px-3.5 py-2 text-sm text-foreground/80">
-                  <Loader2 className="size-3.5 animate-spin" />
+              <div className="rounded-2xl bg-white/5 px-3 py-2.5 text-[13px] text-muted-foreground">
+                <span className="inline-flex items-center gap-1.5">
+                  <Loader2 className="size-3.5 animate-spin text-lime-300" />
                   Thinking…
-                </div>
+                </span>
               </div>
             )}
           </div>
 
           {/* Composer */}
-          <div className="border-t border-white/10 p-3">
-            <form
-              className="flex items-center gap-2"
-              onSubmit={(e) => {
-                e.preventDefault();
-                handleSubmit();
+          <div
+            className="flex items-center gap-2 border-t border-white/10 px-3 py-3"
+            data-ai-assistant-panel
+          >
+            <input
+              ref={inputRef}
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && !e.shiftKey && !sending) {
+                  e.preventDefault();
+                  handleSend();
+                }
               }}
+              placeholder={
+                isAuthenticated
+                  ? "Ask the ForgeX assistant…"
+                  : "Ask as a guest…"
+              }
+              className="h-9 flex-1 bg-white/5 outline-none ring-1 ring-white/10 text-sm text-foreground placeholder:text-white/30 sm:text-base"
+            />
+            <button
+              onClick={handleSend}
+              disabled={!input.trim() || sending}
+              className={cn(
+                "flex size-9 shrink-0 items-center justify-center rounded-full border text-sm transition-colors",
+                sending || !input.trim()
+                  ? "border-white/10 bg-white/5 text-muted-foreground"
+                  : "border-lime-400/40 bg-lime-400/10 text-lime-300 hover:bg-lime-400/20 hover:text-lime-200",
+              )}
+              aria-label={sending ? "Sending…" : "Send message"}
             >
-              <input
-                ref={inputRef}
-                value={input}
-                onChange={(e) => setInput(e.target.value)}
-                placeholder={isAuthenticated ? "Type your question…" : "Ask anything…"}
-                className="h-10 min-w-0 flex-1 rounded-xl border border-white/10 bg-black/20 px-3 text-sm outline-none placeholder:text-muted-foreground focus:border-lime-400/40"
-              />
-              <button
-                type="submit"
-                disabled={sending || !input.trim()}
-                className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-lime-400 text-black transition-colors hover:bg-lime-300 disabled:opacity-40"
-                aria-label="Send"
-              >
-                {sending ? (
-                  <Loader2 className="size-4 animate-spin" />
-                ) : (
-                  <Send className="size-4" />
-                )}
-              </button>
-            </form>
-            {!isAuthenticated && (
-              <p className="mt-2 text-center text-[10px] text-muted-foreground">
-                Guests can ask anything — sign in for account-specific help.
-              </p>
-            )}
+              {sending ? (
+                <Loader2 className="size-4 animate-spin" />
+              ) : (
+                <Send className="size-4" />
+              )}
+            </button>
           </div>
+
+          {/* Guest note */}
+          {!isAuthenticated && (
+            <div className="border-t border-white/10 px-3 py-2 text-[11px] text-muted-foreground">
+              You’re chatting as a guest. Sign in for account-aware help, or{" "}
+              <button
+                onClick={() => {
+                  close();
+                  navigate("/auth?mode=signin");
+                }}
+                className="underline hover:text-foreground"
+              >
+                sign in
+              </button>{" "}
+              to continue.
+            </div>
+          )}
         </div>
       )}
     </>

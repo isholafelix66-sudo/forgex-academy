@@ -66,17 +66,17 @@ export function MobileBottomNav({
               onClick={scrollTop}
               className={({ isActive }) =>
                 cn(
-                  "flex flex-1 flex-col items-center justify-center gap-[3px] px-1 text-[10px] font-medium transition-colors",
+                  "flex flex-1 flex-col items-start justify-center gap-[3px] px-1 py-0 text-[11px] leading-snug text-balance transition-colors",
                   isActive
                     ? "text-lime-300"
                     : "text-muted-foreground active:text-foreground/70",
                 )
               }
             >
-              <span className="flex size-6 items-center justify-center">
+              <span className="flex size-6 shrink-0 items-center justify-center -mt-0.5">
                 {item.icon}
               </span>
-              <span className="truncate max-w-[64px] text-center leading-tight">
+              <span className="leading-tight">
                 {item.label}
               </span>
             </NavLink>
