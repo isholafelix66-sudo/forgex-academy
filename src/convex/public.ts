@@ -1,4 +1,4 @@
-import { query } from "./_generated/server";
+import { getAuthUserId, query } from "./_generated/server";
 import type { Doc, Id } from "./_generated/dataModel";
 import { v } from "convex/values";
 import { difficultyValidator, ROLES } from "./schema";
@@ -495,6 +495,65 @@ export const stats = query({
       tutors: users.filter((u) => u.role === ROLES.TUTOR && !!u.verified).length,
       certificates: certificates.length,
     };
+  },
+});
+
+/**
+ * The authenticated student's in-progress enrollments, surfaced on the
+ * mobile homepage "Continue learning" pill. Guests and tutors/admins get
+ * `null` (the section stays hidden) — only enrolled students see their
+ * own active courses.
+ */
+export const myContinueLearning = query({
+  args: {},
+  handler: async (ctx) => {
+    const userId = await getAuthUserId(ctx);
+    if (userId === null) return null;
+    const user = await ctx.db.get(userId);
+    if (!user || user.role === ROLES.TUTOR || user.role === ROLES.ADMIN) {
+      return null;
+    }
+    const enrollments = await ctx.db
+      .query("enrollments")
+      .withIndex("by_student", (q) => q.eq("studentId", userId))
+      .collect();
+    const inProgress = enrollments.filter(
+      (e) => e.status === "in-progress",
+    );
+    if (inProgress.length === 0) return null;
+    const courseIds = inProgress.map((e) => e.courseId);
+    const courses = await Promise.all(
+      courseIds.map((id) => ctx.db.get(id)),
+    );
+    const hydrated = await Promise.all(
+      (courses.filter(Boolean) as Doc<"courses">[]).map((c) =>
+        hydrateCourse(ctx, c),
+      ),
+    );
+    const courseMap = new Map(hydrated.map((h) => [h._id, h]));
+    const totalLessonsByCourse = new Map<string, number>();
+    for (const c of courses.filter(Boolean) as Doc<"courses">[]) {
+      const lessons = await ctx.db
+        .query("lessons")
+        .withIndex("by_courseId", (q) => q.eq("courseId", c._id))
+        .collect();
+      totalLessonsByCourse.set(c._id, lessons.length);
+    }
+    return inProgress
+      .map((e) => {
+        const course = courseMap.get(e.courseId);
+        if (!course) return null;
+        const totalLessons = totalLessonsByCourse.get(e.courseId) ?? 0;
+        return {
+          course,
+          progress: e.progress,
+          completedLessons: e.completedLessons.length,
+          totalLessons,
+          enrolledAt: e.enrolledAt,
+        };
+      })
+      .filter((row): row is NonNullable<typeof row> => row !== null)
+      .sort((a, b) => b.enrolledAt - a.enrolledAt);
   },
 });
 
