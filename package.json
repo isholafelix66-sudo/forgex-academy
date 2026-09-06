@@ -10,6 +10,7 @@
   "scripts": {
     "dev": "vite",
     "build": "node scripts/build.mjs",
+    "postinstall": "node scripts/install-tsc-wrapper.mjs",
     "lint": "eslint .",
     "test": "vitest run",
     "test:watch": "vitest",
