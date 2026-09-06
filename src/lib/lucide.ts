@@ -118,6 +118,7 @@ export { default as MessageSquareText } from "lucide-react/dist/esm/icons/messag
 export { default as MessageSquareWarning } from "lucide-react/dist/esm/icons/message-square-warning.js";
 export { default as Mic } from "lucide-react/dist/esm/icons/mic.js";
 export { default as MinusIcon } from "lucide-react/dist/esm/icons/minus.js";
+export { default as Moon } from "lucide-react/dist/esm/icons/moon.js";
 export { default as MonitorPlay } from "lucide-react/dist/esm/icons/monitor-play.js";
 export { default as MoreHorizontal } from "lucide-react/dist/esm/icons/more-horizontal.js";
 export { default as MoreHorizontalIcon } from "lucide-react/dist/esm/icons/more-horizontal.js";
@@ -158,6 +159,7 @@ export { default as Square } from "lucide-react/dist/esm/icons/square.js";
 export { default as SquarePen } from "lucide-react/dist/esm/icons/square-pen.js";
 export { default as Star } from "lucide-react/dist/esm/icons/star.js";
 export { default as StickyNote } from "lucide-react/dist/esm/icons/sticky-note.js";
+export { default as Sun } from "lucide-react/dist/esm/icons/sun.js";
 export { default as Target } from "lucide-react/dist/esm/icons/target.js";
 export { default as ToggleLeft } from "lucide-react/dist/esm/icons/toggle-left.js";
 export { default as ToggleRight } from "lucide-react/dist/esm/icons/toggle-right.js";
