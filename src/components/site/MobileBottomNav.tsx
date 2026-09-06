@@ -1,5 +1,5 @@
 import { NavLink, useLocation } from "react-router";
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { X, ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -23,9 +23,12 @@ function scrollTop() {
 export function MobileBottomNav({
   primaryItems,
   moreSections,
+  moreFooter,
 }: {
   primaryItems: MobileNavItem[];
   moreSections: MobileNavSection[];
+  /** Optional extras rendered at the bottom of the More menu (e.g. theme). */
+  moreFooter?: ReactNode;
 }) {
   const [moreOpen, setMoreOpen] = useState(false);
   const location = useLocation();
@@ -167,6 +170,10 @@ export function MobileBottomNav({
                 </div>
               ))}
           </div>
+
+          {moreFooter && (
+            <div className="px-3 pb-6">{moreFooter}</div>
+          )}
         </div>
       )}
     </>

@@ -54,8 +54,20 @@ function lazyRetry(
         try {
           return await loader();
         } catch {
-          // Still failing: the deployment changed under us. Reload once so
-          // the browser fetches current HTML + chunk names.
+          // Still failing — usually a deploy changed under us. NEVER reload
+          // from a background context or a dead network:
+          //  - prerendering: Chrome speculatively loads route chunks in the
+          //    background; a failed speculation must not restart the page the
+          //    user is looking at (reads as a random refresh on mobile).
+          //  - offline: a reload just loops; the error boundary recovers
+          //    automatically once the connection returns.
+          if (
+            (typeof document !== "undefined" &&
+              (document.visibilityState as string) === "prerendering") ||
+            (typeof navigator !== "undefined" && !navigator.onLine)
+          ) {
+            throw err;
+          }
           const KEY = "fx_chunk_reload_at";
           const last = Number(sessionStorage.getItem(KEY) ?? 0);
           if (Date.now() - last > 10_000) {
@@ -316,12 +328,16 @@ class RootErrorBoundary extends React.Component<
       console.warn("[ForgeX] Could not report error to Sentry:", reportErr);
     }
     // A stale-chunk error can never be fixed by re-rendering — only by
-    // fetching the new deployment. Reload once instead of looping.
+    // fetching the new deployment. Reload once instead of looping, but never
+    // reload while offline (it just loops) or from a background prerender.
     const msg = err instanceof Error ? err.message : String(err ?? "");
     if (
       /failed to fetch dynamically imported module|importing a module script|error loading dynamically imported module/i.test(
         msg,
       ) &&
+      (typeof navigator === "undefined" || navigator.onLine) &&
+      (typeof document === "undefined" ||
+        (document.visibilityState as string) !== "prerendering") &&
       typeof sessionStorage !== "undefined"
     ) {
       const KEY = "fx_chunk_reload_at";
@@ -544,6 +560,11 @@ window.addEventListener("unhandledrejection", ensureBootFallback);
     /failed to fetch dynamically imported module|importing a module script|error loading dynamically imported module/i.test(
       msg,
     ) &&
+    // Never reload from a background speculation or while offline — the
+    // visible page is fine and a reload would only loop (mobile flakiness).
+    (typeof document === "undefined" ||
+      (document.visibilityState as string) !== "prerendering") &&
+    (typeof navigator === "undefined" || navigator.onLine) &&
     typeof sessionStorage !== "undefined"
   ) {
     event.preventDefault();

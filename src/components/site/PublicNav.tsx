@@ -17,8 +17,10 @@ import {
   Mail,
   InfoIcon,
   ChevronDown,
+  Sun,
 } from "lucide-react";
 import { MobileBottomNav } from "./MobileBottomNav";
+import { ThemeToggle } from "./ThemeToggle";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/hooks/use-auth";
@@ -353,6 +355,8 @@ export function PublicNav() {
               RIGHT SIDE
               ═══════════════════════════════════════════════════════════ */}
           <div className="flex shrink-0 items-center gap-2">
+            {/* Mobile: theme switch beside the profile avatar / CTA */}
+            <ThemeToggle className="md:hidden" />
             {isAuthenticated ? (
               <>
                 {/* Desktop: exactly one Dashboard link */}
@@ -393,6 +397,14 @@ export function PublicNav() {
                     </div>
                     <div className="h-px bg-white/10" />
                     <div className="py-1.5">
+                      {/* Light/dark clarity mode — desktop */}
+                      <div className="flex items-center justify-between gap-2 px-3.5 py-1.5">
+                        <span className="flex items-center gap-2.5 text-sm text-muted-foreground">
+                          <Sun className="size-4" />
+                          Appearance
+                        </span>
+                        <ThemeToggle />
+                      </div>
                       <button
                         data-prefetch={profileTo}
                         onClick={() => {
@@ -469,7 +481,11 @@ export function PublicNav() {
         </div>
       </header>
 
-      <MobileBottomNav primaryItems={mobilePrimary} moreSections={mobileMore} />
+      <MobileBottomNav
+        primaryItems={mobilePrimary}
+        moreSections={mobileMore}
+        moreFooter={<ThemeToggle showLabel className="w-full justify-start" />}
+      />
     </>
   );
 }

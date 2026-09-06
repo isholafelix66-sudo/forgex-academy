@@ -50,7 +50,9 @@
   --color-sidebar-ring: var(--sidebar-ring);
 }
 
-/* Electric Black + Lime — ForgeX Academy theme */
+/* Electric Black + Lime — ForgeX Academy theme.
+   :root and .dark carry the same dark palette (dark is the default brand);
+   the .light class overrides the tokens for the light “clarity” mode. */
 :root {
   color-scheme: dark;
   --radius: 0.625rem;
@@ -117,6 +119,183 @@
   --sidebar-ring: oklch(0.868 0.216 129.5);
 }
 
+/* ── Light mode (“clarity” theme) ────────────────────────────────────────────
+   The whole app is authored dark-first with hundreds of hardcoded white/black
+   alpha utilities (border-white/10, bg-white/5, text-white/40, bg-black/20 …).
+   Rather than touch every page, the light theme (a) re-maps the semantic
+   tokens and (b) remaps those utility classes to light-friendly equivalents
+   via CSS custom-property indirection, using Tailwind v4's @utility to keep
+   the original class names working. Every override pairs the white-alpha value
+   with its black-alpha twin so --mode-ink/-wash flip together with the theme.
+   ------------------------------------------------------------------------ */
+.light {
+  color-scheme: light;
+  --background: oklch(0.977 0.006 120);
+  --foreground: oklch(0.21 0.012 262);
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.21 0.012 262);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.21 0.012 262);
+  --primary: oklch(0.68 0.22 137);
+  --primary-foreground: oklch(0.99 0.01 120);
+  --secondary: oklch(0.955 0.008 120);
+  --secondary-foreground: oklch(0.28 0.015 262);
+  --muted: oklch(0.955 0.008 120);
+  --muted-foreground: oklch(0.47 0.016 262);
+  --accent: oklch(0.68 0.22 137 / 0.12);
+  --accent-foreground: oklch(0.52 0.19 140);
+  --destructive: oklch(0.58 0.22 25);
+  --border: oklch(0.21 0.012 262 / 0.12);
+  --input: oklch(0.21 0.012 262 / 0.16);
+  --ring: oklch(0.55 0.2 140);
+  --chart-1: oklch(0.55 0.2 140);
+  --chart-2: oklch(0.55 0.16 280);
+  --chart-3: oklch(0.6 0.14 210);
+  --chart-4: oklch(0.65 0.15 80);
+  --chart-5: oklch(0.58 0.2 20);
+  --sidebar: oklch(0.965 0.007 120);
+  --sidebar-foreground: oklch(0.21 0.012 262);
+  --sidebar-primary: oklch(0.55 0.2 140);
+  --sidebar-primary-foreground: oklch(0.99 0.01 120);
+  --sidebar-accent: oklch(0.68 0.22 137 / 0.12);
+  --sidebar-accent-foreground: oklch(0.5 0.18 140);
+  --sidebar-border: oklch(0.21 0.012 262 / 0.12);
+  --sidebar-ring: oklch(0.55 0.2 140);
+
+  /* Utility remap pair values (white-alpha ↔ black-alpha in light mode). */
+  --mode-wash-5: oklch(0.21 0.012 262 / 0.05);
+  --mode-ink-5: oklch(1 0 0 / 0.6);
+  --mode-wash-8: oklch(0.21 0.012 262 / 0.08);
+  --mode-ink-8: oklch(1 0 0 / 0.75);
+  --mode-wash-10: oklch(0.21 0.012 262 / 0.1);
+  --mode-ink-10: oklch(1 0 0 / 0.8);
+  --mode-wash-12: oklch(0.21 0.012 262 / 0.12);
+  --mode-ink-12: oklch(1 0 0 / 0.85);
+  --mode-wash-15: oklch(0.21 0.012 262 / 0.15);
+  --mode-ink-15: oklch(1 0 0 / 0.9);
+  --mode-wash-20: oklch(0.21 0.012 262 / 0.2);
+  --mode-ink-20: oklch(1 0 0 / 0.95);
+  --mode-wash-25: oklch(0.21 0.012 262 / 0.25);
+  --mode-ink-25: oklch(1 0 0);
+  --mode-wash-30: oklch(0.21 0.012 262 / 0.3);
+  --mode-ink-30: oklch(1 0 0);
+  --mode-wash-40: oklch(0.21 0.012 262 / 0.4);
+  --mode-ink-40: oklch(1 0 0);
+  --mode-wash-50: oklch(0.21 0.012 262 / 0.5);
+  --mode-ink-50: oklch(1 0 0);
+  --mode-wash-60: oklch(0.21 0.012 262 / 0.6);
+  --mode-ink-60: oklch(1 0 0);
+  --mode-wash-70: oklch(0.21 0.012 262 / 0.7);
+  --mode-ink-70: oklch(1 0 0);
+  --mode-wash-90: oklch(0.21 0.012 262 / 0.9);
+  --mode-ink-90: oklch(1 0 0);
+
+  /* Hardcoded brand-dark surfaces (bg-[#0d0f0c], bg-[#0a0c0a]/95 …) and
+     near-black text that would be invisible on light backgrounds. */
+  --fx-surface-0: oklch(1 0 0);
+  --fx-surface-1: oklch(0.985 0.004 120);
+  --fx-ink-on-lime: oklch(0.17 0.012 262);
+}
+
+/* Dark mode: white-alpha utilities keep meaning; black-alpha washes and the
+   hardcoded brand surfaces map to their original (near-black) values. */
+:root {
+  --mode-wash-5: oklch(1 0 0 / 0.05);
+  --mode-ink-5: oklch(0 0 0 / 0.2);
+  --mode-wash-8: oklch(1 0 0 / 0.08);
+  --mode-ink-8: oklch(0 0 0 / 0.3);
+  --mode-wash-10: oklch(1 0 0 / 0.1);
+  --mode-ink-10: oklch(0 0 0 / 0.4);
+  --mode-wash-12: oklch(1 0 0 / 0.12);
+  --mode-ink-12: oklch(0 0 0 / 0.5);
+  --mode-wash-15: oklch(1 0 0 / 0.15);
+  --mode-ink-15: oklch(0 0 0 / 0.6);
+  --mode-wash-20: oklch(1 0 0 / 0.2);
+  --mode-ink-20: oklch(0 0 0 / 0.7);
+  --mode-wash-25: oklch(1 0 0 / 0.25);
+  --mode-ink-25: oklch(0 0 0 / 0.75);
+  --mode-wash-30: oklch(1 0 0 / 0.3);
+  --mode-ink-30: oklch(0 0 0 / 0.8);
+  --mode-wash-40: oklch(1 0 0 / 0.4);
+  --mode-ink-40: oklch(0 0 0 / 0.85);
+  --mode-wash-50: oklch(1 0 0 / 0.5);
+  --mode-ink-50: oklch(0 0 0 / 0.88);
+  --mode-wash-60: oklch(1 0 0 / 0.6);
+  --mode-ink-60: oklch(0 0 0 / 0.9);
+  --mode-wash-70: oklch(1 0 0 / 0.7);
+  --mode-ink-70: oklch(0 0 0 / 0.92);
+  --mode-wash-90: oklch(1 0 0 / 0.9);
+  --mode-ink-90: oklch(0 0 0 / 0.95);
+  --fx-surface-0: oklch(0.115 0.014 150);
+  --fx-surface-1: oklch(0.13 0.014 150);
+  --fx-ink-on-lime: oklch(0.155 0.02 262);
+}
+
+/* Utility remaps — same class names, theme-aware values. Written in the same
+   order Tailwind's own text/bg/border utilities would emit, so specificity
+   ties fall back to the @utility layer order rather than the old rule. */
+@utility text-white\/30 { color: var(--mode-ink-30); }
+@utility text-white\/40 { color: var(--mode-ink-40); }
+@utility text-white\/50 { color: var(--mode-ink-50); }
+@utility text-white\/60 { color: var(--mode-ink-60); }
+@utility text-white\/70 { color: var(--mode-ink-70); }
+@utility text-white\/75 { color: var(--mode-ink-70); }
+@utility text-white\/80 { color: var(--mode-ink-70); }
+@utility text-white\/85 { color: var(--mode-ink-70); }
+@utility text-lime-200 { color: var(--accent-foreground); }
+@utility text-lime-300 { color: var(--accent-foreground); }
+@utility hover\:text-lime-200 { &:hover { color: var(--accent-foreground); } }
+@utility hover\:text-lime-300 { &:hover { color: var(--accent-foreground); } }
+
+@utility bg-white\/5 { background-color: var(--mode-wash-5); }
+@utility bg-white\/8 { background-color: var(--mode-wash-8); }
+@utility bg-white\/10 { background-color: var(--mode-wash-10); }
+@utility bg-white\/12 { background-color: var(--mode-wash-12); }
+@utility bg-white\/15 { background-color: var(--mode-wash-15); }
+@utility bg-white\/25 { background-color: var(--mode-wash-25); }
+@utility bg-white\/40 { background-color: var(--mode-wash-40); }
+@utility bg-white { background-color: var(--mode-ink-90); }
+@utility hover\:bg-white\/5 { &:hover { background-color: var(--mode-wash-8); } }
+@utility hover\:bg-white\/10 { &:hover { background-color: var(--mode-wash-12); } }
+@utility hover\:bg-white\/15 { &:hover { background-color: var(--mode-wash-20); } }
+@utility hover\:bg-white\/40 { &:hover { background-color: var(--mode-wash-40); } }
+@utility hover\:bg-white { &:hover { background-color: var(--mode-ink-90); } }
+
+@utility border-white\/5 { border-color: var(--mode-wash-15); }
+@utility border-white\/8 { border-color: var(--mode-wash-20); }
+@utility border-white\/10 { border-color: var(--mode-wash-20); }
+@utility border-white\/12 { border-color: var(--mode-wash-25); }
+@utility border-white\/15 { border-color: var(--mode-wash-25); }
+@utility border-white\/20 { border-color: var(--mode-wash-30); }
+@utility border-white\/25 { border-color: var(--mode-wash-40); }
+@utility hover\:border-white\/10 { &:hover { border-color: var(--mode-wash-25); } }
+@utility hover\:border-white\/15 { &:hover { border-color: var(--mode-wash-25); } }
+@utility hover\:border-white\/20 { &:hover { border-color: var(--mode-wash-30); } }
+@utility divide-white\/5 > :not([hidden]) ~ :not([hidden]) { border-color: var(--mode-wash-15); }
+@utility divide-white\/8 > :not([hidden]) ~ :not([hidden]) { border-color: var(--mode-wash-20); }
+
+@utility bg-black\/10 { background-color: var(--mode-ink-5); }
+@utility bg-black\/15 { background-color: var(--mode-ink-8); }
+@utility bg-black\/20 { background-color: var(--mode-ink-10); }
+@utility bg-black\/25 { background-color: var(--mode-ink-12); }
+@utility bg-black\/30 { background-color: var(--mode-ink-12); }
+@utility bg-black\/40 { background-color: var(--mode-ink-15); }
+@utility bg-black\/50 { background-color: var(--mode-ink-20); }
+@utility bg-black\/60 { background-color: var(--mode-ink-25); }
+@utility bg-black\/70 { background-color: var(--mode-ink-30); }
+@utility bg-black\/80 { background-color: var(--mode-ink-40); }
+@utility bg-black\/90 { background-color: var(--mode-ink-50); }
+@utility bg-black\/95 { background-color: var(--mode-ink-60); }
+
+@utility bg-\[\#11150f\] { background-color: var(--fx-surface-1); }
+@utility bg-\[\#111311\]\/95 { background-color: var(--fx-surface-0); }
+@utility bg-\[\#10130d\] { background-color: var(--fx-surface-1); }
+@utility bg-\[\#0d0f0c\]\/90 { background-color: var(--fx-surface-0); }
+@utility bg-\[\#0d0f0c\]\/85 { background-color: var(--fx-surface-0); }
+@utility bg-\[\#0d0f0c\] { background-color: var(--fx-surface-0); }
+@utility bg-\[\#0b0f0c\]\/75 { background-color: var(--fx-surface-0); }
+@utility bg-\[\#0a0c0a\]\/95 { background-color: var(--fx-surface-0); }
+
 @layer base {
   * {
     @apply border-border outline-ring/50;
@@ -160,6 +339,15 @@
   body {
     @apply bg-background text-foreground antialiased;
     font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+  }
+  /* Primary CTAs are brand lime with near-black text — keep the ink readable
+     in both themes (dark ink stays legible on lime in light mode too). */
+  .bg-lime-400 {
+    background-color: oklch(0.78 0.22 133);
+  }
+  .bg-lime-400.text-black,
+  .text-black {
+    color: var(--fx-ink-on-lime);
   }
   ::selection {
     background: oklch(0.868 0.216 129.5 / 0.35);
@@ -623,4 +811,58 @@
 /* ── Mobile bottom nav: safe-area padding for iOS notch/home indicator ── */
 .safe-area-bottom {
   padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+/* ── Theme toggle (dark ↔ light clarity mode) ────────────────────────────── */
+html {
+  background: var(--background);
+}
+.theme-toggle-spin {
+  transition: transform 0.45s cubic-bezier(0.22, 1, 0.36, 1);
+}
+.theme-toggle-spin:active {
+  transform: rotate(180deg);
+}
+
+/* Light mode keeps the ambient layers but softens them so they never sit
+   under dark ink; heavy blurred-glow loops stay disabled on mobile. */
+.light .bg-grid {
+  background-image: linear-gradient(oklch(0.21 0.012 262 / 0.05) 1px, transparent 1px),
+    linear-gradient(90deg, oklch(0.21 0.012 262 / 0.05) 1px, transparent 1px);
+}
+.light .glow-lime {
+  box-shadow: 0 0 0 1px oklch(0.55 0.2 140 / 0.22), 0 12px 32px -12px oklch(0.55 0.2 140 / 0.28);
+}
+.light .glow-lime-soft {
+  box-shadow: 0 8px 24px -12px oklch(0.55 0.2 140 / 0.25);
+}
+.light .text-gradient {
+  background: linear-gradient(
+    100deg,
+    oklch(0.42 0.16 145) 0%,
+    oklch(0.5 0.18 138) 45%,
+    oklch(0.45 0.14 160) 100%
+  );
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+.light .card-lift:hover {
+  box-shadow: 0 18px 40px -18px oklch(0.21 0.012 262 / 0.25),
+    0 0 0 1px oklch(0.55 0.2 140 / 0.18);
+}
+.light ::-webkit-scrollbar-thumb {
+  background: oklch(0.21 0.012 262 / 0.22);
+}
+.light ::-webkit-scrollbar-thumb:hover {
+  background: oklch(0.55 0.2 140 / 0.45);
+}
+@media (max-width: 767px) {
+  .light .animate-marquee,
+  .light .cta-shimmer::after,
+  .light .hero-glow-pulse,
+  .light .animate-pulse-glow,
+  .light .animate-float-slow {
+    animation: none;
+  }
 }
