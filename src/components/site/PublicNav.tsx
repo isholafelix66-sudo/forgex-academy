@@ -17,10 +17,11 @@ import {
   Mail,
   InfoIcon,
   ChevronDown,
-  Sun,
+  Search,
 } from "lucide-react";
 import { MobileBottomNav } from "./MobileBottomNav";
-import { ThemeToggle } from "./ThemeToggle";
+import { SiteSearch } from "./SiteSearch";
+import { SiteNotifications } from "./SiteNotifications";
 import { cn } from "@/lib/utils";
 import { scrollToTopInstant } from "@/lib/scroll";
 import { Button } from "@/components/ui/button";
@@ -125,6 +126,14 @@ export function PublicNav() {
   const navigate = useNavigate();
   const location = useLocation();
   const [scrolled, setScrolled] = useState(false);
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [notifOpen, setNotifOpen] = useState(false);
+
+  /* Live unread badge for the bell — the guest-safe header query returns
+     null for signed-out visitors; same notifications table as the dashboard. */
+  const headerNotifications = useQuery(api.notifications.myNotificationsForHeader);
+  const unreadCount =
+    headerNotifications?.filter((n) => !n.read).length ?? 0;
 
   const brandLogo = (content?.logo as string | undefined) || logo;
 
@@ -234,6 +243,10 @@ export function PublicNav() {
         ]),
   ];
 
+  /* Round icon buttons for search + notifications (premium, consistent). */
+  const iconButtonClass =
+    "relative flex size-9 items-center justify-center rounded-full border border-white/10 bg-white/5 text-muted-foreground transition-colors hover:border-lime-400/40 hover:text-lime-300";
+
   return (
     <>
       <header
@@ -244,21 +257,26 @@ export function PublicNav() {
             : "border-white/8 bg-[#0d0f0c]/85 backdrop-blur-xl",
         )}
       >
-        <div className="mx-auto flex h-14 max-w-7xl items-center justify-between px-4 sm:px-6 lg:h-16">
-          {/* ── Logo ─────────────────────────────────────────────────── */}
-          <Link to="/" className="flex shrink-0 items-center gap-2.5" onClick={scrollTop}>
+        <div className="mx-auto flex h-16 max-w-7xl items-center justify-between gap-3 px-4 sm:px-6 lg:h-[4.5rem]">
+          {/* ── Brand: logo · ForgeX Academy · Learn • Build • Get Ahead ── */}
+          <Link to="/" className="group flex min-w-0 shrink-0 items-center gap-2.5" onClick={scrollTop}>
             <img
               src={brandLogo}
               alt="ForgeX Academy"
-              className="size-8 rounded-lg lg:size-9 lg:rounded-xl"
+              className="size-9 rounded-lg lg:size-10 lg:rounded-xl"
             />
-            <span className="font-display text-base font-bold tracking-tight lg:text-lg">
-              ForgeX<span className="text-lime-400"> Academy</span>
+            <span className="min-w-0 leading-tight">
+              <span className="font-display block text-[15px] font-bold tracking-tight lg:text-lg">
+                ForgeX<span className="text-lime-400"> Academy</span>
+              </span>
+              <span className="hidden text-[11px] font-medium tracking-wide text-muted-foreground sm:block">
+                Learn • Build • Get Ahead
+              </span>
             </span>
           </Link>
 
           {/* ═══════════════════════════════════════════════════════════
-              DESKTOP NAV (≥ md) — no hamburger exists at any size
+              DESKTOP NAV (≥ md)
               ═══════════════════════════════════════════════════════════ */}
           <nav className="hidden items-center gap-0.5 md:flex">
             {PRIMARY_NAV.map((l) => (
@@ -351,11 +369,36 @@ export function PublicNav() {
           </nav>
 
           {/* ═══════════════════════════════════════════════════════════
-              RIGHT SIDE
+              RIGHT SIDE — Search · Notifications · Profile/CTA
               ═══════════════════════════════════════════════════════════ */}
           <div className="flex shrink-0 items-center gap-2">
-            {/* Mobile: theme switch beside the profile avatar / CTA */}
-            <ThemeToggle className="md:hidden" />
+            {/* Search — functional, opens the site-wide search dialog */}
+            <button
+              aria-label="Search ForgeX Academy"
+              className={iconButtonClass}
+              onClick={() => setSearchOpen(true)}
+            >
+              <Search className="size-4" />
+            </button>
+
+            {/* Notifications — real bell with live unread badge */}
+            <button
+              aria-label={
+                unreadCount > 0
+                  ? `Notifications (${unreadCount} unread)`
+                  : "Notifications"
+              }
+              className={iconButtonClass}
+              onClick={() => setNotifOpen(true)}
+            >
+              <Bell className="size-4" />
+              {unreadCount > 0 && (
+                <span className="absolute -right-0.5 -top-0.5 flex size-4 items-center justify-center rounded-full bg-lime-400 text-[9px] font-bold text-black shadow-[0_0_10px_rgba(192,253,2,0.6)]">
+                  {unreadCount > 9 ? "9+" : unreadCount}
+                </span>
+              )}
+            </button>
+
             {isAuthenticated ? (
               <>
                 {/* Desktop: exactly one Dashboard link */}
@@ -381,7 +424,7 @@ export function PublicNav() {
                       <Avatar
                         name={user?.name ?? "Student"}
                         image={user?.image}
-                        className="size-8 cursor-pointer"
+                        className="size-9 cursor-pointer"
                       />
                     }
                     triggerClassName="rounded-full outline-none"
@@ -396,14 +439,6 @@ export function PublicNav() {
                     </div>
                     <div className="h-px bg-white/10" />
                     <div className="py-1.5">
-                      {/* Light/dark clarity mode — desktop */}
-                      <div className="flex items-center justify-between gap-2 px-3.5 py-1.5">
-                        <span className="flex items-center gap-2.5 text-sm text-muted-foreground">
-                          <Sun className="size-4" />
-                          Appearance
-                        </span>
-                        <ThemeToggle />
-                      </div>
                       <button
                         data-prefetch={profileTo}
                         onClick={() => {
@@ -438,7 +473,7 @@ export function PublicNav() {
                   <Avatar
                     name={user?.name ?? "Student"}
                     image={user?.image}
-                    className="size-8"
+                    className="size-9"
                   />
                 </button>
               </>
@@ -465,7 +500,7 @@ export function PublicNav() {
                   </Button>
                 </div>
 
-                {/* Mobile: one Get Started CTA beside the logo */}
+                {/* Mobile: one Get Started CTA */}
                 <Button
                   size="sm"
                   className="h-8 bg-lime-400 text-xs font-semibold text-black hover:bg-lime-300 md:hidden"
@@ -480,11 +515,11 @@ export function PublicNav() {
         </div>
       </header>
 
-      <MobileBottomNav
-        primaryItems={mobilePrimary}
-        moreSections={mobileMore}
-        moreFooter={<ThemeToggle showLabel className="w-full justify-start" />}
-      />
+      {/* Functional header overlays */}
+      <SiteSearch open={searchOpen} onOpenChange={setSearchOpen} />
+      <SiteNotifications open={notifOpen} onOpenChange={setNotifOpen} />
+
+      <MobileBottomNav primaryItems={mobilePrimary} moreSections={mobileMore} />
     </>
   );
 }

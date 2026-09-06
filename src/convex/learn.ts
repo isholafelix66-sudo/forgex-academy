@@ -398,6 +398,15 @@ export const enroll = mutation({
     });
     await ctx.db.patch(courseId, { enrolledCount: course.enrolledCount + 1 });
 
+    // Real event → real notification (header bell): enrollment confirmation.
+    await notify(ctx, {
+      userId: user._id,
+      title: "Enrolled in a new course",
+      body: `You're enrolled in "${course.title}". Jump in and start the first lesson.`,
+      type: "course",
+      link: `/courses/${course.slug}`,
+    });
+
     // Communication module: every course has a community, and enrolling
     // makes you a member automatically (no separate registration).
     try {

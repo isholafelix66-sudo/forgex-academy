@@ -15,11 +15,10 @@ import {
   Database,
   ExternalLink,
   Globe,
-  Layers,
+  GraduationCap,
   Map,
   Megaphone,
   Palette,
-  ShieldCheck,
   Sparkles,
   Star,
   Users,
@@ -61,7 +60,6 @@ const CATEGORY_ICONS: Record<string, typeof Sparkles> = {
   Megaphone,
   Briefcase,
   Globe,
-  Layers,
   Sparkles,
 };
 
@@ -110,6 +108,35 @@ function SectionHead({
 const SCROLL_ROW =
   "no-scrollbar -mx-4 flex snap-x snap-mandatory gap-3.5 overflow-x-auto px-4 pb-1 sm:gap-4 md:mx-0 md:grid md:snap-none md:overflow-visible md:px-0";
 
+/* ── Feature cards (immediately after the hero) — existing ForgeX
+      concepts, existing routes, no new data. ──────────────────────────── */
+const FEATURES = [
+  {
+    icon: Map,
+    title: "Roadmaps",
+    subtitle: "Learn step-by-step",
+    to: "/roadmap",
+  },
+  {
+    icon: Code2,
+    title: "Hands-on Projects",
+    subtitle: "Build real skills",
+    to: "/courses",
+  },
+  {
+    icon: GraduationCap,
+    title: "Expert Tutors",
+    subtitle: "Learn from the best",
+    to: "/tutors",
+  },
+  {
+    icon: Award,
+    title: "Certificates",
+    subtitle: "Prove your progress",
+    to: "/dashboard/certificates",
+  },
+];
+
 export default function Landing() {
   const seed = useMutation(api.seed.ensureSeedData);
   const content = useQuery(api.public.siteContentAll);
@@ -154,95 +181,137 @@ export default function Landing() {
 
   return (
     <PageShell>
-      {/* ─────────────────────────────────────────────────── Hero (compact) */}
-      <section className="relative overflow-hidden">
-        <div className="mx-auto max-w-7xl px-4 pb-6 pt-5 sm:px-6 sm:pb-10 sm:pt-10 lg:pb-16 lg:pt-16">
-          <div className="flex items-center gap-2 sm:gap-4 lg:grid lg:grid-cols-[1.05fr_0.95fr] lg:gap-8">
-            <motion.div
-              variants={container}
-              initial="hidden"
-              animate="show"
-              className="min-w-0 flex-1 text-left"
-            >
-              <motion.div variants={item}>
-                <span className="inline-flex max-w-full items-center gap-1.5 rounded-full border border-lime-400/30 bg-lime-400/10 px-3 py-1 text-[11px] font-semibold text-lime-300 sm:px-4 sm:py-1.5 sm:text-xs">
-                  <Sparkles className="size-3 shrink-0" />
-                  <span className="truncate">
-                    {hero?.badge ?? "The learning platform of ForgeX Network"}
-                  </span>
+      {/* ───────────────────────────────── Hero — editorial + big mascot */}
+      <section className="hero-bg relative overflow-hidden">
+        <div className="mx-auto max-w-7xl px-4 pb-5 pt-5 sm:px-6 sm:pb-10 sm:pt-10 lg:pb-14 lg:pt-16">
+          <motion.div variants={container} initial="hidden" animate="show">
+            {/* ForgeX badge — full width on top */}
+            <motion.div variants={item}>
+              <span className="inline-flex max-w-full items-center gap-1.5 rounded-full border border-lime-400/30 bg-lime-400/10 px-3 py-1 text-[11px] font-semibold text-lime-300 sm:px-4 sm:py-1.5 sm:text-xs">
+                <Sparkles className="size-3 shrink-0" />
+                <span className="truncate">
+                  {hero?.badge ?? "The learning platform of ForgeX Network"}
                 </span>
-              </motion.div>
-
-              <motion.h1
-                variants={item}
-                className="font-display mt-3 text-[1.75rem] font-bold leading-[1.08] tracking-tight sm:text-5xl lg:mt-6 lg:text-6xl xl:text-7xl"
-              >
-                Discover. <span className="text-gradient">Express.</span> Build.
-              </motion.h1>
-
-              <motion.p
-                variants={item}
-                className="mt-2.5 max-w-xl text-sm leading-relaxed text-muted-foreground sm:mt-4 sm:text-base lg:text-lg"
-              >
-                {hero?.subtitle ??
-                  "Turn curiosity into career-ready skills. Learn through structured roadmaps, hands-on projects, expert tutors, and verifiable certificates."}
-              </motion.p>
-
-              <motion.div
-                variants={item}
-                className="mt-4 flex flex-wrap gap-2.5 sm:mt-6 sm:gap-3 lg:flex-nowrap"
-              >
-                <span data-hero-cta className="min-w-[150px] flex-1 sm:flex-none">
-                  <AnimatedCta
-                    to={hero?.primaryCta?.link ?? "/courses"}
-                    className="w-full justify-center px-4 sm:w-auto sm:px-5"
-                  >
-                    {hero?.primaryCta?.label ?? "Start learning free"}
-                    <ArrowRight className="size-4 transition-transform group-hover:translate-x-0.5" />
-                  </AnimatedCta>
-                </span>
-                <span data-hero-cta className="min-w-[150px] flex-1 sm:flex-none">
-                  <AnimatedCta
-                    to={hero?.secondaryCta?.link ?? "/roadmap"}
-                    variant="outline"
-                    className="w-full justify-center px-4 sm:w-auto sm:px-5"
-                  >
-                    <Map className="size-4" />
-                    {hero?.secondaryCta?.label ?? "Explore roadmaps"}
-                  </AnimatedCta>
-                </span>
-              </motion.div>
-
-              <motion.div
-                variants={item}
-                className="mt-4 flex flex-wrap gap-x-4 gap-y-1.5 text-xs text-muted-foreground sm:mt-6 sm:gap-x-6 sm:text-sm"
-              >
-                <span className="inline-flex items-center gap-1.5">
-                  <CheckCircle2 className="size-3.5 text-lime-400" /> Free to start
-                </span>
-                <span className="inline-flex items-center gap-1.5">
-                  <Award className="size-3.5 text-lime-400" /> Verifiable certificates
-                </span>
-                <span className="inline-flex items-center gap-1.5">
-                  <Users className="size-3.5 text-lime-400" /> Learn at your pace
-                </span>
-              </motion.div>
+                <ArrowRight className="size-3 shrink-0" />
+              </span>
             </motion.div>
 
-            {/* Mascot — compact on mobile (top-right of the hero), full size on desktop */}
+            {/* Headline left · robot right — the mascot is a major element */}
+            <div className="mt-4 flex items-end gap-3 sm:gap-5 lg:mt-6 lg:grid lg:grid-cols-[1.05fr_0.95fr] lg:items-center lg:gap-10">
+              <div className="min-w-0 flex-1">
+                <motion.p
+                  variants={item}
+                  className="text-[10px] font-bold uppercase tracking-[0.22em] text-lime-300/90 sm:text-xs"
+                >
+                  Your skills. Real opportunities.
+                </motion.p>
+                <motion.h1
+                  variants={item}
+                  className="font-display mt-2 text-[1.9rem] font-bold leading-[1.04] tracking-tight sm:text-6xl lg:text-7xl xl:text-[5.25rem]"
+                >
+                  Discover.
+                  <br />
+                  <span className="text-lime-400 drop-shadow-[0_0_20px_rgba(166,255,0,0.35)]">
+                    Learn.
+                  </span>{" "}
+                  Build.
+                </motion.h1>
+                <motion.p
+                  variants={item}
+                  className="mt-2.5 max-w-xl text-[13px] leading-relaxed text-muted-foreground sm:mt-4 sm:text-base lg:text-lg"
+                >
+                  {hero?.subtitle ??
+                    "ForgeX Academy turns curiosity into career-ready skills — structured roadmaps, hands-on projects, expert tutors and verifiable certificates."}
+                </motion.p>
+              </div>
+
+              {/* Mascot — 40–50% of the hero visual area, never covered */}
+              <motion.div
+                variants={item}
+                className="w-[42%] max-w-[210px] shrink-0 sm:max-w-[270px] lg:w-auto lg:max-w-none"
+              >
+                <HeroRobot
+                  imageSrc={
+                    typeof content?.heroImage === "string" && content.heroImage.trim()
+                      ? content.heroImage
+                      : undefined
+                  }
+                />
+              </motion.div>
+            </div>
+
+            {/* CTAs — full-width row, thumb-friendly on mobile */}
             <motion.div
               variants={item}
-              className="w-[31%] max-w-[148px] shrink-0 sm:max-w-[180px] lg:w-auto lg:max-w-none"
+              className="mt-5 flex flex-wrap gap-2.5 sm:mt-7 sm:gap-3 lg:flex-nowrap"
             >
-              <HeroRobot
-                imageSrc={
-                  typeof content?.heroImage === "string" && content.heroImage.trim()
-                    ? content.heroImage
-                    : undefined
-                }
-              />
+              <span data-hero-cta className="min-w-[150px] flex-1 sm:flex-none">
+                <AnimatedCta
+                  to={hero?.primaryCta?.link ?? "/courses"}
+                  className="w-full justify-center px-4 sm:w-auto sm:px-5"
+                >
+                  {hero?.primaryCta?.label ?? "Start learning free"}
+                  <ArrowRight className="size-4 transition-transform group-hover:translate-x-0.5" />
+                </AnimatedCta>
+              </span>
+              <span data-hero-cta className="min-w-[150px] flex-1 sm:flex-none">
+                <AnimatedCta
+                  to={hero?.secondaryCta?.link ?? "/roadmap"}
+                  variant="outline"
+                  className="w-full justify-center px-4 sm:w-auto sm:px-5"
+                >
+                  <Map className="size-4" />
+                  {hero?.secondaryCta?.label ?? "Explore roadmaps"}
+                </AnimatedCta>
+              </span>
             </motion.div>
-          </div>
+
+            {/* Benefits — compact row beneath the CTAs */}
+            <motion.div
+              variants={item}
+              className="mt-4 flex flex-wrap gap-x-5 gap-y-1.5 border-t border-white/8 pt-3.5 text-xs text-muted-foreground sm:mt-6 sm:gap-x-8 sm:text-sm"
+            >
+              <span className="inline-flex items-center gap-1.5">
+                <CheckCircle2 className="size-3.5 text-lime-400" /> Free to start
+              </span>
+              <span className="inline-flex items-center gap-1.5">
+                <Award className="size-3.5 text-lime-400" /> Verifiable certificates
+              </span>
+              <span className="inline-flex items-center gap-1.5">
+                <Users className="size-3.5 text-lime-400" /> Learn at your pace
+              </span>
+            </motion.div>
+          </motion.div>
+        </div>
+      </section>
+
+      {/* ────────────────────────────────────── Feature cards (dark glass) */}
+      <section className="mx-auto max-w-7xl px-4 pb-6 pt-5 sm:px-6 sm:pb-10 sm:pt-8">
+        <div className={cn(SCROLL_ROW, "md:grid-cols-4")}>
+          {FEATURES.map((f, i) => (
+            <Reveal
+              key={f.title}
+              delay={i * 0.05}
+              className="w-[168px] shrink-0 snap-start md:w-auto"
+            >
+              <Link
+                to={f.to}
+                className="group flex h-full flex-col gap-3 rounded-2xl border border-white/10 bg-white/[0.03] p-4 backdrop-blur-sm transition-colors hover:border-lime-400/40"
+              >
+                <span className="flex size-10 items-center justify-center rounded-xl bg-lime-400/12 text-lime-300 ring-1 ring-lime-400/20 transition-colors group-hover:bg-lime-400/20">
+                  <f.icon className="size-5" />
+                </span>
+                <span className="min-w-0">
+                  <span className="block text-sm font-bold tracking-wide text-foreground">
+                    {f.title}
+                  </span>
+                  <span className="mt-0.5 block text-xs text-muted-foreground">
+                    {f.subtitle}
+                  </span>
+                </span>
+              </Link>
+            </Reveal>
+          ))}
         </div>
       </section>
 
@@ -250,79 +319,82 @@ export default function Landing() {
       {continueRow && (
         <section className="mx-auto max-w-7xl px-4 pb-5 sm:px-6 sm:pb-8">
           <Reveal>
-            <div className="rounded-2xl border border-white/10 bg-card p-3 shadow-lg shadow-black/20 sm:p-4">
-              <div className="flex items-center justify-between gap-2">
-                <span className="inline-flex items-center gap-1.5 rounded-full border border-lime-400/30 bg-lime-400/10 px-2.5 py-0.5 text-[11px] font-semibold text-lime-300">
-                  <Sparkles className="size-3" /> Continue learning
-                </span>
-                <Link
-                  to="/dashboard/my-courses"
-                  className="text-xs font-semibold text-lime-300 hover:underline"
-                >
-                  My courses →
-                </Link>
-              </div>
+            <div className="flex items-end justify-between gap-3">
+              <h2 className="font-display text-lg font-bold tracking-tight text-foreground sm:text-2xl">
+                Continue <span className="text-lime-400">Learning</span>
+              </h2>
               <Link
-                to={`/learn/${continueRow.course.slug}`}
-                className="group mt-2.5 flex items-center gap-3 rounded-xl border border-white/8 bg-black/20 p-2.5 transition-colors hover:border-lime-400/30 sm:p-3"
+                to="/dashboard/my-courses"
+                className="inline-flex shrink-0 items-center gap-1 text-xs font-semibold text-lime-300 hover:underline sm:text-sm"
               >
-                <CoverArt
-                  gradient={continueRow.course.gradient}
-                  icon={continueRow.course.icon}
-                  image={continueRow.course.image}
-                  className="h-14 w-14 shrink-0 rounded-xl border-0 sm:h-16 sm:w-16"
-                  iconClassName="text-2xl"
-                />
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm font-semibold transition-colors group-hover:text-lime-300 sm:text-base">
-                    {continueRow.course.title}
-                  </p>
-                  <p className="mt-0.5 text-xs text-muted-foreground">
-                    {continueRow.totalLessons > 0 &&
-                      `${continueRow.completedLessons}/${continueRow.totalLessons} lessons · `}
-                    {continueRow.progress}% complete
-                  </p>
-                  <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-white/10">
-                    <div
-                      className="h-full rounded-full bg-lime-400 transition-[width]"
-                      style={{ width: `${Math.min(100, Math.max(0, continueRow.progress))}%` }}
-                    />
-                  </div>
-                </div>
-                <span className="inline-flex shrink-0 items-center gap-1 rounded-full border border-lime-400/40 bg-lime-400/10 px-3 py-1.5 text-xs font-semibold text-lime-300 transition-colors group-hover:bg-lime-400/20">
-                  Continue <ArrowRight className="size-3.5" />
-                </span>
+                My Courses <ArrowRight className="size-3.5" />
               </Link>
             </div>
+            <Link
+              to={`/learn/${continueRow.course.slug}`}
+              className="group mt-3 flex items-center gap-3 rounded-2xl border border-white/10 bg-card p-3 shadow-lg shadow-black/20 transition-colors hover:border-lime-400/30 sm:p-4"
+            >
+              <CoverArt
+                gradient={continueRow.course.gradient}
+                icon={continueRow.course.icon}
+                image={continueRow.course.image}
+                className="h-14 w-14 shrink-0 rounded-xl border-0 sm:h-16 sm:w-16"
+                iconClassName="text-2xl"
+              />
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-sm font-semibold transition-colors group-hover:text-lime-300 sm:text-base">
+                  {continueRow.course.title}
+                </p>
+                <p className="mt-0.5 text-xs text-muted-foreground">
+                  {continueRow.totalLessons > 0 &&
+                    `${continueRow.completedLessons}/${continueRow.totalLessons} lessons · `}
+                  {continueRow.progress}% complete
+                </p>
+                <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-white/10">
+                  <div
+                    className="h-full rounded-full bg-lime-400 transition-[width]"
+                    style={{ width: `${Math.min(100, Math.max(0, continueRow.progress))}%` }}
+                  />
+                </div>
+              </div>
+              <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-lime-400 px-3 py-1.5 text-xs font-semibold text-black transition-colors group-hover:bg-lime-300">
+                Continue <ArrowRight className="size-3.5" />
+              </span>
+            </Link>
           </Reveal>
         </section>
       )}
 
-      {/* ─────────────────────────────────────── Value proposition (compact) */}
-      <section className="mx-auto max-w-7xl px-4 pb-5 sm:px-6 sm:pb-8">
+      {/* ───────────────────────────────────── Explore All Courses banner */}
+      <section className="mx-auto max-w-7xl px-4 pb-6 sm:px-6 sm:pb-10">
         <Reveal>
-          <div className="grid grid-cols-3 divide-x divide-white/8 rounded-2xl border border-white/10 bg-card/70 py-3.5 sm:py-5">
-            {[
-              { icon: Layers, top: "Structured", bottom: "learning paths" },
-              { icon: Users, top: "Expert", bottom: "tutors" },
-              { icon: ShieldCheck, top: "Verified", bottom: "certificates" },
-            ].map((v) => (
-              <div
-                key={v.top}
-                className="flex flex-col items-center gap-1.5 px-1.5 text-center sm:flex-row sm:justify-center sm:gap-2.5 sm:px-3 sm:text-left"
-              >
-                <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-lime-400/12 text-lime-300 sm:size-9">
-                  <v.icon className="size-4" />
-                </span>
-                <p className="text-[11px] font-medium leading-tight text-muted-foreground sm:text-sm">
-                  {v.top}
-                  <br className="sm:hidden" />{" "}
-                  <span className="sm:hidden">{v.bottom}</span>
-                  <span className="hidden sm:inline">{v.bottom}</span>
-                </p>
-              </div>
-            ))}
-          </div>
+          <Link
+            to="/courses"
+            className="group relative flex items-center gap-4 overflow-hidden rounded-2xl border border-lime-400/25 bg-gradient-to-r from-lime-400/15 via-card to-card p-4 transition-colors hover:border-lime-400/50 sm:p-6"
+          >
+            <div
+              aria-hidden
+              className="pointer-events-none absolute -right-10 -top-12 size-44 rotate-12 bg-gradient-to-br from-lime-400/25 to-transparent blur-2xl"
+            />
+            <div
+              aria-hidden
+              className="pointer-events-none absolute -bottom-14 right-14 size-28 -rotate-12 bg-gradient-to-tr from-emerald-500/20 to-transparent blur-xl"
+            />
+            <span className="relative flex size-12 shrink-0 items-center justify-center rounded-2xl bg-lime-400/15 text-lime-300 ring-1 ring-lime-400/30 sm:size-14">
+              <GraduationCap className="size-6 sm:size-7" />
+            </span>
+            <span className="relative min-w-0 flex-1">
+              <span className="font-display block text-base font-bold text-foreground sm:text-xl">
+                Explore All Courses
+              </span>
+              <span className="mt-0.5 block text-xs text-muted-foreground sm:text-sm">
+                Find the right course for your goals
+              </span>
+            </span>
+            <span className="relative flex size-10 shrink-0 items-center justify-center rounded-full bg-lime-400 text-black transition-transform group-hover:translate-x-1">
+              <ArrowRight className="size-5" />
+            </span>
+          </Link>
         </Reveal>
       </section>
 
@@ -438,7 +510,7 @@ export default function Landing() {
         </section>
       )}
 
-      {/* ───────────────────────────── Featured tutors (admin-controlled) */}
+      {/* ───────────────────────────────────── Featured tutors (admin-controlled) */}
       {featuredTutors && featuredTutors.length > 0 && (
         <section className="border-y border-white/8 bg-black/30 py-7 sm:py-12">
           <div className="mx-auto max-w-7xl px-4 sm:px-6">

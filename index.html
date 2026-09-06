@@ -18,25 +18,9 @@
   <title>ForgeX Academy — Discover. Express. Build.</title>
 
   <script>
-    // Paint the saved theme BEFORE first paint: without this every navigation
-    // that reboots the app flashes electric-black for a frame in light mode,
-    // which reads as "the page is refreshing". Inline because CSP allows it
-    // (vercel.json sets no Content-Security-Policy).
-    (function () {
-      try {
-        var t = localStorage.getItem("forgex-theme");
-        var root = document.documentElement;
-        if (t === "light") {
-          root.classList.add("light");
-          root.classList.remove("dark");
-        } else {
-          root.classList.add("dark");
-          root.classList.remove("light");
-        }
-      } catch (e) {
-        /* storage unavailable — React applies the default on mount */
-      }
-    })();
+    // Permanent dark mode: the brand theme is electric-black. The class is
+    // applied before first paint so tokens resolve on the very first frame.
+    document.documentElement.classList.add("dark");
   </script>
 
   <!-- Fonts: preconnect removes the TLS handshake. The stylesheet is a

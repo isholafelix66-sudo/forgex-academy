@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
-  AnimatePresence,
   motion,
   useMotionValue,
   useReducedMotion,
@@ -20,8 +19,8 @@ import {
  * Life is layered AROUND the image:
  *   - float / breath / weight-shift (whole-body transforms)
  *   - a laptop screen light + typing micro-jitter while "working"
- *   - an occasional greeting: robot pauses, eye-brightens, a holographic
- *     "Ready to learn?" micro-message appears, a small confident pulse
+ *   - an occasional greeting: robot pauses, eye-brightens, a small
+ *     confident pulse
  *   - subtle reactions to the hero CTAs (look toward the button, glow) —
  *     purely visual, never intercepting clicks or navigation
  *
@@ -81,7 +80,6 @@ export function HeroRobot({ imageSrc }: { imageSrc?: string }) {
   // Working → greeting → thumbs-up, then back to working. The cycle is long
   // so the robot mostly just works quietly; the interaction is occasional.
   const [mood, setMood] = useState<Mood>("working");
-  const [message, setMessage] = useState(false);
   const timersRef = useRef<number[]>([]);
 
   useEffect(() => {
@@ -93,12 +91,8 @@ export function HeroRobot({ imageSrc }: { imageSrc?: string }) {
     const cycle = () => {
       // Pause the typing, slowly turn toward the visitor, eyes brighten.
       t(() => setMood("greeting"), 4800);
-      // The holographic micro-message.
-      t(() => setMessage(true), 6100);
       // Small confident pulse.
       t(() => setMood("thumbsup"), 8000);
-      // Message fades away.
-      t(() => setMessage(false), 8900);
       // Back to work.
       t(() => setMood("working"), 9700);
       // Next moment — keep it occasional, never constant.
@@ -353,29 +347,6 @@ export function HeroRobot({ imageSrc }: { imageSrc?: string }) {
         aria-hidden
         className="pointer-events-none absolute -bottom-4 left-1/2 z-0 h-10 w-3/5 -translate-x-1/2 rounded-[100%] bg-black/60 blur-2xl"
       />
-
-      {/* Holographic "Ready to learn?" micro-message */}
-      <AnimatePresence>
-        {message && !reduce && (
-          <motion.div
-            initial={{ opacity: 0, y: 10, scale: 0.92 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: -8, scale: 0.96 }}
-            transition={{ duration: 0.45, ease: [0.22, 1, 0.36, 1] }}
-            className="pointer-events-none absolute right-0 top-2 z-20"
-          >
-            <div className="hero-message relative flex items-center gap-2 rounded-full border border-lime-400/30 bg-[#0b0f0c]/75 px-3.5 py-1.5 shadow-[0_0_28px_rgba(192,253,2,0.22)] backdrop-blur-md">
-              <span className="relative flex size-1.5">
-                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-lime-400 opacity-60" />
-                <span className="relative inline-flex size-1.5 rounded-full bg-lime-400" />
-              </span>
-              <span className="font-display text-xs font-semibold tracking-wide text-lime-200">
-                Ready to learn?
-              </span>
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
 
       {/* Robot — cinematic entrance (held until the picture is ready), then
           cursor + scroll parallax */}

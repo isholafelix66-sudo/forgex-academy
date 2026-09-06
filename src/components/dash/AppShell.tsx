@@ -9,7 +9,6 @@ import { useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import { Avatar } from "@/components/site/Avatar";
 import { MobileBottomNav } from "@/components/site/MobileBottomNav";
-import { ThemeToggle } from "@/components/site/ThemeToggle";
 import type { MobileNavItem, MobileNavSection } from "@/components/site/MobileBottomNav";
 import logo from "@/assets/logo.svg";
 
@@ -182,8 +181,6 @@ export function AppShell({
             <h1 className="font-display min-w-0 truncate text-lg font-bold">{title}</h1>
           </div>
           <div className="flex shrink-0 items-center gap-2">
-            {/* Light/dark clarity mode — one toggle for every dashboard shell */}
-            <ThemeToggle />
             {/* roleLink intentionally NOT duplicated in the header — the
                 sidebar (≥768px) is the single source for dashboard links, so
                 desktop never shows the same Dashboard link twice. */}
@@ -206,11 +203,7 @@ export function AppShell({
 
       {/* Mobile bottom navigation */}
       {mobilePrimaryItems && mobileMoreSections && (
-        <MobileBottomNav
-          primaryItems={mobilePrimaryItems}
-          moreSections={mobileMoreSections}
-          moreFooter={<ThemeToggle showLabel className="w-full justify-start" />}
-        />
+        <MobileBottomNav primaryItems={mobilePrimaryItems} moreSections={mobileMoreSections} />
       )}
     </div>
   );

@@ -1,11 +1,30 @@
 import { mutation, query } from "./_generated/server";
 import { v } from "convex/values";
 import { requireUser } from "./lib";
+import { getAuthUserId } from "@convex-dev/auth/server";
 
 export const myNotifications = query({
   args: {},
   handler: async (ctx) => {
     const userId = await requireUser(ctx);
+    const docs = await ctx.db
+      .query("notifications")
+      .withIndex("by_userId", (q) => q.eq("userId", userId))
+      .collect();
+    return docs.sort((a, b) => b.createdAt - a.createdAt).slice(0, 50);
+  },
+});
+
+/**
+ * Guest-safe variant for the public header bell: returns `null` for signed-out
+ * visitors (the panel shows a sign-in prompt) and the same list as
+ * `myNotifications` when signed in — same table, same mutations, no fork.
+ */
+export const myNotificationsForHeader = query({
+  args: {},
+  handler: async (ctx) => {
+    const userId = await getAuthUserId(ctx);
+    if (userId === null) return null;
     const docs = await ctx.db
       .query("notifications")
       .withIndex("by_userId", (q) => q.eq("userId", userId))

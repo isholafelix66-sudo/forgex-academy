@@ -49,6 +49,7 @@ import type * as quizzes from "../quizzes.js";
 import type * as resilienceData from "../resilienceData.js";
 import type * as resilienceGateway from "../resilienceGateway.js";
 import type * as reviews from "../reviews.js";
+import type * as search from "../search.js";
 import type * as seed from "../seed.js";
 import type * as storage from "../storage.js";
 import type * as stories from "../stories.js";
@@ -108,6 +109,7 @@ declare const fullApi: ApiFromModules<{
   resilienceData: typeof resilienceData;
   resilienceGateway: typeof resilienceGateway;
   reviews: typeof reviews;
+  search: typeof search;
   seed: typeof seed;
   storage: typeof storage;
   stories: typeof stories;
