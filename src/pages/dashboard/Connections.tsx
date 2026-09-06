@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { useNavigate } from "react-router";
+import { Link, useNavigate } from "react-router";
 import { useMutation, useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import type { Id } from "@/convex/_generated/dataModel";
@@ -129,12 +129,12 @@ export default function Connections() {
           }
           action={
             tab !== "blocked" ? (
-              <a
-                href="/dashboard/discover"
+              <Link
+                to="/dashboard/discover"
                 className="inline-flex items-center gap-2 rounded-xl bg-lime-400 px-5 py-2.5 text-sm font-semibold text-black transition-colors hover:bg-lime-300"
               >
                 <UserPlus className="size-4" /> Discover students
-              </a>
+              </Link>
             ) : undefined
           }
         />

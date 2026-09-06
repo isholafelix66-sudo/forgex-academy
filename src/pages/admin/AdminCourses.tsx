@@ -539,9 +539,9 @@ export default function AdminCourses() {
               <StatusChip status={c.status} published={c.published} />
               <div className="flex shrink-0 items-center gap-1.5">
                 {c.published && (
-                  <a href={`/courses/${c.slug}`} className="inline-flex items-center gap-1 rounded-lg p-2 text-lime-300 hover:bg-lime-400/10" title="View">
+                  <Link to={`/courses/${c.slug}`} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 rounded-lg p-2 text-lime-300 hover:bg-lime-400/10" title="View">
                     <ExternalLink className="size-4" />
-                  </a>
+                  </Link>
                 )}
                 <Link
                   to={`/admin/courses/preview/${c._id}`}
