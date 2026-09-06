@@ -22,6 +22,7 @@ import {
 import { MobileBottomNav } from "./MobileBottomNav";
 import { ThemeToggle } from "./ThemeToggle";
 import { cn } from "@/lib/utils";
+import { scrollToTopInstant } from "@/lib/scroll";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/hooks/use-auth";
 import logo from "@/assets/logo.svg";
@@ -59,9 +60,7 @@ const MORE_ITEMS: NavItemDef[] = [
 ];
 
 /** Reset scroll on every in-app navigation click (header links, CTAs…). */
-function scrollTop() {
-  window.scrollTo({ top: 0, behavior: "instant" });
-}
+const scrollTop = scrollToTopInstant;
 
 /* ═══════════════════════════════════════════════════════════════════════
    DESKTOP HOVER DROPDOWN (lightweight, no Radix)

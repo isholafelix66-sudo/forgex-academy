@@ -2,6 +2,7 @@ import { NavLink, useLocation } from "react-router";
 import { useEffect, useState, type ReactNode } from "react";
 import { X, ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { scrollToTopInstant } from "@/lib/scroll";
 
 export type MobileNavItem = {
   to: string;
@@ -16,9 +17,7 @@ export type MobileNavSection = {
 };
 
 /** Reset scroll on every in-app navigation click (bottom nav, More menu…). */
-function scrollTop() {
-  window.scrollTo({ top: 0, behavior: "instant" });
-}
+const scrollTop = scrollToTopInstant;
 
 export function MobileBottomNav({
   primaryItems,
@@ -86,7 +85,6 @@ export function MobileBottomNav({
             <button
               onClick={() => {
                 setMoreOpen(true);
-                scrollTop();
               }}
               className={cn(
                 "flex flex-1 flex-col items-center justify-center gap-[3px] px-1 text-[10px] font-medium transition-colors active:text-foreground/70",
@@ -123,7 +121,7 @@ export function MobileBottomNav({
           aria-label="More menu"
         >
           {/* Header with clear Close button */}
-          <div className="sticky top-0 z-10 flex items-center justify-between border-b border-white/10 bg-background/95 px-4 py-3 backdrop-blur-xl">
+          <div className="sticky top-0 z-10 flex items-center justify-between border-b border-white/10 bg-background/95 px-4 py-3 backdrop-blur-xl" data-more-header>
             <span className="font-display text-sm font-bold">More</span>
             <button
               onClick={() => setMoreOpen(false)}

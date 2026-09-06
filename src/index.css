@@ -311,6 +311,16 @@
   body {
     overflow-x: clip;
   }
+  /* iOS Safari: block the pull-to-refresh gesture at BOTH levels. Pulling
+     down on an already-at-top page re-navigates (re-runs index.html), which
+     reads as a random full-page refresh — most often triggered from the
+     bottom navigation. Only the window itself may overscroll. */
+  html {
+    overscroll-behavior-y: none;
+  }
+  body {
+    overscroll-behavior-y: contain;
+  }
   /* iOS Safari / iPadOS: `100vh` includes the browser chrome, which makes
      full-screen shells (auth gate, route loading, dashboards) overflow and
      can cause blank/scroll-jump behaviour. Prefer the dynamic viewport unit
@@ -322,9 +332,7 @@
   }
   /* Keep the page from rubber-banding/refreshing when the keyboard or a
      scroll gesture overshoots — feels native on iOS Safari. */
-  body {
-    overscroll-behavior-y: none;
-  }
+  /* (Handled above: html none, body contain.) */
   /* Instant taps: no double-tap-zoom delay on interactive elements, and a
      fast on-brand lime tap flash instead of the default grey overlay. */
   a,

@@ -16,6 +16,7 @@ import { BrowserRouter, Route, Routes, useLocation } from "react-router";
 import "./index.css";
 import { attachRoutePrefetch } from "@/lib/prefetch";
 import { registerServiceWorker } from "@/lib/sw";
+import { scrollToTopInstant } from "@/lib/scroll";
 import { ConnectionBanner } from "@/components/network/ConnectionBanner";
 import { AiSupportAssistant } from "@/components/site/AiSupportAssistant";
 
@@ -49,31 +50,37 @@ function lazyRetry(
           msg,
         );
       if (isChunkError && typeof window !== "undefined") {
-        // One retry after a short delay — handles momentary network drops.
-        await new Promise((r) => setTimeout(r, 300));
-        try {
-          return await loader();
-        } catch {
-          // Still failing — usually a deploy changed under us. NEVER reload
-          // from a background context or a dead network:
-          //  - prerendering: Chrome speculatively loads route chunks in the
-          //    background; a failed speculation must not restart the page the
-          //    user is looking at (reads as a random refresh on mobile).
-          //  - offline: a reload just loops; the error boundary recovers
-          //    automatically once the connection returns.
-          if (
-            (typeof document !== "undefined" &&
-              (document.visibilityState as string) === "prerendering") ||
-            (typeof navigator !== "undefined" && !navigator.onLine)
-          ) {
-            throw err;
+        // Patient retry: on mobile a transient network hiccup (weak signal,
+        // radio waking up) fails the first fetch. Retry with growing backoff
+        // before considering a reload — a full page reload reads as "the app
+        // refreshed itself" and must stay a true last resort.
+        for (const delay of [300, 1_200, 3_000]) {
+          await new Promise((r) => setTimeout(r, delay));
+          try {
+            return await loader();
+          } catch {
+            // keep retrying
           }
-          const KEY = "fx_chunk_reload_at";
-          const last = Number(sessionStorage.getItem(KEY) ?? 0);
-          if (Date.now() - last > 10_000) {
-            sessionStorage.setItem(KEY, String(Date.now()));
-            window.location.reload();
-          }
+        }
+        // Still failing — usually a deploy changed under us. NEVER reload
+        // from a background context or a dead network:
+        //  - prerendering: Chrome speculatively loads route chunks in the
+        //    background; a failed speculation must not restart the page the
+        //    user is looking at (reads as a random refresh on mobile).
+        //  - offline: a reload just loops; the error boundary recovers
+        //    automatically once the connection returns.
+        if (
+          (typeof document !== "undefined" &&
+            (document.visibilityState as string) === "prerendering") ||
+          (typeof navigator !== "undefined" && !navigator.onLine)
+        ) {
+          throw err;
+        }
+        const KEY = "fx_chunk_reload_at";
+        const last = Number(sessionStorage.getItem(KEY) ?? 0);
+        if (Date.now() - last > 30_000) {
+          sessionStorage.setItem(KEY, String(Date.now()));
+          window.location.reload();
         }
       }
       throw err;
@@ -585,7 +592,7 @@ window.addEventListener("unhandledrejection", ensureBootFallback);
 function ScrollToTop() {
   const { pathname } = useLocation();
   useEffect(() => {
-    window.scrollTo({ top: 0, behavior: "instant" });
+    scrollToTopInstant();
   }, [pathname]);
   return null;
 }
