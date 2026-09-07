@@ -31,8 +31,7 @@ export function openAiAssistant() {
   }
 }
 
-type AiMessage = { role: "user" | "ai"; body: string; at: number };
-type GuestMessage = { role: "user" | "ai"; body: string; accountSpecific?: boolean };
+type AiMessage = { role: "user" | "ai"; body: string };  const GuestMessage = { role: "user" | "ai"; body: string };
 
 export function AiSupportAssistant() {
   const [open, setOpen] = useState(false);
@@ -42,6 +41,7 @@ export function AiSupportAssistant() {
   const latest = useQuery(api.aiSupportData.getMyLatestSession);
   const startSession = useMutation(api.aiSupportData.startSession);
   const sendAi = useAction(api.aiSupport.sendAiMessage);
+
   const sendGuestAi = useAction(api.aiSupport.sendGuestAiMessage);
   const replyToTeam = useMutation(api.aiSupportData.replyToMyTicket);
 
@@ -150,6 +150,27 @@ export function AiSupportAssistant() {
     } else {
       void handleAiSend(userLine);
     }
+
+    const handleAiSendWrapped = async (userLine: AiMessage) => {
+      try {
+        const reply = await sendAi({
+          text: userLine.body,
+          sessionId: latest?._id,
+        });
+        const replyBody = reply.reply ?? "";
+        setGuestMessages((prev) => [...prev, { role: "ai", body: replyBody }]);
+      } catch (err) {
+        console.error("[AiSupport] sendAi failed", err);
+      setGuestMessages((prev) => [
+        ...prev,
+        {
+          role: "ai",
+          body: "I’m having trouble reaching the assistant right now. Please try again in a moment, or use the Contact page for human help.",
+        } as GuestMessage,
+      ]);
+      }
+      setSending(false);
+    };
   };
 
   const persistGuestMessages = (messages?: GuestMessage[]) => {
@@ -161,21 +182,19 @@ export function AiSupportAssistant() {
     } catch {}
   };
 
-  const handleGuestSend = async (userLine: GuestMessage) => {
-    const aiLine: GuestMessage = {
-      role: "ai",
-      body: "Sign in to get responses tied to your account and your learning progress.",
-      accountSpecific: true,
-    };
+  const handleGuestSend = (userLine: GuestMessage) => {
     setGuestMessages((prev) => {
       const next = [
         ...prev,
-        aiLine,
+        {
+          role: "ai",
+          body: "Sign in to get responses tied to your account and your learning progress.",
+        } as GuestMessage,
         {
           role: "ai",
           body:
             "You can always ask general questions as a guest, but signing in unlocks account-aware help, course progress context, and the ability to escalate to a human via the Contact page.",
-        },
+        } as GuestMessage,
       ];
       persistGuestMessages(next);
       return next;
@@ -185,8 +204,12 @@ export function AiSupportAssistant() {
 
   const handleAiSend = async (userLine: AiMessage) => {
     try {
-      const reply = await sendAi({ message: userLine.body });
-      setGuestMessages((prev) => [...prev, { role: "ai", body: reply.text ?? "" }]);
+      const reply = await sendAi({
+        text: userLine.body,
+        sessionId: latest!._id,
+      });
+      const replyBody: string = (reply as any).reply ?? "";
+      setGuestMessages((prev) => [...prev, { role: "ai", body: replyBody } as GuestMessage]);
     } catch (err) {
       console.error("[AiSupport] sendAi failed", err);
       setGuestMessages((prev) => [
@@ -194,7 +217,7 @@ export function AiSupportAssistant() {
         {
           role: "ai",
           body: "I’m having trouble reaching the assistant right now. Please try again in a moment, or use the Contact page for human help.",
-        },
+        } as GuestMessage,
       ]);
     }
     setSending(false);
@@ -204,10 +227,10 @@ export function AiSupportAssistant() {
     if (!latest?._id) return undefined;
     const session = latest;
     if (!Array.isArray(session?.messages)) return undefined;
-    return session.messages as (AiMessage & { body: string })[] | undefined;
+    return session.messages as AiMessage[] | undefined;
   })();
 
-  const visibleMessages: { role: "user" | "ai"; body: string }[] = isAuthenticated
+  const visibleMessages = isAuthenticated
     ? messagesFromLatest?.map((m) => ({ role: m.role, body: m.body })) ?? []
     : guestMessages;
 
@@ -285,8 +308,6 @@ export function AiSupportAssistant() {
                     "max-w-[88%] rounded-2xl px-3 py-2.5 text-[13px] leading-relaxed",
                     msg.role === "user"
                       ? "ml-auto bg-lime-400/10 text-foreground border border-lime-400/20"
-                      : msg.accountSpecific
-                      ? "bg-accent/30"
                       : "bg-white/5 text-foreground",
                   )}
                 >

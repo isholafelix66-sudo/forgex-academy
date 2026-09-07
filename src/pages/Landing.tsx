@@ -49,6 +49,8 @@ const item = {
   },
 };
 
+const isCarousel = typeof document !== "undefined" && window.matchMedia("(max-width: 1023px)").matches;
+
 /* ── Category pills: map each category's stored lucide icon name to the
       curated barrel (fallback: Sparkles). Names come from the admin
       catalog — nothing is invented here. ─────────────────────────────── */
@@ -235,7 +237,7 @@ export default function Landing() {
     <PageShell>
       {/* ───────────────────────────────── Hero — editorial + big mascot */}
       <section className="hero-bg relative overflow-hidden">
-        <div className="mx-auto max-w-7xl px-4 pb-5 pt-5 sm:px-6 sm:pb-10 sm:pt-10 lg:pb-14 lg:pt-16">
+        <div className="mx-auto max-w-7xl px-4 pb-5 pt-5 sm:px-6 sm:pb-8 sm:pt-6 lg:pb-10 lg:pt-8">
           <motion.div variants={container} initial="hidden" animate="show">
             {/* ForgeX badge — full width on top */}
             <motion.div variants={item}>
@@ -259,7 +261,7 @@ export default function Landing() {
                 </motion.p>
                 <motion.h1
                   variants={item}
-                  className="font-display mt-2 text-[clamp(2.55rem,rem)] font-bold leading-[1.04] tracking-tight sm:text-6xl lg:text-7xl xl:text-[5.25rem]"
+                  className="font-display mt-2 text-[clamp(3.4rem,clamp(5.4rem,7vw,9.6rem),10.2rem)] font-bold leading-[1.04] tracking-tight sm:text-6xl lg:text-7xl xl:text-[5.25rem]"
                 >
                   Discover.
                   <br />
@@ -267,10 +269,9 @@ export default function Landing() {
                     Learn.
                   </span>{" "}
                   Build.
-                </motion.h1>
-                <motion.p
+                </motion.h1>                  <motion.p
                   variants={item}
-                  className="mt-2.5 max-w-xl text-[13px] leading-relaxed text-muted-foreground sm:mt-4 sm:text-base lg:text-lg"
+                  className="mt-2.5 max-w-lg sm:max-w-xl text-[13px] leading-relaxed text-muted-foreground sm:mt-4 sm:text-base lg:text-lg"
                 >
                   {hero?.subtitle ??
                     "ForgeX Academy turns curiosity into career-ready skills — structured roadmaps, hands-on projects, expert tutors and verifiable certificates."}
@@ -290,65 +291,55 @@ export default function Landing() {
                   }
                 />
               </motion.div>
-            </div>
-
-            {/* CTAs — stacked on mobile, equal width, never clipped */}
-            <motion.div
-              variants={item}
-              className="mt-5"
-            >
-              <ul className="mx-auto max-w-[340px] list-none">
-                <li>
-                  <AnimatedCta
-                    to={hero?.primaryCta?.link ?? "/courses"}
-                    className="w-full justify-center"
-                  >
-                    {hero?.primaryCta?.label ?? "Start learning free"}
-                    <ArrowRight className="size-4 transition-transform group-hover:translate-x-0.5" />
-                  </AnimatedCta>
-                </li>
-                <li>
-                  <AnimatedCta
-                    to={hero?.secondaryCta?.link ?? "/roadmap"}
-                    variant="outline"
-                    className="w-full justify-center"
-                  >
-                    <Map className="size-4" />
-                    {hero?.secondaryCta?.label ?? "Explore roadmaps"}
-                  </AnimatedCta>
-                </li>
-              </ul>
-            </motion.div>
-
-            {/* Benefits — 3-item mobile list, clean & readable */}
-            <motion.div
-              variants={item}
-              className="mt-3"
-            >
-              <ul className="mx-auto max-w-[340px] list-none">
-                {[
-                  { icon: CheckCircle2 as React.ElementType, text: "Free to start" },
-                  { icon: Award as React.ElementType, text: "Verifiable certificates" },
-                  { icon: Users as React.ElementType, text: "Learn at your pace" },
-                ].map((b) => (
-                  <li
-                    key={b.text}
-                    className="flex items-start gap-2.5 rounded-xl px-3 py-2.5 sm:p-5"
-                  >
-                    <span className="mt-[1px] flex size-5 shrink-0 items-center justify-center rounded-lg bg-lime-400/12 text-lime-300">
-                      <b.icon className="size-3.5" />
-                    </span>
-                    <span className="text-[13px] leading-snug text-muted-foreground">{b.text}</span>
+            </div>            {/* CTAs + benefits — inline on desktop, stacked on mobile */}              <motion.div
+                variants={item}
+                className="mt-5 flex flex-col gap-3 sm:mt-6 sm:flex-row sm:flex-wrap sm:items-start sm:gap-x-3 sm:gap-y-4 lg:gap-x-6"
+              >
+                <ul className="list-none flex w-full justify-center gap-2 rounded-xl p-2 sm:w-auto sm:justify-start">
+                  {[
+                    { icon: CheckCircle2 as React.ElementType, text: "Free to start" },
+                    { icon: Award as React.ElementType, text: "Verifiable certificates" },
+                    { icon: Users as React.ElementType, text: "Learn at your pace" },
+                  ].map((b) => (
+                    <li
+                      key={b.text}
+                      className="flex items-start gap-2 rounded-xl bg-white/[0.02] px-3 py-2 sm:bg-transparent sm:px-0 sm:py-0 sm:text-sm sm:leading-relaxed"
+                    >
+                      <span className="mt-[1px] flex size-5 shrink-0 items-center justify-center rounded-lg bg-lime-400/12 text-lime-300">
+                        <b.icon className="size-3.5" />
+                      </span>
+                      <span className="text-[13px] leading-snug text-muted-foreground">{b.text}</span>
+                    </li>
+                  ))}
+                </ul>
+                <ul className="list-none flex w-full justify-center gap-2 sm:w-auto sm:justify-start">
+                  <li>
+                    <AnimatedCta
+                      to={hero?.primaryCta?.link ?? "/courses"}
+                      className="w-full justify-center"
+                    >
+                      {hero?.primaryCta?.label ?? "Start learning free"}
+                      <ArrowRight className="size-4 transition-transform group-hover:translate-x-0.5" />
+                    </AnimatedCta>
                   </li>
-                ))}
-              </ul>
-            </motion.div>
+                  <li>
+                    <AnimatedCta
+                      to={hero?.secondaryCta?.link ?? "/roadmap"}
+                      variant="outline"
+                      className="w-full justify-center"
+                    >
+                      <Map className="size-4" />
+                      {hero?.secondaryCta?.label ?? "Explore roadmaps"}
+                    </AnimatedCta>
+                  </li>
+                </ul>
+              </motion.div>
           </motion.div>
         </div>
       </section>
 
       {/* ────────────────────────────────────── Feature cards — mobile carousel */}
-      <section className="mx-auto max-w-7xl px-4 pb-5 pt-4 sm:px-6 sm:pb-10 sm:pt-8">
+      <section className="mx-auto max-w-7xl px-4 pb-5 pt-4 sm:px-6 sm:pb-7 sm:pt-8">
         <Reveal>
           <div className="mx-auto mb-3 max-w-[340px]">
             <h2 className="font-display text-lg font-bold tracking-tight text-foreground">
@@ -364,7 +355,7 @@ export default function Landing() {
             items={FEATURES}
             getKey={(f) => f.title}
             itemClassName="w-[220px] shrink-0"
-            showDots={true}
+            showDots={isCarousel}
             renderItem={(f) => (
               <Link
                 to={f.to}
@@ -373,7 +364,8 @@ export default function Landing() {
                 <span className="flex size-10 items-center justify-center rounded-xl bg-lime-400/12 text-lime-300 ring-1 ring-lime-400/20 transition-colors group-hover:bg-lime-400/20">
                   <f.icon className="size-5" />
                 </span>
-                <span className="min-w-0">                      <span className="block text-sm font-bold tracking-wide text-foreground">
+                <span className="min-w-0">
+                  <span className="block text-sm font-bold tracking-wide text-foreground">
                     {f.title}
                   </span>
                   <span className="mt-0.5 block text-xs text-muted-foreground">
@@ -438,7 +430,7 @@ export default function Landing() {
       )}
 
       {/* ───────────────────────────────────── Explore All Courses banner */}
-      <section className="mx-auto max-w-7xl px-4 pb-6 sm:px-6 sm:pb-10">
+      <section className="mx-auto max-w-7xl px-4 pb-5 sm:px-6 sm:pb-7">
         <Reveal>
           <Link
             to="/courses"
@@ -472,7 +464,7 @@ export default function Landing() {
 
       {/* ────────────────────────────────────── Explore courses (carousel) */}
       {courseCarousel.length > 0 && (
-        <section className="mx-auto max-w-7xl px-4 pb-7 sm:px-6 sm:pb-12">
+        <section className="mx-auto max-w-7xl px-4 pb-5 sm:px-6 sm:pb-7">
           <SectionHead
             eyebrow="Featured courses"
             title="Explore courses"
@@ -504,7 +496,7 @@ export default function Landing() {
 
       {/* ──────────────────────────────────── Categories (scrolling pills) */}
       {categories && categories.length > 0 && (
-        <section className="mx-auto max-w-7xl px-4 pb-7 sm:px-6 sm:pb-12">
+        <section className="mx-auto max-w-7xl px-4 pb-5 sm:px-6 sm:pb-7">
           <SectionHead
             title="What do you want to learn?"
             action={
@@ -546,7 +538,7 @@ export default function Landing() {
             : []),
         ];
         return (
-          <section className="mx-auto max-w-7xl px-4 pb-7 sm:px-6 sm:pb-12">
+          <section className="mx-auto max-w-7xl px-4 pb-5 sm:px-6 sm:pb-7">
             <Reveal>
               <div
                 className={cn(
@@ -572,7 +564,7 @@ export default function Landing() {
 
       {/* ───────────────────────────────────────────── Watch the tour */}
       {tutorialVideo && (
-        <section className="mx-auto max-w-7xl px-4 pb-7 sm:px-6 sm:pb-12">
+        <section className="mx-auto max-w-7xl px-4 pb-5 sm:px-6 sm:pb-7">
           <SectionHead
             eyebrow="Watch the tour"
             title="ForgeX in two minutes"
@@ -586,7 +578,7 @@ export default function Landing() {
 
       {/* ───────────────────────────────────── Featured tutors (admin-controlled) */}
       {featuredTutors && featuredTutors.length > 0 && (
-        <section className="border-y border-white/8 bg-black/30 py-7 sm:py-12">
+        <section className="border-y border-white/8 bg-black/30 py-5 sm:py-7">
           <div className="mx-auto max-w-7xl px-4 sm:px-6">
             <SectionHead
               eyebrow="Featured tutors"
@@ -617,7 +609,7 @@ export default function Landing() {
 
       {/* ─────────────────────────────────────── Student stories (if any) */}
       {featuredStories && featuredStories.length > 0 && (
-        <section className="mx-auto max-w-7xl px-4 py-7 sm:px-6 sm:py-12">
+        <section className="mx-auto max-w-7xl px-4 py-5 sm:px-6 sm:py-7">
           <SectionHead
             eyebrow="Student stories"
             title="Skills that turned into opportunities"
@@ -657,7 +649,7 @@ export default function Landing() {
 
       {/* ─────────────────────────────── Future of ForgeX (compact) */}
       {upcoming.length > 0 && (
-        <section className="border-y border-white/8 bg-black/30 py-7 sm:py-12">
+        <section className="border-y border-white/8 bg-black/30 py-5 sm:py-7">
           <div className="mx-auto max-w-7xl px-4 sm:px-6">
             <Reveal className="mx-auto max-w-2xl text-center">
               <span className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1 text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">
@@ -688,7 +680,7 @@ export default function Landing() {
 
       {/* ─────────────────────────────────────────────── AI Hub preview */}
       {featuredAi && featuredAi.length > 0 && (
-        <section className="mx-auto max-w-7xl px-4 py-7 sm:px-6 sm:py-12">
+        <section className="mx-auto max-w-7xl px-4 py-5 sm:px-6 sm:py-7">
           <SectionHead
             eyebrow="ForgeX AI Hub"
             title="AI resources, verified and curated"
@@ -774,23 +766,22 @@ export default function Landing() {
                 )}
               />
             </Reveal>
-            <Reveal className="mt-4 flex flex-wrap items-center gap-3 sm:mt-5">
-              <AnimatedCta to="/prompts">
-                Explore the Prompt Library
-                <ArrowRight className="size-4 transition-transform group-hover:translate-x-0.5" />
-              </AnimatedCta>
-              <AnimatedCta to="/ai-hub" variant="outline">
-                <Bot className="size-4" /> Visit the AI Hub
-              </AnimatedCta>
-            </Reveal>
+          <Reveal className="mt-4 flex flex-wrap items-center gap-3 sm:mt-5">
+            <AnimatedCta to="/prompts">
+              Explore the Prompt Library
+              <ArrowRight className="size-4 transition-transform group-hover:translate-x-0.5" />
+            </AnimatedCta>
+            <AnimatedCta to="/ai-hub" variant="outline">
+              <Bot className="size-4" /> Visit the AI Hub
+            </AnimatedCta>
+          </Reveal>
           </div>
         </section>
       )}
 
-      {/* ─────────────────────────────────────────────────── Final CTA */}
-      <section className="mx-auto max-w-7xl px-4 py-8 sm:px-6 sm:py-14">
+      {/* ─────────────────────────────────────────────────── Final CTA */}        <section className="mx-auto max-w-7xl px-4 py-5 sm:px-6 sm:py-8">
         <Reveal>
-          <div className="relative overflow-hidden rounded-3xl border border-lime-400/25 bg-gradient-to-br from-lime-400/12 via-card to-card p-6 text-center sm:p-12">
+          <div className="relative overflow-hidden rounded-3xl border border-lime-400/25 bg-gradient-to-br from-lime-400/12 via-card to-card p-6 text-center sm:p-10">
             <div className="absolute -top-20 left-1/2 h-48 w-96 -translate-x-1/2 rounded-full bg-lime-400/15 blur-3xl" />
             <h2 className="font-display relative mx-auto max-w-2xl text-2xl font-bold tracking-tight sm:text-4xl">
               Your skills deserve <span className="text-gradient">proof</span>.
