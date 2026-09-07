@@ -356,7 +356,7 @@ function CategoryMarquee({ categories }: { categories: MarqueeCategory[] }) {
       onTouchEnd={() => setPaused(false)}
     >
       <div
-        className="animate-marquee flex w-max flex-nowrap gap-2 whitespace-nowrap"
+        className="animate-marquee flex w-max flex-nowrap whitespace-nowrap"
         style={{
           animationDuration: `${duration}s`,
           animationPlayState: paused ? "paused" : "running",
@@ -366,7 +366,7 @@ function CategoryMarquee({ categories }: { categories: MarqueeCategory[] }) {
           <Link
             key={`${c._id}-${i}`}
             to={`/courses?category=${c.slug}`}
-            className="group inline-flex shrink-0 items-center gap-2 whitespace-nowrap rounded-full border border-white/10 bg-card px-4 py-2 text-sm font-medium text-muted-foreground transition-all duration-300 hover:-translate-y-0.5 hover:border-lime-400/40 hover:text-lime-300"
+            className="group mr-2 inline-flex shrink-0 items-center gap-2 whitespace-nowrap rounded-full border border-white/10 bg-card px-4 py-2 text-sm font-medium text-muted-foreground transition-all duration-300 hover:-translate-y-0.5 hover:border-lime-400/40 hover:text-lime-300"
           >
             <CategoryIcon
               name={c.icon}
