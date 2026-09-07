@@ -1,7 +1,7 @@
 import { Link } from "react-router";
 import { useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
-import { ExternalLink, Mail, MapPin, MessageSquare, Phone } from "lucide-react";
+import { Mail, MapPin, MessageSquare, Phone } from "lucide-react";
 import logo from "@/assets/logo.svg";
 import { toExternalHref } from "@/lib/url";
 
@@ -30,25 +30,9 @@ const DESCRIPTION =
   "yourself, and build the career you want — with structured paths, " +
   "verified tutors and certificates that unlock real opportunities.";
 
-// The dedicated ForgeX Network platform URL. Social profile links always
-// stay in the "Follow us" section below and are never used here.
-const NETWORK_URL = "https://forgex.network";
-
-// Only trust an admin-configured networkUrl if it points at a ForgeX-branded
-// domain (e.g. forgex.network / forgex.academy). Anything else — stale social
-// profile URLs, typos — falls back to the dedicated platform URL above.
-function resolveNetworkUrl(raw: unknown): string {
-  const candidate = typeof raw === "string" ? raw.trim() : "";
-  if (/^https?:\/\/(?:[\w-]+\.)?forgex\.[a-z]{2,}\/?$/i.test(candidate)) {
-    return candidate;
-  }
-  return NETWORK_URL;
-}
-
 export function Footer() {
   const content = useQuery(api.public.siteContentAll);
   const brandLogo = (content?.logo as string | undefined) || logo;
-  const networkUrl = resolveNetworkUrl(content?.networkUrl);
   const contact = (content?.contact as
     | { email?: string; phone?: string; address?: string }
     | undefined) || {};
@@ -83,7 +67,7 @@ export function Footer() {
             Discover. Express. Build.
           </p>
 
-          <div className="mt-4 flex items-center gap-2 border-t border-white/10 pt-4">
+          <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-white/10 pt-4">
             {/* Sends an in-app message to the ForgeX team inbox (Contact form),
                 never a mailto: redirect to the visitor's email app. */}
             <Link
@@ -93,15 +77,24 @@ export function Footer() {
               <MessageSquare className="size-3.5 text-lime-400" />
               Get in touch
             </Link>
-            <a
-              href={networkUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center gap-1.5 rounded-lg border border-white/10 bg-white/5 px-3 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:border-lime-400/40 hover:text-lime-300"
-            >
-              ForgeX Network
-              <ExternalLink className="size-3 text-lime-400/70" />
-            </a>
+            {/* Social icons managed in the admin portal — same list as the
+                desktop "Follow us" section, opened in a new tab. */}
+            {visibleSocials.length > 0 && (
+              <div className="ml-auto flex items-center gap-1.5">
+                {visibleSocials.map((s) => (
+                  <a
+                    key={s.platform}
+                    href={toExternalHref(s.url)}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    title={s.platform}
+                    className="flex size-8 items-center justify-center rounded-lg border border-white/10 bg-white/5 text-[10px] font-bold text-muted-foreground transition-colors hover:border-lime-400/40 hover:text-lime-300"
+                  >
+                    {SOCIAL_ICONS[s.platform] ?? s.platform.slice(0, 2)}
+                  </a>
+                ))}
+              </div>
+            )}
           </div>
         </div>
 
