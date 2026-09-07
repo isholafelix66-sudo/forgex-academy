@@ -34,6 +34,7 @@ type HeroSlide = {
   ctaLabel: string;
   ctaTo: string;
   src: string;
+  fallbackSrc: string;
   alt: string;
 };
 
@@ -45,6 +46,8 @@ const HERO_SLIDES: HeroSlide[] = [
     ctaLabel: "Start Learning",
     ctaTo: "/courses",
     src: "https://images.unsplash.com/photo-1522202176988-66273c2fd55f?w=1200&q=80",
+    fallbackSrc:
+      "https://images.unsplash.com/photo-1522071820081-009f0129c71c?w=1200&q=80",
     alt: "Young people learning and building digital skills together",
   },
   {
@@ -53,7 +56,9 @@ const HERO_SLIDES: HeroSlide[] = [
     support: "Discover where your skills can take you.",
     ctaLabel: "Explore Roadmap",
     ctaTo: "/roadmap",
-    src: "https://images.unsplash.com/photo-1531482615713-2afd69097998?w=1200&q=80",
+    src: "https://images.unsplash.com/photo-1519389950473-47ba0277781c?w=1200&q=80",
+    fallbackSrc:
+      "https://images.unsplash.com/photo-1531482615713-2afd69097998?w=1200&q=80",
     alt: "A young person building a digital skill on a laptop in a creative workspace",
   },
   {
@@ -63,6 +68,8 @@ const HERO_SLIDES: HeroSlide[] = [
     ctaLabel: "Start Building",
     ctaTo: "/courses",
     src: "https://images.unsplash.com/photo-1517694712202-14dd9538aa97?w=1200&q=80",
+    fallbackSrc:
+      "https://images.unsplash.com/photo-1454165804606-c3d57bc86b40?w=1200&q=80",
     alt: "A person building a real project on a laptop",
   },
   {
@@ -72,12 +79,57 @@ const HERO_SLIDES: HeroSlide[] = [
     ctaLabel: "Explore Opportunities",
     ctaTo: "/dashboard",
     src: "https://images.unsplash.com/photo-1556761175-5973dc0f32e7?w=1200&q=80",
+    fallbackSrc:
+      "https://images.unsplash.com/photo-1488190211105-8b0e65b80b4e?w=1200&q=80",
     alt: "Students collaborating on career opportunities",
   },
 ];
 
 const HERO_INTERVAL_MS = 5000;
 const HERO_RESUME_MS = 3000;
+
+/**
+ * A hero photo that never leaves a slide blank: if the primary URL fails to
+ * load (flaky network, regional CDN hiccup), it silently swaps to a verified
+ * fallback image, and only gives up (showing the branded gradient) if both
+ * fail. All slides render eagerly so the next image is always ready before
+ * the slideshow advances.
+ */
+function HeroImage({
+  src,
+  fallbackSrc,
+  alt,
+}: {
+  src: string;
+  fallbackSrc: string;
+  alt: string;
+}) {
+  const [current, setCurrent] = useState(src);
+  const [failed, setFailed] = useState(false);
+
+  useEffect(() => {
+    setCurrent(src);
+    setFailed(false);
+  }, [src, fallbackSrc]);
+
+  if (failed) return null;
+
+  return (
+    <img
+      src={current}
+      alt={alt}
+      width={1200}
+      height={800}
+      loading="eager"
+      decoding="async"
+      onError={() => {
+        if (current !== fallbackSrc) setCurrent(fallbackSrc);
+        else setFailed(true);
+      }}
+      className="relative h-full w-full object-cover"
+    />
+  );
+}
 
 function HeroSlideshow() {
   const reduce = useReducedMotion();
@@ -167,15 +219,7 @@ function HeroSlideshow() {
                 aria-hidden
                 className="absolute inset-0 bg-gradient-to-br from-[#10150e] via-[#0a0d0a] to-[#1a2410]"
               />
-              <img
-                src={s.src}
-                alt={s.alt}
-                width={1200}
-                height={800}
-                loading="eager"
-                decoding="async"
-                className="relative h-full w-full object-cover"
-              />
+              <HeroImage src={s.src} fallbackSrc={s.fallbackSrc} alt={s.alt} />
               <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/90 via-black/35 to-transparent" />
               <div className="absolute inset-x-0 bottom-0 z-10 p-5 sm:p-7">
                 <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-lime-300">
