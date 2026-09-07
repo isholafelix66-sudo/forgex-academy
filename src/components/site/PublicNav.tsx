@@ -16,6 +16,7 @@ import {
   Bookmark,
   Mail,
   InfoIcon,
+  Award,
   ChevronDown,
   Search,
 } from "lucide-react";
@@ -188,7 +189,7 @@ export function PublicNav() {
     {
       to: "/dashboard/certificates",
       label: "Certificates",
-      icon: <Bookmark className="size-5" />,
+      icon: <Award className="size-5" />,
     },
     {
       to: isAuthenticated ? profileTo : "/contact",

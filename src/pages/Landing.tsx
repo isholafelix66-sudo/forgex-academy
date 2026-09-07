@@ -138,6 +138,18 @@ function HeroSlideshow() {
   const pausedRef = useRef(false);
   const resumeTimer = useRef<number | null>(null);
 
+  // Warm the browser image cache for every slide (and its fallback) as soon
+  // as the hero mounts, so each slide's photo is always ready the moment it
+  // becomes active — no blank/gradient placeholder on the first rotation.
+  useEffect(() => {
+    for (const s of HERO_SLIDES) {
+      const img = new Image();
+      img.src = s.src;
+      const fb = new Image();
+      fb.src = s.fallbackSrc;
+    }
+  }, []);
+
   const pause = useCallback(() => {
     pausedRef.current = true;
     if (resumeTimer.current) window.clearTimeout(resumeTimer.current);
@@ -518,7 +530,7 @@ export default function Landing() {
           title="ForgeX in two minutes"
         />
         <Reveal delay={0.05} className="mt-6">
-          <div className="mx-auto aspect-[4/5] w-full max-w-sm overflow-hidden rounded-2xl border border-white/10 sm:aspect-video sm:max-w-3xl">
+          <div className="mx-auto aspect-[4/5] w-full max-w-sm overflow-hidden rounded-2xl border border-white/10 sm:aspect-[16/11] sm:max-w-3xl">
             <ForgeXMotionVideo />
           </div>
         </Reveal>
