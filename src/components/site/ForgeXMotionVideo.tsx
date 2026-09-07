@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
+import { AnimatePresence, motion } from "framer-motion";
 import {
   Award,
   BarChart3,
@@ -473,8 +473,10 @@ function fmt(ms: number) {
 }
 
 export function ForgeXMotionVideo({ title = "ForgeX in two minutes" }: { title?: string }) {
-  const reduceMotion = useReducedMotion() === true;
-  const [playing, setPlaying] = useState(!reduceMotion);
+  // Starts paused — the tour only plays once the viewer taps Play (audio
+  // autoplay is blocked by browsers anyway, and it respects people who
+  // prefer quiet pages).
+  const [playing, setPlaying] = useState(false);
   const [sceneIndex, setSceneIndex] = useState(0);
   const [progress, setProgress] = useState(0);
   const [ended, setEnded] = useState(false);
@@ -666,6 +668,21 @@ export function ForgeXMotionVideo({ title = "ForgeX in two minutes" }: { title?:
           · {SCENES[sceneIndex].label}
         </span>
       </div>
+
+      {/* Start overlay — invites the tap that begins the film + music */}
+      {!playing && !ended && (
+        <button
+          type="button"
+          onClick={toggle}
+          className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-3 bg-black/45 backdrop-blur-[2px]"
+          aria-label="Play the tour"
+        >
+          <span className="flex size-16 items-center justify-center rounded-full bg-lime-400 text-black shadow-[0_0_0_12px_rgba(163,230,53,0.15),0_0_40px_rgba(163,230,53,0.45)] transition-transform hover:scale-105 active:scale-95">
+            <Play className="ml-1 size-7 fill-black" />
+          </span>
+          <span className="text-sm font-semibold text-lime-200">Watch the tour</span>
+        </button>
+      )}
 
       {/* Replay overlay at the end */}
       {ended && (

@@ -18,6 +18,7 @@ import { SectionHeading } from "@/components/site/SectionHeading";
 import { CourseCard } from "@/components/site/CourseCard";
 import { MotionCarousel } from "@/components/site/MotionCarousel";
 import { ForgeXMotionVideo } from "@/components/site/ForgeXMotionVideo";
+import { CategoryIcon } from "@/components/site/CategoryIcon";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
@@ -490,7 +491,7 @@ export default function Landing() {
                 to={`/courses?category=${c.slug}`}
                 className="inline-flex shrink-0 items-center gap-2 rounded-full border border-white/10 bg-card px-4 py-2 text-sm font-medium text-muted-foreground transition-colors hover:border-lime-400/40 hover:text-lime-300"
               >
-                <span aria-hidden>{c.icon}</span>
+                <CategoryIcon name={c.icon} color={c.color} className="size-4 shrink-0" />
                 {c.name}
               </Link>
             ))}

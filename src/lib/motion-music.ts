@@ -1,10 +1,11 @@
 /**
  * Background music for the "ForgeX in two minutes" motion film.
  *
- * A fully self-contained, synthesized loop (no audio files, no licensing):
- * a warm Am → F → C → G progression with a soft pad, bass, an eighth-note
- * arpeggio and a light kick/hat groove. Generated live with the Web Audio API,
- * so it always plays as long as the browser supports AudioContext.
+ * A fully self-contained, synthesized music-box loop (no audio files, no
+ * licensing): a gentle C → Am → F → G progression with a whisper-quiet,
+ * low-passed pad, a warm sine bass and a sparkly celesta/music-box arpeggio
+ * two octaves up, sent through a dreamy dotted-eighth delay. No percussion —
+ * just a sweet, calming lullaby bed that sits softly under the film.
  *
  * The loop is scheduled ahead of time on a lookahead timer; pausing suspends
  * the AudioContext (freezing the timeline) and resuming continues it — the
@@ -32,30 +33,43 @@ export function createMotionMusic(): MotionMusic | null {
 
   // master → mute gain → destination (mute gain is just a volume cut)
   const master = ctx.createGain();
-  master.gain.value = 0.5;
+  master.gain.value = 0.4;
   const muteGain = ctx.createGain();
   muteGain.gain.value = 1;
   master.connect(muteGain).connect(ctx.destination);
 
   const midi = (m: number) => 440 * Math.pow(2, (m - 69) / 12);
 
-  const BPM = 84;
+  const BPM = 72;
   const beat = 60 / BPM;
   const barDur = beat * 4;
   const eighth = beat / 2;
 
-  // Am → F → C → G — warm and uplifting
+  // C → Am → F → G — warm, open, easy to hum
   const chords = [
+    { root: midi(48), tones: [0, 4, 7] }, // C major
     { root: midi(45), tones: [0, 3, 7] }, // A minor
     { root: midi(41), tones: [0, 4, 7] }, // F major
-    { root: midi(48), tones: [0, 4, 7] }, // C major
     { root: midi(43), tones: [0, 4, 7] }, // G major
   ];
 
+  // Pad — one soft low-passed triangle per chord tone, barely there
   const padFilter = ctx.createBiquadFilter();
   padFilter.type = "lowpass";
-  padFilter.frequency.value = 1400;
+  padFilter.frequency.value = 900;
+  padFilter.Q.value = 0.4;
   padFilter.connect(muteGain);
+
+  // Dreamy dotted-eighth delay bus the music box rings through
+  const delay = ctx.createDelay(1.0);
+  delay.delayTime.value = eighth * 1.5;
+  const delayFilter = ctx.createBiquadFilter();
+  delayFilter.type = "lowpass";
+  delayFilter.frequency.value = 3600;
+  const delayFb = ctx.createGain();
+  delayFb.gain.value = 0.32;
+  delay.connect(delayFilter).connect(delayFb).connect(delay);
+  delayFilter.connect(muteGain);
 
   function playNote(
     freq: number,
@@ -80,79 +94,58 @@ export function createMotionMusic(): MotionMusic | null {
     osc.stop(t + dur + 0.05);
   }
 
-  function kick(t: number, peak = 0.45) {
+  /** Music-box pluck — bell-like sine + shimmering octave, long natural decay. */
+  function pluck(freq: number, t: number, peak: number) {
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.linearRampToValueAtTime(peak, t + 0.008);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 1.4);
+
     const osc = ctx.createOscillator();
     osc.type = "sine";
-    const g = ctx.createGain();
-    osc.frequency.setValueAtTime(160, t);
-    osc.frequency.exponentialRampToValueAtTime(48, t + 0.11);
-    g.gain.setValueAtTime(peak, t);
-    g.gain.exponentialRampToValueAtTime(0.001, t + 0.13);
-    osc.connect(g).connect(muteGain);
+    osc.frequency.value = freq;
+    const bright = ctx.createOscillator();
+    bright.type = "triangle";
+    bright.frequency.value = freq * 2;
+    const brightGain = ctx.createGain();
+    brightGain.gain.value = 0.35;
+    bright.connect(brightGain).connect(g);
+
+    osc.connect(g);
+    g.connect(muteGain); // dry
+    g.connect(delay); // wet — the dreamy repeats
     osc.start(t);
-    osc.stop(t + 0.15);
-  }
-
-  const noiseBuf = (() => {
-    const buf = ctx.createBuffer(1, Math.floor(ctx.sampleRate * 0.08), ctx.sampleRate);
-    const data = buf.getChannelData(0);
-    for (let i = 0; i < data.length; i++) data[i] = Math.random() * 2 - 1;
-    return buf;
-  })();
-
-  function hat(t: number, peak = 0.05) {
-    const src = ctx.createBufferSource();
-    src.buffer = noiseBuf;
-    const hp = ctx.createBiquadFilter();
-    hp.type = "highpass";
-    hp.frequency.value = 7000;
-    const g = ctx.createGain();
-    g.gain.setValueAtTime(peak, t);
-    g.gain.exponentialRampToValueAtTime(0.001, t + 0.05);
-    src.connect(hp).connect(g).connect(muteGain);
-    src.start(t);
-    src.stop(t + 0.06);
+    osc.stop(t + 1.5);
+    bright.start(t);
+    bright.stop(t + 1.5);
   }
 
   function scheduleBar(chordIdx: number, t: number) {
     const c = chords[chordIdx % chords.length];
-    // Pad — one soft triangle per chord tone
+
+    // Pad — whisper-quiet, slow attack
     for (const tone of c.tones) {
       playNote(
         c.root * Math.pow(2, tone / 12),
         t,
-        barDur - 0.15,
+        barDur - 0.1,
         "triangle",
-        0.05,
+        0.018,
         padFilter,
-        0.6,
-        0.4,
+        0.8,
+        0.5,
       );
     }
-    // Bass — root on beats 1 and 3
-    playNote(c.root / 2, t, beat * 1.8, "sine", 0.22, muteGain);
-    playNote(c.root / 2, t + beat * 2, beat * 1.8, "sine", 0.22, muteGain);
-    // Arpeggio — eighth notes over the chord
-    const arp = [0, 7, 12, 7, 0, 7, 14, 7];
+
+    // Bass — warm sine root on beats 1 and 3
+    playNote(c.root, t, beat * 1.9, "sine", 0.1, muteGain, 0.05, 0.25);
+    playNote(c.root, t + beat * 2, beat * 1.9, "sine", 0.09, muteGain, 0.05, 0.25);
+
+    // Music box — gentle rising/falling arpeggio, two octaves up
+    const arp = [0, 4, 7, 12, 16, 12, 7, 4];
     arp.forEach((tone, i) => {
-      playNote(
-        c.root * Math.pow(2, tone / 12),
-        t + i * eighth,
-        eighth * 0.9,
-        "triangle",
-        0.09,
-        muteGain,
-        0.01,
-        0.1,
-      );
+      pluck(c.root * Math.pow(2, (24 + tone) / 12), t + i * eighth, 0.055);
     });
-    // Light groove
-    kick(t, 0.45);
-    hat(t + eighth, 0.05);
-    kick(t + beat * 2, 0.4);
-    hat(t + eighth * 3, 0.05);
-    hat(t + eighth * 5, 0.05);
-    hat(t + eighth * 7, 0.06);
   }
 
   // Lookahead scheduler — keeps the loop rolling indefinitely.
@@ -168,8 +161,8 @@ export function createMotionMusic(): MotionMusic | null {
 
   // Once closed, every AudioContext call throws or rejects — remember it so
   // stale handles (StrictMode double-mount, late play/pause taps, tab
-  // visibility toggles) no-op instead of surfacing “Cannot resume/close a
-  // closed AudioContext”. Promise rejections are swallowed explicitly too,
+  // visibility toggles) no-op instead of surfacing "Cannot resume/close a
+  // closed AudioContext". Promise rejections are swallowed explicitly too,
   // since `resume()`/`close()` on a closed context reject asynchronously and
   // an unhandled rejection would still crash the app.
   let disposed = false;
