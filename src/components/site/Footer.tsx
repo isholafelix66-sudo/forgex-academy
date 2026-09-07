@@ -29,9 +29,16 @@ const DESCRIPTION =
   "yourself, and build the career you want — with structured paths, " +
   "verified tutors and certificates that unlock real opportunities.";
 
+// The dedicated ForgeX Network platform URL. Admins can override it via
+// site content (key "networkUrl"); social profile links always stay in the
+// "Follow us" section below and are never used here.
+const NETWORK_URL = "https://forgex.network";
+
 export function Footer() {
   const content = useQuery(api.public.siteContentAll);
   const brandLogo = (content?.logo as string | undefined) || logo;
+  const networkUrl =
+    ((content?.networkUrl as string | undefined) ?? "").trim() || NETWORK_URL;
   const contact = (content?.contact as
     | { email?: string; phone?: string; address?: string }
     | undefined) || {};
@@ -85,7 +92,7 @@ export function Footer() {
               </Link>
             )}
             <a
-              href="https://forgex.network"
+              href={networkUrl}
               target="_blank"
               rel="noopener noreferrer"
               className="inline-flex items-center gap-1.5 rounded-lg border border-white/10 bg-white/5 px-3 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:border-lime-400/40 hover:text-lime-300"

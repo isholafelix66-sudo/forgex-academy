@@ -320,6 +320,68 @@ function HeroSlideshow() {
 }
 
 /* ═══════════════════════════════════════════════════════════════════════
+   CATEGORY MARQUEE — infinite auto-scrolling pill track.
+   The row is duplicated exactly once and the track translates by -50%, so
+   the loop point is invisible. Hover (desktop) or touch (mobile) pauses the
+   drift; reduced-motion users get a plain horizontal scroll instead.
+   ═══════════════════════════════════════════════════════════════════════ */
+
+type MarqueeCategory = {
+  _id: string;
+  slug: string;
+  name: string;
+  icon?: string | null;
+  color?: string | null;
+};
+
+function CategoryMarquee({ categories }: { categories: MarqueeCategory[] }) {
+  const [paused, setPaused] = useState(false);
+  // ~2.4s per category keeps the drift calm but alive; clamp so tiny lists
+  // don't crawl across the screen.
+  const duration = Math.max(18, categories.length * 2.4);
+  const track = [...categories, ...categories];
+
+  return (
+    <div
+      className="mt-5 overflow-hidden"
+      style={{
+        maskImage:
+          "linear-gradient(to right, transparent, black 16px, black calc(100% - 16px), transparent)",
+        WebkitMaskImage:
+          "linear-gradient(to right, transparent, black 16px, black calc(100% - 16px), transparent)",
+      }}
+      onMouseEnter={() => setPaused(true)}
+      onMouseLeave={() => setPaused(false)}
+      onTouchStart={() => setPaused(true)}
+      onTouchEnd={() => setPaused(false)}
+    >
+      <div
+        className="animate-marquee flex w-max flex-nowrap gap-2 whitespace-nowrap"
+        style={{
+          animationDuration: `${duration}s`,
+          animationPlayState: paused ? "paused" : "running",
+        }}
+      >
+        {track.map((c, i) => (
+          <Link
+            key={`${c._id}-${i}`}
+            to={`/courses?category=${c.slug}`}
+            className="group inline-flex shrink-0 items-center gap-2 whitespace-nowrap rounded-full border border-white/10 bg-card px-4 py-2 text-sm font-medium text-muted-foreground transition-all duration-300 hover:-translate-y-0.5 hover:border-lime-400/40 hover:text-lime-300"
+          >
+            <CategoryIcon
+              name={c.icon}
+              color={c.color}
+              className="size-4 shrink-0 transition-transform duration-300 group-hover:rotate-12 group-hover:scale-110"
+            />
+            {c.name}
+          </Link>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
    PAGE
    ═══════════════════════════════════════════════════════════════════════ */
 
@@ -481,38 +543,26 @@ export default function Landing() {
         </div>
       </section>
 
-      {/* ── CATEGORIES — motion pills, staggered entrance, horizontal scroll ── */}
+      {/* ── CATEGORIES — infinite auto-scrolling marquee, pauses on hover/touch ── */}
       {categories && categories.length > 0 && (
         <section className="mx-auto max-w-7xl px-4 pb-12 sm:px-6">
           <SectionHeading align="left" eyebrow="Browse" title="Categories" />
-          <div className="no-scrollbar mt-5 flex gap-2 overflow-x-auto pb-1">
-            {categories.map((c, i) => (
-              <motion.div
-                key={c._id}
-                initial={reduce ? false : { opacity: 0, y: 16, scale: 0.94 }}
-                whileInView={reduce ? undefined : { opacity: 1, y: 0, scale: 1 }}
-                viewport={reduce ? undefined : { once: true, margin: "-40px" }}
-                transition={{
-                  duration: 0.45,
-                  delay: reduce ? 0 : i * 0.06,
-                  ease: [0.22, 1, 0.36, 1],
-                }}
-                whileHover={reduce ? undefined : { y: -3, scale: 1.05 }}
-              >
+          {reduce ? (
+            <div className="no-scrollbar mt-5 flex gap-2 overflow-x-auto pb-1">
+              {categories.map((c) => (
                 <Link
+                  key={c._id}
                   to={`/courses?category=${c.slug}`}
-                  className="group inline-flex shrink-0 items-center gap-2 rounded-full border border-white/10 bg-card px-4 py-2 text-sm font-medium text-muted-foreground transition-colors hover:border-lime-400/40 hover:text-lime-300"
+                  className="inline-flex shrink-0 items-center gap-2 whitespace-nowrap rounded-full border border-white/10 bg-card px-4 py-2 text-sm font-medium text-muted-foreground transition-colors hover:border-lime-400/40 hover:text-lime-300"
                 >
-                  <CategoryIcon
-                    name={c.icon}
-                    color={c.color}
-                    className="size-4 shrink-0 transition-transform duration-300 group-hover:rotate-12 group-hover:scale-110"
-                  />
+                  <CategoryIcon name={c.icon} color={c.color} className="size-4 shrink-0" />
                   {c.name}
                 </Link>
-              </motion.div>
-            ))}
-          </div>
+              ))}
+            </div>
+          ) : (
+            <CategoryMarquee categories={categories} />
+          )}
         </section>
       )}
 

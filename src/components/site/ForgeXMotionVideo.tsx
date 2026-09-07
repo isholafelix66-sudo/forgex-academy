@@ -527,11 +527,13 @@ export function ForgeXMotionVideo({ title = "ForgeX in two minutes" }: { title?:
   }, [playing, ended]);
 
   // Background music: starts on the first user gesture (poster click) and
-  // follows the film's play/pause state. Wrapped in try/catch so a browser
-  // that blocks AudioContext never breaks the visual player.
+  // follows the film's play state — it keeps playing after the last scene
+  // finishes so the closing screen still has its soundtrack until the
+  // viewer leaves or mutes. Wrapped in try/catch so a browser that blocks
+  // AudioContext never breaks the visual player.
   useEffect(() => {
     try {
-      if (playing && !ended) {
+      if (playing || ended) {
         if (!musicRef.current || musicRef.current.disposed) {
           musicRef.current = createMotionMusic();
         }
@@ -557,7 +559,7 @@ export function ForgeXMotionVideo({ title = "ForgeX in two minutes" }: { title?:
     const onVisibility = () => {
       try {
         if (document.hidden) musicRef.current?.suspend();
-        else if (playing && !ended) musicRef.current?.resume();
+        else if (playing || ended) musicRef.current?.resume();
       } catch {
         // ignore
       }
@@ -660,13 +662,18 @@ export function ForgeXMotionVideo({ title = "ForgeX in two minutes" }: { title?:
         </motion.div>
       </AnimatePresence>
 
-      {/* Scene label chip */}
+      {/* Scene label chip — the film title only leads on the intro scene so
+          it never crowds the content of the later scenes. */}
       <div className="pointer-events-none absolute left-4 top-4 flex items-center gap-2 rounded-full border border-white/10 bg-black/50 px-3 py-1 text-[11px] font-semibold text-muted-foreground backdrop-blur">
         <Sparkles className="size-3.5 text-lime-300" />
-        {title}
-        <span className="text-lime-300/80">
-          · {SCENES[sceneIndex].label}
-        </span>
+        {sceneIndex === 0 ? (
+          <>
+            {title}
+            <span className="text-lime-300/80">· {SCENES[0].label}</span>
+          </>
+        ) : (
+          SCENES[sceneIndex].label
+        )}
       </div>
 
       {/* Start overlay — invites the tap that begins the film + music */}
