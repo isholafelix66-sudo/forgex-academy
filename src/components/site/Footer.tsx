@@ -1,7 +1,7 @@
 import { Link } from "react-router";
 import { useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
-import { ExternalLink, Mail, MapPin, Phone } from "lucide-react";
+import { ExternalLink, Mail, MapPin, MessageSquare, Phone } from "lucide-react";
 import logo from "@/assets/logo.svg";
 import { toExternalHref } from "@/lib/url";
 
@@ -84,23 +84,15 @@ export function Footer() {
           </p>
 
           <div className="mt-4 flex items-center gap-2 border-t border-white/10 pt-4">
-            {contact.email ? (
-              <a
-                href={`mailto:${contact.email}`}
-                className="inline-flex items-center gap-1.5 rounded-lg border border-white/10 bg-white/5 px-3 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:border-lime-400/40 hover:text-lime-300"
-              >
-                <Mail className="size-3.5 text-lime-400" />
-                Get in touch
-              </a>
-            ) : (
-              <Link
-                to="/contact"
-                className="inline-flex items-center gap-1.5 rounded-lg border border-white/10 bg-white/5 px-3 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:border-lime-400/40 hover:text-lime-300"
-              >
-                <Mail className="size-3.5 text-lime-400" />
-                Get in touch
-              </Link>
-            )}
+            {/* Sends an in-app message to the ForgeX team inbox (Contact form),
+                never a mailto: redirect to the visitor's email app. */}
+            <Link
+              to="/contact"
+              className="inline-flex items-center gap-1.5 rounded-lg border border-white/10 bg-white/5 px-3 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:border-lime-400/40 hover:text-lime-300"
+            >
+              <MessageSquare className="size-3.5 text-lime-400" />
+              Get in touch
+            </Link>
             <a
               href={networkUrl}
               target="_blank"
