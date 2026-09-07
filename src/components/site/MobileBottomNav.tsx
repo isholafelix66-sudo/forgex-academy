@@ -57,7 +57,7 @@ export function MobileBottomNav({
     <>
       {/* ── Fixed bottom bar (< md only) ────────────────────────────── */}
       <nav className="fixed bottom-0 inset-x-0 z-50 border-t border-white/10 bg-[#0a0c0a]/95 backdrop-blur-xl md:hidden safe-area-bottom">
-        <div className="mx-auto flex h-[60px] max-w-lg items-stretch px-1">
+        <div className="mx-auto flex h-16 max-w-lg items-stretch px-2">
           {primaryItems.map((item) => (
             <NavLink
               key={item.to}
@@ -66,17 +66,17 @@ export function MobileBottomNav({
               onClick={scrollTop}
               className={({ isActive }) =>
                 cn(
-                  "flex flex-1 flex-col items-start justify-center gap-[3px] px-1 py-0 text-[11px] leading-snug text-balance transition-colors",
+                  "flex flex-1 flex-col items-center justify-center gap-1 px-1 py-0 text-[11px] leading-snug text-balance transition-colors",
                   isActive
                     ? "text-lime-300"
                     : "text-muted-foreground active:text-foreground/70",
                 )
               }
             >
-              <span className="flex size-6 shrink-0 items-center justify-center -mt-0.5">
+              <span className="flex size-6 shrink-0 items-center justify-center">
                 {item.icon}
               </span>
-              <span className="leading-tight">
+              <span className="text-center leading-tight">
                 {item.label}
               </span>
             </NavLink>
@@ -87,7 +87,7 @@ export function MobileBottomNav({
                 setMoreOpen(true);
               }}
               className={cn(
-                "flex flex-1 flex-col items-center justify-center gap-[3px] px-1 text-[10px] font-medium transition-colors active:text-foreground/70",
+                "flex flex-1 flex-col items-center justify-center gap-1 px-1 text-[11px] font-medium transition-colors active:text-foreground/70",
                 moreHasActive &&
                   !primaryItems.some(
                     (p) =>

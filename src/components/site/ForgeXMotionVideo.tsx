@@ -78,7 +78,7 @@ const bg = (
 
 function SceneIntro() {
   return (
-    <div className="absolute inset-0 flex flex-col items-center justify-center px-6 text-center">
+    <div className="absolute inset-0 flex flex-col items-center justify-center pb-24 sm:pb-16 px-6 text-center">
       {bg}
       <motion.div
         initial={{ opacity: 0, scale: 0.6 }}
@@ -120,7 +120,7 @@ function SceneIntro() {
 function SceneSignIn() {
   const otp = ["1", "4", "2", "7", "9", "3"];
   return (
-    <div className="absolute inset-0 flex flex-col items-center justify-center px-6">
+    <div className="absolute inset-0 flex flex-col items-center justify-center pb-24 sm:pb-16 px-6">
       {bg}
       <motion.div variants={container} initial="hidden" animate="show" className="relative w-full max-w-md">
         <motion.div variants={item} className="flex items-center justify-center gap-2 text-lime-300">
@@ -188,7 +188,7 @@ function SceneSignIn() {
 function SceneTakeCourse() {
   const lessons = ["Introduction", "Core concepts", "Hands-on project"];
   return (
-    <div className="absolute inset-0 flex flex-col items-center justify-center px-6">
+    <div className="absolute inset-0 flex flex-col items-center justify-center pb-24 sm:pb-16 px-6">
       {bg}
       <motion.div variants={container} initial="hidden" animate="show" className="relative w-full max-w-lg">
         <motion.div variants={item} className="flex items-center justify-center gap-2 text-lime-300">
@@ -260,7 +260,7 @@ function SceneDiscover() {
   const levels = ["Design Fundamentals", "UI Design Mastery", "Portfolio & Career"];
   const steps = ["Structured roadmaps", "Level-locked progress", "Expert tutors"];
   return (
-    <div className="absolute inset-0 flex flex-col items-center justify-center px-6">
+    <div className="absolute inset-0 flex flex-col items-center justify-center pb-24 sm:pb-16 px-6">
       {bg}
       <motion.div variants={container} initial="hidden" animate="show" className="relative w-full max-w-lg">
         <motion.div variants={item} className="flex items-center justify-center gap-2 text-lime-300">
@@ -311,7 +311,7 @@ function SceneBuild() {
     { icon: BarChart3, title: "Tutor feedback", desc: "Assignments graded by experts" },
   ];
   return (
-    <div className="absolute inset-0 flex flex-col items-center justify-center px-6">
+    <div className="absolute inset-0 flex flex-col items-center justify-center pb-24 sm:pb-16 px-6">
       {bg}
       <motion.div variants={container} initial="hidden" animate="show" className="relative w-full max-w-lg">
         <motion.div variants={item} className="flex items-center justify-center gap-2 text-lime-300">
@@ -354,7 +354,7 @@ function SceneBuild() {
 
 function SceneExpress() {
   return (
-    <div className="absolute inset-0 flex flex-col items-center justify-center px-6">
+    <div className="absolute inset-0 flex flex-col items-center justify-center pb-24 sm:pb-16 px-6">
       {bg}
       <motion.div variants={container} initial="hidden" animate="show" className="relative w-full max-w-lg">
         <motion.div variants={item} className="flex items-center justify-center gap-2 text-lime-300">
@@ -414,7 +414,7 @@ function SceneGrow() {
     { icon: Rocket, label: "Entrepreneurship" },
   ];
   return (
-    <div className="absolute inset-0 flex flex-col items-center justify-center px-6 text-center">
+    <div className="absolute inset-0 flex flex-col items-center justify-center pb-24 sm:pb-16 px-6 text-center">
       {bg}
       <motion.div variants={container} initial="hidden" animate="show" className="relative">
         <motion.div variants={item} className="flex items-center justify-center gap-2 text-lime-300">
@@ -652,7 +652,7 @@ export function ForgeXMotionVideo({ title = "ForgeX in two minutes" }: { title?:
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
           transition={{ duration: 0.45 }}
-          className="absolute inset-0"
+          className="absolute inset-0 scale-[0.85] sm:scale-100"
         >
           <Scene index={sceneIndex} />
         </motion.div>
@@ -683,7 +683,7 @@ export function ForgeXMotionVideo({ title = "ForgeX in two minutes" }: { title?:
       )}
 
       {/* Player controls */}
-      <div className="absolute inset-x-0 bottom-0 z-20 border-t border-white/8 bg-black/60 px-4 pb-3 pt-2 backdrop-blur-md">
+      <div className="absolute inset-x-0 bottom-0 z-20 border-t border-white/8 bg-black/60 px-3 pb-3 pt-2 backdrop-blur-md sm:px-4">
         <div
           ref={barRef}
           className="group relative h-1.5 cursor-pointer rounded-full bg-white/10"
@@ -745,7 +745,7 @@ export function ForgeXMotionVideo({ title = "ForgeX in two minutes" }: { title?:
           </button>
 
           {/* scene dots */}
-          <div className="ml-2 flex items-center gap-1.5">
+          <div className="ml-1.5 flex items-center gap-1 sm:ml-2 sm:gap-1.5">
             {SCENES.map((s, i) => (
               <button
                 key={s.label}
@@ -766,7 +766,7 @@ export function ForgeXMotionVideo({ title = "ForgeX in two minutes" }: { title?:
             ))}
           </div>
 
-          <span className="ml-auto font-mono text-[11px] tabular-nums text-muted-foreground">
+          <span className="ml-auto font-mono text-[10px] tabular-nums text-muted-foreground sm:text-[11px]">
             {fmt(progress)} / {fmt(TOTAL_MS)}
           </span>
         </div>

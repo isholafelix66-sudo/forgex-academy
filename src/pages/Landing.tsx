@@ -53,8 +53,8 @@ const HERO_SLIDES: HeroSlide[] = [
     support: "Discover where your skills can take you.",
     ctaLabel: "Explore Roadmap",
     ctaTo: "/roadmap",
-    src: "https://images.unsplash.com/photo-1531538606174-0f90ff5bfce7?w=1200&q=80",
-    alt: "A young professional walking a clear career path",
+    src: "https://images.unsplash.com/photo-1519085360753-af0119f7cbe7?w=1200&q=80",
+    alt: "A young professional moving ahead on a clear career path",
   },
   {
     tag: "Build",
@@ -151,7 +151,7 @@ function HeroSlideshow() {
       </h1>
 
       {/* Slide card — full-width on mobile, wider on desktop */}
-      <div className="relative mx-auto mt-5 w-full max-w-md overflow-hidden rounded-2xl ring-1 ring-white/10 sm:mt-6 sm:max-w-2xl lg:max-w-4xl">
+      <div className="relative mt-5 w-full overflow-hidden rounded-2xl ring-1 ring-white/10 sm:mt-6 lg:mx-auto lg:max-w-5xl">
         <div className="relative aspect-[4/3] w-full bg-[#05070a] sm:aspect-[16/9]">
           {HERO_SLIDES.map((s, i) => (
             <motion.div
@@ -189,7 +189,7 @@ function HeroSlideshow() {
       </div>
 
       {/* CTAs — one equal-height row, arrows inside, never clipped */}
-      <div className="mx-auto mt-4 flex max-w-md items-center justify-center gap-3 sm:max-w-2xl sm:gap-4">
+      <div className="mt-4 flex w-full items-center gap-3 sm:mx-auto sm:w-auto sm:min-w-[460px] sm:gap-4">
         <Button
           asChild
           className="h-12 flex-1 bg-lime-400 text-sm font-semibold text-black hover:bg-lime-300 glow-lime-soft sm:max-w-[220px]"
@@ -469,7 +469,7 @@ export default function Landing() {
           title="ForgeX in two minutes"
         />
         <Reveal delay={0.05} className="mt-6">
-          <div className="mx-auto aspect-video w-full max-w-3xl overflow-hidden rounded-2xl border border-white/10">
+          <div className="mx-auto aspect-[3/4] w-full max-w-xs overflow-hidden rounded-2xl border border-white/10 sm:aspect-video sm:max-w-3xl">
             <ForgeXMotionVideo />
           </div>
         </Reveal>
