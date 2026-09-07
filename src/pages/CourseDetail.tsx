@@ -354,9 +354,6 @@ export default function CourseDetail() {
                         <p className="text-sm font-medium">{a.title}</p>
                         <p className="mt-0.5 text-xs text-muted-foreground">
                           {a.maxScore} points
-                          {a.deadline
-                            ? ` · due ${new Date(a.deadline).toLocaleDateString(undefined, { month: "short", day: "numeric" })}`
-                            : ""}
                         </p>
                       </div>
                     </div>

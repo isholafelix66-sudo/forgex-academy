@@ -33,7 +33,7 @@ import { Rating } from "@/components/site/Rating";
 import { StatusChip } from "@/pages/tutor/status";
 import { VideoPlayer } from "@/components/learn/VideoPlayer";
 import { getAdminToken } from "@/lib/admin-session";
-import { formatHours, formatDateShort } from "@/lib/format";
+import { formatHours } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
 const QUESTION_TYPE_LABEL: Record<string, string> = {
@@ -460,9 +460,6 @@ export default function AdminCoursePreview() {
                       <p className="text-sm font-medium">{a.title}</p>
                       <p className="mt-0.5 text-xs text-muted-foreground">
                         {a.maxScore} points
-                        {a.deadline
-                          ? ` · due ${formatDateShort(a.deadline)}`
-                          : ""}
                       </p>
                       {a.instructions && (
                         <p className="mt-1.5 line-clamp-2 text-xs leading-relaxed text-muted-foreground/80">

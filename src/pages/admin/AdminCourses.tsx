@@ -110,7 +110,7 @@ export default function AdminCourses() {
 
   // Quiz / assignment mini-editors
   const [quizDraft, setQuizDraft] = useState<{ id?: string; title: string; description: string; timeLimitMinutes: number; passingScorePercent: number; attemptLimit: number; published: boolean; questions: { type: string; question: string; options: string[]; answer: string; points: number; explanation: string; acceptedAnswers: string[] }[] } | null>(null);
-  const [assignDraft, setAssignDraft] = useState<{ id?: string; title: string; description: string; instructions: string; maxScore: number; deadline: string; published: boolean; questions: { type: string; question: string; maxMarks: number; modelAnswer: string; markingInstructions: string }[]; files: { name: string; url: string }[] } | null>(null);
+  const [assignDraft, setAssignDraft] = useState<{ id?: string; title: string; description: string; instructions: string; maxScore: number; published: boolean; questions: { type: string; question: string; maxMarks: number; modelAnswer: string; markingInstructions: string }[]; files: { name: string; url: string }[] } | null>(null);
 
   // Lesson video upload from device (Convex file storage, admin token flow)
   const [lessonVideoBusy, setLessonVideoBusy] = useState(false);
@@ -423,7 +423,6 @@ export default function AdminCourses() {
       title: assignDraft.title,
       description: assignDraft.description,
       instructions: assignDraft.instructions,
-      deadline: assignDraft.deadline ? new Date(assignDraft.deadline).getTime() : undefined,
       maxScore: assignDraft.maxScore,
       files: (assignDraft.files ?? []).filter((f) => f.name && f.url),
       questions: (assignDraft.questions ?? []).map((q) => ({
@@ -1158,7 +1157,7 @@ export default function AdminCourses() {
                 <TabsContent value="assignments" className="space-y-3 pt-4">
                   <div className="flex items-center justify-between">
                     <p className="text-sm text-muted-foreground">{content?.assignments?.length ?? 0} assignments</p>
-                    <Button variant="outline" size="sm" className="gap-1.5 border-white/15" onClick={() => setAssignDraft({ title: "", description: "", instructions: "", maxScore: 100, deadline: "", published: true, questions: [], files: [] })}>
+                    <Button variant="outline" size="sm" className="gap-1.5 border-white/15" onClick={() => setAssignDraft({ title: "", description: "", instructions: "", maxScore: 100, published: true, questions: [], files: [] })}>
                       <Plus className="size-3.5" /> New assignment
                     </Button>
                   </div>
@@ -1168,7 +1167,7 @@ export default function AdminCourses() {
                         <p className="truncate text-sm font-medium">{a.title}</p>
                         <p className="truncate text-xs text-muted-foreground">Max {a.maxScore} pts</p>
                       </div>
-                      <Button variant="ghost" size="icon" onClick={() => setAssignDraft({ id: a._id as string, title: a.title, description: a.description, instructions: a.instructions, maxScore: a.maxScore, deadline: a.deadline ? new Date(a.deadline).toISOString().slice(0, 10) : "", published: a.published ?? false, questions: ((a.questions ?? []) as { type: string; question: string; maxMarks?: number; modelAnswer?: string; markingInstructions?: string }[]).map((q) => ({ type: q.type ?? "short-text", question: q.question, maxMarks: q.maxMarks ?? 10, modelAnswer: q.modelAnswer ?? "", markingInstructions: q.markingInstructions ?? "" })), files: ((a.files ?? []) as { name: string; url: string }[]) })}>
+                      <Button variant="ghost" size="icon" onClick={() => setAssignDraft({ id: a._id as string, title: a.title, description: a.description, instructions: a.instructions, maxScore: a.maxScore, published: a.published ?? false, questions: ((a.questions ?? []) as { type: string; question: string; maxMarks?: number; modelAnswer?: string; markingInstructions?: string }[]).map((q) => ({ type: q.type ?? "short-text", question: q.question, maxMarks: q.maxMarks ?? 10, modelAnswer: q.modelAnswer ?? "", markingInstructions: q.markingInstructions ?? "" })), files: ((a.files ?? []) as { name: string; url: string }[]) })}>
                         <Pencil className="size-4" />
                       </Button>
                       <Button variant="ghost" size="icon" className="text-muted-foreground hover:text-rose-300" onClick={() => void adminDeleteAssignment({ id: a._id as never, token })}>
@@ -1182,10 +1181,7 @@ export default function AdminCourses() {
                       <Input placeholder="Assignment title *" value={assignDraft.title} onChange={(e) => setAssignDraft((d) => d ? { ...d, title: e.target.value } : d)} className="border-white/10 bg-black/30" />
                       <Input placeholder="Description" value={assignDraft.description} onChange={(e) => setAssignDraft((d) => d ? { ...d, description: e.target.value } : d)} className="border-white/10 bg-black/30" />
                       <Textarea placeholder="Instructions" rows={2} value={assignDraft.instructions} onChange={(e) => setAssignDraft((d) => d ? { ...d, instructions: e.target.value } : d)} className="border-white/10 bg-black/30" />
-                      <div className="grid grid-cols-2 gap-3">
-                        <Input type="number" placeholder="Max score" value={assignDraft.maxScore} onChange={(e) => setAssignDraft((d) => d ? { ...d, maxScore: Number(e.target.value) } : d)} className="border-white/10 bg-black/30" />
-                        <Input type="date" value={assignDraft.deadline} onChange={(e) => setAssignDraft((d) => d ? { ...d, deadline: e.target.value } : d)} className="border-white/10 bg-black/30" />
-                      </div>
+                      <Input type="number" placeholder="Max score" value={assignDraft.maxScore} onChange={(e) => setAssignDraft((d) => d ? { ...d, maxScore: Number(e.target.value) } : d)} className="max-w-44 border-white/10 bg-black/30" />
                       {/* Questions */}
                       <div className="space-y-2">
                         <div className="flex items-center justify-between">

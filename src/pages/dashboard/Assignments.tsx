@@ -24,7 +24,7 @@ import {
 } from "@/components/ui/dialog";
 import { PageHeader } from "@/components/dash/PageHeader";
 import { EmptyState } from "@/components/site/EmptyState";
-import { formatDate, formatDateShort, timeAgo } from "@/lib/format";
+import { timeAgo } from "@/lib/format";
 
 export default function Assignments() {
   const submissions = useQuery(api.submissions.mySubmissions);
@@ -33,7 +33,6 @@ export default function Assignments() {
     title: string;
     maxScore: number;
     instructions: string;
-    deadline: number | null;
     existing?: string;
   } | null>(null);
 
@@ -54,7 +53,6 @@ export default function Assignments() {
       title: s.assignment?.title ?? "Assignment",
       maxScore: s.assignment?.maxScore ?? 100,
       instructions: s.assignment?.instructions ?? "",
-      deadline: s.assignment?.deadline ?? null,
       existing: s.assignment ? s.assignment.title : undefined,
     });
     setText(s.text ?? "");
@@ -153,9 +151,6 @@ export default function Assignments() {
                   </div>
                   <p className="mt-0.5 text-xs text-muted-foreground">
                     Submitted {timeAgo(s.submittedAt)}
-                    {s.assignment?.deadline
-                      ? ` · due ${formatDateShort(s.assignment.deadline)}`
-                      : ""}
                   </p>
                   {graded ? (
                     <p className="mt-1.5 text-sm">
@@ -200,9 +195,7 @@ export default function Assignments() {
               <DialogHeader>
                 <DialogTitle className="font-display">{selected.title}</DialogTitle>
                 <DialogDescription className="text-muted-foreground">
-                  {selected.deadline
-                    ? `Due ${formatDate(selected.deadline)} · ${selected.maxScore} points`
-                    : `${selected.maxScore} points`}
+                  {selected.maxScore} points
                 </DialogDescription>
               </DialogHeader>
 

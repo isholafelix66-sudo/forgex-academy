@@ -6,8 +6,9 @@ import {
   Award,
   Bell,
   BookOpen,
-  CalendarClock,
+  CheckCircle2,
   Compass,
+  FileText,
   Flame,
   GraduationCap,
   Percent,
@@ -21,12 +22,12 @@ import { CourseCard } from "@/components/site/CourseCard";
 import { ProgressRing } from "@/components/site/ProgressRing";
 import { EmptyState } from "@/components/site/EmptyState";
 import { useAuth } from "@/hooks/use-auth";
-import { formatDateShort, timeAgo } from "@/lib/format";
+import { timeAgo } from "@/lib/format";
 
 export default function DashboardHome() {
   const { user } = useAuth();
   const enrollments = useQuery(api.learn.myEnrollments);
-  const deadlines = useQuery(api.submissions.upcomingDeadlines);
+  const submissions = useQuery(api.submissions.mySubmissions);
   const announcements = useQuery(api.public.announcementsList);
   const recommendations = useQuery(api.learn.recommendations);
 
@@ -51,6 +52,7 @@ export default function DashboardHome() {
         )
       : 0;
   const streak = user?.streak ?? 0;
+  const awaitingGrade = submissions?.filter((s) => s.grade === undefined);
 
   return (
     <div className="space-y-10">
@@ -85,10 +87,10 @@ export default function DashboardHome() {
           accent
         />
         <StatCard
-          icon={<CalendarClock className="size-5" />}
-          label="Upcoming deadlines"
-          value={deadlines?.length ?? "—"}
-          hint={deadlines && deadlines.length > 0 && deadlines[0] ? `Next: ${formatDateShort(deadlines[0].deadline!)}` : undefined}
+          icon={<FileText className="size-5" />}
+          label="Awaiting grade"
+          value={awaitingGrade?.length ?? "—"}
+          hint={submissions && submissions.length > 0 ? `${submissions.length} total submitted` : undefined}
         />
         <StatCard
           icon={<Flame className="size-5" />}
@@ -185,43 +187,56 @@ export default function DashboardHome() {
       </section>
 
       <div className="grid gap-10 lg:grid-cols-2">
-        {/* Deadlines */}
+        {/* My assignments */}
         <section>
-          <h2 className="font-display mb-4 text-xl font-bold">Upcoming deadlines</h2>
+          <h2 className="font-display mb-4 flex items-center gap-2 text-xl font-bold">
+            <FileText className="size-5 text-lime-300" /> My assignments
+          </h2>
           <div className="space-y-3">
-            {deadlines === undefined ? (
+            {submissions === undefined ? (
               <div className="h-32 animate-pulse rounded-2xl border border-white/8 bg-card" />
-            ) : deadlines.length === 0 ? (
+            ) : submissions.length === 0 ? (
               <p className="rounded-2xl border border-dashed border-white/10 p-6 text-sm text-muted-foreground">
-                No upcoming deadlines — you're all caught up. 🎉
+                No assignments yet — work you submit will show up here. 🎉
               </p>
             ) : (
-              deadlines.map((d) => (
-                <Link
-                  key={d._id}
-                  to={`/dashboard/assignments`}
-                  className="flex items-center gap-4 rounded-2xl border border-white/10 bg-card p-4 transition-colors hover:border-lime-400/30"
-                >
-                  <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-amber-400/12 text-amber-300">
-                    <CalendarClock className="size-5" />
-                  </span>
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate text-sm font-medium">{d.title}</p>
-                    <p className="truncate text-xs text-muted-foreground">
-                      {d.course?.title} · due {formatDateShort(d.deadline!)}
-                    </p>
-                  </div>
-                  {d.submitted ? (
-                    <span className="rounded-full bg-lime-400/15 px-2.5 py-1 text-xs font-semibold text-lime-300">
-                      Submitted
+              submissions.slice(0, 4).map((s) => {
+                const graded = s.grade !== undefined;
+                return (
+                  <Link
+                    key={s._id}
+                    to="/dashboard/assignments"
+                    className="flex items-center gap-4 rounded-2xl border border-white/10 bg-card p-4 transition-colors hover:border-lime-400/30"
+                  >
+                    <span
+                      className={
+                        graded
+                          ? "flex size-10 shrink-0 items-center justify-center rounded-xl bg-lime-400/12 text-lime-300"
+                          : "flex size-10 shrink-0 items-center justify-center rounded-xl bg-amber-400/12 text-amber-300"
+                      }
+                    >
+                      {graded ? <CheckCircle2 className="size-5" /> : <FileText className="size-5" />}
                     </span>
-                  ) : (
-                    <span className="rounded-full bg-rose-400/15 px-2.5 py-1 text-xs font-semibold text-rose-300">
-                      {Math.ceil((d.deadline! - Date.now()) / 86400000)}d left
-                    </span>
-                  )}
-                </Link>
-              ))
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-sm font-medium">
+                        {s.assignment?.title ?? "Assignment"}
+                      </p>
+                      <p className="truncate text-xs text-muted-foreground">
+                        {s.course?.title ?? "Course"} · submitted {timeAgo(s.submittedAt)}
+                      </p>
+                    </div>
+                    {graded ? (
+                      <span className="shrink-0 rounded-full bg-lime-400/15 px-2.5 py-1 text-xs font-semibold text-lime-300">
+                        {s.grade}/{s.assignment?.maxScore ?? 100}
+                      </span>
+                    ) : (
+                      <span className="shrink-0 rounded-full bg-amber-400/15 px-2.5 py-1 text-xs font-semibold text-amber-300">
+                        Awaiting grade
+                      </span>
+                    )}
+                  </Link>
+                );
+              })
             )}
           </div>
         </section>

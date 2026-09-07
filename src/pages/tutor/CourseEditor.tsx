@@ -102,7 +102,6 @@ type AssignmentDraft = {
   title: string;
   description: string;
   instructions: string;
-  deadline: string;
   maxScore: number;
   files: Resource[];
   published: boolean;
@@ -143,7 +142,6 @@ const emptyAssignment: AssignmentDraft = {
   title: "",
   description: "",
   instructions: "",
-  deadline: "",
   maxScore: 100,
   files: [],
   published: true,
@@ -1770,7 +1768,6 @@ function AssignmentsTab({ courseId }: { courseId: string }) {
             title: a.title,
             description: a.description,
             instructions: a.instructions,
-            deadline: a.deadline ? new Date(a.deadline).toISOString().slice(0, 16) : "",
             maxScore: a.maxScore,
             files: a.files,
             published: (a as { published?: boolean }).published ?? false,
@@ -1801,7 +1798,6 @@ function AssignmentsTab({ courseId }: { courseId: string }) {
       title: draft.title,
       description: draft.description,
       instructions: draft.instructions,
-      deadline: draft.deadline ? new Date(draft.deadline).getTime() : undefined,
       maxScore: Number(draft.maxScore) || 100,
       files: draft.files.filter((f) => f.name && f.url),
       published: draft.published,
@@ -1834,7 +1830,7 @@ function AssignmentsTab({ courseId }: { courseId: string }) {
           <div className="min-w-0 flex-1">
             <p className="truncate text-sm font-medium">{a.title}</p>
             <p className="text-xs text-muted-foreground">
-              {a.maxScore} points{a.deadline ? ` · due ${new Date(a.deadline).toLocaleDateString()}` : ""}
+              {a.maxScore} points
             </p>
           </div>
           <Button variant="ghost" size="sm" onClick={() => open(a)}>Edit</Button>
@@ -1868,10 +1864,6 @@ function AssignmentsTab({ courseId }: { courseId: string }) {
               <div className="space-y-2">
                 <Label>Instructions</Label>
                 <Textarea value={draft.instructions} onChange={(e) => setDraft({ ...draft, instructions: e.target.value })} rows={4} className="border-white/10 bg-black/20" />
-              </div>
-              <div className="space-y-2">
-                <Label>Deadline</Label>
-                <Input type="datetime-local" value={draft.deadline} onChange={(e) => setDraft({ ...draft, deadline: e.target.value })} className="border-white/10 bg-black/20" />
               </div>
               <div className="space-y-2">
                 <Label>Files (name · URL per line)</Label>

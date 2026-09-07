@@ -1705,7 +1705,7 @@ export const courseContentDetail = query({
     return {
       lessons: lessons.sort((a, b) => a.order - b.order),
       quizzes: quizzes.sort((a, b) => a.createdAt - b.createdAt),
-      assignments: assignments.sort((a, b) => (a.deadline ?? Infinity) - (b.deadline ?? Infinity)),
+      assignments: assignments.sort((a, b) => a.createdAt - b.createdAt),
     };
   },
 });
@@ -1822,7 +1822,6 @@ export const adminUpsertAssignment = mutation({
     title: v.string(),
     description: v.string(),
     instructions: v.string(),
-    deadline: v.optional(v.number()),
     maxScore: v.number(),
     files: v.array(resourceValidator),
     questions: v.optional(v.array(assignmentQuestionValidator)),
@@ -1831,12 +1830,11 @@ export const adminUpsertAssignment = mutation({
   },
   handler: async (ctx, args) => {
     await requireAdminSession(ctx, args.token);
-    const { id, courseId, title, description, instructions, deadline, maxScore, files, questions, published } = args;
+    const { id, courseId, title, description, instructions, maxScore, files, questions, published } = args;
     const patch = {
       title,
       description,
       instructions,
-      deadline,
       maxScore: Math.max(1, Math.round(maxScore)),
       files,
       questions: questions ?? [],
