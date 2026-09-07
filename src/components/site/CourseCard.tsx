@@ -41,6 +41,7 @@ export function CourseCard({ course, className }: { course: CourseCardData; clas
           gradient={course.gradient}
           icon={course.icon}
           image={course.image}
+          slug={course.slug}
           className="h-40 w-full rounded-none border-0"
           iconClassName="text-5xl transition-transform duration-300 group-hover:scale-110"
         />

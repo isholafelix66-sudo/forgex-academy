@@ -328,7 +328,7 @@ export const ensureSeedData = mutation({
       title: string; subtitle: string; description: string; long: string;
       categoryId: string; tutorId: string; roadmapId?: string; levelId?: string;
       difficulty: "beginner" | "intermediate" | "advanced" | "professional" | "expert";
-      hours: number; rating: number; ratingCount: number; gradient: string; icon: string;
+      hours: number; rating: number; ratingCount: number; gradient: string; icon: string; image: string;
       prerequisites: string[]; skills: string[]; featured: boolean;
       lessons: Array<{ t: string; m: number; n: string; tr: string; r?: Array<[string, string]> }>;
       quizzes: Array<{ t: string; d: string; time: number; qs: Question[] }>;
@@ -339,7 +339,14 @@ export const ensureSeedData = mutation({
         .query("courses")
         .withIndex("by_slug", (q) => q.eq("slug", slug))
         .first();
-      if (existingCourse) return existingCourse._id;
+      if (existingCourse) {
+        // Self-heal: backfill a real cover photo onto courses seeded before
+        // covers existed, so existing databases get them without a wipe.
+        if (!existingCourse.image && c.image) {
+          await ctx.db.patch(existingCourse._id, { image: c.image });
+        }
+        return existingCourse._id;
+      }
       const courseId = await ctx.db.insert("courses", {
         title: c.title, slug, subtitle: c.subtitle,
         description: c.description, longDescription: c.long,
@@ -347,7 +354,7 @@ export const ensureSeedData = mutation({
         roadmapId: c.roadmapId as never, levelId: c.levelId as never,
         difficulty: c.difficulty, durationHours: c.hours,
         rating: c.rating, ratingCount: c.ratingCount,
-        gradient: c.gradient, icon: c.icon,
+        gradient: c.gradient, icon: c.icon, image: c.image,
         prerequisites: c.prerequisites, skills: c.skills,
         featured: c.featured, published: true,
         enrolledCount: Math.floor(120 + Math.random() * 900),
@@ -388,7 +395,7 @@ export const ensureSeedData = mutation({
       description: "Master the building blocks of visual design: color, typography, layout and composition — then apply them to real briefs.",
       long: "This course is your first step into the world of design. You'll learn the core principles every designer uses daily: hierarchy, balance, contrast and rhythm. Through hands-on exercises, you'll train your eye, understand how color and type communicate, and finish with a mini-brand project you can put in your portfolio.",
       categoryId: catDesign, tutorId: tAmara, roadmapId: design.id, levelId: design.levelIds[0],
-      difficulty: "beginner", hours: 8, rating: 4.8, ratingCount: 412, gradient: "violet", icon: "👁️",
+      difficulty: "beginner", hours: 8, rating: 4.8, ratingCount: 412, gradient: "violet", icon: "👁️", image: "https://images.unsplash.com/photo-1561070791-2526d30994b5?w=1200&q=80",
       prerequisites: [], skills: ["Color theory", "Typography", "Composition", "Visual hierarchy", "Figma basics"],
       featured: true,
       lessons: [
@@ -422,7 +429,7 @@ export const ensureSeedData = mutation({
       description: "Learn how strategy becomes identity: research, naming, logos, voice and brand guidelines.",
       long: "Branding is strategy made visible. This course takes you through the full identity process — from audience research and positioning, to logo exploration, color and type systems, and finally brand guidelines that keep a brand consistent everywhere it shows up.",
       categoryId: catDesign, tutorId: tSofia, roadmapId: design.id, levelId: design.levelIds[1],
-      difficulty: "beginner", hours: 10, rating: 4.7, ratingCount: 289, gradient: "fuchsia", icon: "🧬",
+      difficulty: "beginner", hours: 10, rating: 4.7, ratingCount: 289, gradient: "fuchsia", icon: "🧬", image: "https://images.unsplash.com/photo-1634942537034-2531766767d1?w=1200&q=80",
       prerequisites: ["Design Fundamentals"], skills: ["Brand strategy", "Logo design", "Brand voice", "Guidelines", "Presentation"],
       featured: false,
       lessons: [
@@ -454,7 +461,7 @@ export const ensureSeedData = mutation({
       description: "Design systems, component thinking, prototyping and usability — the full UI toolkit.",
       long: "Interfaces are everywhere, and the bar for quality is high. This course teaches you to design web and mobile interfaces with confidence: information architecture, wireframes, high-fidelity UI, design systems, prototyping in Figma, and usability testing.",
       categoryId: catDesign, tutorId: tAmara, roadmapId: design.id, levelId: design.levelIds[2],
-      difficulty: "intermediate", hours: 14, rating: 4.9, ratingCount: 533, gradient: "sky", icon: "🖥️",
+      difficulty: "intermediate", hours: 14, rating: 4.9, ratingCount: 533, gradient: "sky", icon: "🖥️", image: "https://images.unsplash.com/photo-1559028012-481c04fa702d?w=1200&q=80",
       prerequisites: ["Design Fundamentals", "Branding Essentials"], skills: ["Wireframing", "Figma", "Design systems", "Prototyping", "Usability testing"],
       featured: true,
       lessons: [
@@ -488,7 +495,7 @@ export const ensureSeedData = mutation({
       description: "Case studies, personal brand, portfolio sites, interviews and internship applications.",
       long: "Great work won't sell itself. This course turns your projects into a portfolio that hiring managers understand in 30 seconds, builds your personal brand, and prepares you to apply for internships and junior roles with confidence.",
       categoryId: catDesign, tutorId: tSofia, roadmapId: design.id, levelId: design.levelIds[3],
-      difficulty: "intermediate", hours: 6, rating: 4.6, ratingCount: 198, gradient: "violet", icon: "🚀",
+      difficulty: "intermediate", hours: 6, rating: 4.6, ratingCount: 198, gradient: "violet", icon: "🚀", image: "https://images.unsplash.com/photo-1467232004584-a241de8bcf5d?w=1200&q=80",
       prerequisites: ["UI Design Mastery"], skills: ["Case studies", "Portfolio sites", "Resume writing", "Interviews", "Job applications"],
       featured: false,
       lessons: [
@@ -519,7 +526,7 @@ export const ensureSeedData = mutation({
       description: "Semantic HTML, modern CSS, flexbox, grid, responsive design and deploying your first site.",
       long: "The web is built on three languages you'll master here. Write semantic HTML, style with modern CSS including Flexbox and Grid, make layouts responsive, and deploy a real site to the internet by the end of the course.",
       categoryId: catDev, tutorId: tDaniel, roadmapId: webdev.id, levelId: webdev.levelIds[0],
-      difficulty: "beginner", hours: 12, rating: 4.9, ratingCount: 714, gradient: "lime", icon: "🌐",
+      difficulty: "beginner", hours: 12, rating: 4.9, ratingCount: 714, gradient: "lime", icon: "🌐", image: "https://images.unsplash.com/photo-1461749280684-dccba630e2f6?w=1200&q=80",
       prerequisites: [], skills: ["HTML5", "CSS3", "Flexbox & Grid", "Responsive design", "Deployment"],
       featured: true,
       lessons: [
@@ -552,7 +559,7 @@ export const ensureSeedData = mutation({
       description: "Variables to async: types, functions, arrays, DOM, events, promises and modules.",
       long: "JavaScript runs everywhere. This course gives you a genuinely deep understanding: values and types, functions and closures, the DOM and events, and the async patterns that power modern apps. You'll build an interactive project as you go.",
       categoryId: catDev, tutorId: tDaniel, roadmapId: webdev.id, levelId: webdev.levelIds[1],
-      difficulty: "intermediate", hours: 18, rating: 4.8, ratingCount: 621, gradient: "amber", icon: "⚡",
+      difficulty: "intermediate", hours: 18, rating: 4.8, ratingCount: 621, gradient: "amber", icon: "⚡", image: "https://images.unsplash.com/photo-1515879218367-8466d910aaa4?w=1200&q=80",
       prerequisites: ["HTML, CSS & the Modern Web"], skills: ["ES2023", "DOM manipulation", "Async/await", "Modules", "Debugging"],
       featured: true,
       lessons: [
@@ -586,7 +593,7 @@ export const ensureSeedData = mutation({
       description: "HTTP, REST, Express-style routing, databases, auth basics and testing APIs.",
       long: "Every app needs a brain. Learn to design clean REST APIs, build servers that handle real traffic, connect to databases, secure routes with authentication, and document everything so other developers love you.",
       categoryId: catDev, tutorId: tDaniel, roadmapId: webdev.id, levelId: webdev.levelIds[2],
-      difficulty: "advanced", hours: 16, rating: 4.7, ratingCount: 342, gradient: "lime", icon: "🗄️",
+      difficulty: "advanced", hours: 16, rating: 4.7, ratingCount: 342, gradient: "lime", icon: "🗄️", image: "https://images.unsplash.com/photo-1558494949-ef010cbdcc31?w=1200&q=80",
       prerequisites: ["JavaScript Deep Dive"], skills: ["Node.js", "REST APIs", "Databases", "Auth & security", "API testing"],
       featured: false,
       lessons: [
@@ -619,7 +626,7 @@ export const ensureSeedData = mutation({
       description: "The capstone of the web track: a real learning platform with frontend, API, database and deployment.",
       long: "Everything clicks when you build the whole thing. In this capstone you'll build a mini learning-management system: public pages, auth, an admin area, and a database — then deploy it and walk through the architecture in a recorded walkthrough.",
       categoryId: catDev, tutorId: tDaniel, roadmapId: webdev.id, levelId: webdev.levelIds[3],
-      difficulty: "advanced", hours: 20, rating: 4.9, ratingCount: 187, gradient: "cyan", icon: "🎓",
+      difficulty: "advanced", hours: 20, rating: 4.9, ratingCount: 187, gradient: "cyan", icon: "🎓", image: "https://images.unsplash.com/photo-1522542550221-31fd19575a2d?w=1200&q=80",
       prerequisites: ["Backend APIs with Node"], skills: ["Full-stack architecture", "Auth flows", "Database design", "Deployment", "Project planning"],
       featured: true,
       lessons: [
@@ -653,7 +660,7 @@ export const ensureSeedData = mutation({
       description: "Analytical thinking, metrics that matter, spreadsheets and your first analysis.",
       long: "Data skills start with questions, not tools. Learn how to frame problems, pick the metrics that matter, work confidently in spreadsheets, and deliver your first clean analysis that people actually understand.",
       categoryId: catData, tutorId: tLayla, roadmapId: data.id, levelId: data.levelIds[0],
-      difficulty: "beginner", hours: 10, rating: 4.7, ratingCount: 356, gradient: "cyan", icon: "📊",
+      difficulty: "beginner", hours: 10, rating: 4.7, ratingCount: 356, gradient: "cyan", icon: "📊", image: "https://images.unsplash.com/photo-1551288049-bebda4e38f71?w=1200&q=80",
       prerequisites: [], skills: ["Analytical thinking", "Metrics & KPIs", "Spreadsheets", "Data hygiene", "Storytelling"],
       featured: false,
       lessons: [
@@ -685,7 +692,7 @@ export const ensureSeedData = mutation({
       description: "SELECT everything: joins, aggregations, subqueries, window functions and data cleanup.",
       long: "SQL is the language of data. This course builds real fluency: filtering, joins, aggregations, subqueries, window functions, and the messy art of wrangling raw data into analysis-ready tables.",
       categoryId: catData, tutorId: tLayla, roadmapId: data.id, levelId: data.levelIds[1],
-      difficulty: "intermediate", hours: 12, rating: 4.8, ratingCount: 402, gradient: "sky", icon: "🗃️",
+      difficulty: "intermediate", hours: 12, rating: 4.8, ratingCount: 402, gradient: "sky", icon: "🗃️", image: "https://images.unsplash.com/photo-1544383835-bda2bc66a55d?w=1200&q=80",
       prerequisites: ["Data Analytics Foundations"], skills: ["SQL", "Joins", "Aggregations", "Window functions", "Data cleaning"],
       featured: false,
       lessons: [
@@ -718,7 +725,7 @@ export const ensureSeedData = mutation({
       description: "Python, pandas, scikit-learn: regression, classification, evaluation and your first models.",
       long: "Machine learning is more approachable than it looks. Using Python, pandas and scikit-learn, you'll learn the core ideas — features, training, evaluation, overfitting — and build real predictive models for classification and regression problems.",
       categoryId: catData, tutorId: tLayla, roadmapId: data.id, levelId: data.levelIds[2],
-      difficulty: "advanced", hours: 22, rating: 4.8, ratingCount: 298, gradient: "cyan", icon: "🤖",
+      difficulty: "advanced", hours: 22, rating: 4.8, ratingCount: 298, gradient: "cyan", icon: "🤖", image: "https://images.unsplash.com/photo-1527430253228-e93688616381?w=1200&q=80",
       prerequisites: ["SQL & Data Wrangling"], skills: ["Python", "pandas", "scikit-learn", "Model evaluation", "Feature engineering"],
       featured: true,
       lessons: [
@@ -753,7 +760,7 @@ export const ensureSeedData = mutation({
       description: "Positioning, audiences, channels, messaging and the marketing funnel.",
       long: "Marketing is understanding people and earning attention. Learn the foundational frameworks: segmentation and personas, positioning, the funnel, and how to choose channels that fit your product and budget.",
       categoryId: catMkt, tutorId: tMarcus, roadmapId: marketing.id, levelId: marketing.levelIds[0],
-      difficulty: "beginner", hours: 8, rating: 4.6, ratingCount: 287, gradient: "rose", icon: "🎯",
+      difficulty: "beginner", hours: 8, rating: 4.6, ratingCount: 287, gradient: "rose", icon: "🎯", image: "https://images.unsplash.com/photo-1533750349088-cd871a92f312?w=1200&q=80",
       prerequisites: [], skills: ["Positioning", "Personas", "Marketing funnel", "Channel selection", "Messaging"],
       featured: false,
       lessons: [
@@ -785,7 +792,7 @@ export const ensureSeedData = mutation({
       description: "Paid ads, landing pages, A/B testing, analytics and growth loops.",
       long: "Performance marketing is measurable by design. Learn to set up and run paid campaigns, build landing pages that convert, run A/B tests properly, read analytics without fooling yourself, and design growth loops that compound.",
       categoryId: catMkt, tutorId: tMarcus, roadmapId: marketing.id, levelId: marketing.levelIds[2],
-      difficulty: "intermediate", hours: 14, rating: 4.7, ratingCount: 244, gradient: "rose", icon: "📈",
+      difficulty: "intermediate", hours: 14, rating: 4.7, ratingCount: 244, gradient: "rose", icon: "📈", image: "https://images.unsplash.com/photo-1460925895917-afdab827c52f?w=1200&q=80",
       prerequisites: ["Marketing Fundamentals"], skills: ["Paid media", "Conversion optimization", "A/B testing", "Analytics", "Growth loops"],
       featured: false,
       lessons: [
@@ -819,7 +826,7 @@ export const ensureSeedData = mutation({
       description: "Problem interviews, MVPs, business models, pricing and pitching.",
       long: "You don't need a perfect plan — you need a process. This course teaches the lean startup method: finding real problems, validating demand before building, creating MVPs, choosing business models, pricing, and pitching investors or customers with confidence.",
       categoryId: catBiz, tutorId: tTunde,
-      difficulty: "beginner", hours: 9, rating: 4.8, ratingCount: 264, gradient: "amber", icon: "🚀",
+      difficulty: "beginner", hours: 9, rating: 4.8, ratingCount: 264, gradient: "amber", icon: "🚀", image: "https://images.unsplash.com/photo-1559136555-9303baea8ebd?w=1200&q=80",
       prerequisites: [], skills: ["Lean methodology", "Customer interviews", "MVP design", "Business models", "Pitching"],
       featured: true,
       lessons: [

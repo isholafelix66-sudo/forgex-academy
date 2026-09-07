@@ -181,6 +181,7 @@ export default function AdminCoursePreview() {
             gradient={course.gradient}
             icon={course.icon}
             image={course.image}
+            slug={course.slug}
             className="h-64 w-full sm:h-80"
             iconClassName="text-7xl"
           />

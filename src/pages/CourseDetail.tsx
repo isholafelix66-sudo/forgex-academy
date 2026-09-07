@@ -185,6 +185,7 @@ export default function CourseDetail() {
                 gradient={course.gradient}
                 icon={course.icon}
                 image={course.image}
+                slug={course.slug}
                 className="h-64 w-full sm:h-80"
                 iconClassName="text-7xl"
               />
@@ -622,6 +623,7 @@ export default function CourseDetail() {
                   gradient={course.gradient}
                   icon={course.icon}
                   image={course.image}
+                  slug={course.slug}
                   className="h-44 rounded-none border-0"
                   iconClassName="text-6xl"
                 />
