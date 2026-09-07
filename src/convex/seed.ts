@@ -15,6 +15,120 @@ const VIDS = [
   "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/TearsOfSteel.mp4",
 ];
 
+/**
+ * Real educational YouTube lessons for the seeded catalog, keyed by course
+ * slug → video per lesson order (1-based). Used for fresh seeds and to
+ * self-heal existing lessons that still point at placeholder clips.
+ */
+const REAL_LESSON_VIDEOS: Record<string, string[]> = {
+  "ui-design-mastery": [
+    "https://www.youtube.com/watch?v=SjbQ21klQP8",
+    "https://www.youtube.com/watch?v=6t_dYhXyYjI",
+    "https://www.youtube.com/watch?v=XT59i0Nyq-c",
+    "https://www.youtube.com/watch?v=_uva2dQPlV8",
+    "https://www.youtube.com/watch?v=E-H06QNkHTU",
+    "https://www.youtube.com/watch?v=EYUL0N1Fjhg",
+  ],
+  "design-fundamentals": [
+    "https://www.youtube.com/watch?v=YqQx75OPRa0",
+    "https://www.youtube.com/watch?v=MshxnTQW4qU",
+    "https://www.youtube.com/watch?v=_2LLXnUdUIc",
+    "https://www.youtube.com/watch?v=sByzHoiYFX0",
+    "https://www.youtube.com/watch?v=a5KYlHNKQB8",
+    "https://www.youtube.com/watch?v=tvYDYtQhreo",
+  ],
+  "branding-essentials": [
+    "https://www.youtube.com/watch?v=5D8sWNq-WUI",
+    "https://www.youtube.com/watch?v=NPqEdQDraho",
+    "https://www.youtube.com/watch?v=4MxRhjHmiVw",
+    "https://www.youtube.com/watch?v=VTDycrlT1hI",
+    "https://www.youtube.com/watch?v=4n7dC8AcfH8",
+  ],
+  "portfolio-career-launchpad": [
+    "https://www.youtube.com/watch?v=cqHM7pay82E",
+    "https://www.youtube.com/watch?v=mmgxspm9JWs",
+    "https://www.youtube.com/watch?v=Y7wD38n7yl4",
+    "https://www.youtube.com/watch?v=RYssJ_m60vE",
+  ],
+  "html-css-the-modern-web": [
+    "https://www.youtube.com/watch?v=KVBfmtQ2Wlk",
+    "https://www.youtube.com/watch?v=kX3TfdUqpuU",
+    "https://www.youtube.com/watch?v=yfoY53QXEnI",
+    "https://www.youtube.com/watch?v=z62f2k38s64",
+    "https://www.youtube.com/watch?v=69IbzTWg5PM",
+    "https://www.youtube.com/watch?v=RGOj5yH7evk",
+  ],
+  "javascript-deep-dive": [
+    "https://www.youtube.com/watch?v=L9-3VBOjNH4",
+    "https://www.youtube.com/watch?v=1S8SBDhA7HA",
+    "https://www.youtube.com/watch?v=5fb2aPlgoys",
+    "https://www.youtube.com/watch?v=8MoElay6dWU",
+    "https://www.youtube.com/watch?v=VmQ6dHvnKIM",
+    "https://www.youtube.com/watch?v=s9kNndJLOjg",
+  ],
+  "backend-apis-with-node": [
+    "https://www.youtube.com/watch?v=Q-BpqyOT3a8",
+    "https://www.youtube.com/watch?v=32M1al-Y6Ag",
+    "https://www.youtube.com/watch?v=_7UQPve99r4",
+    "https://www.youtube.com/watch?v=favjC6EKFgw",
+    "https://www.youtube.com/watch?v=8gHEv5iNRKk",
+    "https://www.youtube.com/watch?v=5aryMKiBEKY",
+  ],
+  "full-stack-project-build-an-lms": [
+    "https://www.youtube.com/watch?v=9aZcnf2_py0",
+    "https://www.youtube.com/watch?v=xsg9BDiwiJE",
+    "https://www.youtube.com/watch?v=305q6IJHy0w",
+    "https://www.youtube.com/watch?v=O3BUHwfHf84",
+    "https://www.youtube.com/watch?v=8Xwq35cPwYg",
+    "https://www.youtube.com/watch?v=l134cBAJCuc",
+  ],
+  "data-analytics-foundations": [
+    "https://www.youtube.com/watch?v=lgCNTuLBMK4",
+    "https://www.youtube.com/watch?v=ItZlTixh6Bs",
+    "https://www.youtube.com/watch?v=zXnQNytHCPM",
+    "https://www.youtube.com/watch?v=_jmiEGZ6PIY",
+    "https://www.youtube.com/watch?v=Hfx1X9WSGYQ",
+  ],
+  "sql-data-wrangling": [
+    "https://www.youtube.com/watch?v=h0nxCDiD-zg",
+    "https://www.youtube.com/watch?v=2HVMiPPuPIM",
+    "https://www.youtube.com/watch?v=nNrgRVIzeHg",
+    "https://www.youtube.com/watch?v=K1WeoKxLZ5o",
+    "https://www.youtube.com/watch?v=gMymeinwF8A",
+    "https://www.youtube.com/watch?v=bMtuPFLCljg",
+  ],
+  "machine-learning-essentials": [
+    "https://www.youtube.com/watch?v=ZyhVh-qRZPA",
+    "https://www.youtube.com/watch?v=-o3AxdVcUtQ",
+    "https://www.youtube.com/watch?v=O2Cw82YR5Bo",
+    "https://www.youtube.com/watch?v=J5bXOOmkopc",
+    "https://www.youtube.com/watch?v=C-Cd2ZGXBH4",
+    "https://www.youtube.com/watch?v=pYVScuY-GPk",
+  ],
+  "marketing-fundamentals": [
+    "https://www.youtube.com/watch?v=O9j9aLo9waY",
+    "https://www.youtube.com/watch?v=v6EWN4EjHM0",
+    "https://www.youtube.com/watch?v=SI0XD9e9Tl8",
+    "https://www.youtube.com/watch?v=OD-GVCZvcTU",
+    "https://www.youtube.com/watch?v=VnbaIbo6z5k",
+  ],
+  "growth-performance-marketing": [
+    "https://www.youtube.com/watch?v=NFAxZg1cGwA",
+    "https://www.youtube.com/watch?v=16-dF2p0kKo",
+    "https://www.youtube.com/watch?v=hcPxMuxh5Tc",
+    "https://www.youtube.com/watch?v=KZe0C0Qq4p0",
+    "https://www.youtube.com/watch?v=pRKpaZJJRxk",
+    "https://www.youtube.com/watch?v=LQ2eyBztSAs",
+  ],
+  "entrepreneurship-lean-startups": [
+    "https://www.youtube.com/watch?v=9bPgNEDdX3E",
+    "https://www.youtube.com/watch?v=KD1NcMTyKs4",
+    "https://www.youtube.com/watch?v=1FoCbbbcYT8",
+    "https://www.youtube.com/watch?v=AMKgcBzK7cg",
+    "https://www.youtube.com/watch?v=Tk-RdCFSrKU",
+  ],
+};
+
 const resource = (name: string, url: string): Resource => ({ name, url });
 
 function q(
@@ -346,14 +460,16 @@ export const ensureSeedData = mutation({
           await ctx.db.patch(existingCourse._id, { image: c.image });
         }
         // Self-heal: swap seeded placeholder clips (sample movies) for the
-        // real educational videos configured on the lessons.
-        if (c.lessons.some((l) => l.v)) {
+        // real educational videos mapped for this course (per lesson order).
+        const realFor = REAL_LESSON_VIDEOS[slug];
+        if (realFor) {
           const existingLessons = await ctx.db
             .query("lessons")
             .withIndex("by_course", (q) => q.eq("courseId", existingCourse._id))
             .collect();
           for (const l of existingLessons) {
-            const real = c.lessons[l.order - 1]?.v;
+            const real =
+              c.lessons[l.order - 1]?.v ?? realFor[l.order - 1];
             if (
               real &&
               (!l.videoUrl || l.videoUrl.includes("gtv-videos-bucket"))
@@ -377,12 +493,14 @@ export const ensureSeedData = mutation({
         enrolledCount: Math.floor(120 + Math.random() * 900),
         createdAt: Date.now() - Math.floor(Math.random() * 40000000),
       });
+      const realFor = REAL_LESSON_VIDEOS[slug];
       for (const [i, l] of c.lessons.entries()) {
+        const real = l.v ?? realFor?.[i];
         await ctx.db.insert("lessons", {
           courseId: courseId as never, title: l.t, order: i + 1,
           durationMinutes: l.m,
-          videoUrl: l.v ?? VIDS[i % VIDS.length],
-          videoType: l.v ? "youtube" : "mp4",
+          videoUrl: real ?? VIDS[i % VIDS.length],
+          videoType: real ? "youtube" : "mp4",
           notes: l.n, transcript: l.tr,
           resources: (l.r ?? []).map(([n, u]) => resource(n, u)),
         });
@@ -418,12 +536,12 @@ export const ensureSeedData = mutation({
       prerequisites: [], skills: ["Color theory", "Typography", "Composition", "Visual hierarchy", "Figma basics"],
       featured: true,
       lessons: [
-        { t: "Welcome to Design Fundamentals", m: 12, n: "Course structure, materials and how to get the most from the program.", tr: "We'll cover the roadmap, the design briefs you'll complete, and the tools you need to install. Download the workbook from resources.", r: [["Workbook (PDF)", "https://learn.forgex.academy/workbook.pdf"]] },
-        { t: "The Elements of Design", m: 18, n: "Line, shape, form, space, texture and value — the raw materials of every composition.", tr: "Elements are the ingredients; principles are the recipe. Learn to spot elements in the world around you and use them deliberately in your work.", r: [["Cheat sheet", "https://learn.forgex.academy/elements.pdf"]] },
-        { t: "Color: Theory & Emotion", m: 22, n: "Color wheels, harmonies, psychology and accessibility contrast.", tr: "We break down hue, saturation and value, explore classic harmonies, and look at how brands use color to trigger emotion. Always check contrast for accessibility." },
-        { t: "Typography That Works", m: 20, n: "Type anatomy, pairing, hierarchy and legibility systems.", tr: "Great type is invisible. Learn to pair serif and sans, build a type scale, and set comfortable reading experiences." },
-        { t: "Composition & Layout", m: 24, n: "Grids, alignment, whitespace and the rule of thirds.", tr: "Grids give structure; whitespace gives breathing room. We'll rebuild a cluttered poster into a calm, focused layout." },
-        { t: "Mini Brand: Putting It Together", m: 26, n: "Capstone exercise: design a one-page brand identity system.", tr: "You'll apply everything to a fictional coffee brand: palette, type system and a simple logo mark. This becomes portfolio piece #1." },
+        { t: "Welcome to Design Fundamentals", v: "https://www.youtube.com/watch?v=YqQx75OPRa0", m: 12, n: "Course structure, materials and how to get the most from the program.", tr: "We'll cover the roadmap, the design briefs you'll complete, and the tools you need to install. Download the workbook from resources.", r: [["Workbook (PDF)", "https://learn.forgex.academy/workbook.pdf"]] },
+        { t: "The Elements of Design", v: "https://www.youtube.com/watch?v=MshxnTQW4qU", m: 18, n: "Line, shape, form, space, texture and value — the raw materials of every composition.", tr: "Elements are the ingredients; principles are the recipe. Learn to spot elements in the world around you and use them deliberately in your work.", r: [["Cheat sheet", "https://learn.forgex.academy/elements.pdf"]] },
+        { t: "Color: Theory & Emotion", v: "https://www.youtube.com/watch?v=_2LLXnUdUIc", m: 22, n: "Color wheels, harmonies, psychology and accessibility contrast.", tr: "We break down hue, saturation and value, explore classic harmonies, and look at how brands use color to trigger emotion. Always check contrast for accessibility." },
+        { t: "Typography That Works", v: "https://www.youtube.com/watch?v=sByzHoiYFX0", m: 20, n: "Type anatomy, pairing, hierarchy and legibility systems.", tr: "Great type is invisible. Learn to pair serif and sans, build a type scale, and set comfortable reading experiences." },
+        { t: "Composition & Layout", v: "https://www.youtube.com/watch?v=a5KYlHNKQB8", m: 24, n: "Grids, alignment, whitespace and the rule of thirds.", tr: "Grids give structure; whitespace gives breathing room. We'll rebuild a cluttered poster into a calm, focused layout." },
+        { t: "Mini Brand: Putting It Together", v: "https://www.youtube.com/watch?v=tvYDYtQhreo", m: 26, n: "Capstone exercise: design a one-page brand identity system.", tr: "You'll apply everything to a fictional coffee brand: palette, type system and a simple logo mark. This becomes portfolio piece #1." },
       ],
       quizzes: [
         {
@@ -452,11 +570,11 @@ export const ensureSeedData = mutation({
       prerequisites: ["Design Fundamentals"], skills: ["Brand strategy", "Logo design", "Brand voice", "Guidelines", "Presentation"],
       featured: false,
       lessons: [
-        { t: "What Branding Actually Is", m: 14, n: "Brand vs logo: identity as a system of meaning.", tr: "A logo is a mark; a brand is the feeling people have. We start by defining the difference and why strategy comes first." },
-        { t: "Research & Positioning", m: 20, n: "Audiences, competitors, and the positioning statement.", tr: "Interviews, competitive audits and positioning statements are the raw materials of identity. You'll write one for your own brand." },
-        { t: "Logo Design Process", m: 24, n: "Moodboards, sketching, iteration and vectorizing.", tr: "From 50 rough sketches to 3 refined concepts to one final mark — the classic designer's funnel." },
-        { t: "Color, Type & Voice", m: 18, n: "Assembling the toolkit that makes a brand consistent.", tr: "Palette, type system, tone of voice. Consistent use is what makes a brand feel premium." },
-        { t: "Brand Guidelines & Handoff", m: 16, n: "Document your system so anyone can apply it.", tr: "A guideline deck protects the brand. Learn what to include and how to present it to clients." },
+        { t: "What Branding Actually Is", v: "https://www.youtube.com/watch?v=5D8sWNq-WUI", m: 14, n: "Brand vs logo: identity as a system of meaning.", tr: "A logo is a mark; a brand is the feeling people have. We start by defining the difference and why strategy comes first." },
+        { t: "Research & Positioning", v: "https://www.youtube.com/watch?v=NPqEdQDraho", m: 20, n: "Audiences, competitors, and the positioning statement.", tr: "Interviews, competitive audits and positioning statements are the raw materials of identity. You'll write one for your own brand." },
+        { t: "Logo Design Process", v: "https://www.youtube.com/watch?v=4MxRhjHmiVw", m: 24, n: "Moodboards, sketching, iteration and vectorizing.", tr: "From 50 rough sketches to 3 refined concepts to one final mark — the classic designer's funnel." },
+        { t: "Color, Type & Voice", v: "https://www.youtube.com/watch?v=VTDycrlT1hI", m: 18, n: "Assembling the toolkit that makes a brand consistent.", tr: "Palette, type system, tone of voice. Consistent use is what makes a brand feel premium." },
+        { t: "Brand Guidelines & Handoff", v: "https://www.youtube.com/watch?v=4n7dC8AcfH8", m: 16, n: "Document your system so anyone can apply it.", tr: "A guideline deck protects the brand. Learn what to include and how to present it to clients." },
       ],
       quizzes: [
         {
@@ -518,10 +636,10 @@ export const ensureSeedData = mutation({
       prerequisites: ["UI Design Mastery"], skills: ["Case studies", "Portfolio sites", "Resume writing", "Interviews", "Job applications"],
       featured: false,
       lessons: [
-        { t: "Case Study Anatomy", m: 18, n: "Problem → process → outcome. Tell the story of your work.", tr: "Hiring managers skim case studies. Lead with the problem and the result; keep process tight and visual." },
-        { t: "Building Your Portfolio Site", m: 22, n: "Tools, structure, and the 3 projects that matter.", tr: "Three strong, focused projects beat ten shallow ones. We'll structure a one-page site that scrolls beautifully." },
-        { t: "Resume & LinkedIn", m: 14, n: "Translate design skills into language recruiters scan.", tr: "Action verbs, measurable outcomes, and a headline that positions you." },
-        { t: "Applying & Interviewing", m: 16, n: "Portfolio reviews, whiteboard exercises and salary talks.", tr: "Practice your pitch, handle critiques gracefully, and know what you're worth." },
+        { t: "Case Study Anatomy", v: "https://www.youtube.com/watch?v=cqHM7pay82E", m: 18, n: "Problem → process → outcome. Tell the story of your work.", tr: "Hiring managers skim case studies. Lead with the problem and the result; keep process tight and visual." },
+        { t: "Building Your Portfolio Site", v: "https://www.youtube.com/watch?v=mmgxspm9JWs", m: 22, n: "Tools, structure, and the 3 projects that matter.", tr: "Three strong, focused projects beat ten shallow ones. We'll structure a one-page site that scrolls beautifully." },
+        { t: "Resume & LinkedIn", v: "https://www.youtube.com/watch?v=Y7wD38n7yl4", m: 14, n: "Translate design skills into language recruiters scan.", tr: "Action verbs, measurable outcomes, and a headline that positions you." },
+        { t: "Applying & Interviewing", v: "https://www.youtube.com/watch?v=RYssJ_m60vE", m: 16, n: "Portfolio reviews, whiteboard exercises and salary talks.", tr: "Practice your pitch, handle critiques gracefully, and know what you're worth." },
       ],
       quizzes: [
         {
@@ -549,12 +667,12 @@ export const ensureSeedData = mutation({
       prerequisites: [], skills: ["HTML5", "CSS3", "Flexbox & Grid", "Responsive design", "Deployment"],
       featured: true,
       lessons: [
-        { t: "How the Web Works", m: 10, n: "Browsers, servers, URLs and the request cycle.", tr: "Understanding the fundamentals demystifies everything else. We trace a request from your browser to a server and back." },
-        { t: "Semantic HTML", m: 20, n: "Structure content with meaning: header, nav, main, article, footer.", tr: "Semantic HTML is good for accessibility, SEO and maintainability. You'll build the skeleton of a real page." },
-        { t: "Modern CSS Fundamentals", m: 22, n: "Selectors, cascade, box model and custom properties.", tr: "CSS is a language of rules and inheritance. Custom properties (variables) change the game — we use them everywhere." },
-        { t: "Flexbox & Grid", m: 24, n: "The two layout engines that power modern interfaces.", tr: "Flexbox for one-dimensional rows, Grid for two-dimensional layouts. You'll build a responsive card grid." },
-        { t: "Responsive Design", m: 18, n: "Media queries, fluid type and mobile-first thinking.", tr: "Design for the smallest screen first, then enhance. Your page will look great on every device." },
-        { t: "Ship It: Deploy Your Site", m: 14, n: "Git, GitHub and free hosting so the world can see your work.", tr: "Push your code to GitHub and deploy with free static hosting. You now have a live URL to share." },
+        { t: "How the Web Works", v: "https://www.youtube.com/watch?v=KVBfmtQ2Wlk", m: 10, n: "Browsers, servers, URLs and the request cycle.", tr: "Understanding the fundamentals demystifies everything else. We trace a request from your browser to a server and back." },
+        { t: "Semantic HTML", v: "https://www.youtube.com/watch?v=kX3TfdUqpuU", m: 20, n: "Structure content with meaning: header, nav, main, article, footer.", tr: "Semantic HTML is good for accessibility, SEO and maintainability. You'll build the skeleton of a real page." },
+        { t: "Modern CSS Fundamentals", v: "https://www.youtube.com/watch?v=yfoY53QXEnI", m: 22, n: "Selectors, cascade, box model and custom properties.", tr: "CSS is a language of rules and inheritance. Custom properties (variables) change the game — we use them everywhere." },
+        { t: "Flexbox & Grid", v: "https://www.youtube.com/watch?v=z62f2k38s64", m: 24, n: "The two layout engines that power modern interfaces.", tr: "Flexbox for one-dimensional rows, Grid for two-dimensional layouts. You'll build a responsive card grid." },
+        { t: "Responsive Design", v: "https://www.youtube.com/watch?v=69IbzTWg5PM", m: 18, n: "Media queries, fluid type and mobile-first thinking.", tr: "Design for the smallest screen first, then enhance. Your page will look great on every device." },
+        { t: "Ship It: Deploy Your Site", v: "https://www.youtube.com/watch?v=RGOj5yH7evk", m: 14, n: "Git, GitHub and free hosting so the world can see your work.", tr: "Push your code to GitHub and deploy with free static hosting. You now have a live URL to share." },
       ],
       quizzes: [
         {
@@ -582,12 +700,12 @@ export const ensureSeedData = mutation({
       prerequisites: ["HTML, CSS & the Modern Web"], skills: ["ES2023", "DOM manipulation", "Async/await", "Modules", "Debugging"],
       featured: true,
       lessons: [
-        { t: "Values, Types & Variables", m: 18, n: "Primitives, objects, coercion and const/let.", tr: "Everything in JS is a value. Understanding types and coercion prevents a whole class of bugs." },
-        { t: "Functions & Closures", m: 22, n: "First-class functions, scope, closures and higher-order functions.", tr: "Functions are values you can pass around. Closures are how JavaScript remembers — this unlocks functional patterns." },
-        { t: "The DOM & Events", m: 24, n: "Select, create, update and listen. Build interactive UI.", tr: "The DOM is your API to the page. We build a working to-do list with events and rendering." },
-        { t: "Arrays & Objects in Depth", m: 20, n: "map, filter, reduce and modern object patterns.", tr: "Transform data fluently with array methods instead of loops. This is the bread and butter of real codebases." },
-        { t: "Async JavaScript", m: 26, n: "Promises, async/await, fetch and error handling.", tr: "The web is async. We fetch real data from an API, handle loading and errors, and render it." },
-        { t: "Modules & Tooling", m: 16, n: "import/export, npm and the modern dev workflow.", tr: "Break code into modules, install packages, and meet the tools real developers use daily." },
+        { t: "Values, Types & Variables", v: "https://www.youtube.com/watch?v=L9-3VBOjNH4", m: 18, n: "Primitives, objects, coercion and const/let.", tr: "Everything in JS is a value. Understanding types and coercion prevents a whole class of bugs." },
+        { t: "Functions & Closures", v: "https://www.youtube.com/watch?v=1S8SBDhA7HA", m: 22, n: "First-class functions, scope, closures and higher-order functions.", tr: "Functions are values you can pass around. Closures are how JavaScript remembers — this unlocks functional patterns." },
+        { t: "The DOM & Events", v: "https://www.youtube.com/watch?v=5fb2aPlgoys", m: 24, n: "Select, create, update and listen. Build interactive UI.", tr: "The DOM is your API to the page. We build a working to-do list with events and rendering." },
+        { t: "Arrays & Objects in Depth", v: "https://www.youtube.com/watch?v=8MoElay6dWU", m: 20, n: "map, filter, reduce and modern object patterns.", tr: "Transform data fluently with array methods instead of loops. This is the bread and butter of real codebases." },
+        { t: "Async JavaScript", v: "https://www.youtube.com/watch?v=VmQ6dHvnKIM", m: 26, n: "Promises, async/await, fetch and error handling.", tr: "The web is async. We fetch real data from an API, handle loading and errors, and render it." },
+        { t: "Modules & Tooling", v: "https://www.youtube.com/watch?v=s9kNndJLOjg", m: 16, n: "import/export, npm and the modern dev workflow.", tr: "Break code into modules, install packages, and meet the tools real developers use daily." },
       ],
       quizzes: [
         {
@@ -616,12 +734,12 @@ export const ensureSeedData = mutation({
       prerequisites: ["JavaScript Deep Dive"], skills: ["Node.js", "REST APIs", "Databases", "Auth & security", "API testing"],
       featured: false,
       lessons: [
-        { t: "HTTP & REST in Practice", m: 16, n: "Methods, status codes, resources and idempotency.", tr: "REST is a set of conventions, not a framework. Master the verbs and status codes first." },
-        { t: "Your First Server", m: 20, n: "Routing, middleware and JSON responses.", tr: "We scaffold a server, add routes, and handle requests and responses cleanly." },
-        { t: "Working with Databases", m: 24, n: "Models, CRUD and query patterns.", tr: "Persist data with a database and model your resources. CRUD becomes second nature." },
-        { t: "Authentication Basics", m: 22, n: "Passwords, hashing, tokens and protected routes.", tr: "Never store plaintext passwords. We implement hashing, sessions and protected endpoints." },
-        { t: "Errors, Validation & Testing", m: 18, n: "Fail loudly and early — then verify it works.", tr: "Input validation, structured errors and a few automated tests turn a demo into a product." },
-        { t: "Documenting & Shipping", m: 14, n: "OpenAPI docs, environment config and deployment.", tr: "Document your API, keep secrets out of code, and deploy so others can call it." },
+        { t: "HTTP & REST in Practice", v: "https://www.youtube.com/watch?v=Q-BpqyOT3a8", m: 16, n: "Methods, status codes, resources and idempotency.", tr: "REST is a set of conventions, not a framework. Master the verbs and status codes first." },
+        { t: "Your First Server", v: "https://www.youtube.com/watch?v=32M1al-Y6Ag", m: 20, n: "Routing, middleware and JSON responses.", tr: "We scaffold a server, add routes, and handle requests and responses cleanly." },
+        { t: "Working with Databases", v: "https://www.youtube.com/watch?v=_7UQPve99r4", m: 24, n: "Models, CRUD and query patterns.", tr: "Persist data with a database and model your resources. CRUD becomes second nature." },
+        { t: "Authentication Basics", v: "https://www.youtube.com/watch?v=favjC6EKFgw", m: 22, n: "Passwords, hashing, tokens and protected routes.", tr: "Never store plaintext passwords. We implement hashing, sessions and protected endpoints." },
+        { t: "Errors, Validation & Testing", v: "https://www.youtube.com/watch?v=8gHEv5iNRKk", m: 18, n: "Fail loudly and early — then verify it works.", tr: "Input validation, structured errors and a few automated tests turn a demo into a product." },
+        { t: "Documenting & Shipping", v: "https://www.youtube.com/watch?v=5aryMKiBEKY", m: 14, n: "OpenAPI docs, environment config and deployment.", tr: "Document your API, keep secrets out of code, and deploy so others can call it." },
       ],
       quizzes: [
         {
@@ -649,12 +767,12 @@ export const ensureSeedData = mutation({
       prerequisites: ["Backend APIs with Node"], skills: ["Full-stack architecture", "Auth flows", "Database design", "Deployment", "Project planning"],
       featured: true,
       lessons: [
-        { t: "Planning & Architecture", m: 16, n: "Requirements, data model, and the stack decision.", tr: "Great products start on paper. We define features, sketch the data model, and choose our stack deliberately." },
-        { t: "Database & Data Model", m: 22, n: "Users, courses, enrollments — relationships done right.", tr: "We model the core entities and their relationships, then migrate and seed." },
-        { t: "Auth & Roles", m: 20, n: "Sign up, sign in, protected routes and role guards.", tr: "Users, sessions and role-based access. Students see the app; admins see the admin." },
-        { t: "Building the Product UI", m: 26, n: "Catalog, course pages and the student dashboard.", tr: "We build the public catalog and the dashboard, connecting every screen to real data." },
-        { t: "Admin, Testing & Polish", m: 20, n: "Admin screens, edge cases and QA pass.", tr: "Admins manage content; testers break things. We fix the rough edges before launch." },
-        { t: "Deploy & Walkthrough", m: 18, n: "Ship it and record the story.", tr: "Deploy to production, then record a 5-minute walkthrough that becomes your capstone deliverable." },
+        { t: "Planning & Architecture", v: "https://www.youtube.com/watch?v=9aZcnf2_py0", m: 16, n: "Requirements, data model, and the stack decision.", tr: "Great products start on paper. We define features, sketch the data model, and choose our stack deliberately." },
+        { t: "Database & Data Model", v: "https://www.youtube.com/watch?v=xsg9BDiwiJE", m: 22, n: "Users, courses, enrollments — relationships done right.", tr: "We model the core entities and their relationships, then migrate and seed." },
+        { t: "Auth & Roles", v: "https://www.youtube.com/watch?v=305q6IJHy0w", m: 20, n: "Sign up, sign in, protected routes and role guards.", tr: "Users, sessions and role-based access. Students see the app; admins see the admin." },
+        { t: "Building the Product UI", v: "https://www.youtube.com/watch?v=O3BUHwfHf84", m: 26, n: "Catalog, course pages and the student dashboard.", tr: "We build the public catalog and the dashboard, connecting every screen to real data." },
+        { t: "Admin, Testing & Polish", v: "https://www.youtube.com/watch?v=8Xwq35cPwYg", m: 20, n: "Admin screens, edge cases and QA pass.", tr: "Admins manage content; testers break things. We fix the rough edges before launch." },
+        { t: "Deploy & Walkthrough", v: "https://www.youtube.com/watch?v=l134cBAJCuc", m: 18, n: "Ship it and record the story.", tr: "Deploy to production, then record a 5-minute walkthrough that becomes your capstone deliverable." },
       ],
       quizzes: [
         {
@@ -683,11 +801,11 @@ export const ensureSeedData = mutation({
       prerequisites: [], skills: ["Analytical thinking", "Metrics & KPIs", "Spreadsheets", "Data hygiene", "Storytelling"],
       featured: false,
       lessons: [
-        { t: "Analytical Thinking", m: 14, n: "Ask better questions before touching data.", tr: "The best analysts are curious and structured. We practice turning vague questions into measurable ones." },
-        { t: "Metrics That Matter", m: 18, n: "KPIs, vanity vs actionable metrics, and benchmarking.", tr: "A metric is only useful if it drives a decision. Learn to separate signals from noise." },
-        { t: "Spreadsheet Superpowers", m: 24, n: "Formulas, pivots, lookups and clean modeling.", tr: "Spreadsheets are still the world's most-used analytics tool. We go deep on the functions that matter." },
-        { t: "Data Hygiene 101", m: 16, n: "Clean data is half the battle: dedupe, validate, document.", tr: "Garbage in, garbage out. We build habits that keep datasets trustworthy." },
-        { t: "First Analysis: From Question to Slides", m: 20, n: "Structure an analysis and present it with confidence.", tr: "Framing, analysis, and a tight narrative. You'll present your first insight deck." },
+        { t: "Analytical Thinking", v: "https://www.youtube.com/watch?v=lgCNTuLBMK4", m: 14, n: "Ask better questions before touching data.", tr: "The best analysts are curious and structured. We practice turning vague questions into measurable ones." },
+        { t: "Metrics That Matter", v: "https://www.youtube.com/watch?v=ItZlTixh6Bs", m: 18, n: "KPIs, vanity vs actionable metrics, and benchmarking.", tr: "A metric is only useful if it drives a decision. Learn to separate signals from noise." },
+        { t: "Spreadsheet Superpowers", v: "https://www.youtube.com/watch?v=zXnQNytHCPM", m: 24, n: "Formulas, pivots, lookups and clean modeling.", tr: "Spreadsheets are still the world's most-used analytics tool. We go deep on the functions that matter." },
+        { t: "Data Hygiene 101", v: "https://www.youtube.com/watch?v=_jmiEGZ6PIY", m: 16, n: "Clean data is half the battle: dedupe, validate, document.", tr: "Garbage in, garbage out. We build habits that keep datasets trustworthy." },
+        { t: "First Analysis: From Question to Slides", v: "https://www.youtube.com/watch?v=Hfx1X9WSGYQ", m: 20, n: "Structure an analysis and present it with confidence.", tr: "Framing, analysis, and a tight narrative. You'll present your first insight deck." },
       ],
       quizzes: [
         {
@@ -715,12 +833,12 @@ export const ensureSeedData = mutation({
       prerequisites: ["Data Analytics Foundations"], skills: ["SQL", "Joins", "Aggregations", "Window functions", "Data cleaning"],
       featured: false,
       lessons: [
-        { t: "SELECT, FROM, WHERE", m: 18, n: "The query skeleton and filtering with precision.", tr: "Every query starts the same. Master projection and filtering before touching anything advanced." },
-        { t: "Joins: Connecting Tables", m: 22, n: "INNER, LEFT, RIGHT and when to reach for each.", tr: "Real data lives in many tables. Joins are how you bring it together without duplicating it." },
-        { t: "Aggregations & GROUP BY", m: 20, n: "SUM, COUNT, AVG and grouping by dimension.", tr: "From rows to answers: group, aggregate, and filter groups with HAVING." },
-        { t: "Subqueries & CTEs", m: 20, n: "Compose complex questions from simple pieces.", tr: "WITH clauses make monster queries readable. We break hard problems into steps." },
-        { t: "Window Functions", m: 22, n: "Rankings, running totals and comparisons across rows.", tr: "Window functions unlock analytics like rank, lag, and rolling averages — the daily tools of data teams." },
-        { t: "Wrangling Dirty Data", m: 18, n: "CASE, COALESCE, parsing and deduplication patterns.", tr: "Real data is messy. Learn the standard cleanup moves and when to automate them." },
+        { t: "SELECT, FROM, WHERE", v: "https://www.youtube.com/watch?v=h0nxCDiD-zg", m: 18, n: "The query skeleton and filtering with precision.", tr: "Every query starts the same. Master projection and filtering before touching anything advanced." },
+        { t: "Joins: Connecting Tables", v: "https://www.youtube.com/watch?v=2HVMiPPuPIM", m: 22, n: "INNER, LEFT, RIGHT and when to reach for each.", tr: "Real data lives in many tables. Joins are how you bring it together without duplicating it." },
+        { t: "Aggregations & GROUP BY", v: "https://www.youtube.com/watch?v=nNrgRVIzeHg", m: 20, n: "SUM, COUNT, AVG and grouping by dimension.", tr: "From rows to answers: group, aggregate, and filter groups with HAVING." },
+        { t: "Subqueries & CTEs", v: "https://www.youtube.com/watch?v=K1WeoKxLZ5o", m: 20, n: "Compose complex questions from simple pieces.", tr: "WITH clauses make monster queries readable. We break hard problems into steps." },
+        { t: "Window Functions", v: "https://www.youtube.com/watch?v=gMymeinwF8A", m: 22, n: "Rankings, running totals and comparisons across rows.", tr: "Window functions unlock analytics like rank, lag, and rolling averages — the daily tools of data teams." },
+        { t: "Wrangling Dirty Data", v: "https://www.youtube.com/watch?v=bMtuPFLCljg", m: 18, n: "CASE, COALESCE, parsing and deduplication patterns.", tr: "Real data is messy. Learn the standard cleanup moves and when to automate them." },
       ],
       quizzes: [
         {
@@ -748,12 +866,12 @@ export const ensureSeedData = mutation({
       prerequisites: ["SQL & Data Wrangling"], skills: ["Python", "pandas", "scikit-learn", "Model evaluation", "Feature engineering"],
       featured: true,
       lessons: [
-        { t: "Python for Data", m: 20, n: "Notebooks, pandas and the data workflow.", tr: "A fast tour of the Python data stack: notebooks, DataFrames and the classic load-explore-clean loop." },
-        { t: "Exploratory Data Analysis", m: 22, n: "Describe, visualize, hypothesize.", tr: "Plots and statistics that reveal what your data is really saying before any model sees it." },
-        { t: "Regression: Predicting Numbers", m: 24, n: "Linear models, error metrics and baseline thinking.", tr: "Always beat a baseline. We train, evaluate with RMSE/MAE, and sanity-check our predictions." },
-        { t: "Classification: Predicting Categories", m: 26, n: "Logistic regression, trees, accuracy and confusion matrices.", tr: "Spam or not? Churn or stay? We build classifiers and learn why accuracy can lie." },
-        { t: "Overfitting & Validation", m: 22, n: "Train/test splits, cross-validation and regularization.", tr: "Models that memorize don't generalize. We use validation honestly and keep complexity in check." },
-        { t: "Feature Engineering & Final Model", m: 24, n: "Turn raw fields into signals, then ship a model.", tr: "Great features beat fancy algorithms. You'll engineer features and deliver a final evaluated model." },
+        { t: "Python for Data", v: "https://www.youtube.com/watch?v=ZyhVh-qRZPA", m: 20, n: "Notebooks, pandas and the data workflow.", tr: "A fast tour of the Python data stack: notebooks, DataFrames and the classic load-explore-clean loop." },
+        { t: "Exploratory Data Analysis", v: "https://www.youtube.com/watch?v=-o3AxdVcUtQ", m: 22, n: "Describe, visualize, hypothesize.", tr: "Plots and statistics that reveal what your data is really saying before any model sees it." },
+        { t: "Regression: Predicting Numbers", v: "https://www.youtube.com/watch?v=O2Cw82YR5Bo", m: 24, n: "Linear models, error metrics and baseline thinking.", tr: "Always beat a baseline. We train, evaluate with RMSE/MAE, and sanity-check our predictions." },
+        { t: "Classification: Predicting Categories", v: "https://www.youtube.com/watch?v=J5bXOOmkopc", m: 26, n: "Logistic regression, trees, accuracy and confusion matrices.", tr: "Spam or not? Churn or stay? We build classifiers and learn why accuracy can lie." },
+        { t: "Overfitting & Validation", v: "https://www.youtube.com/watch?v=C-Cd2ZGXBH4", m: 22, n: "Train/test splits, cross-validation and regularization.", tr: "Models that memorize don't generalize. We use validation honestly and keep complexity in check." },
+        { t: "Feature Engineering & Final Model", v: "https://www.youtube.com/watch?v=pYVScuY-GPk", m: 24, n: "Turn raw fields into signals, then ship a model.", tr: "Great features beat fancy algorithms. You'll engineer features and deliver a final evaluated model." },
       ],
       quizzes: [
         {
