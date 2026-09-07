@@ -32,6 +32,7 @@ import { SectionHeading } from "@/components/site/SectionHeading";
 import { SafeImage } from "@/components/site/SafeImage";
 import { AI_CATEGORIES } from "@/convex/aiResources";
 import { formatDate } from "@/lib/format";
+import { toExternalHref } from "@/lib/url";
 
 type Resource = NonNullable<
   ReturnType<typeof useQuery<typeof api.aiResources.listPublished>>
@@ -137,7 +138,7 @@ function ResourceCard({
           </Button>
           {r.url && (
             <a
-              href={r.url}
+              href={toExternalHref(r.url)}
               target="_blank"
               rel="noopener noreferrer"
               onClick={(e) => e.stopPropagation()}
@@ -388,7 +389,7 @@ function ResourceDetail({
 
           {r.url && (
             <a
-              href={r.url}
+              href={toExternalHref(r.url)}
               target="_blank"
               rel="noopener noreferrer"
               className="flex w-full items-center justify-center gap-2 rounded-xl bg-lime-400 px-4 py-3 font-semibold text-black transition-colors hover:bg-lime-300"

@@ -3,6 +3,7 @@ import { useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import { ExternalLink, Mail, MapPin, Phone } from "lucide-react";
 import logo from "@/assets/logo.svg";
+import { toExternalHref } from "@/lib/url";
 
 const SOCIAL_ICONS: Record<string, string> = {
   facebook: "f",
@@ -181,7 +182,7 @@ export function Footer() {
                   {visibleSocials.map((s) => (
                     <a
                       key={s.platform}
-                      href={s.url}
+                      href={toExternalHref(s.url)}
                       target="_blank"
                       rel="noopener noreferrer"
                       title={s.platform}

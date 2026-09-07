@@ -13,6 +13,7 @@ import { Button } from "@/components/ui/button";
 import { PageShell } from "@/components/site/PageShell";
 import { Reveal } from "@/components/site/Reveal";
 import { SectionHeading } from "@/components/site/SectionHeading";
+import { toExternalHref } from "@/lib/url";
 
 export default function About() {
   const content = useQuery(api.public.siteContentAll);
@@ -135,7 +136,7 @@ export default function About() {
               .map(([platform, url]) => (
                 <a
                   key={platform}
-                  href={url}
+                  href={toExternalHref(url)}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-5 py-2.5 text-sm font-medium text-muted-foreground transition-colors hover:border-lime-400/40 hover:text-lime-300"

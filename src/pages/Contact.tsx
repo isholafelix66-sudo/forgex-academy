@@ -11,6 +11,7 @@ import {
 } from "lucide-react";
 import { PageShell } from "@/components/site/PageShell";
 import { Reveal } from "@/components/site/Reveal";
+import { toExternalHref } from "@/lib/url";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -151,7 +152,7 @@ export default function Contact() {
                     {visibleSocials.map((s) => (
                       <a
                         key={s.platform}
-                        href={s.url}
+                        href={toExternalHref(s.url)}
                         target="_blank"
                         rel="noopener noreferrer"
                         title={s.platform}

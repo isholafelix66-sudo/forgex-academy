@@ -12,6 +12,7 @@ import {
 import { toast } from "sonner";
 import CoursePreviewModal from "@/components/team/CoursePreviewModal";
 import AiEscalatedTickets from "@/components/team/AiEscalatedTickets";
+import { toExternalHref } from "@/lib/url";
 
 const VALID_ROLES = ["academic", "ai-support", "tutor-support", "student-support", "content"] as const;
 const TEAM_INFO: Record<string, { name: string; icon: string; color: string }> = {
@@ -247,7 +248,7 @@ function AIToolsPanel() {
             <p className="mt-0.5 text-xs text-white/30">{t.category} • {t.pricingType}</p>
           </div>
           <div className="flex items-center gap-2">
-            <a href={t.url} target="_blank" rel="noreferrer" className="rounded-lg border border-white/10 p-1.5 text-white/40 hover:bg-white/5"><ExternalLink className="size-3.5" /></a>
+            <a href={toExternalHref(t.url)} target="_blank" rel="noopener noreferrer" className="rounded-lg border border-white/10 p-1.5 text-white/40 hover:bg-white/5"><ExternalLink className="size-3.5" /></a>
             <button type="button" onClick={() => handleTogglePublish(t)} className={`rounded-lg border px-2.5 py-1.5 text-[10px] font-semibold ${t.published ? "border-amber-400/30 text-amber-300 hover:bg-amber-400/10" : "border-lime-400/30 text-lime-300 hover:bg-lime-400/10"}`}>
               {t.published ? "Unpublish" : "Publish"}
             </button>

@@ -29,6 +29,7 @@ import { ImageUploader, type UploadedImage } from "@/components/admin/ImageUploa
 import { VideoUploader } from "@/components/admin/VideoUploader";
 import type { TutorialVideoConfig } from "@/lib/tutorial-video";
 import { getAdminToken } from "@/lib/admin-session";
+import { toExternalHref } from "@/lib/url";
 
 const TEXT_FIELDS: Array<{ key: string; label: string; hint: string; rows: number }> = [
   { key: "heroTitle", label: "Homepage hero title", hint: "Big headline on the landing page.", rows: 2 },
@@ -486,7 +487,7 @@ export default function AdminContent() {
                     setSocials(next);
                   }} className="size-4 accent-lime-400" title="Enabled" />
                   <span className="w-24 text-sm font-medium capitalize">{s.platform}</span>
-                  <a href={s.url} target="_blank" rel="noopener noreferrer" className="min-w-0 flex-1 truncate text-xs text-muted-foreground hover:text-lime-300">
+                  <a href={toExternalHref(s.url)} target="_blank" rel="noopener noreferrer" className="min-w-0 flex-1 truncate text-xs text-muted-foreground hover:text-lime-300">
                     {s.url}
                   </a>
                   <Button variant="ghost" size="icon" onClick={() => setSocialDraft({ ...s })}>

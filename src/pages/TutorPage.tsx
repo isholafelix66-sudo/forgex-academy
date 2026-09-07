@@ -26,6 +26,7 @@ import { EmptyState } from "@/components/site/EmptyState";
 import { useAuth } from "@/hooks/use-auth";
 import { copyText } from "@/lib/copy";
 import { openChatWith } from "@/lib/chat-open";
+import { toExternalHref } from "@/lib/url";
 import { toast } from "sonner";
 
 const SOCIAL_LINKS: Array<{
@@ -213,7 +214,7 @@ export default function TutorPage() {
                       ).map((s) => (
                         <a
                           key={s.key}
-                          href={(tutor.socials as Record<string, string>)[s.key]}
+                          href={toExternalHref((tutor.socials as Record<string, string>)[s.key])}
                           target="_blank"
                           rel="noopener noreferrer"
                           className="flex items-center justify-between rounded-xl border border-white/10 bg-white/5 px-3.5 py-2.5 text-sm transition-colors hover:border-lime-400/40 hover:text-lime-300"
