@@ -53,8 +53,8 @@ const HERO_SLIDES: HeroSlide[] = [
     support: "Discover where your skills can take you.",
     ctaLabel: "Explore Roadmap",
     ctaTo: "/roadmap",
-    src: "https://images.unsplash.com/photo-1519085360753-af0119f7cbe7?w=1200&q=80",
-    alt: "A young professional moving ahead on a clear career path",
+    src: "https://images.unsplash.com/photo-1531482615713-2afd69097998?w=1200&q=80",
+    alt: "A young person building a digital skill on a laptop in a creative workspace",
   },
   {
     tag: "Build",
@@ -162,14 +162,19 @@ function HeroSlideshow() {
               className="absolute inset-0"
               aria-hidden={i !== active}
             >
+              {/* Branded placeholder while the photo streams in — never a blank box */}
+              <div
+                aria-hidden
+                className="absolute inset-0 bg-gradient-to-br from-[#10150e] via-[#0a0d0a] to-[#1a2410]"
+              />
               <img
                 src={s.src}
                 alt={s.alt}
                 width={1200}
                 height={800}
-                loading={i === 0 ? "eager" : "lazy"}
+                loading="eager"
                 decoding="async"
-                className="h-full w-full object-cover"
+                className="relative h-full w-full object-cover"
               />
               <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/90 via-black/35 to-transparent" />
               <div className="absolute inset-x-0 bottom-0 z-10 p-5 sm:p-7">
@@ -469,7 +474,7 @@ export default function Landing() {
           title="ForgeX in two minutes"
         />
         <Reveal delay={0.05} className="mt-6">
-          <div className="mx-auto aspect-[3/4] w-full max-w-xs overflow-hidden rounded-2xl border border-white/10 sm:aspect-video sm:max-w-3xl">
+          <div className="mx-auto aspect-[4/5] w-full max-w-sm overflow-hidden rounded-2xl border border-white/10 sm:aspect-video sm:max-w-3xl">
             <ForgeXMotionVideo />
           </div>
         </Reveal>

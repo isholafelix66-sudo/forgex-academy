@@ -57,7 +57,7 @@ export function MobileBottomNav({
     <>
       {/* ── Fixed bottom bar (< md only) ────────────────────────────── */}
       <nav className="fixed bottom-0 inset-x-0 z-50 border-t border-white/10 bg-[#0a0c0a]/95 backdrop-blur-xl md:hidden safe-area-bottom">
-        <div className="mx-auto flex h-16 max-w-lg items-stretch px-2">
+        <div className="mx-auto flex h-16 max-w-lg items-stretch gap-0.5 px-1">
           {primaryItems.map((item) => (
             <NavLink
               key={item.to}
@@ -66,7 +66,7 @@ export function MobileBottomNav({
               onClick={scrollTop}
               className={({ isActive }) =>
                 cn(
-                  "flex flex-1 flex-col items-center justify-center gap-1 px-1 py-0 text-[11px] leading-snug text-balance transition-colors",
+                  "flex min-w-0 flex-1 flex-col items-center justify-center gap-1 px-0.5 py-0 text-[11px] leading-snug text-balance transition-colors",
                   isActive
                     ? "text-lime-300"
                     : "text-muted-foreground active:text-foreground/70",
@@ -76,7 +76,7 @@ export function MobileBottomNav({
               <span className="flex size-6 shrink-0 items-center justify-center">
                 {item.icon}
               </span>
-              <span className="text-center leading-tight">
+              <span className="w-full truncate text-center leading-tight">
                 {item.label}
               </span>
             </NavLink>
@@ -87,7 +87,7 @@ export function MobileBottomNav({
                 setMoreOpen(true);
               }}
               className={cn(
-                "flex flex-1 flex-col items-center justify-center gap-1 px-1 text-[11px] font-medium transition-colors active:text-foreground/70",
+                "flex min-w-0 flex-1 flex-col items-center justify-center gap-1 px-0.5 text-[11px] font-medium transition-colors active:text-foreground/70",
                 moreHasActive &&
                   !primaryItems.some(
                     (p) =>
@@ -106,7 +106,7 @@ export function MobileBottomNav({
                   <span className="size-[4px] rounded-full bg-current" />
                 </div>
               </span>
-              <span className="leading-tight">More</span>
+              <span className="w-full truncate text-center leading-tight">More</span>
             </button>
           )}
         </div>
