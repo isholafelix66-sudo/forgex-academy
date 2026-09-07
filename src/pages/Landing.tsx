@@ -4,6 +4,7 @@ function Nt(){
   {tag:"Career Roadmap",headline:"Find Your Career Path.",support:"Discover where your skills can take you.",ctaLabel:"Explore Roadmap",ctaTo:"/roadmap",src:"https://images.unsplash.com/photo-1515634928627-2a4e0dae3ddf?w=1200&q=80",width:1200,height:800,alt:"Two people discussing a career pathway together"},
   {tag:"Build",headline:"Build. Practice. Grow.",support:"Turn knowledge into real experience.",ctaLabel:"Start Building",ctaTo:"/courses",src:"https://images.unsplash.com/photo-1531403009284-440f080d1e12?w=1200&q=80",width:1200,height:800,alt:"A developer building a real project at a desk"},
   {tag:"Opportunities",headline:"Turn Skills Into Opportunities.",support:"Connect your learning to your future.",ctaLabel:"Explore Opportunities",ctaTo:"/dashboard",src:"https://images.unsplash.com/photo-1522202176988-66273c2fd55f?w=1200&q=80",width:1200,height:800,alt:"Professionals networking and growing together"}],
+
   u=n.useCallback(()=>{b.current=!0,v.current&&clearTimeout(v.current)},[]),
   g=n.useCallback(()=>{v.current&&clearTimeout(v.current);v.current=window.setTimeout(()=>{b.current=!1},3e3)},[]);
   return n.useEffect(()=>{const o=c.current;if(!o)return;const m={passive:!0},y=()=>u(),C=()=>g();
@@ -38,11 +39,10 @@ function Nt(){
                         children:[
                           e.jsx("li",{children:e.jsxs(X,{to:d[t].ctaTo,className:"w-full flex flex-col sm:w-auto sm:flex-row sm:justify-center",children:[d[t].ctaLabel,e.jsx(P,{className:"size-4 transition-transform group-hover:translate-x-0.5"})]})}),
                           e.jsx("li",{children:e.jsxs(X,{to:t===2?"/courses":t===3?"/dashboard":"/courses",variant:"outline",className:"w-full flex flex-col sm:w-auto sm:flex-row sm:justify-center",children:[e.jsx(ne,{className:"size-4"}),t===0?"Explore roadmaps":t===1?"View all paths":t===2?"Browse courses":"See all"]})})
-                        ]})
-                    ]})
-              ]})
-            ]})},o.tag)}),
+                        ]});
+              ]});
+            ]});
       e.jsxs("div",{className:"mt-3 flex justify-center gap-2 sm:gap-3 sm:px-2",
-        children:d.map((o,m)=>e.jsx("button",{onClick:()=>{u(),r(m),g()},className:"flex size-2 shrink-0 rounded-full transition-all active:scale-90","aria-label":`Go to slide ${m+1}`,"aria-current":m===t,children:e.jsx("span",{className:I("block h-1.5 rounded-full transition-all duration-500",m===t?"w-6 bg-lime-400 shadow-[0_0_12px_rgba(166,255,0,0.7)]":"w-2 bg-white/30 hover:bg-white/50"),style:{transitionTimingFunction:"cubic-bezier(0.22,1,.36,1)"},m)}))}),
+        children:d.map((o,m)=>e.jsx("button",{onClick:()=>{u(),r(m),g()},className:"flex size-2 shrink-0 rounded-full transition-all active:scale-90","aria-label`:Go to slide ${m+1}`,`aria-current`:m===t,children:e.jsx("span",{className:I("block h-1.5 rounded-full transition-all duration-500",m===t?"w-6 bg-lime-400 shadow-[0_0_12px_rgba(166,255,0,0.7)]":"w-2 bg-white/30 hover:bg-white/50"),style:{transitionTimingFunction:"cubic-bezier(0.22,1,.36,1)"},m)}))}),
     ]});
 }
