@@ -1,0 +1,1 @@
+function s(r){const t=(r??"").trim();return t?/^[a-z][a-z0-9+.-]*:/i.test(t)||t.startsWith("//")||t.startsWith("/")||t.startsWith("#")||t.startsWith("?")?t:/^www\./i.test(t)||/^[\w-]+(\.[\w-]+)+(?:\/|$)/.test(t)?`https://${t}`:t:""}export{s as t};
