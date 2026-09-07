@@ -1,7 +1,7 @@
 import { Link } from "react-router";
 import { useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
-import { Mail, MapPin, Phone } from "lucide-react";
+import { ExternalLink, Mail, MapPin, Phone } from "lucide-react";
 import logo from "@/assets/logo.svg";
 
 const SOCIAL_ICONS: Record<string, string> = {
@@ -24,6 +24,11 @@ const UPCOMING = [
   "AI Career Coach",
 ];
 
+const DESCRIPTION =
+  "The learning platform of ForgeX Network. Discover skills, express " +
+  "yourself, and build the career you want — with structured paths, " +
+  "verified tutors and certificates that unlock real opportunities.";
+
 export function Footer() {
   const content = useQuery(api.public.siteContentAll);
   const brandLogo = (content?.logo as string | undefined) || logo;
@@ -43,8 +48,56 @@ export function Footer() {
 
   return (
     <footer className="border-t border-white/10 bg-black/30">
-      <div className="mx-auto max-w-7xl px-4 pb-28 pt-14 sm:px-6 md:pb-14">
-        <div className="grid gap-10 md:grid-cols-4">
+      <div className="mx-auto max-w-7xl px-4 pb-28 pt-8 sm:px-6 md:pb-14 md:pt-14">
+        {/* ── Mobile footer — compact closing brand section ──
+             Navigation lives in the fixed bottom bar, so this stays
+             minimal: brand, short description, tagline, utility row. */}
+        <div className="md:hidden">
+          <div className="flex items-center gap-2.5">
+            <img src={brandLogo} alt="ForgeX Academy" className="size-8 rounded-lg" />
+            <span className="font-display text-base font-bold">
+              ForgeX<span className="text-lime-400"> Academy</span>
+            </span>
+          </div>
+          <p className="mt-3 max-w-sm text-xs leading-relaxed text-muted-foreground">
+            {DESCRIPTION}
+          </p>
+          <p className="mt-3 text-[10px] font-semibold uppercase tracking-widest text-lime-400/80">
+            Discover. Express. Build.
+          </p>
+
+          <div className="mt-4 flex items-center gap-2 border-t border-white/10 pt-4">
+            {contact.email ? (
+              <a
+                href={`mailto:${contact.email}`}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-white/10 bg-white/5 px-3 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:border-lime-400/40 hover:text-lime-300"
+              >
+                <Mail className="size-3.5 text-lime-400" />
+                Get in touch
+              </a>
+            ) : (
+              <Link
+                to="/contact"
+                className="inline-flex items-center gap-1.5 rounded-lg border border-white/10 bg-white/5 px-3 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:border-lime-400/40 hover:text-lime-300"
+              >
+                <Mail className="size-3.5 text-lime-400" />
+                Get in touch
+              </Link>
+            )}
+            <a
+              href="https://forgex.network"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1.5 rounded-lg border border-white/10 bg-white/5 px-3 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:border-lime-400/40 hover:text-lime-300"
+            >
+              ForgeX Network
+              <ExternalLink className="size-3 text-lime-400/70" />
+            </a>
+          </div>
+        </div>
+
+        {/* ── Desktop footer — unchanged ── */}
+        <div className="hidden gap-10 md:grid md:grid-cols-4">
           <div className="md:col-span-2">
             <div className="flex items-center gap-2.5">
               <img src={brandLogo} alt="ForgeX Academy" className="size-9 rounded-xl" />
@@ -53,9 +106,7 @@ export function Footer() {
               </span>
             </div>
             <p className="mt-4 max-w-sm text-sm leading-relaxed text-muted-foreground">
-              The learning platform of ForgeX Network. Discover skills, express
-              yourself, and build the career you want — with structured paths,
-              verified tutors and certificates that unlock real opportunities.
+              {DESCRIPTION}
             </p>
             <p className="mt-4 text-xs font-semibold uppercase tracking-widest text-lime-400/80">
               Discover. Express. Build.
@@ -78,7 +129,7 @@ export function Footer() {
             </ul>
           </div>
 
-          {/* Get in touch — compact on mobile (no bottom padding conflict) */}
+          {/* Get in touch — desktop only */}
           <div>
             <h4 className="text-sm font-semibold text-foreground">Get in touch</h4>
             <ul className="mt-4 space-y-2.5 text-sm text-muted-foreground">
@@ -129,9 +180,9 @@ export function Footer() {
           </div>
         </div>
 
-        <div className="mt-12 flex flex-col items-center justify-between gap-4 border-t border-white/10 pt-6 text-xs text-muted-foreground sm:flex-row">
+        <div className="mt-8 flex flex-col items-center justify-between gap-3 border-t border-white/10 pt-5 text-xs text-muted-foreground sm:flex-row md:mt-12 md:pt-6">
           <p>© {new Date().getFullYear()} ForgeX Network. All rights reserved.</p>
-          <p>
+          <p className="hidden md:block">
             A module of{" "}
             <span className="font-medium text-lime-400">ForgeX Network</span> —
             discover, express, build.

@@ -330,6 +330,7 @@ const VALUE_PROPS = [
 ];
 
 export default function Landing() {
+  const reduce = useReducedMotion();
   const featured = useQuery(api.public.featuredCourses);
   const categories = useQuery(api.public.categoriesList);
   const stats = useQuery(api.public.stats);
@@ -480,22 +481,38 @@ export default function Landing() {
         </div>
       </section>
 
-      {/* ── CATEGORIES — real pills, horizontal scroll ───────────────── */}
+      {/* ── CATEGORIES — motion pills, staggered entrance, horizontal scroll ── */}
       {categories && categories.length > 0 && (
         <section className="mx-auto max-w-7xl px-4 pb-12 sm:px-6">
           <SectionHeading align="left" eyebrow="Browse" title="Categories" />
-          <Reveal delay={0.05} className="no-scrollbar mt-5 flex gap-2 overflow-x-auto pb-1">
-            {categories.map((c) => (
-              <Link
+          <div className="no-scrollbar mt-5 flex gap-2 overflow-x-auto pb-1">
+            {categories.map((c, i) => (
+              <motion.div
                 key={c._id}
-                to={`/courses?category=${c.slug}`}
-                className="inline-flex shrink-0 items-center gap-2 rounded-full border border-white/10 bg-card px-4 py-2 text-sm font-medium text-muted-foreground transition-colors hover:border-lime-400/40 hover:text-lime-300"
+                initial={reduce ? false : { opacity: 0, y: 16, scale: 0.94 }}
+                whileInView={reduce ? undefined : { opacity: 1, y: 0, scale: 1 }}
+                viewport={reduce ? undefined : { once: true, margin: "-40px" }}
+                transition={{
+                  duration: 0.45,
+                  delay: reduce ? 0 : i * 0.06,
+                  ease: [0.22, 1, 0.36, 1],
+                }}
+                whileHover={reduce ? undefined : { y: -3, scale: 1.05 }}
               >
-                <CategoryIcon name={c.icon} color={c.color} className="size-4 shrink-0" />
-                {c.name}
-              </Link>
+                <Link
+                  to={`/courses?category=${c.slug}`}
+                  className="group inline-flex shrink-0 items-center gap-2 rounded-full border border-white/10 bg-card px-4 py-2 text-sm font-medium text-muted-foreground transition-colors hover:border-lime-400/40 hover:text-lime-300"
+                >
+                  <CategoryIcon
+                    name={c.icon}
+                    color={c.color}
+                    className="size-4 shrink-0 transition-transform duration-300 group-hover:rotate-12 group-hover:scale-110"
+                  />
+                  {c.name}
+                </Link>
+              </motion.div>
             ))}
-          </Reveal>
+          </div>
         </section>
       )}
 
