@@ -27,6 +27,7 @@ import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { VideoPlayer } from "@/components/learn/VideoPlayer";
+import { resolveLessonVideo } from "@/lib/lesson-videos";
 import { QuizRunner, type QuizData, type QuizSubmitResult } from "@/components/learn/QuizRunner";
 import { DifficultyBadge } from "@/components/site/DifficultyBadge";
 import { Rating } from "@/components/site/Rating";
@@ -595,7 +596,7 @@ export default function Learn() {
 
               <VideoPlayer
                 key={activeLesson._id}
-                url={activeLesson.videoUrl}
+                url={resolveLessonVideo(course.slug, activeLesson.order, activeLesson.videoUrl)}
                 type={activeLesson.videoType}
                 muxPlaybackId={activeLesson.muxPlaybackId}
                 image={activeLesson.image}

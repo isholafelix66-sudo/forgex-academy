@@ -330,7 +330,7 @@ export const ensureSeedData = mutation({
       difficulty: "beginner" | "intermediate" | "advanced" | "professional" | "expert";
       hours: number; rating: number; ratingCount: number; gradient: string; icon: string; image: string;
       prerequisites: string[]; skills: string[]; featured: boolean;
-      lessons: Array<{ t: string; m: number; n: string; tr: string; r?: Array<[string, string]> }>;
+      lessons: Array<{ t: string; m: number; n: string; tr: string; r?: Array<[string, string]>; v?: string }>;
       quizzes: Array<{ t: string; d: string; time: number; qs: Question[] }>;
       assignment?: { t: string; d: string; i: string; days: number };
     }) => {
@@ -344,6 +344,23 @@ export const ensureSeedData = mutation({
         // covers existed, so existing databases get them without a wipe.
         if (!existingCourse.image && c.image) {
           await ctx.db.patch(existingCourse._id, { image: c.image });
+        }
+        // Self-heal: swap seeded placeholder clips (sample movies) for the
+        // real educational videos configured on the lessons.
+        if (c.lessons.some((l) => l.v)) {
+          const existingLessons = await ctx.db
+            .query("lessons")
+            .withIndex("by_course", (q) => q.eq("courseId", existingCourse._id))
+            .collect();
+          for (const l of existingLessons) {
+            const real = c.lessons[l.order - 1]?.v;
+            if (
+              real &&
+              (!l.videoUrl || l.videoUrl.includes("gtv-videos-bucket"))
+            ) {
+              await ctx.db.patch(l._id, { videoUrl: real, videoType: "youtube" });
+            }
+          }
         }
         return existingCourse._id;
       }
@@ -363,7 +380,9 @@ export const ensureSeedData = mutation({
       for (const [i, l] of c.lessons.entries()) {
         await ctx.db.insert("lessons", {
           courseId: courseId as never, title: l.t, order: i + 1,
-          durationMinutes: l.m, videoUrl: VIDS[i % VIDS.length], videoType: "mp4",
+          durationMinutes: l.m,
+          videoUrl: l.v ?? VIDS[i % VIDS.length],
+          videoType: l.v ? "youtube" : "mp4",
           notes: l.n, transcript: l.tr,
           resources: (l.r ?? []).map(([n, u]) => resource(n, u)),
         });
@@ -465,12 +484,12 @@ export const ensureSeedData = mutation({
       prerequisites: ["Design Fundamentals", "Branding Essentials"], skills: ["Wireframing", "Figma", "Design systems", "Prototyping", "Usability testing"],
       featured: true,
       lessons: [
-        { t: "Information Architecture", m: 16, n: "Organize content so users never get lost.", tr: "Sitemaps, user flows and card sorting. Good IA is invisible — bad IA is a maze." },
-        { t: "Wireframes & Low-Fi Prototypes", m: 20, n: "Layout first, polish later.", tr: "Quick grayscale wireframes let you test structure before investing in pixels." },
-        { t: "High-Fidelity UI in Figma", m: 26, n: "From wireframe to polished screen: spacing, states and detail.", tr: "We build a real screen component by component, obsessing over the details that make UI feel professional." },
-        { t: "Design Systems & Components", m: 22, n: "Tokens, components and consistency at scale.", tr: "Colors, type scales, spacing tokens and reusable components — the language of scalable design teams." },
-        { t: "Prototyping & Handoff", m: 18, n: "Interactions, developer handoff and design specs.", tr: "Turn static screens into clickable prototypes and hand developers everything they need." },
-        { t: "Usability Testing Basics", m: 14, n: "Watch real users, learn fast, iterate.", tr: "Five users find most problems. Learn to write tasks, moderate tests and prioritize fixes." },
+        { t: "Information Architecture", m: 16, n: "Organize content so users never get lost.", tr: "Sitemaps, user flows and card sorting. Good IA is invisible — bad IA is a maze.", v: "https://www.youtube.com/watch?v=SjbQ21klQP8" },
+        { t: "Wireframes & Low-Fi Prototypes", m: 20, n: "Layout first, polish later.", tr: "Quick grayscale wireframes let you test structure before investing in pixels.", v: "https://www.youtube.com/watch?v=6t_dYhXyYjI" },
+        { t: "High-Fidelity UI in Figma", m: 26, n: "From wireframe to polished screen: spacing, states and detail.", tr: "We build a real screen component by component, obsessing over the details that make UI feel professional.", v: "https://www.youtube.com/watch?v=XT59i0Nyq-c" },
+        { t: "Design Systems & Components", m: 22, n: "Tokens, components and consistency at scale.", tr: "Colors, type scales, spacing tokens and reusable components — the language of scalable design teams.", v: "https://www.youtube.com/watch?v=_uva2dQPlV8" },
+        { t: "Prototyping & Handoff", m: 18, n: "Interactions, developer handoff and design specs.", tr: "Turn static screens into clickable prototypes and hand developers everything they need.", v: "https://www.youtube.com/watch?v=E-H06QNkHTU" },
+        { t: "Usability Testing Basics", m: 14, n: "Watch real users, learn fast, iterate.", tr: "Five users find most problems. Learn to write tasks, moderate tests and prioritize fixes.", v: "https://www.youtube.com/watch?v=EYUL0N1Fjhg" },
       ],
       quizzes: [
         {
