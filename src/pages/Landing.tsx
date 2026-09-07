@@ -1,6 +1,6 @@
-import { useEffect } from "react";
+import { useEffect, useState, useRef, useCallback } from "react";
 import { Link } from "react-router";
-import { motion } from "framer-motion";
+import { motion, useReducedMotion } from "framer-motion";
 import { useMutation, useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import {
@@ -33,7 +33,6 @@ import { parseTutorialVideo } from "@/lib/tutorial-video";
 import { Avatar } from "@/components/site/Avatar";
 import { AnimatedCta } from "@/components/site/AnimatedCta";
 import { CoverArt } from "@/components/site/CoverArt";
-import { HeroRobot } from "@/components/site/HeroRobot";
 import { cn } from "@/lib/utils";
 
 const container = {
@@ -50,6 +49,249 @@ const item = {
 };
 
 const isCarousel = typeof document !== "undefined" && window.matchMedia("(max-width: 1023px)").matches;
+
+/* ── Hero slideshow: 4 human, high-quality photo slides with short headlines,
+      stacked CTAs on mobile and an inline row on desktop. No mascot, no robot,
+      no AI-character imagery anywhere in the hero. Photos are real Unsplash
+      images, sized with explicit width/height so the layout never shifts. ── */
+function HeroSlideshow() {
+  const reduce = useReducedMotion();
+  const [active, setActive] = useState(0);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const pausedRef = useRef(false);
+  const resumeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const slides = [
+    {
+      tag: "Learn",
+      headline: "Learn Skills That Matter.",
+      support: "Build practical skills for the real world.",
+      ctaLabel: "Start Learning",
+      ctaTo: "/courses",
+      src: "https://images.unsplash.com/photo-1531746020798-e6953c6e8e04?w=1200&q=80",
+      width: 1200,
+      height: 800,
+      alt: "Young person learning digital skills on a laptop",
+    },
+    {
+      tag: "Career Roadmap",
+      headline: "Find Your Career Path.",
+      support: "Discover where your skills can take you.",
+      ctaLabel: "Explore Roadmap",
+      ctaTo: "/roadmap",
+      src: "https://images.unsplash.com/photo-1522202176988-66273c2fd55f?w=1200&q=80",
+      width: 1200,
+      height: 800,
+      alt: "Two people discussing a career pathway together",
+    },
+    {
+      tag: "Build",
+      headline: "Build. Practice. Grow.",
+      support: "Turn knowledge into real experience.",
+      ctaLabel: "Start Building",
+      ctaTo: "/courses",
+      src: "https://images.unsplash.com/photo-1461749280684-dccba630e2f6?w=1200&q=80",
+      width: 1200,
+      height: 800,
+      alt: "A developer building a real project at a desk",
+    },
+    {
+      tag: "Opportunities",
+      headline: "Turn Skills Into Opportunities.",
+      support: "Connect your learning to your future.",
+      ctaLabel: "Explore Opportunities",
+      ctaTo: "/dashboard",
+      src: "https://images.unsplash.com/photo-1521737711867-e3b97375f902?w=1200&q=80",
+      width: 1200,
+      height: 800,
+      alt: "People networking and growing together in a professional setting",
+    },
+  ] as const;
+
+  const markInteraction = useCallback(() => {
+    pausedRef.current = true;
+    if (resumeTimer.current) clearTimeout(resumeTimer.current);
+  }, []);
+
+  const scheduleResume = useCallback(() => {
+    if (resumeTimer.current) clearTimeout(resumeTimer.current);
+    resumeTimer.current = window.setTimeout(() => {
+      pausedRef.current = false;
+    }, 3000) as unknown as ReturnType<typeof setTimeout>;
+  }, []);
+
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    const opts = { passive: true };
+    const onStart = () => markInteraction();
+    const onEnd = () => scheduleResume();
+    el.addEventListener("pointerdown", onStart, opts);
+    el.addEventListener("pointerup", onEnd, opts);
+    el.addEventListener("wheel", onStart, opts);
+    el.addEventListener("focusin", onStart);
+    el.addEventListener("focusout", onEnd);
+    return () => {
+      el.removeEventListener("pointerdown", onStart);
+      el.removeEventListener("pointerup", onEnd);
+      el.removeEventListener("wheel", onStart);
+      el.removeEventListener("focusin", onStart);
+      el.removeEventListener("focusout", onEnd);
+    };
+  }, [markInteraction, scheduleResume]);
+
+  useEffect(() => {
+    if (reduce) return;
+    const id = window.setInterval(() => {
+      if (document.hidden || pausedRef.current) return;
+      setActive((prev) => (prev + 1) % slides.length);
+    }, 5000);
+    return () => window.clearInterval(id);
+  }, [slides.length, reduce]);
+
+  useEffect(
+    () => () => {
+      if (resumeTimer.current) clearTimeout(resumeTimer.current);
+    },
+    [],
+  );
+
+  return (
+    <div
+      ref={containerRef}
+      className="group relative mx-auto w-full max-w-[340px] rounded-2xl overflow-hidden ring-1 ring-white/10 sm:max-w-[460px] lg:max-w-4xl"
+    >
+      {/* Slides */}
+      <div className="relative aspect-[16/9] overflow-hidden bg-[#05070a]">
+        {slides.map((s, i) => {
+          const isActive = i === active;
+          return (
+            <motion.div
+              key={s.tag}
+              animate={{
+                opacity: isActive ? 1 : 0,
+                y: isActive ? 0 : 10,
+              }}
+              transition={{
+                duration: reduce ? 0 : 0.5,
+                ease: [0.22, 1, 0.36, 1] as const,
+              }}
+              className="absolute inset-0"
+            >
+              {/* Photo — real, sized, lazy-loaded, never a mascot/robot */}
+              <img
+                src={s.src}
+                width={s.width}
+                height={s.height}
+                alt={s.alt}
+                loading="lazy"
+                decoding="async"
+                className="h-full w-full object-cover"
+              />
+              {/* Dark gradient for text legibility */}
+              <div
+                className="pointer-events-none absolute inset-0 bg-gradient-to-t from-[#05070a]/92 via-[#05070a]/30 to-transparent"
+              />
+
+              {/* Text layer — lower-left, inside the slide, never clipped */}
+              <div className="absolute bottom-0 left-0 z-10 max-w-[320px] p-5 sm:p-7 lg:max-w-[520px]">
+                <p className="font-display text-[11px] font-semibold uppercase tracking-[0.22em] text-lime-300">
+                  {s.tag}
+                </p>
+                <h2 className="font-display mt-2 text-3xl font-bold leading-[1.05] tracking-tight text-white sm:text-4xl lg:text-5xl">
+                  {s.headline}
+                </h2>
+                <p className="mt-2 text-[13px] leading-relaxed text-white/80 sm:text-sm">
+                  {s.support}
+                </p>
+              </div>
+            </motion.div>
+          );
+        })}
+      </div>
+
+      {/* CTAs — stacked on mobile, inline row on desktop */}
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between sm:gap-x-4 lg:justify-end">
+        <ul className="list-none flex w-full justify-center gap-2 sm:w-auto sm:justify-start">
+          {[
+            { icon: CheckCircle2 as React.ElementType, text: "Free to start" },
+            { icon: Award as React.ElementType, text: "Verifiable certificates" },
+            { icon: Users as React.ElementType, text: "Learn at your pace" },
+          ].map((b) => (
+            <li
+              key={b.text}
+              className="flex items-start gap-2 rounded-xl bg-white/[0.03] px-3 py-2 sm:bg-transparent sm:px-0 sm:py-0 sm:text-sm sm:leading-relaxed"
+            >
+              <span className="mt-[1px] flex size-5 shrink-0 items-center justify-center rounded-lg bg-lime-400/12 text-lime-300">
+                <b.icon className="size-3.5" />
+              </span>
+              <span className="text-[13px] leading-snug text-white/80">{b.text}</span>
+            </li>
+          ))}
+        </ul>
+        <ul className="list-none flex w-full justify-center gap-2 sm:w-auto sm:justify-start">
+          <li>
+            <AnimatedCta
+              to={slides[active].ctaTo}
+              className="w-full justify-center"
+            >
+              {slides[active].ctaLabel}
+              <ArrowRight className="size-4 transition-transform group-hover:translate-x-0.5" />
+            </AnimatedCta>
+          </li>
+          <li>
+            <AnimatedCta
+              to={active === 1 || active === 3 ? (active === 1 ? "/roadmap" : "/dashboard") : "/courses"}
+              variant="outline"
+              className="w-full justify-center"
+            >
+              <Map className="size-4" />
+              {active === 0
+                ? "Explore roadmaps"
+                : active === 1
+                ? "View all paths"
+                : active === 2
+                ? "Browse courses"
+                : "See all"}
+            </AnimatedCta>
+          </li>
+        </ul>
+      </div>
+
+      {/* Thin accent line under the headline, slide-aware */}
+      <div className="absolute left-5 sm:left-7 bottom-10 sm:bottom-12">
+        <span className="h-px w-9 bg-lime-400 drop-shadow-[0_0_10px_rgba(166,255,0,0.6)]" />
+      </div>
+
+      {/* Pagination dots */}
+      <div className="absolute bottom-2 left-1/2 z-20 flex -translate-x-1/2 gap-1.5">
+        {slides.map((_, i) => (
+          <button
+            key={i}
+            onClick={() => {
+              markInteraction();
+              setActive(i);
+              scheduleResume();
+            }}
+            className="flex size-1.5 rounded-full transition-colors"
+            aria-label={`Go to slide ${i + 1}`}
+            aria-current={i === active}
+          >
+            <span
+              className={cn(
+                "block h-1.5 rounded-full transition-all duration-500",
+                i === active
+                  ? "w-5 bg-lime-400 shadow-[0_0_8px_rgba(166,255,0,0.6)]"
+                  : "w-1.5 bg-white/30 hover:bg-white/50",
+              )}
+              style={{ transitionTimingFunction: "cubic-bezier(0.22, 1, 0.36, 1)" }}
+            />
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
 
 /* ── Category pills: map each category's stored lucide icon name to the
       curated barrel (fallback: Sparkles). Names come from the admin
@@ -234,108 +476,9 @@ export default function Landing() {
   const continueRow = continueLearning?.[0] ?? null;
 
   return (
-    <PageShell>
-      {/* ───────────────────────────────── Hero — editorial + big mascot */}
-      <section className="hero-bg relative overflow-hidden">
-        <div className="mx-auto max-w-7xl px-4 pb-5 pt-5 sm:px-6 sm:pb-8 sm:pt-6 lg:pb-10 lg:pt-8">
-          <motion.div variants={container} initial="hidden" animate="show">
-            {/* ForgeX badge — full width on top */}
-            <motion.div variants={item}>
-              <span className="inline-flex max-w-full items-center gap-1.5 rounded-full border border-lime-400/30 bg-lime-400/10 px-3 py-1 text-[11px] font-semibold text-lime-300 sm:px-4 sm:py-1.5 sm:text-xs">
-                <Sparkles className="size-3 shrink-0" />
-                <span className="truncate">
-                  {hero?.badge ?? "The learning platform of ForgeX Network"}
-                </span>
-                <ArrowRight className="size-3 shrink-0" />
-              </span>
-            </motion.div>
-
-            {/* Headline left · robot right — the mascot is a major element */}
-            <div className="mt-4 flex items-end gap-3 sm:gap-5 lg:mt-6 lg:grid lg:grid-cols-[1.05fr_0.95fr] lg:items-center lg:gap-10">
-              <div className="min-w-0 flex-1">
-                <motion.p
-                  variants={item}
-                  className="text-[10px] font-bold uppercase tracking-[0.22em] text-lime-300/90 sm:text-xs"
-                >
-                  Your skills. Real opportunities.
-                </motion.p>
-                <motion.h1
-                  variants={item}
-                  className="font-display mt-2 text-[clamp(3.4rem,clamp(5.4rem,7vw,9.6rem),10.2rem)] font-bold leading-[1.04] tracking-tight sm:text-6xl lg:text-7xl xl:text-[5.25rem]"
-                >
-                  Discover.
-                  <br />
-                  <span className="text-lime-400 drop-shadow-[0_0_20px_rgba(166,255,0,0.35)]">
-                    Learn.
-                  </span>{" "}
-                  Build.
-                </motion.h1>                  <motion.p
-                  variants={item}
-                  className="mt-2.5 max-w-lg sm:max-w-xl text-[13px] leading-relaxed text-muted-foreground sm:mt-4 sm:text-base lg:text-lg"
-                >
-                  {hero?.subtitle ??
-                    "ForgeX Academy turns curiosity into career-ready skills — structured roadmaps, hands-on projects, expert tutors and verifiable certificates."}
-                </motion.p>
-              </div>
-
-              {/* Mascot — 40–50% of the hero visual area, never covered */}
-              <motion.div
-                variants={item}
-                className="w-[42%] max-w-[210px] shrink-0 sm:max-w-[270px] lg:w-auto lg:max-w-none"
-              >
-                <HeroRobot
-                  imageSrc={
-                    typeof content?.heroImage === "string" && content.heroImage.trim()
-                      ? content.heroImage
-                      : undefined
-                  }
-                />
-              </motion.div>
-            </div>            {/* CTAs + benefits — inline on desktop, stacked on mobile */}              <motion.div
-                variants={item}
-                className="mt-5 flex flex-col gap-3 sm:mt-6 sm:flex-row sm:flex-wrap sm:items-start sm:gap-x-3 sm:gap-y-4 lg:gap-x-6"
-              >
-                <ul className="list-none flex w-full justify-center gap-2 rounded-xl p-2 sm:w-auto sm:justify-start">
-                  {[
-                    { icon: CheckCircle2 as React.ElementType, text: "Free to start" },
-                    { icon: Award as React.ElementType, text: "Verifiable certificates" },
-                    { icon: Users as React.ElementType, text: "Learn at your pace" },
-                  ].map((b) => (
-                    <li
-                      key={b.text}
-                      className="flex items-start gap-2 rounded-xl bg-white/[0.02] px-3 py-2 sm:bg-transparent sm:px-0 sm:py-0 sm:text-sm sm:leading-relaxed"
-                    >
-                      <span className="mt-[1px] flex size-5 shrink-0 items-center justify-center rounded-lg bg-lime-400/12 text-lime-300">
-                        <b.icon className="size-3.5" />
-                      </span>
-                      <span className="text-[13px] leading-snug text-muted-foreground">{b.text}</span>
-                    </li>
-                  ))}
-                </ul>
-                <ul className="list-none flex w-full justify-center gap-2 sm:w-auto sm:justify-start">
-                  <li>
-                    <AnimatedCta
-                      to={hero?.primaryCta?.link ?? "/courses"}
-                      className="w-full justify-center"
-                    >
-                      {hero?.primaryCta?.label ?? "Start learning free"}
-                      <ArrowRight className="size-4 transition-transform group-hover:translate-x-0.5" />
-                    </AnimatedCta>
-                  </li>
-                  <li>
-                    <AnimatedCta
-                      to={hero?.secondaryCta?.link ?? "/roadmap"}
-                      variant="outline"
-                      className="w-full justify-center"
-                    >
-                      <Map className="size-4" />
-                      {hero?.secondaryCta?.label ?? "Explore roadmaps"}
-                    </AnimatedCta>
-                  </li>
-                </ul>
-              </motion.div>
-          </motion.div>
-        </div>
+    <PageShell>      {/* ───────────────────────────────── Hero — visual slideshow (human visuals) */}
+      <section className="relative mx-auto max-w-7xl overflow-hidden px-4 pb-9 pt-5 sm:px-6 sm:pb-12 sm:pt-8 lg:px-0">
+        <HeroSlideshow />
       </section>
 
       {/* ────────────────────────────────────── Feature cards — mobile carousel */}

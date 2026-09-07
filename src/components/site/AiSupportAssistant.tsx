@@ -31,7 +31,8 @@ export function openAiAssistant() {
   }
 }
 
-type AiMessage = { role: "user" | "ai"; body: string };  const GuestMessage = { role: "user" | "ai"; body: string };
+type AiMessage = { role: "user" | "ai"; body: string };
+type GuestMessage = { role: "user" | "ai"; body: string };
 
 export function AiSupportAssistant() {
   const [open, setOpen] = useState(false);
@@ -86,7 +87,7 @@ export function AiSupportAssistant() {
   }, [open, input, sending]);
 
   useEffect(() => {
-    const onOutside = (e: MouseEvent) => {
+    const onOutside = (e: MouseEvent | TouchEvent) => {
       const target = e.target as HTMLElement | null;
       if (target && !target.closest("[data-ai-assistant-root]") && !target.closest("[data-ai-assistant-panel]")) {
         setOpen(false);
@@ -121,15 +122,14 @@ export function AiSupportAssistant() {
     setInput("");
     setSending(false);
     void startSession().then((session) => {
-      if (!session?._id && !isAuthenticated) {
-        setGuestMessages([
-          {
-            role: "ai",
-            body: "Welcome to the ForgeX AI Support Assistant. Ask me about courses, tutoring, certificates, scholarships, placements or anything related to the Academy. I can also help you find the right page.",
-          },
-        ]);
-        persistGuestMessages();
-      }
+      void session;
+      setGuestMessages([
+        {
+          role: "ai",
+          body: "Welcome to the ForgeX AI Support Assistant. Ask me about courses, tutoring, certificates, scholarships, placements or anything related to the Academy. I can also help you find the right page.",
+        },
+      ]);
+      persistGuestMessages();
     });
   };
 
@@ -153,21 +153,29 @@ export function AiSupportAssistant() {
 
     const handleAiSendWrapped = async (userLine: AiMessage) => {
       try {
-        const reply = await sendAi({
-          text: userLine.body,
-          sessionId: latest?._id,
-        });
+        if (!latest?._id) {
+          setGuestMessages((prev) => [
+            ...prev,
+            {
+              role: "ai",
+              body: "No active session yet — open the assistant again in a moment and we’ll pick up where you left off.",
+            } as GuestMessage,
+          ]);
+          setSending(false);
+          return;
+        }
+        const reply = await sendAi({ text: userLine.body, sessionId: latest._id });
         const replyBody = reply.reply ?? "";
         setGuestMessages((prev) => [...prev, { role: "ai", body: replyBody }]);
       } catch (err) {
         console.error("[AiSupport] sendAi failed", err);
-      setGuestMessages((prev) => [
-        ...prev,
-        {
-          role: "ai",
-          body: "I’m having trouble reaching the assistant right now. Please try again in a moment, or use the Contact page for human help.",
-        } as GuestMessage,
-      ]);
+        setGuestMessages((prev) => [
+          ...prev,
+          {
+            role: "ai",
+            body: "I’m having trouble reaching the assistant right now. Please try again in a moment, or use the Contact page for human help.",
+          } as GuestMessage,
+        ]);
       }
       setSending(false);
     };
