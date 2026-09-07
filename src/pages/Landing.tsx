@@ -57,10 +57,10 @@ const HERO_SLIDES: HeroSlide[] = [
     support: "Discover where your skills can take you.",
     ctaLabel: "Explore Roadmap",
     ctaTo: "/roadmap",
-    src: "https://images.unsplash.com/photo-1519389950473-47ba0277781c?w=1200&q=80",
+    src: "https://images.unsplash.com/photo-1521737711867-e3b97375f902?w=1200&q=80",
     fallbackSrc:
-      "https://images.unsplash.com/photo-1531482615713-2afd69097998?w=1200&q=80",
-    alt: "A young person building a digital skill on a laptop in a creative workspace",
+      "https://images.unsplash.com/photo-1573497019940-1c28c88b4f3e?w=1200&q=80",
+    alt: "A young professional charting their next career step in a bright workspace",
   },
   {
     tag: "Build",

@@ -16,6 +16,18 @@ const SOCIAL_ICONS: Record<string, string> = {
   telegram: "✈",
 };
 
+// Shown in the footer only until the owner adds real social links in the
+// admin portal (Admin → Website & branding → Social media). Once any links
+// are saved there, they fully replace these defaults.
+const DEFAULT_SOCIALS = [
+  { platform: "facebook", url: "https://facebook.com", enabled: true, order: 0 },
+  { platform: "instagram", url: "https://instagram.com", enabled: true, order: 1 },
+  { platform: "x", url: "https://x.com", enabled: true, order: 2 },
+  { platform: "linkedin", url: "https://linkedin.com", enabled: true, order: 3 },
+  { platform: "youtube", url: "https://youtube.com", enabled: true, order: 4 },
+  { platform: "tiktok", url: "https://tiktok.com", enabled: true, order: 5 },
+];
+
 const UPCOMING = [
   "Opportunity Hub",
   "Internships",
@@ -43,9 +55,14 @@ export function Footer() {
     order?: number;
   }>;
 
-  const visibleSocials = socials
-    .filter((s) => s.enabled !== false && s.url)
-    .sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+  // Admin-configured links win; until the owner saves any, the standard
+  // platform icons keep the section alive so it never looks unfinished.
+  const visibleSocials =
+    socials.length > 0
+      ? socials
+          .filter((s) => s.enabled !== false && s.url)
+          .sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
+      : DEFAULT_SOCIALS;
 
   return (
     <footer className="border-t border-white/10 bg-black/30">
