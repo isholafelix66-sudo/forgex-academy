@@ -515,9 +515,8 @@ export const ensureSeedData = mutation({
       if (c.assignment) {
         await ctx.db.insert("assignments", {
           courseId: courseId as never, tutorId: c.tutorId as never,
-          title: c.assignment.t, description: c.assignment.d,
+          title: c.assignment.t,          description: c.assignment.d,
           instructions: c.assignment.i,
-          deadline: Date.now() + c.assignment.days * 86400000,
           maxScore: 100,
           files: [resource("Assignment brief (PDF)", "https://learn.forgex.academy/brief.pdf")],
           createdAt: Date.now(),

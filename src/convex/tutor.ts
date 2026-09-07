@@ -630,7 +630,7 @@ export const courseAssignmentsFull = query({
       .query("assignments")
       .withIndex("by_course", (q) => q.eq("courseId", courseId as never))
       .collect();
-    return docs.sort((a, b) => (a.deadline ?? Infinity) - (b.deadline ?? Infinity));
+    return docs;
   },
 });
 
@@ -641,7 +641,6 @@ export const upsertAssignment = mutation({
     title: v.string(),
     description: v.string(),
     instructions: v.string(),
-    deadline: v.optional(v.number()),
     maxScore: v.number(),
     files: v.array(resourceValidator),
     // Assignment Builder settings
@@ -669,7 +668,6 @@ export const upsertAssignment = mutation({
         title: args.title,
         description: args.description,
         instructions: args.instructions,
-        deadline: args.deadline,
         maxScore: Math.max(1, Math.round(args.maxScore)),
         files: args.files,
         questions: args.questions ?? [],
@@ -683,7 +681,6 @@ export const upsertAssignment = mutation({
       title: args.title,
       description: args.description,
       instructions: args.instructions,
-      deadline: args.deadline,
       maxScore: Math.max(1, Math.round(args.maxScore)),
       files: args.files,
       questions: args.questions ?? [],

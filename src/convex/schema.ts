@@ -279,7 +279,6 @@ const schema = defineSchema(
       title: v.string(),
       description: v.string(),
       instructions: v.string(),
-      deadline: v.optional(v.number()),
       maxScore: v.number(),
       files: v.array(resourceValidator),
       // Assignment Builder: structured questions. Legacy assignments keep an

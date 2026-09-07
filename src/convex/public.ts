@@ -360,15 +360,12 @@ export const courseBySlug = query({
           }
         : null,
       lessons: lessons.sort((a, b) => a.order - b.order),
-      assignments: assignments
-        .sort((a, b) => (a.deadline ?? Infinity) - (b.deadline ?? Infinity))
-        .map((a) => ({
-          _id: a._id,
-          title: a.title,
-          description: a.description,
-          deadline: a.deadline ?? null,
-          maxScore: a.maxScore,
-        })),
+      assignments: assignments.map((a) => ({
+        _id: a._id,
+        title: a.title,
+        description: a.description,
+        maxScore: a.maxScore,
+      })),
       quizzes: quizzes.map((q) => ({
         _id: q._id,
         title: q.title,

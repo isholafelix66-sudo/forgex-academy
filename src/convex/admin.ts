@@ -1067,9 +1067,7 @@ export const coursePreview = query({
         : null,
       lessons: lessons.sort((a, b) => a.order - b.order),
       quizzes: quizzes.sort((a, b) => a.createdAt - b.createdAt),
-      assignments: assignments.sort(
-        (a, b) => (a.deadline ?? Infinity) - (b.deadline ?? Infinity),
-      ),
+      assignments,
     };
   },
 });

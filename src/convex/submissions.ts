@@ -19,7 +19,6 @@ export const assignmentsByCourse = query({
       .collect();
     return assignments
       .filter((a) => a.published !== false)
-      .sort((a, b) => (a.deadline ?? Infinity) - (b.deadline ?? Infinity))
       .map((a) => ({
         ...a,
         submission:
@@ -182,44 +181,7 @@ export const mySubmissions = query({
   },
 });
 
-export const upcomingDeadlines = query({
-  args: {},
-  handler: async (ctx) => {
-    const userId = await requireUser(ctx);
-    const enrollments = await ctx.db
-      .query("enrollments")
-      .withIndex("by_student", (q) => q.eq("studentId", userId))
-      .collect();
-    const now = Date.now();
-    const courseIds = enrollments.map((e) => e.courseId);
-    const allAssignments = await ctx.db.query("assignments").collect();
-    const mine = allAssignments
-      .filter(
-        (a) =>
-          courseIds.includes(a.courseId) &&
-          a.deadline &&
-          a.deadline > now,
-      )
-      .sort((a, b) => (a.deadline ?? 0) - (b.deadline ?? 0));
-    const submissions = await ctx.db
-      .query("submissions")
-      .withIndex("by_student", (q) => q.eq("studentId", userId))
-      .collect();
-    const hydrated = await Promise.all(
-      mine.map(async (a) => {
-        const course = await ctx.db.get(a.courseId);
-        return {
-          ...a,
-          course: course
-            ? { _id: course._id, title: course.title, slug: course.slug }
-            : null,
-          submitted: submissions.some((s) => s.assignmentId === a._id),
-        };
-      }),
-    );
-    return hydrated.slice(0, 6);
-  },
-});
+
 
 // ---------------------------------------------------------------------------
 // Tutor grading
