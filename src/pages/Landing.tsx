@@ -215,7 +215,7 @@ function HeroSlideshow() {
         <span className="text-gradient">Build.</span>
       </h1>
 
-      {/* Slide card — full-width on mobile, wider on desktop */}
+      {/* Slide card — full-width on mobile, wider + centered on desktop */}
       <div className="relative mt-5 w-full overflow-hidden rounded-2xl ring-1 ring-white/10 sm:mt-6 lg:mx-auto lg:max-w-5xl">
         <div className="relative aspect-[4/3] w-full bg-[#05070a] sm:aspect-[16/9]">
           {HERO_SLIDES.map((s, i) => (
@@ -224,8 +224,12 @@ function HeroSlideshow() {
               initial={false}
               animate={{ opacity: i === active ? 1 : 0 }}
               transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
-              className="absolute inset-0"
+              className={cn(
+                "absolute inset-0",
+                i === active ? "pointer-events-auto" : "pointer-events-none",
+              )}
               aria-hidden={i !== active}
+              inert={i !== active ? true : undefined}
             >
               {/* Branded placeholder while the photo streams in — never a blank box */}
               <div
@@ -234,24 +238,46 @@ function HeroSlideshow() {
               />
               <HeroImage src={s.src} fallbackSrc={s.fallbackSrc} alt={s.alt} />
               <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/90 via-black/35 to-transparent" />
-              <div className="absolute inset-x-0 bottom-0 z-10 p-5 sm:p-7">
+              {/* Desktop: hero text + CTAs are one centered, bottom-anchored block. Mobile/tablet stay left-aligned as before. */}
+              <div className="absolute inset-x-0 bottom-0 z-10 flex flex-col p-5 sm:p-7 lg:items-center lg:pb-8 lg:text-center">
                 <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-lime-300">
                   {s.tag}
                 </p>
-                <h2 className="font-display mt-2 max-w-md text-2xl font-bold leading-tight text-white sm:text-4xl">
+                <h2 className="font-display mt-2 max-w-md text-2xl font-bold leading-tight text-white sm:text-4xl lg:max-w-2xl">
                   {s.headline}
                 </h2>
-                <p className="mt-2 max-w-sm text-[13px] leading-relaxed text-white/80 sm:text-sm">
+                <p className="mt-2 max-w-sm text-[13px] leading-relaxed text-white/80 sm:text-sm lg:max-w-xl">
                   {s.support}
                 </p>
+                {/* CTAs — inside the hero block on desktop, centered directly beneath the text */}
+                <div className="mt-5 hidden items-center gap-4 lg:flex">
+                  <Button
+                    asChild
+                    className="h-12 bg-lime-400 text-sm font-semibold text-black hover:bg-lime-300 glow-lime-soft"
+                  >
+                    <Link to={s.ctaTo} onClick={pause}>
+                      {s.ctaLabel}
+                      <ArrowRight className="ml-1.5 size-4 shrink-0" />
+                    </Link>
+                  </Button>
+                  <Button
+                    asChild
+                    variant="outline"
+                    className="h-12 border-white/15 text-sm font-medium hover:border-lime-400/40 hover:text-lime-300"
+                  >
+                    <Link to="/roadmap" onClick={pause}>
+                      Explore Roadmaps
+                    </Link>
+                  </Button>
+                </div>
               </div>
             </motion.div>
           ))}
         </div>
       </div>
 
-      {/* CTAs — one equal-height row, arrows inside, never clipped */}
-      <div className="mt-4 flex w-full items-center gap-3 sm:mx-auto sm:w-auto sm:min-w-[460px] sm:gap-4">
+      {/* CTAs — mobile/tablet only (desktop CTAs live inside the hero card) */}
+      <div className="mt-4 flex w-full items-center gap-3 sm:mx-auto sm:w-auto sm:min-w-[460px] sm:gap-4 lg:hidden">
         <Button
           asChild
           className="h-12 flex-1 bg-lime-400 text-sm font-semibold text-black hover:bg-lime-300 glow-lime-soft sm:max-w-[220px]"
