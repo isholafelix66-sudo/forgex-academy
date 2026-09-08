@@ -378,7 +378,7 @@ export default function AdminContent() {
 
               {tvMode === "motion" && (
                 <p className="rounded-xl border border-dashed border-lime-400/25 bg-lime-400/5 p-3.5 text-xs leading-relaxed text-muted-foreground">
-                  The animated “Learn · Build · Succeed” tour plays instantly with no
+                  The animated “Discover · Express · Build” tour plays instantly with no
                   upload or hosting needed. Save to publish it on the homepage.
                 </p>
               )}

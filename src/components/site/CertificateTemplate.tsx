@@ -36,7 +36,7 @@ export type CertificateBranding = {
 
 export const DEFAULT_CERTIFICATE_BRANDING: CertificateBranding = {
   institutionName: "ForgeX Academy",
-  motto: "Learn. Build. Succeed.",
+  motto: "Discover. Express. Build.",
   signatoryName: "",
   signatoryTitle: "",
   logoUrl: null,

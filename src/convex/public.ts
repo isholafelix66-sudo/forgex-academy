@@ -576,7 +576,7 @@ export const certificateBranding = query({
       motto:
         typeof b?.motto === "string" && b.motto
           ? b.motto
-          : "Learn. Build. Succeed.",
+          : "Discover. Express. Build.",
       signatoryName:
         typeof b?.signatoryName === "string" ? b.signatoryName : "",
       signatoryTitle:
