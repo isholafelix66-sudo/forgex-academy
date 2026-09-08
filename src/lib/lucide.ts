@@ -140,6 +140,7 @@ export { default as Play } from "lucide-react/dist/esm/icons/play.js";
 export { default as PlayCircle } from "lucide-react/dist/esm/icons/play-circle.js";
 export { default as Plus } from "lucide-react/dist/esm/icons/plus.js";
 export { default as Quote } from "lucide-react/dist/esm/icons/quote.js";
+export { default as RefreshCcw } from "lucide-react/dist/esm/icons/refresh-ccw.js";
 export { default as RefreshCw } from "lucide-react/dist/esm/icons/refresh-cw.js";
 export { default as Reply } from "lucide-react/dist/esm/icons/reply.js";
 export { default as Rocket } from "lucide-react/dist/esm/icons/rocket.js";
