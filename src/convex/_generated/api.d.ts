@@ -9,6 +9,8 @@
  */
 
 import type * as admin from "../admin.js";
+import type * as aiCourseCatalog from "../aiCourseCatalog.js";
+import type * as aiCourseSeed from "../aiCourseSeed.js";
 import type * as aiResources from "../aiResources.js";
 import type * as aiSupport from "../aiSupport.js";
 import type * as aiSupportData from "../aiSupportData.js";
@@ -69,6 +71,8 @@ import type {
 
 declare const fullApi: ApiFromModules<{
   admin: typeof admin;
+  aiCourseCatalog: typeof aiCourseCatalog;
+  aiCourseSeed: typeof aiCourseSeed;
   aiResources: typeof aiResources;
   aiSupport: typeof aiSupport;
   aiSupportData: typeof aiSupportData;

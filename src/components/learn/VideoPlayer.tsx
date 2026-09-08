@@ -157,6 +157,23 @@ export function VideoPlayer({
   const playerPauseRef = useRef(onPlayerPause);
   playerPauseRef.current = onPlayerPause;
 
+  // Seeded lessons that deliberately have no recording yet carry the
+  // "planned-recording" sentinel — render an honest coming-soon state
+  // instead of attempting playback of a non-existent URL.
+  if (url === "planned-recording") {
+    return (
+      <div className="flex aspect-video w-full flex-col items-center justify-center gap-2 rounded-2xl border border-white/10 bg-black/40 px-6 text-center">
+        <PlayCircle className="size-10 text-lime-400/70" />
+        <p className="text-sm font-semibold text-white">Video coming soon</p>
+        <p className="max-w-md text-xs leading-relaxed text-muted-foreground">
+          This lesson is planned as a video recording. Follow the notes,
+          transcript and resources below and complete the practical task to
+          keep building.
+        </p>
+      </div>
+    );
+  }
+
   // Recognized embed URLs (YouTube / Vimeo / Loom) always win — a stale Mux
   // playback ID must never shadow the video URL a tutor actually saved.
   const yt = url ? youtubeId(url) : null;

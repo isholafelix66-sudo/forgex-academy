@@ -3,6 +3,7 @@ import { v } from "convex/values";
 import { checkRateLimit } from "./lib";
 import { ROLES, type Question, type Resource } from "./schema";
 import { PROMPT_CATEGORIES, PROMPT_SEED } from "./promptSeedData";
+import { seedAiCourses } from "./aiCourseSeed";
 
 const VIDS = [
   "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4",
@@ -14,6 +15,60 @@ const VIDS = [
   "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/Sintel.mp4",
   "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/TearsOfSteel.mp4",
 ];
+
+/**
+ * Every course the seed is expected to provide, by slug. Databases seeded
+ * before a course was added to this list must still receive it, so the
+ * short-circuit below only fires when the whole catalog is present.
+ */
+const EXPECTED_COURSE_SLUGS = [
+  // Design roadmap
+  "design-fundamentals",
+  "branding-essentials",
+  "ui-design-mastery",
+  "portfolio-career-launchpad",
+  "professional-graphic-design",
+  "photoshop-mastery",
+  "video-editing-with-capcut",
+  "capcut-pro-editing",
+  "capcut-pro-storytelling",
+  "photoshop-pro-workflows",
+  // Development roadmap
+  "html-css-the-modern-web",
+  "javascript-deep-dive",
+  "backend-apis-with-node",
+  "full-stack-project-build-an-lms",
+  // Data roadmap
+  "data-analytics-foundations",
+  "sql-data-wrangling",
+  "machine-learning-essentials",
+  // Marketing roadmap
+  "marketing-fundamentals",
+  "growth-performance-marketing",
+  // Business
+  "entrepreneurship-lean-startups",
+  // AI & modern-work courses (added to the catalog after the original seed)
+  "build-websites-with-ai",
+  "data-analysis-with-excel",
+  "ai-video-generation-content-creation",
+  "ai-automation-productivity",
+  "prompt-engineering",
+  "ai-productivity-digital-work",
+];
+
+/**
+ * Courses whose lessons deliberately ship without videos yet. Their lessons
+ * are clearly labelled “video coming soon” in the lesson notes — the demo
+ * video repair pass must never attach sample clips to them.
+ */
+const NO_DEMO_VIDEO_SLUGS = new Set([
+  "build-websites-with-ai",
+  "data-analysis-with-excel",
+  "ai-video-generation-content-creation",
+  "ai-automation-productivity",
+  "prompt-engineering",
+  "ai-productivity-digital-work",
+]);
 
 /**
  * Real educational YouTube lessons for the seeded catalog, keyed by course
@@ -267,7 +322,24 @@ export const ensureSeedData = mutation({
       }
     }
 
-    if (existing && anyCourse && anyRoadmap && !force) return { seeded: false };
+    // New catalog additions (courses added to the seed after a database was
+    // already seeded) must still appear. If every expected course exists the
+    // seed short-circuits; otherwise it continues and mkCourse() fills in
+    // whatever is missing (it is idempotent by slug).
+    const seededSlugs = new Set(
+      (await ctx.db.query("courses").collect()).map((c) => c.slug),
+    );
+    const missingCourses = EXPECTED_COURSE_SLUGS.filter(
+      (s) => !seededSlugs.has(s),
+    );
+    if (
+      existing &&
+      anyCourse &&
+      anyRoadmap &&
+      missingCourses.length === 0 &&
+      !force
+    )
+      return { seeded: false };
     // Hard security: a forced reseed replaces catalog data — cap destructive
     // reseeds at 2 per 10 minutes.
     if (force) {
@@ -319,6 +391,15 @@ export const ensureSeedData = mutation({
     const catData = await catBySlug("data-ai");
     const catBiz = await catBySlug("business");
     const catMkt = await catBySlug("marketing");
+
+    // ------------------------------------------------------------------
+    // AI & modern-work courses — Build Websites with AI, Data Analysis with
+    // Excel, AI Video Generation, AI Automation & Productivity, Prompt
+    // Engineering, AI Productivity & Digital Work. Self-contained and
+    // idempotent by slug, so databases seeded before these existed receive
+    // the full catalog on re-run (no duplicate content, no demo clips).
+    // ------------------------------------------------------------------
+    await seedAiCourses(ctx);
 
     // ------------------------------------------------------------------
     // Roadmaps
@@ -480,6 +561,7 @@ export const ensureSeedData = mutation({
       lessons: Array<{ t: string; m: number; n: string; tr: string; r?: Array<[string, string]>; v?: string }>;
       quizzes: Array<{ t: string; d: string; time: number; qs: Question[] }>;
       assignment?: { t: string; d: string; i: string; days: number };
+      assignments?: Array<{ t: string; d: string; i: string; days: number }>;
     }) => {
       const slug = c.title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
       const existingCourse = await ctx.db
@@ -545,11 +627,13 @@ export const ensureSeedData = mutation({
           timeLimitMinutes: quiz.time, questions: quiz.qs, createdAt: Date.now(),
         });
       }
-      if (c.assignment) {
+      const assignmentList =
+        c.assignments ?? (c.assignment ? [c.assignment] : []);
+      for (const a of assignmentList) {
         await ctx.db.insert("assignments", {
           courseId: courseId as never, tutorId: c.tutorId as never,
-          title: c.assignment.t,          description: c.assignment.d,
-          instructions: c.assignment.i,
+          title: a.t, description: a.d,
+          instructions: a.i,
           maxScore: 100,
           files: [resource("Assignment brief (PDF)", "https://learn.forgex.academy/brief.pdf")],
           createdAt: Date.now(),

@@ -9,6 +9,7 @@ import {
   BookOpen,
   Eraser,
   GraduationCap,
+  RefreshCcw,
   Users,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -29,6 +30,8 @@ export default function AdminOverview() {
   const applications = useQuery(api.admin.tutorApplications, token ? { token } : "skip");
   const pendingCourses = useQuery(api.admin.coursesPendingReview, token ? { token } : "skip");
   const purgeDemoData = useMutation(api.admin.purgeDemoData);
+  const updateCatalog = useMutation(api.seed.ensureSeedData);
+  const [updatingCatalog, setUpdatingCatalog] = useState(false);
 
   const pendingApps = (applications ?? []).filter(
     (a) => a.status === "submitted" || a.status === "under-review",
@@ -241,6 +244,35 @@ export default function AdminOverview() {
           setConfirmPurge(false);
         }}
       />
+
+      {/* Catalog update control */}
+      <section className="flex flex-col gap-4 rounded-2xl border border-lime-400/20 bg-lime-400/5 p-6 sm:flex-row sm:items-center">
+        <RefreshCcw className="size-7 shrink-0 text-lime-300" />
+        <div className="flex-1">
+          <p className="font-display font-semibold">Update course catalog</p>
+          <p className="mt-1 text-sm leading-relaxed text-muted-foreground">
+            Newly shipped ForgeX courses (Build Websites with AI, Data Analysis
+            with Excel, AI Video Generation, AI Automation, Prompt Engineering
+            and AI Productivity) are added to this database with one click. It
+            only inserts what's missing — your content and student progress are
+            never touched.
+          </p>
+        </div>
+        <Button
+          variant="outline"
+          className="shrink-0 gap-1.5 border-lime-400/40 text-lime-300 hover:bg-lime-400/10"
+          disabled={updatingCatalog}
+          onClick={() => {
+            setUpdatingCatalog(true);
+            void updateCatalog({ force: false }).finally(() =>
+              setUpdatingCatalog(false),
+            );
+          }}
+        >
+          <RefreshCcw className={`size-4 ${updatingCatalog ? "animate-spin" : ""}`} />
+          {updatingCatalog ? "Updating…" : "Update catalog"}
+        </Button>
+      </section>
 
       {/* Quick tips */}
       <section className="rounded-2xl border border-lime-400/20 bg-lime-400/5 p-6">

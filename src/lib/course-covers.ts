@@ -39,6 +39,19 @@ export const COURSE_COVER_IMAGES: Record<string, string> = {
     "https://images.unsplash.com/photo-1547334411-58a4a0e8e5a5?w=1200&q=80",
   "video-editing-with-capcut":
     "https://images.unsplash.com/photo-1561070791-2526d30994b5?w=1200&q=80",
+  // AI & modern-work courses
+  "build-websites-with-ai":
+    "https://images.unsplash.com/photo-1531297484001-80022131f5a1?w=1200&q=80",
+  "data-analysis-with-excel":
+    "https://images.unsplash.com/photo-1554224154-26032ffc0d07?w=1200&q=80",
+  "ai-video-generation-content-creation":
+    "https://images.unsplash.com/photo-1574717024653-61fd2cf4d44d?w=1200&q=80",
+  "ai-automation-productivity":
+    "https://images.unsplash.com/photo-1518770660439-4636190af475?w=1200&q=80",
+  "prompt-engineering":
+    "https://images.unsplash.com/photo-1620712943543-bcc4688e7485?w=1200&q=80",
+  "ai-productivity-digital-work":
+    "https://images.unsplash.com/photo-1499750310107-5fef28a66643?w=1200&q=80",
 };
 
 export function courseCoverFor(
