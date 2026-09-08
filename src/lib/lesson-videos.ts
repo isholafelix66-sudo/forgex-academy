@@ -160,10 +160,142 @@ export const LESSON_VIDEO_FALLBACKS: Record<string, string[]> = {
     "https://www.youtube.com/watch?v=ImKkcOE3y70",
     "https://www.youtube.com/watch?v=pHMoPh6mzm4",
   ],
+  // Build Websites with AI — Bolt.new builds, web fundamentals, CSS/JS, SEO, Git.
+  "build-websites-with-ai": [
+    "https://www.youtube.com/watch?v=GcH5sn_0Src",
+    "https://www.youtube.com/watch?v=KVBfmtQ2Wlk",
+    "https://www.youtube.com/watch?v=5zfOitaKfmM",
+    "https://www.youtube.com/watch?v=kmN-u7qSKME",
+    "https://www.youtube.com/watch?v=1yxmzUslHuo",
+    "https://www.youtube.com/watch?v=hdDPXYP3b4k",
+    "https://www.youtube.com/watch?v=eMZmDH3T2bY",
+    "https://www.youtube.com/watch?v=hdDPXYP3b4k",
+    "https://www.youtube.com/watch?v=kX3TfdUqpuU",
+    "https://www.youtube.com/watch?v=69IbzTWg5PM",
+    "https://www.youtube.com/watch?v=yfoY53QXEnI",
+    "https://www.youtube.com/watch?v=z62f2k38s64",
+    "https://www.youtube.com/watch?v=L9-3VBOjNH4",
+    "https://www.youtube.com/watch?v=xsVTqzratPs",
+    "https://www.youtube.com/watch?v=RGOj5yH7evk",
+    "https://www.youtube.com/watch?v=eMZmDH3T2bY",
+    "https://www.youtube.com/watch?v=1yxmzUslHuo",
+  ],
+  // Data Analysis with Excel — Alex The Analyst + Kevin Stratvert/Chandoo.
+  "data-analysis-with-excel": [
+    "https://www.youtube.com/watch?v=lgCNTuLBMK4",
+    "https://www.youtube.com/watch?v=zXnQNytHCPM",
+    "https://www.youtube.com/watch?v=_jmiEGZ6PIY",
+    "https://www.youtube.com/watch?v=zXnQNytHCPM",
+    "https://www.youtube.com/watch?v=zXnQNytHCPM",
+    "https://www.youtube.com/watch?v=zXnQNytHCPM",
+    "https://www.youtube.com/watch?v=zXnQNytHCPM",
+    "https://www.youtube.com/watch?v=_jmiEGZ6PIY",
+    "https://www.youtube.com/watch?v=_jmiEGZ6PIY",
+    "https://www.youtube.com/watch?v=zXnQNytHCPM",
+    "https://www.youtube.com/watch?v=ItZlTixh6Bs",
+    "https://www.youtube.com/watch?v=Hfx1X9WSGYQ",
+    "https://www.youtube.com/watch?v=0aeZX1l4JT4",
+    "https://www.youtube.com/watch?v=MMdcczmULrU",
+    "https://www.youtube.com/watch?v=ItZlTixh6Bs",
+    "https://www.youtube.com/watch?v=Hfx1X9WSGYQ",
+    "https://www.youtube.com/watch?v=lgCNTuLBMK4",
+    "https://www.youtube.com/watch?v=zXnQNytHCPM",
+  ],
+  // AI Video Generation & Content Creation — Runway, ElevenLabs, CapCut.
+  "ai-video-generation-content-creation": [
+    "https://www.youtube.com/watch?v=c38vtLw1nSk",
+    "https://www.youtube.com/watch?v=FqYRkl12ON8",
+    "https://www.youtube.com/watch?v=-og75MUlnFk",
+    "https://www.youtube.com/watch?v=w_kKWDyPZnI",
+    "https://www.youtube.com/watch?v=g5oEAoKdrdw",
+    "https://www.youtube.com/watch?v=-og75MUlnFk",
+    "https://www.youtube.com/watch?v=CrvraynXNe4",
+    "https://www.youtube.com/watch?v=CrvraynXNe4",
+    "https://www.youtube.com/watch?v=yDTbAxJ3sKI",
+    "https://www.youtube.com/watch?v=bALqRZTgfuY",
+    "https://www.youtube.com/watch?v=ImKkcOE3y70",
+    "https://www.youtube.com/watch?v=c6wA5sWGX5c",
+    "https://www.youtube.com/watch?v=-og75MUlnFk",
+    "https://www.youtube.com/watch?v=u3cm1gbHwJU",
+    "https://www.youtube.com/watch?v=TlJR7PAtHks",
+    "https://www.youtube.com/watch?v=-og75MUlnFk",
+    "https://www.youtube.com/watch?v=c38vtLw1nSk",
+    "https://www.youtube.com/watch?v=-og75MUlnFk",
+  ],
+  // AI Automation & Productivity — Zapier (Kevin Stratvert / MinorCo) + ChatGPT.
+  "ai-automation-productivity": [
+    "https://www.youtube.com/watch?v=JtdUgJGI_Oo",
+    "https://www.youtube.com/watch?v=VkzZqLSt2hs",
+    "https://www.youtube.com/watch?v=JtdUgJGI_Oo",
+    "https://www.youtube.com/watch?v=VkzZqLSt2hs",
+    "https://www.youtube.com/watch?v=JtdUgJGI_Oo",
+    "https://www.youtube.com/watch?v=VkzZqLSt2hs",
+    "https://www.youtube.com/watch?v=g5oEAoKdrdw",
+    "https://www.youtube.com/watch?v=JtdUgJGI_Oo",
+    "https://www.youtube.com/watch?v=JtdUgJGI_Oo",
+    "https://www.youtube.com/watch?v=VkzZqLSt2hs",
+    "https://www.youtube.com/watch?v=g5oEAoKdrdw",
+    "https://www.youtube.com/watch?v=JtdUgJGI_Oo",
+    "https://www.youtube.com/watch?v=VkzZqLSt2hs",
+    "https://www.youtube.com/watch?v=JtdUgJGI_Oo",
+    "https://www.youtube.com/watch?v=g5oEAoKdrdw",
+    "https://www.youtube.com/watch?v=VkzZqLSt2hs",
+    "https://www.youtube.com/watch?v=JtdUgJGI_Oo",
+    "https://www.youtube.com/watch?v=JtdUgJGI_Oo",
+  ],
+  // Prompt Engineering — full prompt courses + ChatGPT, Claude Code, Runway, Zapier.
+  "prompt-engineering": [
+    "https://www.youtube.com/watch?v=YhRfgYH_AoU",
+    "https://www.youtube.com/watch?v=YhRfgYH_AoU",
+    "https://www.youtube.com/watch?v=YhRfgYH_AoU",
+    "https://www.youtube.com/watch?v=YhRfgYH_AoU",
+    "https://www.youtube.com/watch?v=YhRfgYH_AoU",
+    "https://www.youtube.com/watch?v=YhRfgYH_AoU",
+    "https://www.youtube.com/watch?v=g5oEAoKdrdw",
+    "https://www.youtube.com/watch?v=YhRfgYH_AoU",
+    "https://www.youtube.com/watch?v=YhRfgYH_AoU",
+    "https://www.youtube.com/watch?v=YhRfgYH_AoU",
+    "https://www.youtube.com/watch?v=g5oEAoKdrdw",
+    "https://www.youtube.com/watch?v=eMZmDH3T2bY",
+    "https://www.youtube.com/watch?v=DvhFcIRRXyI",
+    "https://www.youtube.com/watch?v=-og75MUlnFk",
+    "https://www.youtube.com/watch?v=JtdUgJGI_Oo",
+    "https://www.youtube.com/watch?v=DvhFcIRRXyI",
+    "https://www.youtube.com/watch?v=YhRfgYH_AoU",
+    "https://www.youtube.com/watch?v=YhRfgYH_AoU",
+  ],
+  // AI Productivity & Digital Work — ChatGPT, Notion AI, Excel.
+  "ai-productivity-digital-work": [
+    "https://www.youtube.com/watch?v=g5oEAoKdrdw",
+    "https://www.youtube.com/watch?v=VSKIS5D-gQg",
+    "https://www.youtube.com/watch?v=g5oEAoKdrdw",
+    "https://www.youtube.com/watch?v=g5oEAoKdrdw",
+    "https://www.youtube.com/watch?v=VSKIS5D-gQg",
+    "https://www.youtube.com/watch?v=g5oEAoKdrdw",
+    "https://www.youtube.com/watch?v=g5oEAoKdrdw",
+    "https://www.youtube.com/watch?v=zXnQNytHCPM",
+    "https://www.youtube.com/watch?v=kOf3QSBV29Y",
+    "https://www.youtube.com/watch?v=g5oEAoKdrdw",
+    "https://www.youtube.com/watch?v=g5oEAoKdrdw",
+    "https://www.youtube.com/watch?v=g5oEAoKdrdw",
+    "https://www.youtube.com/watch?v=VSKIS5D-gQg",
+    "https://www.youtube.com/watch?v=kOf3QSBV29Y",
+    "https://www.youtube.com/watch?v=g5oEAoKdrdw",
+    "https://www.youtube.com/watch?v=g5oEAoKdrdw",
+    "https://www.youtube.com/watch?v=VSKIS5D-gQg",
+    "https://www.youtube.com/watch?v=VSKIS5D-gQg",
+  ],
 };
 
 /** Host of the seeded placeholder clips (sample movies, not educational). */
 const PLACEHOLDER_HOST = "commondatastorage.googleapis.com/gtv-videos-bucket";
+
+/**
+ * Sentinel stored on lessons that deliberately ship without a recording yet
+ * (the AI & modern-work courses were seeded with it). The resolver replaces
+ * it with the real mapped tutorial, so those courses play immediately.
+ */
+const PLANNED_RECORDING = "planned-recording";
 
 /**
  * Returns the real educational video for a seeded lesson when the stored URL
@@ -179,7 +311,14 @@ export function resolveLessonVideo(
   if (!fallbacks) return storedUrl;
   const real = fallbacks[lessonOrder - 1];
   if (!real) return storedUrl;
-  // Respect any video a tutor/admin set — only replace seeded placeholders.
-  if (storedUrl && !storedUrl.includes(PLACEHOLDER_HOST)) return storedUrl;
+  // Respect any video a tutor/admin set — only replace seeded placeholder
+  // clips and lessons still marked as "planned recording".
+  if (
+    storedUrl &&
+    !storedUrl.includes(PLACEHOLDER_HOST) &&
+    storedUrl !== PLANNED_RECORDING
+  ) {
+    return storedUrl;
+  }
   return real;
 }
