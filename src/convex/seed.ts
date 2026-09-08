@@ -873,7 +873,7 @@ export const ensureSeedData = mutation({
             q("short-answer", "Name one thing you check before delivering a final export.", { answer: "", points: 3 }),
           ],
         },
-      },
+      ],
       assignment: {
         t: "Capstone: client-style brand video", d: "From raw footage to a finished branded edit.",
         i: "Take the fictional brief (in the assignment resources). Plan the story, edit the provided raw footage into a 60–90 second branded video: hook, keyframe motion, color grade, captions, music with ducked audio, and a clean outro. Export at platform settings and submit your video file (MP4) or a link.",
@@ -910,7 +910,7 @@ export const ensureSeedData = mutation({
             q("short-answer", "Name one reason to keep a file non-destructive.", { answer: "", points: 3 }),
           ],
         },
-      },
+      ],
       assignment: {
         t: "Capstone: retouch + composite + deliver", d: "A client-style project from brief to final files.",
         i: "Take the fictional brief (in the assignment resources). Retouch the hero image with frequency separation, build one composite, correct color, and deliver both a print-ready file (CMYK, bleed) and a screen file. Submit your files as a PDF or a link to your package.",
