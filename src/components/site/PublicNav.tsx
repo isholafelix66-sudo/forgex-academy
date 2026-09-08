@@ -259,7 +259,7 @@ export function PublicNav() {
         )}
       >
         <div className="mx-auto flex h-16 max-w-7xl items-center justify-between gap-3 px-4 sm:px-6 lg:h-[4.5rem]">
-          {/* ── Brand: logo · ForgeX Academy · Learn • Build • Get Ahead ── */}
+          {/* ── Brand: logo · ForgeX Academy · Discover • Express • Build ── */}
           <Link to="/" className="group flex min-w-0 shrink-0 items-center gap-2.5" onClick={scrollTop}>
             <img
               src={brandLogo}
@@ -271,7 +271,7 @@ export function PublicNav() {
                 ForgeX<span className="text-lime-400"> Academy</span>
               </span>
               <span className="hidden text-[11px] font-medium tracking-wide text-muted-foreground sm:block">
-                Learn • Build • Get Ahead
+                Discover • Express • Build
               </span>
             </span>
           </Link>
