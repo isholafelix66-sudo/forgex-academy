@@ -120,6 +120,46 @@ export const LESSON_VIDEO_FALLBACKS: Record<string, string[]> = {
     "https://www.youtube.com/watch?v=AMKgcBzK7cg",
     "https://www.youtube.com/watch?v=Tk-RdCFSrKU",
   ],
+  // Professional Graphic Design — client workflow, branding, campaigns, capstone.
+  "professional-graphic-design": [
+    "https://www.youtube.com/watch?v=tvYDYtQhreo",
+    "https://www.youtube.com/watch?v=5D8sWNq-WUI",
+    "https://www.youtube.com/watch?v=4MxRhjHmiVw",
+    "https://www.youtube.com/watch?v=VTDycrlT1hI",
+    "https://www.youtube.com/watch?v=NPqEdQDraho",
+    "https://www.youtube.com/watch?v=YqQx75OPRa0",
+    "https://www.youtube.com/watch?v=a5KYlHNKQB8",
+    "https://www.youtube.com/watch?v=MshxnTQW4qU",
+    "https://www.youtube.com/watch?v=cqHM7pay82E",
+  ],
+  // Photoshop Mastery — interface, layers, masks, selections, pen, retouching.
+  "photoshop-mastery": [
+    "https://www.youtube.com/watch?v=PeD7uhc8R4U",
+    "https://www.youtube.com/watch?v=PeD7uhc8R4U",
+    "https://www.youtube.com/watch?v=fE1_nHllIp8",
+    "https://www.youtube.com/watch?v=0qcWeuWCkJ4",
+    "https://www.youtube.com/watch?v=dvJ1HxlyEfI",
+    "https://www.youtube.com/watch?v=TEQOd6fRSiI",
+    "https://www.youtube.com/watch?v=zKiSUBWAObA",
+    "https://www.youtube.com/watch?v=yeQR0qAl_-k",
+    "https://www.youtube.com/watch?v=Xt39PClmo4U",
+    "https://www.youtube.com/watch?v=0qcWeuWCkJ4",
+    "https://www.youtube.com/watch?v=Xt39PClmo4U",
+    "https://www.youtube.com/watch?v=5dJl_Lr5TGQ",
+  ],
+  // Video Editing with CapCut — fundamentals, timeline, cuts, music, text, export.
+  "video-editing-with-capcut": [
+    "https://www.youtube.com/watch?v=TlJR7PAtHks",
+    "https://www.youtube.com/watch?v=ImKkcOE3y70",
+    "https://www.youtube.com/watch?v=pHMoPh6mzm4",
+    "https://www.youtube.com/watch?v=c6wA5sWGX5c",
+    "https://www.youtube.com/watch?v=ImKkcOE3y70",
+    "https://www.youtube.com/watch?v=c6wA5sWGX5c",
+    "https://www.youtube.com/watch?v=bALqRZTgfuY",
+    "https://www.youtube.com/watch?v=u3cm1gbHwJU",
+    "https://www.youtube.com/watch?v=ImKkcOE3y70",
+    "https://www.youtube.com/watch?v=pHMoPh6mzm4",
+  ],
 };
 
 /** Host of the seeded placeholder clips (sample movies, not educational). */

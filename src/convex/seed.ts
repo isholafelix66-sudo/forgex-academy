@@ -656,6 +656,124 @@ export const ensureSeedData = mutation({
       },
     });
 
+    // --- Professional Graphic Design (project-focused, client-style) ---
+    await mkCourse({
+      title: "Professional Graphic Design", subtitle: "Client work, campaigns and a portfolio that sells",
+      description: "Work like a real designer: branding projects, advertising campaigns and a client-style capstone delivered from brief to final files.",
+      long: "This is the serious, career-oriented stage of the design path. You'll take a fictional business from brief to brand system, run a full advertising campaign, and finish a client-style capstone where you plan, research, design, revise and deliver — exactly how professional design work actually happens.",
+      categoryId: catDesign, tutorId: tSofia, roadmapId: design.id, levelId: design.levelIds[4],
+      difficulty: "professional", hours: 24, rating: 4.9, ratingCount: 176, gradient: "violet", icon: "💼", image: "https://images.unsplash.com/photo-1561070791-2526d30994b5?w=1200&q=80",
+      prerequisites: ["Branding Essentials", "UI Design Mastery"], skills: ["Brand identity systems", "Advertising design", "Client workflow", "Presentation", "Portfolio delivery"],
+      featured: false,
+      lessons: [
+        { t: "The Client Design Process", v: "https://www.youtube.com/watch?v=tvYDYtQhreo", m: 18, n: "Brief → research → concept → design → revise → deliver.", tr: "Real design work is a process, not a single file. Learn how to run a project from the first client call to the final handoff — and how to manage feedback without losing your vision.", r: [["Client brief template", "https://learn.forgex.academy/client-brief.pdf"]] },
+        { t: "Brand Identity Systems", v: "https://www.youtube.com/watch?v=5D8sWNq-WUI", m: 24, n: "Logo, palette, type and guidelines working as one system.", tr: "A brand system is a toolkit. We build a complete identity: primary and secondary logos, a color system with usage rules, typography pairing, and the guidelines that keep it consistent." },
+        { t: "Business Card & Stationery", v: "https://www.youtube.com/watch?v=4MxRhjHmiVw", m: 20, n: "Print-ready business cards that feel premium.", tr: "Print requires precision: bleed, safe margins, CMYK and dieline thinking. Design a business card that actually gets kept." },
+        { t: "Social Media Templates", v: "https://www.youtube.com/watch?v=VTDycrlT1hI", m: 18, n: "A template system for Instagram, LinkedIn and X.", tr: "Consistency across platforms builds recognition. Create a template set that scales to every post the brand will ever make." },
+        { t: "Brand Presentation", v: "https://www.youtube.com/watch?v=NPqEdQDraho", m: 16, n: "Present the identity like a studio would.", tr: "The presentation sells the work. Structure a brand deck that tells the strategy story and walks the client through every decision." },
+        { t: "Advertising Campaign Design", v: "https://www.youtube.com/watch?v=YqQx75OPRa0", m: 22, n: "Campaign concept, key visual and multi-format rollout.", tr: "A campaign starts with one idea, then adapts everywhere: feed ads, banners, posters and stories. You'll design a full campaign for one product." },
+        { t: "Promotional Flyer & Print", v: "https://www.youtube.com/watch?v=a5KYlHNKQB8", m: 18, n: "Flyers that get read: hierarchy, offer and action.", tr: "Print promotions live or die on hierarchy. Design a promotional flyer with a clear offer, strong typography and a single call to action." },
+        { t: "Design Variations & Iteration", v: "https://www.youtube.com/watch?v=MshxnTQW4qU", m: 16, n: "Deliver options, not opinions — then refine.", tr: "Clients need choices. Create multiple design variations, learn to present them honestly, and iterate to a final that everyone believes in." },
+        { t: "Capstone: Client Project End-to-End", v: "https://www.youtube.com/watch?v=cqHM7pay82E", m: 28, n: "Full client project: brief → research → concept → design → revision → delivery.", tr: "Your final project mirrors real studio work. Take the fictional brief, run the whole process, and deliver a brand system plus a campaign — portfolio-ready." },
+      ],
+      quizzes: [
+        {
+          t: "Professional Design Checkpoint", d: "Client work and delivery.", time: 10,
+          qs: [
+            q("multiple-choice", "What is the first step in a professional design project?", { options: ["Opening Photoshop", "Understanding the brief and researching", "Designing the logo", "Sending an invoice"], answer: "Understanding the brief and researching", points: 2 }),
+            q("multiple-choice", "Why do professional designers present multiple variations?", { options: ["To confuse the client", "Clients need choices to react to", "To charge more", "It's faster"], answer: "Clients need choices to react to", points: 2 }),
+            q("true-false", "A brand guidelines document protects consistency after handoff.", { options: ["True", "False"], answer: "True", points: 2 }),
+            q("short-answer", "Name one thing you must check before sending a file to print.", { answer: "", points: 3 }),
+          ],
+        },
+      ],
+      assignment: {
+        t: "Capstone: full brand + campaign delivery", d: "A client-style project from brief to final files.",
+        i: "Pick a fictional business. Deliver: brand strategy (positioning + audience), logo system (2 variations), color palette with hex codes, typography system, business card, 3 social media templates, a promotional flyer, and a 5-slide brand presentation. Submit a PDF or link to your files.",
+        days: 21,
+      },
+    });
+
+    // --- Photoshop Mastery (intermediate → professional, hands-on) ---
+    await mkCourse({
+      title: "Photoshop Mastery", subtitle: "Real photo editing and design skills, hands-on",
+      description: "Layers, masks, selections, retouching, color correction and social media design — with follow-along practicals in every lesson.",
+      long: "Stop watching and start doing. This course takes you through the Photoshop skills working designers actually use: the interface, layers, masks, the pen tool, adjustment layers, blending modes, smart objects, retouching, background removal and color correction — each topic with a follow-along practical and a deliverable you can submit.",
+      categoryId: catDesign, tutorId: tSofia, roadmapId: design.id, levelId: design.levelIds[2],
+      difficulty: "intermediate", hours: 30, rating: 4.9, ratingCount: 388, gradient: "sky", icon: "🖌️", image: "https://images.unsplash.com/photo-1547334411-58a4a0e8e5a5?w=1200&q=80",
+      prerequisites: ["Design Fundamentals"], skills: ["Photoshop", "Layer masks", "Pen tool", "Retouching", "Color correction"],
+      featured: true,
+      lessons: [
+        { t: "The Photoshop Interface", v: "https://www.youtube.com/watch?v=PeD7uhc8R4U", m: 16, n: "Workspace, panels, tools and shortcuts that speed you up.", tr: "Learn the layout once and everything else gets faster. We tour the workspace, the layers panel, and the shortcuts you'll use every single day.", r: [["Photoshop shortcuts cheat sheet", "https://learn.forgex.academy/ps-shortcuts.pdf"]] },
+        { t: "Layers Explained", v: "https://www.youtube.com/watch?v=PeD7uhc8R4U", m: 20, n: "The stack that makes Photoshop powerful.", tr: "Layers are the heart of Photoshop. Understand stacking order, opacity, visibility and how to keep files organized like a professional." },
+        { t: "Layer Masks", v: "https://www.youtube.com/watch?v=fE1_nHllIp8", m: 22, n: "Non-destructive editing with black and white.", tr: "Masks let you hide and reveal without deleting. Paint with black and white to blend images seamlessly — the single most important Photoshop skill." },
+        { t: "Selection Tools", v: "https://www.youtube.com/watch?v=0qcWeuWCkJ4", m: 20, n: "Marquee, lasso, quick selection and refine edge.", tr: "Selections are the starting point of most edits. Master the quick selection and refine edge workflow for clean cutouts." },
+        { t: "The Pen Tool", v: "https://www.youtube.com/watch?v=dvJ1HxlyEfI", m: 24, n: "Precise paths for cutouts and shapes.", tr: "The pen tool is the most precise way to select. Learn anchor points, curves and how to convert a path into a clean selection." },
+        { t: "Adjustment Layers", v: "https://www.youtube.com/watch?v=TEQOd6fRSiI", m: 18, n: "Levels, curves, hue/saturation — non-destructive color control.", tr: "Adjustment layers change color without destroying pixels. Build a global color grade that stays editable forever." },
+        { t: "Blending Modes", v: "https://www.youtube.com/watch?v=zKiSUBWAObA", m: 18, n: "Multiply, screen, overlay and friends.", tr: "Blending modes control how layers interact. Learn the ones that matter and when to reach for each." },
+        { t: "Smart Objects", v: "https://www.youtube.com/watch?v=yeQR0qAl_-k", m: 14, n: "Non-destructive scaling and filters.", tr: "Smart objects keep edits reversible. Resize, filter and re-edit without ever degrading quality." },
+        { t: "Photo Retouching", v: "https://www.youtube.com/watch?v=Xt39PClmo4U", m: 22, n: "Heal, clone and clean up portraits and products.", tr: "Retouching is subtlety. Use the healing brush, clone stamp and frequency separation to clean images without the plastic look." },
+        { t: "Background Removal", v: "https://www.youtube.com/watch?v=0qcWeuWCkJ4", m: 20, n: "Clean cutouts for products and people.", tr: "Combine selection tools, masks and refine edge to remove backgrounds cleanly — a skill you'll bill for." },
+        { t: "Color Correction", v: "https://www.youtube.com/watch?v=Xt39PClmo4U", m: 20, n: "Fix white balance, exposure and casts.", tr: "Correct color with a 4-point technique: white balance, exposure, contrast and saturation. Before-and-after that sells." },
+        { t: "Social Media Graphics & Flyers", v: "https://www.youtube.com/watch?v=5dJl_Lr5TGQ", m: 24, n: "Design social posts and promotional flyers in Photoshop.", tr: "Combine everything: layout, type, masks and color into finished social graphics and a professional flyer you can submit." },
+      ],
+      quizzes: [
+        {
+          t: "Photoshop Checkpoint", d: "Non-destructive editing essentials.", time: 12,
+          qs: [
+            q("multiple-choice", "What do layer masks use to hide and reveal pixels?", { options: ["Colors", "Black and white", "Filters", "Blur"], answer: "Black and white", points: 2 }),
+            q("multiple-choice", "Which tool is most precise for creating cutout paths?", { options: ["Brush", "Pen", "Eraser", "Gradient"], answer: "Pen", points: 2 }),
+            q("true-false", "Adjustment layers destroy the original pixels.", { options: ["True", "False"], answer: "False", points: 2, explanation: "Adjustment layers are non-destructive — the original stays editable." }),
+            q("short-answer", "Name one benefit of using smart objects.", { answer: "", points: 3 }),
+          ],
+        },
+      ],
+      assignment: {
+        t: "Photo edit + social media graphic", d: "Retouch a photo and design a social post.",
+        i: "Take a photo of a person or product. Remove the background cleanly, retouch it, correct the color, and design a social media graphic with text. Submit your before/after as images (JPG/PNG) or a PDF.",
+        days: 14,
+      },
+    });
+
+    // --- Video Editing with CapCut (beginner → professional) ---
+    await mkCourse({
+      title: "Video Editing with CapCut", subtitle: "Edit videos people actually watch",
+      description: "From your first cut to a professional edit: CapCut fundamentals, keyframes, captions, color, sound and a client-style capstone.",
+      long: "Video is the most engaging medium on the internet — and CapCut puts a professional editor in your pocket. This course takes you from importing your first clip to delivering a polished, color-graded, captioned video: cutting, transitions, speed ramps, keyframes, captions, green screen, sound design and storytelling, with a practical project at every level.",
+      categoryId: catDesign, tutorId: tSofia, roadmapId: design.id, levelId: design.levelIds[1],
+      difficulty: "beginner", hours: 28, rating: 4.8, ratingCount: 512, gradient: "rose", icon: "🎬", image: "https://images.unsplash.com/photo-1561070791-2526d30994b5?w=1200&q=80",
+      prerequisites: [], skills: ["CapCut", "Video editing", "Keyframes", "Captions", "Color grading"],
+      featured: true,
+      lessons: [
+        { t: "Introduction to Video Editing", v: "https://www.youtube.com/watch?v=TlJR7PAtHks", m: 16, n: "What editing is and the mindset that makes a good editor.", tr: "Editing is storytelling with time. Learn the editor's mindset, the vocabulary (cuts, shots, sequences) and what makes a great edit feel effortless." },
+        { t: "The CapCut Interface", v: "https://www.youtube.com/watch?v=ImKkcOE3y70", m: 18, n: "Preview, timeline, tools and the media bin.", tr: "CapCut is free on desktop and mobile. Tour the interface: the preview, the timeline, the toolbars and where everything lives.", r: [["CapCut desktop download", "https://www.capcut.com"]] },
+        { t: "Importing Media & Creating a Project", v: "https://www.youtube.com/watch?v=pHMoPh6mzm4", m: 14, n: "Start a project, import footage and set up your canvas.", tr: "Create your first project, import clips and photos, and choose the right resolution and frame rate for where the video will live." },
+        { t: "Timeline Fundamentals", v: "https://www.youtube.com/watch?v=c6wA5sWGX5c", m: 20, n: "Tracks, layers and the language of the timeline.", tr: "The timeline is where edits happen. Understand video and audio tracks, how clips stack, and how to read your footage at a glance." },
+        { t: "Cutting & Trimming", v: "https://www.youtube.com/watch?v=ImKkcOE3y70", m: 18, n: "The most important skill: knowing what to remove.", tr: "Good editing is subtraction. Learn to trim dead air, cut on action and keep a natural rhythm." },
+        { t: "Splitting & Rearranging Clips", v: "https://www.youtube.com/watch?v=c6wA5sWGX5c", m: 16, n: "Split, move, reorder — build your story.", tr: "Split clips at the right moments and rearrange them into a sequence that tells your story clearly." },
+        { t: "Adding Music", v: "https://www.youtube.com/watch?v=bALqRZTgfuY", m: 14, n: "Pick music that fits and sync it to the edit.", tr: "Music sets emotion. Choose tracks from CapCut's library, trim them to length and sync the edit to the beat." },
+        { t: "Adding Text & Titles", v: "https://www.youtube.com/watch?v=u3cm1gbHwJU", m: 16, n: "Titles, lower thirds and animated text.", tr: "Text turns raw video into content. Add titles, style them and animate them so they feel part of the video." },
+        { t: "Basic Transitions", v: "https://www.youtube.com/watch?v=ImKkcOE3y70", m: 14, n: "Cuts, fades and the transitions that don't scream.", tr: "Transitions should serve the story. Master the cut, the fade and a few subtle transitions before touching the flashy ones." },
+        { t: "Exporting Videos", v: "https://www.youtube.com/watch?v=pHMoPh6mzm4", m: 12, n: "Resolution, frame rate and the right export settings.", tr: "Export for the platform: 1080p for YouTube, vertical for Reels and TikTok. Learn the settings that keep quality high and files small." },
+      ],
+      quizzes: [
+        {
+          t: "CapCut Fundamentals Checkpoint", d: "The basics that matter.", time: 8,
+          qs: [
+            q("multiple-choice", "What is the most important skill in editing?", { options: ["Adding effects", "Knowing what to remove", "Using every transition", "Making it loud"], answer: "Knowing what to remove", points: 2 }),
+            q("multiple-choice", "Where do you arrange your clips in CapCut?", { options: ["The preview", "The timeline", "The media bin", "The export menu"], answer: "The timeline", points: 2 }),
+            q("true-false", "Transitions should serve the story, not dominate it.", { options: ["True", "False"], answer: "True", points: 2 }),
+            q("short-answer", "Name one export setting you'd change for TikTok vs YouTube.", { answer: "", points: 3 }),
+          ],
+        },
+      ],
+      assignment: {
+        t: "Edit your first 30–60 second video", d: "Cut raw footage into a short, watchable edit.",
+        i: "Record 2–5 minutes of raw footage on your phone (any subject). Edit it in CapCut into a 30–60 second video: trim the best moments, add music, one text title and one transition, then export. Submit your video file (MP4) or a link.",
+        days: 10,
+      },
+    });
+
     // --- Development roadmap courses ---
     await mkCourse({
       title: "HTML, CSS & the Modern Web", subtitle: "Build and style your first real web pages",
