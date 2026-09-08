@@ -177,7 +177,7 @@ export default function CourseDetail() {
           </Link>
         </Reveal>
 
-        <div className="mt-6 grid gap-10 lg:grid-cols-[1fr_380px]">
+        <div className="mt-6 grid grid-cols-1 gap-10 lg:grid-cols-[1fr_380px]">
           {/* Main */}
           <div className="min-w-0">
             <Reveal>
@@ -209,7 +209,7 @@ export default function CourseDetail() {
                 )}
               </div>
 
-              <h1 className="font-display mt-4 text-4xl font-bold tracking-tight sm:text-5xl">
+              <h1 className="font-display mt-4 break-words text-4xl font-bold tracking-tight sm:text-5xl">
                 {course.title}
               </h1>
               <p className="mt-3 text-lg text-muted-foreground">{course.subtitle}</p>
@@ -613,7 +613,7 @@ export default function CourseDetail() {
           </div>
 
           {/* Sidebar */}
-          <div className="lg:pt-2">
+          <div className="min-w-0 lg:pt-2">
             <Reveal className="lg:sticky lg:top-24">
               <div className="overflow-hidden rounded-3xl border border-white/10 bg-card">
                 <CoverArt

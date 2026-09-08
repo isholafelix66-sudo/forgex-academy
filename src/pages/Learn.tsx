@@ -413,14 +413,14 @@ export default function Learn() {
     <div className="min-h-screen bg-background">
       {/* Top bar */}
       <header className="sticky top-0 z-40 border-b border-white/8 bg-[#0d0f0c]/90 backdrop-blur-xl">
-        <div className="mx-auto flex h-16 max-w-7xl items-center gap-3 px-4 sm:px-6">
+        <div className="mx-auto flex h-16 max-w-7xl items-center gap-2 px-4 sm:gap-3 sm:px-6">
           <Link
             to="/dashboard/my-courses"
-            className="inline-flex items-center gap-1.5 text-sm text-muted-foreground transition-colors hover:text-lime-300"
+            className="inline-flex shrink-0 items-center gap-1.5 text-sm text-muted-foreground transition-colors hover:text-lime-300"
           >
             <ArrowLeft className="size-4" /> My courses
           </Link>
-          <div className="mx-2 h-5 w-px bg-white/10" />
+          <div className="mx-2 h-5 w-px shrink-0 bg-white/10" />
           <div className="min-w-0 flex-1">
             <p className="truncate font-display text-sm font-semibold sm:text-base">
               {course.title}
@@ -436,9 +436,9 @@ export default function Learn() {
         </div>
       </header>
 
-      <div className="mx-auto grid max-w-7xl gap-8 px-4 py-8 sm:px-6 lg:grid-cols-[320px_1fr]">
+      <div className="mx-auto grid max-w-7xl grid-cols-1 gap-8 px-4 py-8 sm:px-6 lg:grid-cols-[320px_1fr]">
         {/* Lesson list */}
-        <aside className="lg:sticky lg:top-24 lg:h-fit">
+        <aside className="min-w-0 lg:sticky lg:top-24 lg:h-fit">
           <div className="overflow-hidden rounded-2xl border border-white/10 bg-card">
             <div className="border-b border-white/10 bg-black/20 px-5 py-4">
               <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
@@ -589,7 +589,7 @@ export default function Learn() {
                   {course.category && <Badge variant="outline">{course.category.name}</Badge>}
                   <Rating value={course.rating} size="xs" />
                 </div>
-                <h1 className="font-display mt-3 text-2xl font-bold sm:text-3xl">
+                <h1 className="font-display mt-3 break-words text-2xl font-bold leading-snug sm:text-3xl">
                   {activeLesson.title}
                 </h1>
               </div>
@@ -760,9 +760,9 @@ export default function Learn() {
                     onClick={() => next.locked && toast.info("Complete the previous lesson first to unlock this one.") || setActiveLessonId(next.lesson._id)}
                     className="group flex w-full items-center justify-between rounded-2xl border border-white/10 bg-card p-5 transition-colors hover:border-lime-400/40"
                   >
-                    <div className="text-left">
+                    <div className="min-w-0 text-left">
                       <p className="text-xs uppercase tracking-wider text-muted-foreground">Up next</p>
-                      <p className="font-display mt-1 flex items-center gap-2 font-semibold group-hover:text-lime-300">
+                      <p className="font-display mt-1 flex min-w-0 items-center gap-2 font-semibold break-words group-hover:text-lime-300">
                         {next.locked && <Lock className="size-4 text-muted-foreground" />}
                         {next.lesson.title}
                       </p>

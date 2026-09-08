@@ -152,7 +152,7 @@ export function MuxTracked({
   }, []);
 
   return (
-    <div className="aspect-video w-full overflow-hidden rounded-2xl border border-white/10 bg-black">
+    <div className="aspect-video w-full max-w-full overflow-hidden rounded-2xl border border-white/10 bg-black">
       <MuxPlayer
         ref={ref}
         playbackId={playbackId}

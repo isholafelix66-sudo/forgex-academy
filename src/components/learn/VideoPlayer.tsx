@@ -87,7 +87,7 @@ function YouTubeEmbed({
       title={title ?? "Lesson video"}
       allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share; fullscreen"
       allowFullScreen
-      className="size-full"
+      className="block size-full border-0"
     />
   );
 }
@@ -162,7 +162,7 @@ export function VideoPlayer({
   // instead of attempting playback of a non-existent URL.
   if (url === "planned-recording") {
     return (
-      <div className="flex aspect-video w-full flex-col items-center justify-center gap-2 rounded-2xl border border-white/10 bg-black/40 px-6 text-center">
+      <div className="flex aspect-video w-full max-w-full flex-col items-center justify-center gap-2 rounded-2xl border border-white/10 bg-black/40 px-6 text-center">
         <PlayCircle className="size-10 text-lime-400/70" />
         <p className="text-sm font-semibold text-white">Video coming soon</p>
         <p className="max-w-md text-xs leading-relaxed text-muted-foreground">
@@ -179,7 +179,7 @@ export function VideoPlayer({
   const yt = url ? youtubeId(url) : null;
   if (yt) {
     return (
-      <div className="aspect-video w-full overflow-hidden rounded-2xl border border-white/10 bg-black">
+      <div className="aspect-video w-full max-w-full overflow-hidden rounded-2xl border border-white/10 bg-black">
         <YouTubeEmbed id={yt} title={title} resumePosition={resumePosition} onEmit={emit} onHeartbeat={hbRef.current} />
       </div>
     );
@@ -204,13 +204,13 @@ export function VideoPlayer({
   const loom = url ? loomId(url) : null;
   if (loom) {
     return (
-      <div className="aspect-video w-full overflow-hidden rounded-2xl border border-white/10 bg-black">
+      <div className="aspect-video w-full max-w-full overflow-hidden rounded-2xl border border-white/10 bg-black">
         <iframe
           src={`https://www.loom.com/embed/${loom}`}
           title={title ?? "Lesson video"}
           allow="autoplay; fullscreen"
           allowFullScreen
-          className="size-full"
+          className="block size-full border-0"
         />
       </div>
     );
@@ -220,7 +220,7 @@ export function VideoPlayer({
     return (
       <Suspense
         fallback={
-          <div className="flex aspect-video w-full items-center justify-center rounded-2xl border border-white/10 bg-black/40">
+          <div className="flex aspect-video w-full max-w-full items-center justify-center rounded-2xl border border-white/10 bg-black/40">
             <div className="size-8 animate-spin rounded-full border-2 border-lime-400/30 border-t-lime-400" />
           </div>
         }
@@ -244,7 +244,7 @@ export function VideoPlayer({
   if (!url) {
     if (image) {
       return (
-        <div className="aspect-video w-full overflow-hidden rounded-2xl border border-white/10 bg-black">
+        <div className="aspect-video w-full max-w-full overflow-hidden rounded-2xl border border-white/10 bg-black">
           <img
             src={image}
             alt={title ?? "Lesson image"}
@@ -254,7 +254,7 @@ export function VideoPlayer({
       );
     }
     return (
-      <div className="flex aspect-video w-full flex-col items-center justify-center gap-3 rounded-2xl border border-white/10 bg-black/40 text-center">
+      <div className="flex aspect-video w-full max-w-full flex-col items-center justify-center gap-3 rounded-2xl border border-white/10 bg-black/40 text-center">
         <PlayCircle className="size-10 text-lime-400/70" />
         <p className="text-sm text-muted-foreground">
           No video for this lesson — follow the notes and resources below.
@@ -346,7 +346,7 @@ function NativeVideo({
   }
 
   return (
-    <div className="aspect-video w-full overflow-hidden rounded-2xl border border-white/10 bg-black">
+    <div className="aspect-video w-full max-w-full overflow-hidden rounded-2xl border border-white/10 bg-black">
       <video
         key={attempt}
         controls
@@ -355,7 +355,7 @@ function NativeVideo({
         preload="metadata"
         playsInline
         title={title}
-        className="size-full"
+        className="block size-full border-0"
         onError={() => setFailed(true)}
         onTimeUpdate={(e) => {
           const v = e.currentTarget;
@@ -472,13 +472,13 @@ function VimeoTracked({
   }, []);
 
   return (
-    <div className="aspect-video w-full overflow-hidden rounded-2xl border border-white/10 bg-black">
+    <div className="aspect-video w-full max-w-full overflow-hidden rounded-2xl border border-white/10 bg-black">
       <iframe
         src={`https://player.vimeo.com/video/${vimeo}`}
         title={title}
         allow="autoplay; fullscreen; picture-in-picture"
         allowFullScreen
-        className="size-full"
+        className="block size-full border-0"
       />
     </div>
   );
