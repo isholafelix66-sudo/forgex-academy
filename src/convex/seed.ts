@@ -127,6 +127,39 @@ const REAL_LESSON_VIDEOS: Record<string, string[]> = {
     "https://www.youtube.com/watch?v=AMKgcBzK7cg",
     "https://www.youtube.com/watch?v=Tk-RdCFSrKU",
   ],
+  // CapCut Pro Editing — keyframes, speed ramps, color, sound, captions, export.
+  "capcut-pro-editing": [
+    "https://www.youtube.com/watch?v=TlJR7PAtHks",
+    "https://www.youtube.com/watch?v=ImKkcOE3y70",
+    "https://www.youtube.com/watch?v=pHMoPh6mzm4",
+    "https://www.youtube.com/watch?v=bALqRZTgfuY",
+    "https://www.youtube.com/watch?v=u3cm1gbHwJU",
+    "https://www.youtube.com/watch?v=c6wA5sWGX5c",
+    "https://www.youtube.com/watch?v=ImKkcOE3y70",
+    "https://www.youtube.com/watch?v=pHMoPh6mzm4",
+  ],
+  // CapCut Pro Storytelling — client workflow, story, green screen, brand content, capstone.
+  "capcut-pro-storytelling": [
+    "https://www.youtube.com/watch?v=TlJR7PAtHks",
+    "https://www.youtube.com/watch?v=ImKkcOE3y70",
+    "https://www.youtube.com/watch?v=c6wA5sWGX5c",
+    "https://www.youtube.com/watch?v=pHMoPh6mzm4",
+    "https://www.youtube.com/watch?v=u3cm1gbHwJU",
+    "https://www.youtube.com/watch?v=bALqRZTgfuY",
+    "https://www.youtube.com/watch?v=ImKkcOE3y70",
+    "https://www.youtube.com/watch?v=TlJR7PAtHks",
+  ],
+  // Photoshop Pro Workflows — frequency separation, composites, actions, print, capstone.
+  "photoshop-pro-workflows": [
+    "https://www.youtube.com/watch?v=Xt39PClmo4U",
+    "https://www.youtube.com/watch?v=0qcWeuWCkJ4",
+    "https://www.youtube.com/watch?v=yeQR0qAl_-k",
+    "https://www.youtube.com/watch?v=zKiSUBWAObA",
+    "https://www.youtube.com/watch?v=dvJ1HxlyEfI",
+    "https://www.youtube.com/watch?v=TEQOd6fRSiI",
+    "https://www.youtube.com/watch?v=Xt39PClmo4U",
+    "https://www.youtube.com/watch?v=5dJl_Lr5TGQ",
+  ],
 };
 
 const resource = (name: string, url: string): Resource => ({ name, url });
@@ -771,6 +804,117 @@ export const ensureSeedData = mutation({
         t: "Edit your first 30–60 second video", d: "Cut raw footage into a short, watchable edit.",
         i: "Record 2–5 minutes of raw footage on your phone (any subject). Edit it in CapCut into a 30–60 second video: trim the best moments, add music, one text title and one transition, then export. Submit your video file (MP4) or a link.",
         days: 10,
+      },
+    });
+
+    // --- CapCut Pro Editing (intermediate — real production workflows) ---
+    await mkCourse({
+      title: "CapCut Pro Editing", subtitle: "From first cut to a polished, professional edit",
+      description: "Keyframes, speed ramps, color grading, sound design and captions — the intermediate toolkit that makes edits feel professional.",
+      long: "The beginner course taught you the tools; this course teaches you the craft. You'll move into real production workflows: keyframe animation, speed ramps, color grading, sound design, captions that convert, and multi-clip storytelling. Every lesson is a follow-along practical with a deliverable you can submit.",
+      categoryId: catDesign, tutorId: tSofia, roadmapId: design.id, levelId: design.levelIds[2],
+      difficulty: "intermediate", hours: 26, rating: 4.8, ratingCount: 317, gradient: "rose", icon: "🎬", image: "https://images.unsplash.com/photo-1561070791-2526d30994b5?w=1200&q=80",
+      prerequisites: ["Video Editing with CapCut"], skills: ["Keyframes", "Speed ramps", "Color grading", "Sound design", "Captions"],
+      featured: true,
+      lessons: [
+        { t: "Keyframes: Motion & Animation", v: "https://www.youtube.com/watch?v=TlJR7PAtHks", m: 20, n: "Animate position, scale, rotation and opacity with keyframes.", tr: "Keyframes are the heart of motion in CapCut. Learn to set a start and end state, then let CapCut fill the movement between them — the foundation of every animated title, zoom and effect." },
+        { t: "Speed Ramps & Time Effects", v: "https://www.youtube.com/watch?v=ImKkcOE3y70", m: 18, n: "Slow motion, fast motion and the speed curve.", tr: "Speed is emotion: slow-motion drama, fast-cut energy. Use the speed curve to ramp smoothly from slow to fast and back, exactly like professional sports and travel edits." },
+        { t: "Color Grading Fundamentals", v: "https://www.youtube.com/watch?v=pHMoPh6mzm4", m: 22, n: "Exposure, contrast, saturation and the cinematic look.", tr: "Color grading is where edits start to feel like films. Balance exposure, shape contrast with curves, and build a consistent look across every clip in your project." },
+        { t: "Sound Design & Audio Mixing", v: "https://www.youtube.com/watch?v=bALqRZTgfuY", m: 20, n: "Clean dialogue, layered music, and audio that breathes.", tr: "Viewers forgive a rough picture but not bad audio. Learn to duck music under voice, balance levels, and add subtle sound effects that sell the edit." },
+        { t: "Captions That Convert", v: "https://www.youtube.com/watch?v=u3cm1gbHwJU", m: 16, n: "Auto-captions, styling and the rhythm of on-screen text.", tr: "Most social video is watched on mute. Master auto-caption workflows, styling that matches your brand, and the timing that keeps viewers reading and watching." },
+        { t: "Multi-Clip Storytelling", v: "https://www.youtube.com/watch?v=c6wA5sWGX5c", m: 22, n: "Cut between angles and shots to build a narrative.", tr: "One take is a video; two angles is a story. Learn to assemble multiple clips into a sequence with rhythm, coverage and a clear beginning, middle and end." },
+        { t: "Transitions, Effects & Overlays", v: "https://www.youtube.com/watch?v=ImKkcOE3y70", m: 18, n: "Use effects with restraint and purpose.", tr: "Effects are seasoning, not the meal. Choose transitions and overlays that support the story, and learn the professional habit of using fewer, better ones." },
+        { t: "Exporting for Every Platform", v: "https://www.youtube.com/watch?v=pHMoPh6mzm4", m: 14, n: "Vertical, square and 1080p — the right settings every time.", tr: "Export settings decide how your work looks in the feed. Match resolution, frame rate and bitrate to each platform, and keep a master copy you can always reuse." },
+      ],
+      quizzes: [
+        {
+          t: "CapCut Pro Editing Checkpoint", d: "Production workflows.", time: 10,
+          qs: [
+            q("multiple-choice", "What are keyframes used for in CapCut?", { options: ["Storing backup files", "Animating properties like position and scale over time", "Changing the video resolution", "Adding subtitles automatically"], answer: "Animating properties like position and scale over time", points: 2 }),
+            q("multiple-choice", "What does a speed curve let you do?", { options: ["Change the frame rate", "Ramp smoothly between slow and fast motion", "Export faster", "Add more tracks"], answer: "Ramp smoothly between slow and fast motion", points: 2 }),
+            q("true-false", "Sound design matters even when viewers watch on mute.", { options: ["True", "False"], answer: "True", points: 2, explanation: "Good audio keeps people watching with sound on — and captions cover the mute case." }),
+            q("short-answer", "Why would you keep a master export of every project?", { answer: "", points: 3 }),
+          ],
+        },
+      ],
+      assignment: {
+        t: "Pro edit: keyframes + grade + captions", d: "A 60–90 second edit with motion, color and captions.",
+        i: "Edit a 60–90 second video using at least: one keyframe animation, one speed ramp, a color grade, music with ducked audio, and styled captions. Export at the right settings for one platform and submit your video file (MP4) or a link.",
+        days: 14,
+      },
+    });
+
+    // --- CapCut Pro Storytelling (professional — client-style capstone) ---
+    await mkCourse({
+      title: "CapCut Pro Storytelling", subtitle: "Client edits, brand content and a portfolio that sells",
+      description: "Work like a professional editor: brand content, green screen, advanced color, and a client-style capstone delivered from raw footage to final cut.",
+      long: "This is the serious, career-oriented stage of the video path. You'll take a fictional client brief from raw footage to a finished branded video: planning the story, shooting with the edit in mind, green screen compositing, advanced grading, and delivering a client-style capstone exactly how professional editors work.",
+      categoryId: catDesign, tutorId: tSofia, roadmapId: design.id, levelId: design.levelIds[4],
+      difficulty: "professional", hours: 30, rating: 4.9, ratingCount: 148, gradient: "rose", icon: "🎬", image: "https://images.unsplash.com/photo-1561070791-2526d30994b5?w=1200&q=80",
+      prerequisites: ["CapCut Pro Editing"], skills: ["Client workflow", "Green screen", "Advanced color", "Brand content", "Storytelling"],
+      featured: false,
+      lessons: [
+        { t: "The Client Editing Process", v: "https://www.youtube.com/watch?v=TlJR7PAtHks", m: 18, n: "Brief → ingest → rough cut → review → final delivery.", tr: "Professional editing is a process with deliverables at every step. Learn how to run a project from the first client call to the final export — and how to manage feedback without losing your vision." },
+        { t: "Story Structure for Video", v: "https://www.youtube.com/watch?v=ImKkcOE3y70", m: 20, n: "Hook, build, payoff — the structure every good edit follows.", tr: "Great edits are built on story, not effects. Learn the hook in the first three seconds, the build that keeps attention, and the payoff that makes viewers share." },
+        { t: "Green Screen & Compositing", v: "https://www.youtube.com/watch?v=c6wA5sWGX5c", m: 24, n: "Chroma key, clean edges and believable backgrounds.", tr: "Green screen turns one location into any location. Master chroma key settings, edge cleanup and lighting notes so the composite actually looks real." },
+        { t: "Advanced Color & Looks", v: "https://www.youtube.com/watch?v=pHMoPh6mzm4", m: 22, n: "LUTs, matching shots and a signature look.", tr: "Move beyond basic grading: apply LUTs, match color across dozens of clips, and develop a consistent signature look a brand can rely on." },
+        { t: "Brand Content Systems", v: "https://www.youtube.com/watch?v=u3cm1gbHwJU", m: 18, n: "Templates, intros and a repeatable style for any brand.", tr: "Brands need content every week, not once. Build a reusable edit system — intro, captions, music bed, outro — that keeps every post on-brand." },
+        { t: "Working With Raw Footage", v: "https://www.youtube.com/watch?v=bALqRZTgfuY", m: 20, n: "Ingest, organize, cull and log like a professional.", tr: "Professionals never start editing in a mess. Learn a culling and logging workflow that turns hours of footage into a clean, findable timeline." },
+        { t: "Feedback & Revision Rounds", v: "https://www.youtube.com/watch?v=ImKkcOE3y70", m: 16, n: "Take notes, protect the cut, deliver on time.", tr: "Client feedback is part of the job. Learn to organize notes, make targeted revisions, and communicate what changes and why." },
+        { t: "Capstone: Client Edit End-to-End", v: "https://www.youtube.com/watch?v=TlJR7PAtHks", m: 28, n: "Full client project: brief → rough cut → revisions → final delivery.", tr: "Your final project mirrors real client work. Take the fictional brief, plan the story, edit the footage, apply a grade and captions, and deliver a finished branded video — portfolio-ready." },
+      ],
+      quizzes: [
+        {
+          t: "CapCut Pro Storytelling Checkpoint", d: "Client work and delivery.", time: 10,
+          qs: [
+            q("multiple-choice", "What is the first step in a professional editing project?", { options: ["Adding effects", "Understanding the brief and planning the story", "Exporting", "Buying music"], answer: "Understanding the brief and planning the story", points: 2 }),
+            q("multiple-choice", "What does chroma key let you do?", { options: ["Speed up a clip", "Replace a green background with another image or video", "Add captions", "Change the frame rate"], answer: "Replace a green background with another image or video", points: 2 }),
+            q("true-false", "A brand content system should be reusable across many posts.", { options: ["True", "False"], answer: "True", points: 2 }),
+            q("short-answer", "Name one thing you check before delivering a final export.", { answer: "", points: 3 }),
+          ],
+        },
+      },
+      assignment: {
+        t: "Capstone: client-style brand video", d: "From raw footage to a finished branded edit.",
+        i: "Take the fictional brief (in the assignment resources). Plan the story, edit the provided raw footage into a 60–90 second branded video: hook, keyframe motion, color grade, captions, music with ducked audio, and a clean outro. Export at platform settings and submit your video file (MP4) or a link.",
+        days: 21,
+      },
+    });
+
+    // --- Photoshop Pro Workflows (professional — advanced techniques) ---
+    await mkCourse({
+      title: "Photoshop Pro Workflows", subtitle: "Advanced techniques and client-ready delivery",
+      description: "Frequency separation, advanced compositing, actions, batch processing and client delivery — the professional Photoshop toolkit.",
+      long: "You know the tools; now work like a professional. This course covers the advanced techniques working designers and retouchers use daily: frequency separation retouching, advanced composites, smart workflows, actions and batch processing, print-ready delivery and client-style projects.",
+      categoryId: catDesign, tutorId: tSofia, roadmapId: design.id, levelId: design.levelIds[4],
+      difficulty: "professional", hours: 28, rating: 4.9, ratingCount: 203, gradient: "sky", icon: "🖌️", image: "https://images.unsplash.com/photo-1547334411-58a4a0e8e5a5?w=1200&q=80",
+      prerequisites: ["Photoshop Mastery"], skills: ["Frequency separation", "Compositing", "Actions & batch", "Print delivery", "Client workflow"],
+      featured: false,
+      lessons: [
+        { t: "Advanced Retouching: Frequency Separation", v: "https://www.youtube.com/watch?v=Xt39PClmo4U", m: 24, n: "Separate texture from tone for natural, clean retouching.", tr: "Frequency separation splits an image into texture and color layers, so you can smooth skin without losing detail. The professional retoucher's core technique." },
+        { t: "Advanced Compositing", v: "https://www.youtube.com/watch?v=0qcWeuWCkJ4", m: 26, n: "Match light, color and perspective across multiple images.", tr: "A convincing composite is about consistency: matching light direction, color temperature and perspective so separate photos feel like one scene." },
+        { t: "Smart Objects & Non-Destructive Workflows", v: "https://www.youtube.com/watch?v=yeQR0qAl_-k", m: 20, n: "Keep every edit reversible and every file flexible.", tr: "Professionals never flatten what can stay editable. Smart objects, adjustment layers and smart filters keep your work flexible for clients and revisions." },
+        { t: "Actions & Batch Processing", v: "https://www.youtube.com/watch?v=zKiSUBWAObA", m: 18, n: "Record once, apply to hundreds of files.", tr: "Anything you do twice, automate. Record actions, batch-process folders of images, and reclaim hours of repetitive work." },
+        { t: "Print-Ready Delivery", v: "https://www.youtube.com/watch?v=dvJ1HxlyEfI", m: 22, n: "CMYK, bleed, safe margins and the right file formats.", tr: "Print has rules that screens don't. Prepare CMYK files with bleed and safe margins, and deliver the formats printers actually request." },
+        { t: "Client File Organization & Handoff", v: "https://www.youtube.com/watch?v=TEQOd6fRSiI", m: 16, n: "Name files, package layers and hand off like a studio.", tr: "Clients judge your professionalism by your files. Learn naming conventions, layer organization and handoff packages that make you easy to work with." },
+        { t: "Portfolio Retouching Project", v: "https://www.youtube.com/watch?v=Xt39PClmo4U", m: 24, n: "A before/after retouch worthy of your portfolio.", tr: "Apply everything to one hero image: frequency separation, color correction, compositing and a clean, non-destructive file — a portfolio piece that shows process, not just result." },
+        { t: "Capstone: Client Delivery End-to-End", v: "https://www.youtube.com/watch?v=5dJl_Lr5TGQ", m: 28, n: "Full client project: brief → retouch → composite → deliver.", tr: "Your final project mirrors real client work. Take the fictional brief, retouch and composite the images, prepare print and screen deliverables, and hand off a professional file package." },
+      ],
+      quizzes: [
+        {
+          t: "Photoshop Pro Checkpoint", d: "Advanced workflows.", time: 10,
+          qs: [
+            q("multiple-choice", "What does frequency separation separate?", { options: ["Layers and folders", "Texture from color/tone", "RGB channels", "File formats"], answer: "Texture from color/tone", points: 2 }),
+            q("multiple-choice", "What is the main benefit of recording an action?", { options: ["It makes images sharper", "You can apply the same steps to many files automatically", "It changes the file format", "It adds filters"], answer: "You can apply the same steps to many files automatically", points: 2 }),
+            q("true-false", "Print files should include bleed and safe margins.", { options: ["True", "False"], answer: "True", points: 2 }),
+            q("short-answer", "Name one reason to keep a file non-destructive.", { answer: "", points: 3 }),
+          ],
+        },
+      },
+      assignment: {
+        t: "Capstone: retouch + composite + deliver", d: "A client-style project from brief to final files.",
+        i: "Take the fictional brief (in the assignment resources). Retouch the hero image with frequency separation, build one composite, correct color, and deliver both a print-ready file (CMYK, bleed) and a screen file. Submit your files as a PDF or a link to your package.",
+        days: 21,
       },
     });
 
