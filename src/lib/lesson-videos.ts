@@ -311,6 +311,9 @@ export function resolveLessonVideo(
   if (!fallbacks) return storedUrl;
   const real = fallbacks[lessonOrder - 1];
   if (!real) return storedUrl;
+  // An admin deliberately cleared the lesson's video (empty URL) — show no
+  // video rather than substituting a tutorial.
+  if (storedUrl === "") return "";
   // Respect any video a tutor/admin set — only replace seeded placeholder
   // clips and lessons still marked as "planned recording".
   if (

@@ -3,7 +3,7 @@ import { v } from "convex/values";
 import { checkRateLimit } from "./lib";
 import { ROLES, type Question, type Resource } from "./schema";
 import { PROMPT_CATEGORIES, PROMPT_SEED } from "./promptSeedData";
-import { seedAiCourses } from "./aiCourseSeed";
+import { getDeletedCatalogSlugs, seedAiCourses } from "./aiCourseSeed";
 
 /**
  * Internal wrapper so the scheduler can re-run the idempotent catalog seed.
@@ -344,11 +344,14 @@ export const ensureSeedData = mutation({
     // already seeded) must still appear. If every expected course exists the
     // seed short-circuits; otherwise it continues and mkCourse() fills in
     // whatever is missing (it is idempotent by slug).
+    // Seeded courses an admin deleted are recorded in siteContent — the
+    // self-healing seed must never resurrect them.
+    const deletedCatalogSlugs = await getDeletedCatalogSlugs(ctx);
     const seededSlugs = new Set(
       (await ctx.db.query("courses").collect()).map((c) => c.slug),
     );
     const missingCourses = EXPECTED_COURSE_SLUGS.filter(
-      (s) => !seededSlugs.has(s),
+      (s) => !seededSlugs.has(s) && !deletedCatalogSlugs.has(s),
     );
     if (
       existing &&
@@ -582,6 +585,8 @@ export const ensureSeedData = mutation({
       assignments?: Array<{ t: string; d: string; i: string; days: number }>;
     }) => {
       const slug = c.title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
+      // Respect admin deletions of seeded catalog courses.
+      if (deletedCatalogSlugs.has(slug)) return null;
       const existingCourse = await ctx.db
         .query("courses")
         .withIndex("by_slug", (q) => q.eq("slug", slug))
@@ -605,6 +610,7 @@ export const ensureSeedData = mutation({
               c.lessons[l.order - 1]?.v ?? realFor[l.order - 1];
             if (
               real &&
+              l.videoUrl !== "" &&
               (!l.videoUrl || l.videoUrl.includes("gtv-videos-bucket"))
             ) {
               await ctx.db.patch(l._id, { videoUrl: real, videoType: "youtube" });

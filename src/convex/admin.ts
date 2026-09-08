@@ -5,6 +5,7 @@ import { v } from "convex/values";
 import { hydrateCourse, hydrateCourses, makeAdminToken, notify, publicUser, requireAdminSession, slugify } from "./lib";
 import { difficultyValidator, ROLES, roleValidator, questionValidator, assignmentQuestionValidator, resourceValidator } from "./schema";
 import { messagePreview } from "./messages";
+import { recordDeletedCatalogSlug } from "./aiCourseSeed";
 
 // ---------------------------------------------------------------------------
 // Admin password gate (access is URL-only: /admin + this password)
@@ -1620,6 +1621,9 @@ export const adminDeleteCourse = mutation({
     const course = await ctx.db.get(courseId);
     if (!course) return false;
     await deleteCourseData(ctx, courseId);
+    // Tombstone the slug so the self-healing seed never re-creates a
+    // seeded catalog course the admin deliberately deleted.
+    await recordDeletedCatalogSlug(ctx, course.slug);
     await audit(ctx, undefined, undefined, "course-deleted", `Course deleted: ${course.title} (+ lessons, quizzes, assignments, enrollments)`);
     return true;
   },
@@ -1648,27 +1652,58 @@ export const adminUpsertLesson = mutation({
     ),
     image: v.optional(v.string()),
     notes: v.string(),
-    transcript: v.string(),
+    // Optional so edits that don't touch the transcript preserve the stored
+    // one — seeded lessons ship with full transcripts and must never be wiped
+    // by a simple title/video edit.
+    transcript: v.optional(v.string()),
     token: v.string(),
   },
   handler: async (ctx, args) => {
     await requireAdminSession(ctx, args.token);
-    const { token, id, ...data } = args;
+    const { token, id, transcript, videoUrl, videoType, ...rest } = args;
     if (id) {
-      await ctx.db.patch(id, {
-        ...data,
-        muxAssetId: undefined,
-        muxPlaybackId: undefined,
-      });
-      await audit(ctx, undefined, undefined, "lesson-edited", `Lesson edited: ${data.title}`);
+      const patchData: {
+        title: string;
+        order: number;
+        durationMinutes: number;
+        image?: string;
+        notes: string;
+        transcript?: string;
+        videoUrl?: string;
+        videoType?: "youtube" | "mp4" | "vimeo" | "loom" | "mux";
+        muxAssetId?: string;
+        muxPlaybackId?: string;
+      } = { ...rest };
+      // Preserve the transcript unless the editor explicitly changed it.
+      if (transcript !== undefined) patchData.transcript = transcript;
+      // Only touch the video when the editor actually manages it — editing a
+      // title or notes must never wipe a Mux-backed recording by accident.
+      if (videoUrl !== undefined || videoType !== undefined) {
+        if (videoUrl === undefined || videoUrl === "") {
+          // Admin removed the video: no URL, no playback source.
+          patchData.videoUrl = "";
+          patchData.muxAssetId = "";
+          patchData.muxPlaybackId = "";
+        } else {
+          patchData.videoUrl = videoUrl;
+          patchData.videoType = videoType ?? undefined;
+          patchData.muxAssetId = "";
+          patchData.muxPlaybackId = "";
+        }
+      }
+      await ctx.db.patch(id, patchData);
+      await audit(ctx, undefined, undefined, "lesson-edited", `Lesson edited: ${rest.title}`);
       return id;
     }
     const newId = await ctx.db.insert("lessons", {
-      ...data,
-      image: data.image,
+      ...rest,
+      videoUrl: videoUrl || undefined,
+      videoType: videoType || undefined,
+      transcript: transcript ?? "",
+      image: rest.image,
       resources: [],
     });
-    await audit(ctx, undefined, undefined, "lesson-created", `Lesson created: ${data.title}`);
+    await audit(ctx, undefined, undefined, "lesson-created", `Lesson created: ${rest.title}`);
     return newId;
   },
 });

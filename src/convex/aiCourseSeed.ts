@@ -21,6 +21,45 @@ const resource = (name: string, url: string): Resource => ({ name, url });
 const SLUG = (title: string) =>
   title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
 
+/** siteContent key that records seeded-catalog courses an admin deleted. */
+const DELETED_CATALOG_KEY = "catalog:deleted-slugs";
+
+/**
+ * Slugs of seeded courses an admin deleted. The seed consults this list so a
+ * deletion is permanent — the self-healing seed never resurrects a course
+ * the admin deliberately removed (Admin → Courses → delete).
+ */
+export async function getDeletedCatalogSlugs(
+  ctx: MutationCtx,
+): Promise<Set<string>> {
+  const doc = await ctx.db
+    .query("siteContent")
+    .withIndex("by_key", (q) => q.eq("key", DELETED_CATALOG_KEY))
+    .first();
+  return new Set<string>(Array.isArray(doc?.value) ? doc.value : []);
+}
+
+/** Records a deleted course so the seed skips it on every re-run. */
+export async function recordDeletedCatalogSlug(
+  ctx: MutationCtx,
+  slug: string,
+): Promise<void> {
+  const doc = await ctx.db
+    .query("siteContent")
+    .withIndex("by_key", (q) => q.eq("key", DELETED_CATALOG_KEY))
+    .first();
+  const slugs = new Set<string>(Array.isArray(doc?.value) ? doc.value : []);
+  slugs.add(slug);
+  if (doc) {
+    await ctx.db.patch(doc._id, { value: [...slugs] });
+  } else {
+    await ctx.db.insert("siteContent", {
+      key: DELETED_CATALOG_KEY,
+      value: [...slugs],
+    });
+  }
+}
+
 /**
  * Real educational YouTube tutorials for the AI & modern-work courses,
  * keyed by course slug → video URL per lesson order (1-based). All URLs
@@ -240,9 +279,12 @@ export async function seedAiCourses(ctx: MutationCtx): Promise<number> {
     marketing: await catBySlug("marketing"),
   };
 
+  // Admin-deleted seeded courses are tombstones — never re-create them.
+  const deletedSlugs = await getDeletedCatalogSlugs(ctx);
   let created = 0;
   for (const c of AI_COURSE_CATALOG) {
     const slug = SLUG(c.title);
+    if (deletedSlugs.has(slug)) continue;
     const videos = AI_COURSE_VIDEOS[slug];
     const existing = await ctx.db
       .query("courses")
