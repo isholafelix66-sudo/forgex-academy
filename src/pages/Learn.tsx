@@ -429,7 +429,7 @@ export default function Learn() {
               {doneCount} of {lessonStates.length} lessons complete
             </p>
           </div>
-          <div className="flex w-36 items-center gap-2 sm:w-48">
+          <div className="flex w-28 shrink-0 items-center gap-2 sm:w-48">
             <Progress value={progress} className="h-1.5 bg-white/10 [&>div]:bg-lime-400" />
             <span className="shrink-0 text-xs font-bold text-lime-300">{progress}%</span>
           </div>
@@ -639,7 +639,7 @@ export default function Learn() {
               )}
 
               {/* Complete / quiz action row */}
-              <div className="flex items-center justify-between gap-3 rounded-2xl border border-white/10 bg-card p-4">
+              <div className="flex flex-col gap-3 rounded-2xl border border-white/10 bg-card p-4 sm:flex-row sm:items-center sm:justify-between">
                 <div className="min-w-0">
                   <p className="text-sm font-medium">
                     {activeState.completed
@@ -665,7 +665,7 @@ export default function Learn() {
                     }
                     disabled={activeState.completed}
                     className={cn(
-                      "shrink-0 gap-2",
+                      "w-full shrink-0 gap-2 sm:w-auto",
                       activeState.completed
                         ? "border border-lime-400/40 bg-lime-400/10 text-lime-300 hover:bg-lime-400/15"
                         : "bg-lime-400 font-semibold text-black hover:bg-lime-300",
@@ -686,7 +686,7 @@ export default function Learn() {
                     onClick={handleComplete}
                     disabled={marking || activeState.completed}
                     className={cn(
-                      "shrink-0 gap-2",
+                      "w-full shrink-0 gap-2 sm:w-auto",
                       activeState.completed
                         ? "border border-lime-400/40 bg-lime-400/10 text-lime-300 hover:bg-lime-400/15"
                         : "bg-lime-400 font-semibold text-black hover:bg-lime-300",
@@ -711,7 +711,7 @@ export default function Learn() {
                   <h2 className="flex items-center gap-2 font-display text-base font-semibold">
                     <StickyNote className="size-4 text-lime-300" /> Lesson notes
                   </h2>
-                  <p className="mt-3 whitespace-pre-line text-sm leading-relaxed text-muted-foreground">
+                  <p className="mt-3 break-words whitespace-pre-line text-sm leading-relaxed text-muted-foreground">
                     {activeLesson.notes}
                   </p>
                 </section>
@@ -745,7 +745,7 @@ export default function Learn() {
                   <h2 className="flex items-center gap-2 font-display text-base font-semibold">
                     <ScrollText className="size-4 text-lime-300" /> Transcript
                   </h2>
-                  <p className="mt-3 whitespace-pre-line text-sm leading-relaxed text-muted-foreground">
+                  <p className="mt-3 break-words whitespace-pre-line text-sm leading-relaxed text-muted-foreground">
                     {activeLesson.transcript}
                   </p>
                 </section>
@@ -834,7 +834,7 @@ export default function Learn() {
                       onClick={() => setExamOpen(true)}
                       disabled={!states?.allLessonsComplete || !!bestExam?.passed}
                       className={cn(
-                        "shrink-0 gap-2",
+                        "w-full shrink-0 gap-2 sm:w-auto",
                         states?.allLessonsComplete && !bestExam?.passed
                           ? "bg-lime-400 font-semibold text-black hover:bg-lime-300"
                           : "border border-white/15",
@@ -1038,7 +1038,7 @@ export default function Learn() {
             >
               <MessageSquare className="size-3.5" /> Message tutor
             </Button>
-            <Link to={`/tutors/${course.tutorId}`} className="text-xs text-lime-300 hover:underline">
+            <Link to={`/tutors/${course.tutorId}`} className="hidden text-xs text-lime-300 hover:underline sm:inline">
               View profile
             </Link>
           </div>

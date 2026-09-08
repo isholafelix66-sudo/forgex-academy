@@ -235,10 +235,10 @@ export default function CourseDetail() {
             {/* Tutor */}
             {course.tutorProfile && (
               <Reveal className="mt-8">
-                <div className="flex items-center gap-4 rounded-2xl border border-white/10 bg-card p-5 transition-colors hover:border-lime-400/30">
+                <div className="flex flex-col gap-4 rounded-2xl border border-white/10 bg-card p-5 transition-colors hover:border-lime-400/30 sm:flex-row sm:items-center">
                   <Link
                     to={`/tutors/${course.tutorId}`}
-                    className="flex min-w-0 flex-1 items-center gap-4"
+                    className="flex min-w-0 items-center gap-4 sm:flex-1"
                   >
                     <Avatar
                       name={course.tutorProfile.name}
@@ -263,7 +263,7 @@ export default function CourseDetail() {
                   <Button
                     size="sm"
                     onClick={handleMessageTutor}
-                    className="shrink-0 gap-1.5 bg-lime-400 font-semibold text-black hover:bg-lime-300"
+                    className="w-full shrink-0 gap-1.5 bg-lime-400 font-semibold text-black hover:bg-lime-300 sm:w-auto"
                   >
                     <MessageSquare className="size-3.5" /> Message tutor
                   </Button>
@@ -274,7 +274,7 @@ export default function CourseDetail() {
             {/* Description */}
             <Reveal className="mt-10">
               <h2 className="font-display text-2xl font-bold">About this course</h2>
-              <p className="mt-4 whitespace-pre-line text-base leading-relaxed text-muted-foreground">
+              <p className="mt-4 break-words whitespace-pre-line text-base leading-relaxed text-muted-foreground">
                 {course.longDescription}
               </p>
             </Reveal>
@@ -595,7 +595,7 @@ export default function CourseDetail() {
                             </span>
                           </div>
                           {r.comment ? (
-                            <p className="mt-1.5 whitespace-pre-line text-sm leading-relaxed text-muted-foreground">
+                            <p className="mt-1.5 break-words whitespace-pre-line text-sm leading-relaxed text-muted-foreground">
                               {r.comment}
                             </p>
                           ) : (
