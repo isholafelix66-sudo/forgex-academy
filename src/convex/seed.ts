@@ -1,9 +1,27 @@
-import { mutation } from "./_generated/server";
+import { internalMutation, mutation, type MutationCtx } from "./_generated/server";
 import { v } from "convex/values";
 import { checkRateLimit } from "./lib";
 import { ROLES, type Question, type Resource } from "./schema";
 import { PROMPT_CATEGORIES, PROMPT_SEED } from "./promptSeedData";
 import { seedAiCourses } from "./aiCourseSeed";
+
+/**
+ * Internal wrapper so the scheduler can re-run the idempotent catalog seed.
+ * New courses shipped after a database was first seeded (e.g. the AI &
+ * modern-work courses) then appear automatically — no manual action needed.
+ * `ensureSeedData.handler` is only referenced at call time, so placing this
+ * before its declaration is safe.
+ */
+export const ensureSeedDataInternal = internalMutation({
+  args: { force: v.optional(v.boolean()) },
+  handler: async (ctx, args) =>
+    // The generated type only exposes the registered function, but the runtime
+    // object always carries the plain `handler` — invoke it directly so both
+    // the public mutation and this cron wrapper share one implementation.
+    (ensureSeedData as unknown as {
+      handler: (c: MutationCtx, a: { force?: boolean }) => Promise<{ seeded: boolean }>;
+    }).handler(ctx, args),
+});
 
 const VIDS = [
   "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4",

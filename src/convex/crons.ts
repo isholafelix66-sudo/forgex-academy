@@ -28,4 +28,12 @@ crons.interval("email-tutor-inactivity", { hours: 24 }, internal.emailTriggers.s
 /** Daily admin activity summary. */
 crons.interval("email-admin-summary", { hours: 24 }, internal.emailTriggers.sendAdminDailySummary, {});
 
+// ---------------------------------------------------------------------------
+// Catalog self-heal: re-runs the idempotent seed so courses added to the
+// catalog after a database was first seeded (professional graphic design,
+// Photoshop, CapCut, and the AI & modern-work courses) appear automatically.
+// Cheap no-op when the catalog is already complete.
+// ---------------------------------------------------------------------------
+crons.interval("catalog-self-heal", { hours: 12 }, internal.seed.ensureSeedDataInternal, {});
+
 export default crons;
