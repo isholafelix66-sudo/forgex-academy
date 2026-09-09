@@ -64,14 +64,17 @@ export const submitLessonQuiz = mutation({
     const enrollment = await enrollmentFor(ctx, user._id, quiz.courseId);
     if (!enrollment) throw new Error("Enroll in this course first.");
 
-    // Watch gate: learners must watch ≥90% of the video before the quiz
-    // unlocks. Lessons without a video (notes-only) and players that can't
-    // report progress (Loom embeds) skip the gate.
+    // Watch gate: learners must watch the course's threshold percentage of
+    // the video before the quiz unlocks. Lessons without a playable video
+    // (notes-only, videos an admin cleared, "planned-recording" placeholders)
+    // and players that can't report progress (Loom embeds) skip the gate.
+    // Same rule as completeLessonInternal so both gates always agree.
     const trackable =
       !!lesson.muxPlaybackId ||
-      lesson.videoType === "youtube" ||
-      lesson.videoType === "mp4" ||
-      lesson.videoType === "vimeo";
+      (!!lesson.videoUrl &&
+        lesson.videoUrl !== "" &&
+        lesson.videoUrl !== "planned-recording" &&
+        lesson.videoType !== "loom");
     if (trackable) {
       const rows = await ctx.db
         .query("watchProgress")

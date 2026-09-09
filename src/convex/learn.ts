@@ -238,6 +238,34 @@ export async function completeLessonInternal(
   const req = course ? courseRequirements(course) : null;
 
   if (!enrollment.completedLessons.includes(lessonId)) {
+    // Watch gate: video lessons only complete once the credited (range-based)
+    // watch coverage meets the course's configured threshold. Enforced here on
+    // the backend so the "Mark complete" button can never bypass watching —
+    // the frontend mirrors this by disabling the button until the threshold
+    // is reached. Lessons without a playable video (notes-only, Loom embeds,
+    // recordings still marked "planned") skip the gate.
+    const hasRealVideo =
+      !!lesson.muxPlaybackId ||
+      (!!lesson.videoUrl &&
+        lesson.videoUrl !== "" &&
+        lesson.videoUrl !== "planned-recording" &&
+        lesson.videoType !== "loom");
+    if (hasRealVideo && req) {
+      const watchRows = await ctx.db
+        .query("watchProgress")
+        .withIndex("by_student_course", (q) =>
+          q.eq("studentId", user._id).eq("courseId", lesson.courseId),
+        )
+        .collect();
+      const wp = watchRows.find((r) => r.lessonId === lessonId);
+      const watched = effectiveWatchedPercent(wp);
+      if (watched < req.videoWatchPercent) {
+        throw new Error(
+          `Watch at least ${req.videoWatchPercent}% of this lesson's video before completing it (${Math.floor(watched)}% watched so far).`,
+        );
+      }
+    }
+
     // A published per-lesson quiz must be passed first — passing the quiz is
     // what marks the lesson complete (see submitLessonQuiz).
     const quiz = await ctx.db

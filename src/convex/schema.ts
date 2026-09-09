@@ -442,6 +442,16 @@ const schema = defineSchema(
       lastPosition: v.optional(v.number()), // last validated heartbeat position
       lastSeenAt: v.optional(v.number()), // wall clock of that heartbeat
       updatedAt: v.number(),
+      // Which player reported this progress (mux | youtube | mp4 | vimeo | loom).
+      videoSource: v.optional(
+        v.union(
+          v.literal("mux"),
+          v.literal("youtube"),
+          v.literal("mp4"),
+          v.literal("vimeo"),
+          v.literal("loom"),
+        ),
+      ),
     })
       .index("by_student_course", ["studentId", "courseId"])
       .index("by_lesson", ["lessonId"]),

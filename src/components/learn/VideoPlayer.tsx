@@ -1,5 +1,6 @@
 import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import { PlayCircle, RefreshCw, TriangleAlert } from "lucide-react";
+import { loadYouTubeApi, YT_STATE, type YTPlayer } from "@/lib/youtubeApi";
 
 // @mux/mux-player-react is ~1MB — loaded only when a Mux-backed lesson plays.
 const MuxTracked = lazy(() => import("./MuxTracked").then((m) => ({ default: m.MuxTracked })));
@@ -24,87 +25,224 @@ export function loomId(url: string): string | null {
 }
 
 /**
- * YouTube via a plain <iframe> embed — no IFrame API script required, so it
- * plays even under strict CSPs (`frame-src` allows youtube.com). Progress is
- * tracked from the player's `infoDelivery` postMessage events, which the
- * embed sends to the parent frame on its own.
+ * YouTube lesson player built on the official YouTube IFrame Player API.
+ *
+ * The plain-iframe approach can't report playback position to the parent
+ * frame, so lessons never earned watch credit. This player creates a real
+ * `YT.Player`, polls `getCurrentTime()/getDuration()` once a second while
+ * playing, and feeds the exact same progress/position callbacks the Mux and
+ * native players use — so YouTube lessons flow into the shared
+ * `lms.watchHeartbeat` / `lms.saveWatchPosition` backend unchanged.
+ *
+ * Emits:
+ * - emit(pct, currentTime, duration) — every ~1s while playing
+ * - onHeartbeat(currentTime, duration, playing) — on pause/end
+ * - onSavePosition(currentTime, duration) — on pause/end/unmount
+ * - onDurationReady(duration) — when duration becomes known
+ * - onPlay / onPlayerPause — playback state mirrors for the parent
  */
-function YouTubeEmbed({
+function YouTubeTracked({
   id,
   title,
   resumePosition,
-  onEmit,
+  emit,
   onHeartbeat,
+  onSavePosition,
+  onDurationReady,
+  onPlay,
+  onPlayerPause,
 }: {
   id: string;
   title?: string;
+  /** Saved playback position in seconds — player seeks here on ready. */
   resumePosition?: number;
-  onEmit: (pct: number, currentTime: number, duration: number) => void;
+  /** Percentage + position (0–100, currentTime, duration) for instant UI updates. */
+  emit: (pct: number, currentTime: number, duration: number) => void;
+  /** Heartbeat: current position/duration + playing flag (pause/end only). */
   onHeartbeat?: (currentTime: number, duration: number, playing: boolean) => void;
+  /** Fires on pause/end/unmount to persist the resume position. */
+  onSavePosition?: (positionSeconds: number, durationSeconds: number) => void;
+  /** Fires when the video duration becomes known. */
+  onDurationReady?: (duration: number) => void;
+  /** Fires when the player starts playing. */
+  onPlay?: () => void;
+  /** Fires when the player pauses or ends. */
+  onPlayerPause?: () => void;
 }) {
-  const emitRef = useRef(onEmit);
-  emitRef.current = onEmit;
+  const hostRef = useRef<HTMLDivElement>(null);
+  const playerRef = useRef<YTPlayer | null>(null);
+  const [failed, setFailed] = useState(false);
+  const [attempt, setAttempt] = useState(0);
+
+  const emitRef = useRef(emit);
+  emitRef.current = emit;
   const hbRef = useRef(onHeartbeat);
   hbRef.current = onHeartbeat;
+  const saveRef = useRef(onSavePosition);
+  saveRef.current = onSavePosition;
+  const durationReadyRef = useRef(onDurationReady);
+  durationReadyRef.current = onDurationReady;
+  const playRef = useRef(onPlay);
+  playRef.current = onPlay;
+  const playerPauseRef = useRef(onPlayerPause);
+  playerPauseRef.current = onPlayerPause;
+  const resumeRef = useRef(resumePosition);
+  resumeRef.current = resumePosition;
+  /** Latest known position — persisted on unmount if no pause event fired. */
+  const lastPosRef = useRef<{ ct: number; dur: number }>({ ct: 0, dur: 0 });
 
   useEffect(() => {
-    let lastHb = 0;
-    const handler = (e: MessageEvent) => {
-      if (
-        e.origin !== "https://www.youtube.com" &&
-        e.origin !== "https://www.youtube-nocookie.com"
-      ) {
-        return;
-      }
-      const d = e.data as {
-        event?: string;
-        info?: { currentTime?: number; duration?: number };
-      };
-      if (
-        d?.event === "infoDelivery" &&
-        typeof d.info?.currentTime === "number" &&
-        typeof d.info?.duration === "number" &&
-        d.info.duration > 0
-      ) {
-        const ct = d.info.currentTime;
-        const dur = d.info.duration;
-        emitRef.current((ct / dur) * 100, ct, dur);
-        // Heartbeat every ~12s
-        const now = Date.now();
-        if (now - lastHb >= 12_000 && hbRef.current) {
-          lastHb = now;
-          hbRef.current(ct, dur, true);
-        }
-      }
-    };
-    window.addEventListener("message", handler);
-    return () => window.removeEventListener("message", handler);
-  }, []);
+    let cancelled = false;
+    let poll: ReturnType<typeof setInterval> | null = null;
+    const el = hostRef.current;
+    if (!el) return;
 
-  // The `origin` + `widget_referrer` params are required for reliable embeds:
-  // without them YouTube can treat the embed as suspicious traffic and show
-  // its own "verify you're not a bot" / age-check screens inside the player.
-  const origin =
-    typeof window !== "undefined" ? window.location.origin : undefined;
-  const referrer =
-    typeof window !== "undefined" ? window.location.href : undefined;
-  const params = new URLSearchParams({ rel: "0", playsinline: "1" });
-  if (origin) params.set("origin", origin);
-  if (referrer) params.set("widget_referrer", referrer);
-  if (resumePosition && resumePosition > 2) {
-    params.set("start", String(Math.floor(resumePosition)));
+    const safeDur = (p: YTPlayer) => {
+      const d = p.getDuration();
+      return typeof d === "number" && Number.isFinite(d) && d > 0 ? d : 0;
+    };
+    const safeTime = (p: YTPlayer) => {
+      const t = p.getCurrentTime();
+      return typeof t === "number" && Number.isFinite(t) && t > 0 ? t : 0;
+    };
+    const tick = (p: YTPlayer) => {
+      const dur = safeDur(p);
+      if (dur <= 0) return;
+      const ct = Math.min(dur, safeTime(p));
+      lastPosRef.current = { ct, dur };
+      emitRef.current((ct / dur) * 100, ct, dur);
+    };
+
+    (async () => {
+      try {
+        const YT = await loadYouTubeApi();
+        if (cancelled || !hostRef.current) return;
+        const player = new YT.Player(hostRef.current, {
+          videoId: id,
+          width: "100%",
+          height: "100%",
+          playerVars: {
+            rel: 0,
+            playsinline: 1,
+            modestbranding: 1,
+            origin: window.location.origin,
+          },
+          events: {
+            onReady: (e) => {
+              if (cancelled) return;
+              playerRef.current = e.target;
+              const dur = safeDur(e.target);
+              if (dur > 0) {
+                if (durationReadyRef.current) durationReadyRef.current(dur);
+                // Resume from the saved position (skip if already near the end).
+                const rp = resumeRef.current;
+                if (rp && rp > 2 && rp < dur - 2) {
+                  try {
+                    e.target.seekTo(rp, true);
+                  } catch {
+                    // seekTo before playback can throw in rare cases — ignore
+                  }
+                }
+                lastPosRef.current = { ct: Math.min(dur, Math.max(0, rp ?? 0)), dur };
+              }
+            },
+            onStateChange: (e) => {
+              if (cancelled) return;
+              const p = e.target;
+              if (e.data === YT_STATE.PLAYING || e.data === YT_STATE.BUFFERING) {
+                if (e.data === YT_STATE.PLAYING) {
+                  if (playRef.current) playRef.current();
+                  if (!poll) {
+                    tick(p);
+                    poll = setInterval(() => tick(p), 1000);
+                  }
+                }
+              } else if (e.data === YT_STATE.PAUSED) {
+                if (poll) {
+                  clearInterval(poll);
+                  poll = null;
+                }
+                if (playerPauseRef.current) playerPauseRef.current();
+                const dur = safeDur(p);
+                if (dur > 0) {
+                  const ct = Math.min(dur, safeTime(p));
+                  lastPosRef.current = { ct, dur };
+                  emitRef.current((ct / dur) * 100, ct, dur);
+                  if (hbRef.current) hbRef.current(ct, dur, false);
+                  if (saveRef.current) saveRef.current(ct, dur);
+                }
+              } else if (e.data === YT_STATE.ENDED) {
+                if (poll) {
+                  clearInterval(poll);
+                  poll = null;
+                }
+                const dur = safeDur(p);
+                if (dur > 0) {
+                  lastPosRef.current = { ct: dur, dur };
+                  emitRef.current(100, dur, dur);
+                  // Report the final span as playback so the server can credit
+                  // the tail (short videos would otherwise stall just under the
+                  // threshold), then persist the end position.
+                  if (hbRef.current) hbRef.current(dur, dur, true);
+                  if (playerPauseRef.current) playerPauseRef.current();
+                  if (saveRef.current) saveRef.current(dur, dur);
+                }
+              }
+            },
+            onPlaybackRateChange: () => {
+              // Playback continues; the poll keeps emitting current time.
+            },
+            onError: () => {
+              if (!cancelled) setFailed(true);
+            },
+          },
+        });
+      } catch {
+        if (!cancelled) setFailed(true);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+      if (poll) clearInterval(poll);
+      // Persist the latest position when the student leaves without pausing.
+      const { ct, dur } = lastPosRef.current;
+      if (dur > 0 && saveRef.current) saveRef.current(ct, dur);
+      try {
+        playerRef.current?.destroy();
+      } catch {
+        // already destroyed
+      }
+      playerRef.current = null;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [id, attempt]);
+
+  if (failed) {
+    return (
+      <div className="flex aspect-video w-full flex-col items-center justify-center gap-3 rounded-2xl border border-white/10 bg-black/60 text-center">
+        <TriangleAlert className="size-8 text-amber-300/80" />
+        <div>
+          <p className="text-sm font-medium">This video couldn&rsquo;t load</p>
+          <p className="mt-1 text-xs text-muted-foreground">
+            YouTube may be blocked on this network or the video is unavailable.
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={() => {
+            setFailed(false);
+            setAttempt((a) => a + 1);
+          }}
+          className="inline-flex items-center gap-1.5 rounded-xl bg-lime-400 px-4 py-2 text-xs font-semibold text-black transition-colors hover:bg-lime-300"
+        >
+          <RefreshCw className="size-3.5" /> Retry playback
+        </button>
+      </div>
+    );
   }
 
-  return (
-    <iframe
-      src={`https://www.youtube-nocookie.com/embed/${id}?${params.toString()}`}
-      title={title ?? "Lesson video"}
-      allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share; fullscreen"
-      allowFullScreen
-      referrerPolicy="strict-origin-when-cross-origin"
-      className="block size-full border-0"
-    />
-  );
+  return <div ref={hostRef} aria-label={title ?? "Lesson video"} className="size-full" />;
 }
 
 export function VideoPlayer({
@@ -195,7 +333,17 @@ export function VideoPlayer({
   if (yt) {
     return (
       <div className="aspect-video w-full max-w-full overflow-hidden rounded-2xl border border-white/10 bg-black">
-        <YouTubeEmbed id={yt} title={title} resumePosition={resumePosition} onEmit={emit} onHeartbeat={hbRef.current} />
+        <YouTubeTracked
+          id={yt}
+          title={title}
+          resumePosition={resumePosition}
+          emit={emit}
+          onHeartbeat={hbRef.current}
+          onSavePosition={saveRef.current}
+          onDurationReady={durationReadyRef.current}
+          onPlay={playRef.current}
+          onPlayerPause={playerPauseRef.current}
+        />
       </div>
     );
   }

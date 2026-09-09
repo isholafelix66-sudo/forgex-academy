@@ -26,7 +26,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { VideoPlayer } from "@/components/learn/VideoPlayer";
+import { VideoPlayer, youtubeId } from "@/components/learn/VideoPlayer";
 import { resolveLessonVideo } from "@/lib/lesson-videos";
 import { QuizRunner, type QuizData, type QuizSubmitResult } from "@/components/learn/QuizRunner";
 import { DifficultyBadge } from "@/components/site/DifficultyBadge";
@@ -163,16 +163,36 @@ export default function Learn() {
     );
   }
 
-  const trackable =
+  /** Resolved video URL — real tutorials substituted for seeded placeholders. */
+  const resolvedVideo = activeLesson
+    ? resolveLessonVideo(course.slug, activeLesson.order, activeLesson.videoUrl)
+    : null;
+  /** Whether the lesson actually has a playable, trackable video. */
+  const hasPlayableVideo =
     !!activeLesson?.muxPlaybackId ||
-    activeLesson?.videoType === "youtube" ||
-    activeLesson?.videoType === "mp4" ||
-    activeLesson?.videoType === "vimeo" ||
-    activeLesson?.videoType === "mux";
+    (!!resolvedVideo &&
+      resolvedVideo !== "planned-recording" &&
+      resolvedVideo.trim() !== "" &&
+      activeLesson?.videoType !== "loom");
+  /** Watch threshold from the course's completion settings (default 90%). */
+  const watchThreshold = states?.completionRequirements?.videoWatchPercent ?? 90;
 
-  // Video progress is informational only — no longer gates lesson completion.
+  // Video lessons complete through real playback credit only — the UI mirrors
+  // the backend gate (completeLessonInternal) by keeping the completion/quiz
+  // buttons locked until the credited watch coverage meets the threshold.
+  const trackable = hasPlayableVideo;
   const watchPercent = Math.max(localWatchPercent, serverWatchPercent);
-  const watchOk = true; // Always enabled — mark complete is free
+  const watchOk = !trackable || watchPercent >= watchThreshold;
+
+  /** Which player reported this lesson's progress (stored on watchProgress). */
+  const videoSource: "mux" | "youtube" | "mp4" | "vimeo" | "loom" = (() => {
+    if (!activeLesson) return "mp4";
+    if (activeLesson.muxPlaybackId) return "mux";
+    if (resolvedVideo && youtubeId(resolvedVideo)) return "youtube";
+    if (activeLesson.videoType === "vimeo") return "vimeo";
+    if (activeLesson.videoType === "loom") return "loom";
+    return "mp4";
+  })();
 
   /** Reset local progress when switching lessons. */
   useEffect(() => {
@@ -213,9 +233,10 @@ export default function Learn() {
         positionSeconds: currentTime,
         durationSeconds: duration,
         playing: playingRef.current,
+        videoSource,
       });
     },
-    [activeLesson, watchHeartbeat],
+    [activeLesson, watchHeartbeat, videoSource],
   );
 
   /**
@@ -238,10 +259,11 @@ export default function Learn() {
           positionSeconds: currentTime,
           durationSeconds: duration,
           playing: true,
+          videoSource,
         });
       }
     },
-    [activeLesson, watchHeartbeat],
+    [activeLesson, watchHeartbeat, videoSource],
   );
 
   const handleHeartbeat = useCallback(
@@ -256,9 +278,10 @@ export default function Learn() {
         positionSeconds: currentTime,
         durationSeconds: duration,
         playing,
+        videoSource,
       });
     },
-    [activeLesson, watchHeartbeat],
+    [activeLesson, watchHeartbeat, videoSource],
   );
 
   const handlePause = useCallback(
@@ -272,14 +295,16 @@ export default function Learn() {
         positionSeconds: currentTime,
         durationSeconds: duration,
         playing: false,
+        videoSource,
       });
       void saveWatchPosition({
         lessonId: activeLesson._id as never,
         positionSeconds: currentTime,
         durationSeconds: duration,
+        videoSource,
       });
     },
-    [activeLesson, watchHeartbeat, saveWatchPosition],
+    [activeLesson, watchHeartbeat, saveWatchPosition, videoSource],
   );
 
   const handleSavePosition = useCallback(
@@ -291,9 +316,10 @@ export default function Learn() {
         lessonId: activeLesson._id as never,
         positionSeconds,
         durationSeconds,
+        videoSource,
       });
     },
-    [activeLesson, saveWatchPosition],
+    [activeLesson, saveWatchPosition, videoSource],
   );
 
   /** Called when the video duration becomes known (loadedmetadata). */
@@ -324,17 +350,19 @@ export default function Learn() {
           positionSeconds: currentTime,
           durationSeconds: duration,
           playing: false,
+          videoSource,
         });
         void saveWatchPosition({
           lessonId: activeLesson._id as never,
           positionSeconds: currentTime,
           durationSeconds: duration,
+          videoSource,
         });
       }
     };
     window.addEventListener("beforeunload", handleBeforeUnload);
     return () => window.removeEventListener("beforeunload", handleBeforeUnload);
-  }, [activeLesson, watchHeartbeat, saveWatchPosition]);
+  }, [activeLesson, watchHeartbeat, saveWatchPosition, videoSource]);
 
   /** Save position when the browser tab becomes hidden (user switches tabs). */
   useEffect(() => {
@@ -348,18 +376,20 @@ export default function Learn() {
             positionSeconds: currentTime,
             durationSeconds: duration,
             playing: false,
+            videoSource,
           });
           void saveWatchPosition({
             lessonId: activeLesson._id as never,
             positionSeconds: currentTime,
             durationSeconds: duration,
+            videoSource,
           });
         }
       }
     };
     document.addEventListener("visibilitychange", handleVisibility);
     return () => document.removeEventListener("visibilitychange", handleVisibility);
-  }, [activeLesson, watchHeartbeat, saveWatchPosition]);
+  }, [activeLesson, watchHeartbeat, saveWatchPosition, videoSource]);
 
   const advanceAfterComplete = (lessonId: string) => {
     setJustCompleted(lessonId);
@@ -611,7 +641,7 @@ export default function Learn() {
                 onPlayerPause={handlePlayerPause}
               />
 
-              {/* Video progress — informational, no longer gates completion */}
+              {/* Video progress — watch credit toward the completion threshold */}
               {trackable && (
                 <div className="rounded-2xl border border-white/10 bg-card p-4">
                   <div className="flex items-center justify-between gap-3">
@@ -620,11 +650,13 @@ export default function Learn() {
                         {activeState.completed
                           ? "Lesson completed ✓"
                           : activeState.quiz
-                            ? "Quiz available — ready to test your knowledge"
-                            : "Mark complete when you're ready"}
+                            ? `Quiz unlocks at ${watchThreshold}% watched`
+                            : watchOk
+                              ? "Watch threshold reached — ready to complete"
+                              : `Watch ${watchThreshold}% of the video to complete`}
                       </p>
                       <p className="text-xs text-muted-foreground">
-                        Video progress: {Math.min(watchPercent, 100)}%.
+                        Video progress: {Math.min(watchPercent, 100)}% · {watchThreshold}% required.
                       </p>
                     </div>
                     <span className="shrink-0 rounded-full bg-lime-400/15 px-2.5 py-1 text-xs font-bold text-lime-300">
@@ -638,7 +670,8 @@ export default function Learn() {
                 </div>
               )}
 
-              {/* Complete / quiz action row */}
+              {/* Complete / quiz action row — video lessons stay locked until
+                  the credited watch coverage meets the course threshold. */}
               <div className="flex flex-col gap-3 rounded-2xl border border-white/10 bg-card p-4 sm:flex-row sm:items-center sm:justify-between">
                 <div className="min-w-0">
                   <p className="text-sm font-medium">
@@ -646,12 +679,18 @@ export default function Learn() {
                       ? "Lesson completed ✓"
                       : activeState.quiz
                         ? "Ready to test your knowledge"
-                        : "Mark this lesson as complete"}
+                        : watchOk
+                          ? "Video watched — mark the lesson complete"
+                          : "Keep watching to complete this lesson"}
                   </p>
                   <p className="text-xs text-muted-foreground">
                     {activeState.quiz
-                      ? `${activeState.quiz.questions.length} questions · pass ${activeState.quiz.passPercent}% · ${activeState.quiz.timeLimitMinutes} min`
-                      : "Completing all lessons unlocks your certificate"}
+                      ? trackable && !watchOk
+                        ? `Watch ${watchThreshold}% of the video to unlock this quiz — ${Math.min(watchPercent, 100)}% watched`
+                        : `${activeState.quiz.questions.length} questions · pass ${activeState.quiz.passPercent}% · ${activeState.quiz.timeLimitMinutes} min`
+                      : trackable && !watchOk
+                        ? `Watch ${watchThreshold}% of the video to complete — ${Math.min(watchPercent, 100)}% watched`
+                        : "Completing all lessons unlocks your certificate"}
                   </p>
                 </div>
                 {activeState.quiz ? (
@@ -663,17 +702,23 @@ export default function Learn() {
                         courseId: course._id,
                       })
                     }
-                    disabled={activeState.completed}
+                    disabled={activeState.completed || (trackable && !watchOk)}
                     className={cn(
                       "w-full shrink-0 gap-2 sm:w-auto",
                       activeState.completed
                         ? "border border-lime-400/40 bg-lime-400/10 text-lime-300 hover:bg-lime-400/15"
-                        : "bg-lime-400 font-semibold text-black hover:bg-lime-300",
+                        : trackable && !watchOk
+                          ? "border border-white/15 text-muted-foreground"
+                          : "bg-lime-400 font-semibold text-black hover:bg-lime-300",
                     )}
                   >
                     {activeState.completed ? (
                       <>
                         <CheckCircle2 className="size-4" /> Completed
+                      </>
+                    ) : trackable && !watchOk ? (
+                      <>
+                        <Lock className="size-4" /> Quiz locked
                       </>
                     ) : (
                       <>
@@ -684,12 +729,14 @@ export default function Learn() {
                 ) : (
                   <Button
                     onClick={handleComplete}
-                    disabled={marking || activeState.completed}
+                    disabled={marking || activeState.completed || (trackable && !watchOk)}
                     className={cn(
                       "w-full shrink-0 gap-2 sm:w-auto",
                       activeState.completed
                         ? "border border-lime-400/40 bg-lime-400/10 text-lime-300 hover:bg-lime-400/15"
-                        : "bg-lime-400 font-semibold text-black hover:bg-lime-300",
+                        : trackable && !watchOk
+                          ? "border border-white/15 text-muted-foreground"
+                          : "bg-lime-400 font-semibold text-black hover:bg-lime-300",
                     )}
                   >
                     {marking ? (
@@ -697,6 +744,10 @@ export default function Learn() {
                     ) : activeState.completed ? (
                       <>
                         <CheckCircle2 className="size-4" /> Completed
+                      </>
+                    ) : trackable && !watchOk ? (
+                      <>
+                        <Lock className="size-4" /> Watch video to complete
                       </>
                     ) : (
                       "Mark complete"

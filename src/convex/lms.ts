@@ -22,14 +22,26 @@ const HEARTBEAT_WINDOW_MS = 60_000; // ignore stale/gapped heartbeats beyond thi
 const BUFFER_TOLERANCE = 1.35; // credit up to 135% of wall time (buffering slack)
 const MIN_CREDIT_SPAN_S = 0.75; // ignore sub-second jitter
 
+const videoSourceValidator = v.optional(
+  v.union(
+    v.literal("mux"),
+    v.literal("youtube"),
+    v.literal("mp4"),
+    v.literal("vimeo"),
+    v.literal("loom"),
+  ),
+);
+
 export const watchHeartbeat = mutation({
   args: {
     lessonId: v.id("lessons"),
     positionSeconds: v.number(),
     durationSeconds: v.optional(v.number()),
     playing: v.boolean(),
+    /** Which player reported this heartbeat (mux | youtube | mp4 | …). */
+    videoSource: videoSourceValidator,
   },
-  handler: async (ctx, { lessonId, positionSeconds, durationSeconds, playing }) => {
+  handler: async (ctx, { lessonId, positionSeconds, durationSeconds, playing, videoSource }) => {
     const user = await requireUserDoc(ctx);
     const lesson = await ctx.db.get(lessonId);
     if (!lesson) return { percent: 0 };
@@ -71,6 +83,7 @@ export const watchHeartbeat = mutation({
           lastPosition: pos,
           lastSeenAt: now,
           updatedAt: now,
+          videoSource: videoSource ?? row.videoSource,
         });
       } else {
         await ctx.db.insert("watchProgress", {
@@ -84,6 +97,7 @@ export const watchHeartbeat = mutation({
           lastPosition: pos,
           lastSeenAt: now,
           updatedAt: now,
+          videoSource,
         });
       }
       return { percent: row?.percent ?? 0 };
@@ -103,6 +117,7 @@ export const watchHeartbeat = mutation({
         lastPosition: pos,
         lastSeenAt: now,
         updatedAt: now,
+        videoSource: videoSource ?? row.videoSource,
       });
       return { percent: row.percent };
     }
@@ -138,6 +153,7 @@ export const watchHeartbeat = mutation({
       lastPosition: frontier,
       lastSeenAt: now,
       updatedAt: now,
+      videoSource: videoSource ?? row.videoSource,
     });
 
     // Auto-complete the lesson once credited coverage meets the course's
@@ -163,8 +179,10 @@ export const saveWatchPosition = mutation({
     lessonId: v.id("lessons"),
     positionSeconds: v.number(),
     durationSeconds: v.optional(v.number()),
+    /** Which player reported this position (mux | youtube | mp4 | …). */
+    videoSource: videoSourceValidator,
   },
-  handler: async (ctx, { lessonId, positionSeconds, durationSeconds }) => {
+  handler: async (ctx, { lessonId, positionSeconds, durationSeconds, videoSource }) => {
     const user = await requireUserDoc(ctx);
     const lesson = await ctx.db.get(lessonId);
     if (!lesson) return;
@@ -185,6 +203,7 @@ export const saveWatchPosition = mutation({
         lastPosition: Math.max(0, positionSeconds),
         lastSeenAt: Date.now(),
         updatedAt: Date.now(),
+        videoSource: videoSource ?? row.videoSource,
       });
     } else {
       await ctx.db.insert("watchProgress", {
@@ -198,6 +217,7 @@ export const saveWatchPosition = mutation({
         lastPosition: Math.max(0, positionSeconds),
         lastSeenAt: Date.now(),
         updatedAt: Date.now(),
+        videoSource,
       });
     }
   },
