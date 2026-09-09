@@ -27,6 +27,19 @@ export default function About() {
   const mission = content?.mission as string | undefined;
   const vision = content?.vision as string | undefined;
 
+  // Admin socials: array of {platform, url, enabled?, order?}. Defensive
+  // normalization so a malformed/legacy value can never crash the page.
+  const socialLinks = (
+    (Array.isArray(content?.socials) ? content.socials : []) as Array<{
+      platform: string;
+      url: string;
+      enabled?: boolean;
+      order?: number;
+    }>
+  )
+    .filter((s) => s && s.url && s.enabled !== false)
+    .sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+
   return (
     <PageShell>
       <section className="mx-auto max-w-7xl px-4 pb-24 pt-16 sm:px-6">
@@ -129,22 +142,22 @@ export default function About() {
             title="Connect with ForgeX"
           />
           <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
-            {Object.entries(
-              (content?.socials ?? {}) as Record<string, string>,
-            )
-              .filter(([, url]) => !!url)
-              .map(([platform, url]) => (
-                <a
-                  key={platform}
-                  href={toExternalHref(url)}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-5 py-2.5 text-sm font-medium text-muted-foreground transition-colors hover:border-lime-400/40 hover:text-lime-300"
-                >
-                  {platform.charAt(0).toUpperCase() + platform.slice(1)}
-                  <ExternalLink className="size-3.5" />
-                </a>
-              ))}
+            {/* Admin socials are stored as an array of
+                {platform, url, enabled, order} — the same shape Footer uses.
+                Reading it as a map crashed on toExternalHref(url) (url was an
+                object), which surfaced as the page "refreshing" in a loop. */}
+            {socialLinks.map(({ platform, url }) => (
+              <a
+                key={platform}
+                href={toExternalHref(url)}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-5 py-2.5 text-sm font-medium text-muted-foreground transition-colors hover:border-lime-400/40 hover:text-lime-300"
+              >
+                {platform.charAt(0).toUpperCase() + platform.slice(1)}
+                <ExternalLink className="size-3.5" />
+              </a>
+            ))}
           </div>
         </Reveal>
 
