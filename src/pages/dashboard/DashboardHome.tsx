@@ -213,51 +213,60 @@ export default function DashboardHome() {
                 .map((a) => {
                   const s = a.submission;
                   const graded = s?.grade !== undefined;
+                  const pill = graded ? (
+                    <span className="shrink-0 rounded-full bg-lime-400/15 px-2.5 py-1 text-[11px] font-semibold text-lime-300">
+                      {s!.grade}/{a.maxScore}
+                    </span>
+                  ) : (
+                    <span
+                      className={
+                        s
+                          ? "shrink-0 rounded-full bg-blue-400/15 px-2.5 py-1 text-[11px] font-semibold text-blue-300"
+                          : "shrink-0 rounded-full bg-amber-400/15 px-2.5 py-1 text-[11px] font-semibold text-amber-300"
+                      }
+                    >
+                      {s ? "Awaiting grade" : "To do"}
+                    </span>
+                  );
                   return (
                     <Link
                       key={a._id}
                       to="/dashboard/assignments"
-                      className="flex items-center gap-4 rounded-2xl border border-white/10 bg-card p-4 transition-colors hover:border-lime-400/30"
+                      className="block rounded-2xl border border-white/10 bg-card p-4 transition-colors hover:border-lime-400/30"
                     >
-                      <span
-                        className={
-                          graded
-                            ? "flex size-10 shrink-0 items-center justify-center rounded-xl bg-lime-400/12 text-lime-300"
-                            : s
-                              ? "flex size-10 shrink-0 items-center justify-center rounded-xl bg-blue-400/12 text-blue-300"
-                              : "flex size-10 shrink-0 items-center justify-center rounded-xl bg-amber-400/12 text-amber-300"
-                        }
-                      >
-                        {graded ? (
-                          <CheckCircle2 className="size-5" />
-                        ) : (
-                          <FileText className="size-5" />
-                        )}
-                      </span>
-                      <div className="min-w-0 flex-1">
-                        <p className="truncate text-sm font-medium">{a.title}</p>
-                        <p className="truncate text-xs text-muted-foreground">
-                          {a.course?.title ?? "Course"}
-                          {s
-                            ? ` · submitted ${timeAgo(s.submittedAt)}`
-                            : " · to do"}
-                        </p>
-                      </div>
-                      {graded ? (
-                        <span className="shrink-0 rounded-full bg-lime-400/15 px-2.5 py-1 text-xs font-semibold text-lime-300">
-                          {s!.grade}/{a.maxScore}
-                        </span>
-                      ) : (
+                      {/* Stacked on phones: icon + text on top, status pill
+                          below — keeps long titles readable at 320–430px. */}
+                      <div className="flex items-start gap-3">
                         <span
                           className={
-                            s
-                              ? "shrink-0 rounded-full bg-blue-400/15 px-2.5 py-1 text-xs font-semibold text-blue-300"
-                              : "shrink-0 rounded-full bg-amber-400/15 px-2.5 py-1 text-xs font-semibold text-amber-300"
+                            graded
+                              ? "flex size-10 shrink-0 items-center justify-center rounded-xl bg-lime-400/12 text-lime-300"
+                              : s
+                                ? "flex size-10 shrink-0 items-center justify-center rounded-xl bg-blue-400/12 text-blue-300"
+                                : "flex size-10 shrink-0 items-center justify-center rounded-xl bg-amber-400/12 text-amber-300"
                           }
                         >
-                          {s ? "Awaiting grade" : "To do"}
+                          {graded ? (
+                            <CheckCircle2 className="size-5" />
+                          ) : (
+                            <FileText className="size-5" />
+                          )}
                         </span>
-                      )}
+                        <div className="min-w-0 flex-1">
+                          <p className="break-words text-sm font-medium leading-snug">
+                            {a.title}
+                          </p>
+                          <p className="mt-0.5 line-clamp-1 break-words text-xs text-muted-foreground">
+                            {a.course?.title ?? "Course"}
+                            {s
+                              ? ` · submitted ${timeAgo(s.submittedAt)}`
+                              : " · to do"}
+                          </p>
+                        </div>
+                      </div>
+                      <div className="mt-2.5 flex items-center justify-end">
+                        {pill}
+                      </div>
                     </Link>
                   );
                 })
@@ -277,13 +286,13 @@ export default function DashboardHome() {
                 to="/updates"
                 className="block rounded-2xl border border-white/10 bg-card p-4 transition-colors hover:border-lime-400/30"
               >
-                <div className="flex items-center justify-between gap-2">
+                <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-0.5">
                   <span className="text-[11px] font-semibold uppercase tracking-wider text-lime-400/80">
                     {a.category}
                   </span>
                   <span className="text-xs text-muted-foreground">{timeAgo(a.createdAt)}</span>
                 </div>
-                <p className="mt-1.5 text-sm font-medium">{a.title}</p>
+                <p className="mt-1.5 break-words text-sm font-medium leading-snug">{a.title}</p>
               </Link>
             ))}
           </div>

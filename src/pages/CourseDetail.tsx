@@ -353,16 +353,41 @@ export default function CourseDetail() {
                 <h2 className="font-display text-2xl font-bold">Assignments</h2>
                 <div className="mt-4 space-y-3">
                   {course.assignments.map((a) => (
-                    <div key={a._id} className="flex items-start gap-4 rounded-xl border border-white/10 bg-card px-4 py-4">
+                    <div
+                      key={a._id}
+                      className="flex flex-col gap-3 rounded-xl border border-white/10 bg-card px-4 py-4 sm:flex-row sm:items-center"
+                    >
                       <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-amber-400/12 text-amber-300">
                         <FileText className="size-5" />
                       </span>
-                      <div>
+                      <div className="min-w-0 flex-1">
                         <p className="text-sm font-medium">{a.title}</p>
                         <p className="mt-0.5 text-xs text-muted-foreground">
                           {a.maxScore} points
                         </p>
                       </div>
+                      {isEnrolled ? (
+                        <Link
+                          to="/dashboard/assignments"
+                          className="shrink-0"
+                        >
+                          <Button
+                            size="sm"
+                            className="w-full bg-lime-400 font-semibold text-black hover:bg-lime-300 sm:w-auto"
+                          >
+                            <Send className="size-3.5" /> Submit assignment
+                          </Button>
+                        </Link>
+                      ) : (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={handleEnroll}
+                          className="w-full shrink-0 sm:w-auto"
+                        >
+                          <GraduationCap className="size-3.5" /> Enroll to submit
+                        </Button>
+                      )}
                     </div>
                   ))}
                 </div>
