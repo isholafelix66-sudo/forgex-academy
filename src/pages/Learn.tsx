@@ -659,6 +659,34 @@ export default function Learn() {
                 </div>
               )}
             </div>
+            {/* Assignments — visible in the outline with a submit CTA. */}
+            {course.assignments.length > 0 && (
+              <div className="border-t border-white/10">
+                <p className="px-4 pb-1 pt-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                  Assignments
+                </p>
+                {course.assignments.map((a) => (
+                  <Link
+                    key={a._id}
+                    to="/dashboard/assignments"
+                    className="flex items-center gap-3 border-b border-white/5 px-4 py-3 text-left transition-colors last:border-b-0 hover:bg-white/5"
+                  >
+                    <span className="flex size-7 shrink-0 items-center justify-center rounded-full bg-amber-400/12 text-amber-300">
+                      <FileText className="size-3.5" />
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-sm font-medium">{a.title}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {a.maxScore} points
+                      </p>
+                    </div>
+                    <span className="inline-flex shrink-0 items-center gap-1 rounded-lg bg-lime-400/15 px-2.5 py-1.5 text-[11px] font-semibold text-lime-300 transition-colors hover:bg-lime-400/25">
+                      Submit <ChevronRight className="size-3" />
+                    </span>
+                  </Link>
+                ))}
+              </div>
+            )}
             {isComplete && (
               <div className="flex items-center gap-2 border-t border-lime-400/25 bg-lime-400/8 px-4 py-3 text-xs font-semibold text-lime-300">
                 <Award className="size-4" /> Course completed — certificate earned!
