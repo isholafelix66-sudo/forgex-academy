@@ -6,7 +6,6 @@ import {
   Award,
   Bell,
   BookOpen,
-  CheckCircle2,
   Compass,
   FileText,
   Flame,
@@ -28,7 +27,6 @@ export default function DashboardHome() {
   const { user } = useAuth();
   const enrollments = useQuery(api.learn.myEnrollments);
   const submissions = useQuery(api.submissions.mySubmissions);
-  const assignments = useQuery(api.submissions.myAssignments);
   const announcements = useQuery(api.public.announcementsList);
   const recommendations = useQuery(api.learn.recommendations);
 
@@ -187,99 +185,14 @@ export default function DashboardHome() {
         )}
       </section>
 
-      <div className="grid gap-10 lg:grid-cols-2">
-        {/* My assignments */}
-        <section>
-          <h2 className="font-display mb-4 flex items-center gap-2 text-xl font-bold">
-            <FileText className="size-5 text-lime-300" /> My assignments
-          </h2>
-          <div className="space-y-3">
-            {assignments === undefined ? (
-              <div className="h-32 animate-pulse rounded-2xl border border-white/8 bg-card" />
-            ) : assignments.length === 0 ? (
-              <p className="rounded-2xl border border-dashed border-white/10 p-6 text-sm text-muted-foreground">
-                No assignments yet — work posted in your enrolled courses will
-                show up here. 🎉
-              </p>
-            ) : (
-              // Show pending (unsubmitted) work FIRST, then graded/submitted.
-              [...assignments]
-                .sort((a, b) => {
-                  const rank = (x: NonNullable<typeof assignments>[number]) =>
-                    x.submission ? 1 : 0;
-                  return rank(a) - rank(b);
-                })
-                .slice(0, 4)
-                .map((a) => {
-                  const s = a.submission;
-                  const graded = s?.grade !== undefined;
-                  const pill = graded ? (
-                    <span className="shrink-0 rounded-full bg-lime-400/15 px-2.5 py-1 text-[11px] font-semibold text-lime-300">
-                      {s!.grade}/{a.maxScore}
-                    </span>
-                  ) : (
-                    <span
-                      className={
-                        s
-                          ? "shrink-0 rounded-full bg-blue-400/15 px-2.5 py-1 text-[11px] font-semibold text-blue-300"
-                          : "shrink-0 rounded-full bg-amber-400/15 px-2.5 py-1 text-[11px] font-semibold text-amber-300"
-                      }
-                    >
-                      {s ? "Awaiting grade" : "To do"}
-                    </span>
-                  );
-                  return (
-                    <Link
-                      key={a._id}
-                      to="/dashboard/assignments"
-                      className="block rounded-2xl border border-white/10 bg-card p-4 transition-colors hover:border-lime-400/30"
-                    >
-                      {/* Stacked on phones: icon + text on top, status pill
-                          below — keeps long titles readable at 320–430px. */}
-                      <div className="flex items-start gap-3">
-                        <span
-                          className={
-                            graded
-                              ? "flex size-10 shrink-0 items-center justify-center rounded-xl bg-lime-400/12 text-lime-300"
-                              : s
-                                ? "flex size-10 shrink-0 items-center justify-center rounded-xl bg-blue-400/12 text-blue-300"
-                                : "flex size-10 shrink-0 items-center justify-center rounded-xl bg-amber-400/12 text-amber-300"
-                          }
-                        >
-                          {graded ? (
-                            <CheckCircle2 className="size-5" />
-                          ) : (
-                            <FileText className="size-5" />
-                          )}
-                        </span>
-                        <div className="min-w-0 flex-1">
-                          <p className="break-words text-sm font-medium leading-snug">
-                            {a.title}
-                          </p>
-                          <p className="mt-0.5 line-clamp-1 break-words text-xs text-muted-foreground">
-                            {a.course?.title ?? "Course"}
-                            {s
-                              ? ` · submitted ${timeAgo(s.submittedAt)}`
-                              : " · to do"}
-                          </p>
-                        </div>
-                      </div>
-                      <div className="mt-2.5 flex items-center justify-end">
-                        {pill}
-                      </div>
-                    </Link>
-                  );
-                })
-            )}
-          </div>
-        </section>
-
-        {/* Announcements */}
-        <section>
-          <h2 className="font-display mb-4 flex items-center gap-2 text-xl font-bold">
-            <Bell className="size-5 text-lime-300" /> Recent announcements
-          </h2>
-          <div className="space-y-3">
+      {/* Announcements — assignments live in each course's outline and the
+          dedicated Assignments page, so the dashboard keeps only a peek at
+          course news here. */}
+      <section>
+        <h2 className="font-display mb-4 flex items-center gap-2 text-xl font-bold">
+          <Bell className="size-5 text-lime-300" /> Recent announcements
+        </h2>
+        <div className="space-y-3">
             {announcements?.slice(0, 3).map((a) => (
               <Link
                 key={a._id}
@@ -296,8 +209,7 @@ export default function DashboardHome() {
               </Link>
             ))}
           </div>
-        </section>
-      </div>
+      </section>
 
       {/* Recommendations */}
       <section>
