@@ -12,7 +12,7 @@ import {
 import { useAuth } from "@/hooks/use-auth";
 import { PublicNav } from "@/components/site/PublicNav";
 import { Footer } from "@/components/site/Footer";
-import { BackgroundFX } from "@/components/site/PageShell";
+import { BackgroundFX } from "@/components/site/PublicLayout";
 import logo from "@/assets/logo.svg";
 import {
   ArrowLeft,

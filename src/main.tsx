@@ -17,6 +17,7 @@ import "./index.css";
 import { attachRoutePrefetch } from "@/lib/prefetch";
 import { registerServiceWorker } from "@/lib/sw";
 import { scrollToTopInstant } from "@/lib/scroll";
+import { PublicLayout } from "@/components/site/PublicLayout";
 import { ConnectionBanner } from "@/components/network/ConnectionBanner";
 import { AiSupportAssistant } from "@/components/site/AiSupportAssistant";
 import {
@@ -890,22 +891,31 @@ createRoot(document.getElementById("root")!).render(
           <Suspense fallback={<RouteLoading />}>
             <RouteBoundary>
             <Routes>
-              {/* Public */}
-              <Route path="/" element={<Landing />} />
-              <Route path="/about" element={<About />} />
-              <Route path="/courses" element={<Courses />} />
-              <Route path="/courses/:slug" element={<CourseDetail />} />
-              <Route path="/tutors" element={<Tutors />} />
-              <Route path="/tutors/:id" element={<TutorDetail />} />
-              <Route path="/roadmap" element={<RoadmapPage />} />
-              <Route path="/updates" element={<Updates />} />
-              <Route path="/stories" element={<Stories />} />
-              <Route path="/ai-hub" element={<AIHub />} />
-              <Route path="/prompts" element={<PromptLibrary />} />
-              <Route path="/prompts/:slug" element={<PromptDetail />} />
-              <Route path="/contact" element={<Contact />} />
-              <Route path="/verify/:certificateId" element={<VerifyCertificate />} />
-              <Route path="/become-tutor" element={<BecomeTutor />} />
+              {/* ── Public: one persistent shell (nav/footer/background) is
+                  mounted once as a layout route — navigating between public
+                  pages swaps only the page content, so the whole viewport
+                  never unmounts/repaints (the old white flash on every
+                  desktop navigation). ── */}
+              <Route element={<PublicLayout />}>
+                <Route path="/" element={<Landing />} />
+                <Route path="/about" element={<About />} />
+                <Route path="/courses" element={<Courses />} />
+                <Route path="/courses/:slug" element={<CourseDetail />} />
+                <Route path="/tutors" element={<Tutors />} />
+                <Route path="/tutors/:id" element={<TutorDetail />} />
+                <Route path="/roadmap" element={<RoadmapPage />} />
+                <Route path="/updates" element={<Updates />} />
+                <Route path="/stories" element={<Stories />} />
+                <Route path="/ai-hub" element={<AIHub />} />
+                <Route path="/prompts" element={<PromptLibrary />} />
+                <Route path="/prompts/:slug" element={<PromptDetail />} />
+                <Route path="/contact" element={<Contact />} />
+                <Route path="/become-tutor" element={<BecomeTutor />} />
+                <Route path="/verify/:certificateId" element={<VerifyCertificate />} />
+                <Route path="/tutor/:slug" element={<TutorPage />} />
+                {/* Catch-all 404 also renders inside the public shell. */}
+                <Route path="*" element={<NotFound />} />
+              </Route>
               <Route
                 path="/auth"
                 element={<AuthPage redirectAfterAuth="/dashboard" />}
@@ -974,15 +984,14 @@ createRoot(document.getElementById("root")!).render(
                 <Route path="settings" element={<TutorSettings />} />
               </Route>
 
-              {/* Public tutor mini-website — the shareable /tutor/<slug> page.
+              {/* Public tutor mini-website — the shareable /tutor/<slug> page
+                  is registered inside the persistent public shell above.
                   Static routes under /tutor (courses, grading, …) win over
                   this dynamic segment, so the dashboard keeps working. */}
-              <Route path="/tutor/:slug" element={<TutorPage />} />
 
               {/* Team Hub — workspace password access */}
               <Route path="/team" element={<TeamHub />} />
-              <Route path="/team/access/:teamSlug" element={<TeamPassword />} />
-              <Route path="/team/:teamSlug" element={<RequireTeamAuth><TeamDashboardShell /></RequireTeamAuth>}>
+              <Route path="/team/access/:teamSlug" element={<TeamPassword />} />              <Route path="/team/:teamSlug" element={<RequireTeamAuth><TeamDashboardShell /></RequireTeamAuth>}>
                 <Route index element={<AcademicOverview />} />
                 <Route path="settings" element={<TeamSettings />} />
               </Route>
@@ -1020,8 +1029,6 @@ createRoot(document.getElementById("root")!).render(
                 <Route path="ai-support" element={<AdminAiSupport />} />
                 <Route path="email-center" element={<AdminEmailCenter />} />
               </Route>
-
-              <Route path="*" element={<NotFound />} />
             </Routes>
             </RouteBoundary>
           </Suspense>
