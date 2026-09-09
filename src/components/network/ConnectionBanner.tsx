@@ -17,6 +17,7 @@ import {
   type NetMode,
 } from "@/lib/network/connection-monitor";
 import { subscribeQueue } from "@/lib/network/offline-queue";
+import { CONNECTION_RESTORED_EVENT } from "@/lib/network/recovery";
 
 export function ConnectionBanner() {
   const [mode, setMode] = useState<NetMode>("normal");
@@ -33,6 +34,14 @@ export function ConnectionBanner() {
       if (prev === "offline" && m !== "offline") {
         setBackOnline(true);
         setTimeout(() => setBackOnline(false), 4_000);
+        // Tell any recovering error boundaries (and the data layer) to retry
+        // NOW — the connection is back, so pages should reconnect immediately
+        // instead of waiting for their next countdown tick.
+        try {
+          window.dispatchEvent(new Event(CONNECTION_RESTORED_EVENT));
+        } catch {
+          // Event dispatch is best-effort; the countdown retries still fire.
+        }
       }
       prev = m;
       setMode(m);

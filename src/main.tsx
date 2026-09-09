@@ -19,6 +19,11 @@ import { registerServiceWorker } from "@/lib/sw";
 import { scrollToTopInstant } from "@/lib/scroll";
 import { ConnectionBanner } from "@/components/network/ConnectionBanner";
 import { AiSupportAssistant } from "@/components/site/AiSupportAssistant";
+import {
+  isNetworkRelatedError,
+  subscribeToRecoverySignals,
+} from "@/lib/network/recovery";
+import { cn } from "@/lib/utils";
 
 
 
@@ -330,19 +335,30 @@ class ToolbarErrorBoundary extends React.Component<
 /**
  * Hard guard so runtime errors never leave the preview as a blank page or a
  * permanent error screen. When anything throws (a transient Convex hiccup, a
- * stale route, a lazy chunk failure…) the app shows a short "recovering"
- * screen and re-renders automatically — no error details are ever exposed to
- * the visitor. If the same failure keeps happening, auto-recovery gives up
- * after a few tries and offers a single friendly reload button. The full
- * error is logged to the console only, where it can be pasted back for
- * diagnosis.
+ * suspended tab's dropped WebSocket, a lazy chunk failure…) the app shows a
+ * short "reconnecting" screen and re-renders automatically — no error
+ * details are ever exposed to the visitor.
+ *
+ * Recovery rules:
+ *  - Network/connection failures (offline, dropped WebSocket, aborted fetch,
+ *    chunk load failure) retry FOREVER, and retry IMMEDIATELY when the
+ *    browser reports the connection is back or the app is resumed — the
+ *    user simply returns to the app and it reconnects on its own.
+ *  - Genuine code bugs stop auto-recovering after a few tries and offer a
+ *    single reload button. The full error is logged to the console only.
  */
 class RootErrorBoundary extends React.Component<
   { children: React.ReactNode },
-  { hasError: boolean; attempts: number; countdown: number }
+  {
+    hasError: boolean;
+    attempts: number;
+    countdown: number;
+    network: boolean;
+  }
 > {
-  state = { hasError: false, attempts: 0, countdown: 0 };
+  state = { hasError: false, attempts: 0, countdown: 0, network: false };
   private timer: ReturnType<typeof setInterval> | null = null;
+  private unsubscribe: (() => void) | null = null;
 
   static getDerivedStateFromError() {
     return { hasError: true };
@@ -358,6 +374,7 @@ class RootErrorBoundary extends React.Component<
     } catch (reportErr) {
       console.warn("[ForgeX] Could not report error to Sentry:", reportErr);
     }
+    this.setState({ network: isNetworkRelatedError(err) });
     // A stale-chunk error can never be fixed by re-rendering — only by
     // fetching the new deployment. Reload once instead of looping, but never
     // reload while offline (it just loops) or from a background prerender.
@@ -383,6 +400,7 @@ class RootErrorBoundary extends React.Component<
         }
       });
     }
+    this.scheduleRecovery();
   }
 
   componentDidUpdate(
@@ -400,24 +418,31 @@ class RootErrorBoundary extends React.Component<
 
   private scheduleRecovery() {
     this.clearRecovery();
-    // Persistent failures stop auto-recovering after 3 attempts and fall back
-    // to a manual reload instead of looping forever.
-    if (this.state.attempts >= 3) return;
+    // Genuine code bugs stop auto-recovering after 3 attempts; network and
+    // connection failures retry forever — the connection WILL come back, and
+    // we must not strand the user on an error screen when it does.
+    if (!this.state.network && this.state.attempts >= 3) return;
     let left = 3;
     this.setState({ countdown: left });
+    // Retry the moment the browser says we're back online or the app resumes.
+    this.unsubscribe = subscribeToRecoverySignals(() => this.recover());
     this.timer = setInterval(() => {
       left -= 1;
       if (left <= 0) {
-        this.clearRecovery();
-        this.setState((s) => ({
-          hasError: false,
-          attempts: s.attempts + 1,
-          countdown: 0,
-        }));
+        this.recover();
       } else {
         this.setState({ countdown: left });
       }
     }, 1000);
+  }
+
+  private recover() {
+    this.clearRecovery();
+    this.setState((s) => ({
+      hasError: false,
+      attempts: s.attempts + 1,
+      countdown: 0,
+    }));
   }
 
   private clearRecovery() {
@@ -425,11 +450,16 @@ class RootErrorBoundary extends React.Component<
       clearInterval(this.timer);
       this.timer = null;
     }
+    if (this.unsubscribe) {
+      this.unsubscribe();
+      this.unsubscribe = null;
+    }
   }
 
   render() {
     if (this.state.hasError) {
-      const stillRetrying = this.state.attempts < 3;
+      const network = this.state.network;
+      const stillRetrying = network || this.state.attempts < 3;
       return (
         <div className="flex min-h-screen items-center justify-center bg-background p-6 text-foreground">
           <div className="max-w-md text-center">
@@ -443,13 +473,25 @@ class RootErrorBoundary extends React.Component<
               />
             </div>
             <h1 className="font-display mt-5 text-xl font-bold">
-              {stillRetrying ? "One moment…" : "We hit a snag"}
+              {network
+                ? "Reconnecting…"
+                : stillRetrying
+                  ? "One moment…"
+                  : "We hit a snag"}
             </h1>
             <p className="mt-2 text-sm text-muted-foreground">
-              {stillRetrying
-                ? `Something hiccuped — recovering automatically in ${this.state.countdown}s.`
-                : "A quick reload usually sorts this out. You'll be right back where you were."}
+              {network
+                ? `Your connection dropped — reconnecting automatically in ${this.state.countdown}s. You'll be right back where you were.`
+                : stillRetrying
+                  ? `Something hiccuped — recovering automatically in ${this.state.countdown}s.`
+                  : "A quick reload usually sorts this out. You'll be right back where you were."}
             </p>
+            <button
+              onClick={() => this.recover()}
+              className="mt-5 inline-flex items-center gap-2 rounded-xl border border-lime-400/40 px-4 py-2 text-sm font-semibold text-lime-300 transition-colors hover:bg-lime-400/10"
+            >
+              <RefreshCw className="size-4" /> Retry now
+            </button>
             {!stillRetrying && (
               <button
                 onClick={() => window.location.reload()}
@@ -469,15 +511,31 @@ class RootErrorBoundary extends React.Component<
 /**
  * Page-level error boundary: if ONE route crashes, only that page shows a
  * friendly "retry" card — the rest of the app (nav, footer, chat, other
- * routes) keeps working. It auto-resets on the next navigation, so a
- * transient failure never traps the user on an error screen. The error is
- * logged + reported to Sentry, never shown to the visitor.
+ * routes) keeps working. The error is logged + reported to Sentry, never
+ * shown to the visitor.
+ *
+ * Auto-recovery (this is the screen users saw stuck until "Back to home"):
+ *  - When the failure is network/connection-related (suspended tab dropped
+ *    its WebSocket, query rejected while offline, chunk failed to load…),
+ *    the page retries by itself — immediately on `online` / app-resume
+ *    events and on a rolling countdown — until it succeeds. The user simply
+ *    returns to the app and the SAME route reconnects and re-renders.
+ *  - Genuine page bugs auto-retry a few times, then stay on a manual
+ *    "Try again" card that retries THIS page (never a redirect home).
+ *  - It also auto-resets on the next navigation.
  */
 class RouteErrorBoundary extends React.Component<
   { locationKey: string; children: React.ReactNode },
-  { failed: boolean }
+  {
+    failed: boolean;
+    network: boolean;
+    attempts: number;
+    retryIn: number;
+  }
 > {
-  state = { failed: false };
+  state = { failed: false, network: false, attempts: 0, retryIn: 0 };
+  private timer: ReturnType<typeof setInterval> | null = null;
+  private unsubscribe: (() => void) | null = null;
 
   static getDerivedStateFromError() {
     return { failed: true };
@@ -490,43 +548,112 @@ class RouteErrorBoundary extends React.Component<
     } catch (reportErr) {
       console.warn("[ForgeX] Could not report route error:", reportErr);
     }
+    this.setState({ network: isNetworkRelatedError(err) });
+    this.startAutoRecovery();
   }
 
-  componentDidUpdate(prevProps: { locationKey: string }) {
+  componentDidUpdate(
+    prevProps: { locationKey: string },
+    prevState: { failed: boolean },
+  ) {
     // Navigated away — clear the failure so the next page renders fresh.
     if (this.state.failed && this.props.locationKey !== prevProps.locationKey) {
-      this.setState({ failed: false });
+      this.clearAutoRecovery();
+      this.setState({ failed: false, retryIn: 0 });
+    }
+    // A retry failed again — resume auto-recovery for the current page.
+    if (this.state.failed && !prevState.failed) {
+      this.startAutoRecovery();
+    }
+  }
+
+  componentWillUnmount() {
+    this.clearAutoRecovery();
+  }
+
+  private startAutoRecovery() {
+    this.clearAutoRecovery();
+    // Network/connection failures retry indefinitely; genuine bugs give up
+    // after a few attempts and stay on the manual "Try again" card.
+    if (!this.state.network && this.state.attempts >= 5) return;
+    let left = 4;
+    this.setState({ retryIn: left });
+    // Retry the instant the browser says we're back online or the app resumes
+    // (visibilitychange) — no waiting for the next countdown tick.
+    this.unsubscribe = subscribeToRecoverySignals(() => this.retryNow());
+    this.timer = setInterval(() => {
+      left -= 1;
+      if (left <= 0) {
+        this.retryNow();
+      } else {
+        this.setState({ retryIn: left });
+      }
+    }, 1000);
+  }
+
+  private retryNow() {
+    this.clearAutoRecovery();
+    // Retry the CURRENT page: clearing `failed` re-renders the same route in
+    // place — the URL is never changed and the user is never sent home.
+    this.setState((s) => ({
+      failed: false,
+      attempts: s.attempts + 1,
+      retryIn: 0,
+    }));
+  }
+
+  private clearAutoRecovery() {
+    if (this.timer) {
+      clearInterval(this.timer);
+      this.timer = null;
+    }
+    if (this.unsubscribe) {
+      this.unsubscribe();
+      this.unsubscribe = null;
     }
   }
 
   render() {
     if (this.state.failed) {
+      const network = this.state.network;
+      const autoRetrying = network || this.state.attempts < 5;
       return (
         <div className="flex min-h-[60vh] items-center justify-center px-4">
           <div className="w-full max-w-md rounded-3xl border border-white/10 bg-card p-8 text-center">
-            <div className="mx-auto flex size-12 items-center justify-center rounded-2xl border border-amber-400/25 bg-amber-400/10">
-              <RefreshCw className="size-6 text-amber-300" />
+            <div
+              className={cn(
+                "mx-auto flex size-12 items-center justify-center rounded-2xl border",
+                network
+                  ? "border-lime-400/25 bg-lime-400/10"
+                  : "border-amber-400/25 bg-amber-400/10",
+              )}
+            >
+              <RefreshCw
+                className={cn(
+                  "size-6",
+                  autoRetrying ? "animate-spin" : "",
+                  network ? "text-lime-300" : "text-amber-300",
+                )}
+              />
             </div>
             <h1 className="font-display mt-4 text-xl font-bold">
-              This page hit a snag
+              {network
+                ? "Reconnecting…"
+                : "This page hit a snag"}
             </h1>
             <p className="mt-2 text-sm text-muted-foreground">
-              Something went wrong loading this page — a quick retry usually
-              sorts it out.
+              {network
+                ? `Your connection dropped — this page will reconnect automatically in ${this.state.retryIn}s. You'll be right back where you were.`
+                : "Something went wrong loading this page — a quick retry usually sorts it out."}
             </p>
             <div className="mt-6 flex justify-center gap-3">
               <button
-                onClick={() => this.setState({ failed: false })}
+                onClick={() => this.retryNow()}
                 className="inline-flex items-center gap-2 rounded-xl bg-lime-400 px-5 py-2.5 text-sm font-semibold text-black transition-colors hover:bg-lime-300"
               >
-                <RefreshCw className="size-4" /> Try again
+                <RefreshCw className="size-4" />{" "}
+                {network ? "Retry now" : "Try again"}
               </button>
-              <a
-                href="/"
-                className="inline-flex items-center rounded-xl border border-white/15 px-5 py-2.5 text-sm font-medium text-muted-foreground transition-colors hover:border-lime-400/40 hover:text-lime-300"
-              >
-                Back to home
-              </a>
             </div>
           </div>
         </div>
