@@ -12,7 +12,7 @@ import { ConvexReactClient } from "convex/react";
 import React, { StrictMode, useEffect, lazy, Suspense, useState, LazyExoticComponent, ComponentType } from "react";
 import { RefreshCw } from "lucide-react";
 import { createRoot } from "react-dom/client";
-import { BrowserRouter, Route, Routes, useLocation } from "react-router";
+import { BrowserRouter, Link, Route, Routes, useLocation } from "react-router";
 import "./index.css";
 import { attachRoutePrefetch } from "@/lib/prefetch";
 import { registerServiceWorker } from "@/lib/sw";
@@ -646,7 +646,7 @@ class RouteErrorBoundary extends React.Component<
                 ? `Your connection dropped — this page will reconnect automatically in ${this.state.retryIn}s. You'll be right back where you were.`
                 : "Something went wrong loading this page — a quick retry usually sorts it out."}
             </p>
-            <div className="mt-6 flex justify-center gap-3">
+            <div className="mt-6 flex flex-col items-center justify-center gap-3">
               <button
                 onClick={() => this.retryNow()}
                 className="inline-flex items-center gap-2 rounded-xl bg-lime-400 px-5 py-2.5 text-sm font-semibold text-black transition-colors hover:bg-lime-300"
@@ -654,6 +654,14 @@ class RouteErrorBoundary extends React.Component<
                 <RefreshCw className="size-4" />{" "}
                 {network ? "Retry now" : "Try again"}
               </button>
+              {/* Escape hatch to the landing page — auto-recovery stays the
+                  primary path, but users who want out can always head home. */}
+              <Link
+                to="/"
+                className="inline-flex items-center gap-2 rounded-xl border border-white/10 px-4 py-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-white/5 hover:text-foreground"
+              >
+                Back to home
+              </Link>
             </div>
           </div>
         </div>
