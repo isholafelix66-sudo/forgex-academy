@@ -12,7 +12,7 @@ import {
   Link2,
   Loader2,
   Paperclip,
-  PenLine,
+  Pencil,
   Send,
   X,
 } from "lucide-react";
@@ -346,7 +346,7 @@ export default function Assignments() {
                     >
                       {s ? (
                         <>
-                          <PenLine className="size-3.5" /> View / resubmit
+                          <Pencil className="size-3.5" /> View / resubmit
                         </>
                       ) : (
                         "Start submission"
