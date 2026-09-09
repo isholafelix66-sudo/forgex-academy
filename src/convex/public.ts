@@ -45,9 +45,11 @@ export const featuredCourses = query({
   handler: async (ctx) => {
     const courses = await ctx.db.query("courses").collect();
     const published = courses.filter((c) => c.published && c.featured);
+    // 4 featured cards fill the desktop 4-column grid; mobile shows them in
+    // its swipe carousel as before.
     return hydrateCourses(
       ctx,
-      published.sort((a, b) => b.rating - a.rating).slice(0, 3),
+      published.sort((a, b) => b.rating - a.rating).slice(0, 4),
     );
   },
 });

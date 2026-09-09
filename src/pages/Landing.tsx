@@ -159,8 +159,6 @@ function HeroSlideshow() {
     [],
   );
 
-  const slide = slides[Math.min(active, slides.length - 1)];
-
   return (
     <div ref={wrapRef} className="group">
       {/* Brand tagline — compact, exactly as requested */}
@@ -203,7 +201,10 @@ function HeroSlideshow() {
                 <p className="mt-2 max-w-sm text-[13px] leading-relaxed text-white/80 sm:text-sm lg:max-w-xl">
                   {s.support}
                 </p>
-                {/* CTAs — inside the hero block on desktop, centered directly beneath the text */}
+                {/* CTAs — DESKTOP ONLY (lg+): dedicated buttons inside the
+                    hero card, centered directly beneath the text. Mobile and
+                    tablet read the slide text without buttons; they reach
+                    courses via the nav. */}
                 <div className="mt-5 hidden items-center gap-4 lg:flex">
                   <Button
                     asChild
@@ -230,29 +231,7 @@ function HeroSlideshow() {
         </div>
       </div>
 
-      {/* CTAs — mobile/tablet only (desktop CTAs live inside the hero card) */}
-      <div className="mt-4 flex w-full items-center gap-3 sm:mx-auto sm:w-auto sm:min-w-[460px] sm:gap-4 lg:hidden">
-        <Button
-          asChild
-          className="h-12 flex-1 bg-lime-400 text-sm font-semibold text-black hover:bg-lime-300 glow-lime-soft sm:max-w-[220px]"
-        >
-          <Link to={slide.ctaTo} onClick={pause}>
-            {slide.ctaLabel}
-            <ArrowRight className="ml-1.5 size-4 shrink-0" />
-          </Link>
-        </Button>
-        <Button
-          asChild
-          variant="outline"
-          className="h-12 flex-1 border-white/15 text-sm font-medium hover:border-lime-400/40 hover:text-lime-300 sm:max-w-[220px]"
-        >
-          <Link to="/roadmap" onClick={pause}>
-            Explore Roadmaps
-          </Link>
-        </Button>
-      </div>
-
-      {/* Pagination dots — dedicated row BELOW the buttons, never overlapping */}
+      {/* Pagination dots — dedicated row BELOW the card, never overlapping */}
       <div className="mt-4 flex items-center justify-center gap-2">
         {slides.map((s, i) => (
           <button
@@ -488,8 +467,8 @@ export default function Landing() {
 
         <div className="mt-6">
           {featured === undefined ? (
-            <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
-              {Array.from({ length: 3 }).map((_, i) => (
+            <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
+              {Array.from({ length: 4 }).map((_, i) => (
                 <div
                   key={i}
                   className="h-72 animate-pulse rounded-2xl border border-white/8 bg-card"
@@ -504,20 +483,52 @@ export default function Landing() {
             </div>
           ) : (
             <>
-              <MotionCarousel
-                items={featured}
-                getKey={(c) => c._id}
-                ariaLabel="Featured courses"
-                itemClassName="w-[78vw] max-w-[300px] sm:w-[320px]"
-                scrollerClassName="md:grid-cols-3"
-                renderItem={(c) => <CourseCard course={c} className="h-full" />}
-              />
-              <Link
-                to="/courses"
-                className="mt-4 inline-flex items-center gap-1 text-sm font-medium text-lime-300 hover:underline sm:hidden"
-              >
-                View all courses <ArrowRight className="size-3.5" />
-              </Link>
+              {/* MOBILE/TABLET — native swipe carousel, unchanged. */}
+              <div className="md:hidden">
+                <MotionCarousel
+                  items={featured}
+                  getKey={(c) => c._id}
+                  ariaLabel="Featured courses"
+                  itemClassName="w-[78vw] max-w-[300px] sm:w-[320px]"
+                  renderItem={(c) => <CourseCard course={c} className="h-full" />}
+                />
+                <Link
+                  to="/courses"
+                  className="mt-4 inline-flex items-center gap-1 text-sm font-medium text-lime-300 hover:underline"
+                >
+                  View all courses <ArrowRight className="size-3.5" />
+                </Link>
+              </div>
+
+              {/* DESKTOP (md+) — 4-column grid with staggered entrance and
+                  a rich lift/tilt/glow hover. Split into its own renderer so
+                  the mobile carousel and desktop grid never interfere. */}
+              <div className="hidden gap-5 md:grid md:grid-cols-4">
+                {featured.map((c, i) => (
+                  <motion.div
+                    key={c._id}
+                    initial={{ opacity: 0, y: 28, scale: 0.97 }}
+                    whileInView={{ opacity: 1, y: 0, scale: 1 }}
+                    viewport={{ once: true, margin: "-60px" }}
+                    transition={{
+                      duration: 0.55,
+                      delay: i * 0.08,
+                      ease: [0.22, 1, 0.36, 1],
+                    }}
+                    whileHover={{ y: -5, scale: 1.015 }}
+                    style={{
+                      transformPerspective: 900,
+                      transformOrigin: "center",
+                      transitionTimingFunction: "cubic-bezier(0.22, 1, 0.36, 1)",
+                    }}
+                    className="group/card h-full"
+                  >
+                    <div className="relative h-full rounded-2xl transition-shadow duration-300 group-hover/card:shadow-[0_20px_45px_-18px_rgba(166,255,0,0.28)]">
+                      <CourseCard course={c} className="h-full" />
+                    </div>
+                  </motion.div>
+                ))}
+              </div>
             </>
           )}
         </div>
