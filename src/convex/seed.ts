@@ -237,6 +237,17 @@ const REAL_LESSON_VIDEOS: Record<string, string[]> = {
 
 const resource = (name: string, url: string): Resource => ({ name, url });
 
+/** Resource links seeded before real files existed point at a never-hosted
+ *  placeholder domain (learn.forgex.academy/*.pdf) — they render as dead PDF
+ *  cards, so they are dropped from the catalog at seed time. Admins upload
+ *  real files through the lesson editor instead. */
+const PLACEHOLDER_RESOURCE_HOST = "learn.forgex.academy";
+
+const cleanResources = (r: Array<[string, string]> = []) =>
+  r
+    .filter(([, u]) => !u.includes(PLACEHOLDER_RESOURCE_HOST))
+    .map(([n, u]) => resource(n, u));
+
 function q(
   type: Question["type"],
   question: string,
@@ -641,7 +652,7 @@ export const ensureSeedData = mutation({
           videoUrl: real ?? VIDS[i % VIDS.length],
           videoType: real ? "youtube" : "mp4",
           notes: l.n, transcript: l.tr,
-          resources: (l.r ?? []).map(([n, u]) => resource(n, u)),
+          resources: cleanResources(l.r),
         });
       }
       for (const quiz of c.quizzes) {

@@ -29,13 +29,14 @@ export const adminSetLessonVideoDuration = mutation({
     const lesson = await ctx.db.get(lessonId);
     if (!lesson) throw new Error("Lesson not found.");
     const rounded = Math.max(0, Math.round(durationSeconds));
-    const next = rounded > 0 ? rounded : undefined;
-    if ((lesson.videoDurationSeconds ?? 0) !== (next ?? 0)) {
+    // 0 = unknown (cleared) — consumers treat <= 0 as "manual minutes".
+    const next = rounded > 0 ? rounded : 0;
+    if ((lesson.videoDurationSeconds ?? 0) !== next) {
       await ctx.db.patch(lessonId, { videoDurationSeconds: next });
     }
     const courseDurationHours = await recomputeCourseDuration(ctx, lesson.courseId);
     await audit(ctx, undefined, undefined, "lesson-duration-set", `Lesson duration set: ${rounded}s`);
-    return { videoDurationSeconds: next ?? 0, courseDurationHours };
+    return { videoDurationSeconds: next, courseDurationHours };
   },
 });
 

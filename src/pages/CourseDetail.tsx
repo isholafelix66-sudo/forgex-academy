@@ -38,7 +38,10 @@ import { cn } from "@/lib/utils";
 import { Textarea } from "@/components/ui/textarea";
 import { useAuth } from "@/hooks/use-auth";
 import { openChatWith } from "@/lib/chat-open";
-import { formatHours } from "@/lib/format";
+import {
+  formatCourseDuration,
+  formatLessonDuration,
+} from "@/lib/format";
 
 function formatRelative(ts: number) {
   const diff = Date.now() - ts;
@@ -217,7 +220,8 @@ export default function CourseDetail() {
               <div className="mt-5 flex flex-wrap items-center gap-x-6 gap-y-3 text-sm text-muted-foreground">
                 <Rating value={course.rating} count={course.ratingCount} />
                 <span className="inline-flex items-center gap-1.5">
-                  <Clock className="size-4" /> {formatHours(course.durationHours)}
+                  <Clock className="size-4" />{" "}
+                  {formatCourseDuration(course.lessons, course.durationHours)}
                 </span>
                 <span className="inline-flex items-center gap-1.5">
                   <BookOpen className="size-4" /> {course.lessons.length} lessons
@@ -319,7 +323,8 @@ export default function CourseDetail() {
             <Reveal className="mt-10">
               <h2 className="font-display text-2xl font-bold">Course content</h2>
               <p className="mt-1 text-sm text-muted-foreground">
-                {course.lessons.length} lessons · {course.lessons.reduce((s, l) => s + l.durationMinutes, 0)} min total
+                {course.lessons.length} lessons ·{" "}
+                {formatCourseDuration(course.lessons)}
               </p>
               <div className="mt-5 space-y-3">
                 {course.lessons.map((l, i) => (
@@ -333,7 +338,9 @@ export default function CourseDetail() {
                     <PlayCircle className="size-4 shrink-0 text-muted-foreground" />
                     <div className="min-w-0 flex-1">
                       <p className="truncate text-sm font-medium">{l.title}</p>
-                      <p className="text-xs text-muted-foreground">{l.durationMinutes} min</p>
+                      <p className="text-xs text-muted-foreground">
+                        {formatLessonDuration(l)}
+                      </p>
                     </div>
                   </div>
                 ))}
@@ -681,7 +688,9 @@ export default function CourseDetail() {
                     </div>
                     <div className="flex items-center justify-between">
                       <span className="text-muted-foreground">Duration</span>
-                      <span className="font-medium">{formatHours(course.durationHours)}</span>
+                      <span className="font-medium">
+                        {formatCourseDuration(course.lessons, course.durationHours)}
+                      </span>
                     </div>
                     <div className="flex items-center justify-between">
                       <span className="text-muted-foreground">Lessons</span>

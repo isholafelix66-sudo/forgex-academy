@@ -35,6 +35,61 @@ export function formatHours(hours: number): string {
   return `${Math.round(hours)}h`;
 }
 
+/** Smart human duration: 45 sec / 12 min / 1 hr / 1 hr 12 min / 2 hr 5 min. */
+export function formatDuration(totalSeconds: number): string {
+  const s = Math.max(0, Math.round(totalSeconds));
+  if (s <= 0) return "";
+  if (s < 60) return `${s} sec`;
+  const totalMin = Math.round(s / 60);
+  if (totalMin < 60) return `${totalMin} min`;
+  const h = Math.floor(totalMin / 60);
+  const m = totalMin % 60;
+  return m > 0 ? `${h} hr ${m} min` : `${h} hr`;
+}
+
+/** Authoritative per-lesson length in seconds: the real video duration when
+ *  known, otherwise the manually entered minutes. 0 = unknown. */
+export function lessonDurationSeconds(lesson: {
+  videoDurationSeconds?: number | null;
+  durationMinutes?: number | null;
+}): number {
+  if (lesson.videoDurationSeconds && lesson.videoDurationSeconds > 0) {
+    return lesson.videoDurationSeconds;
+  }
+  return (lesson.durationMinutes ?? 0) * 60;
+}
+
+export function formatLessonDuration(lesson: {
+  videoDurationSeconds?: number | null;
+  durationMinutes?: number | null;
+}): string {
+  return formatDuration(lessonDurationSeconds(lesson));
+}
+
+/** Sum of every lesson's real duration (falls back to manual minutes). */
+export function courseDurationSeconds(
+  lessons: Array<{
+    videoDurationSeconds?: number | null;
+    durationMinutes?: number | null;
+  }>,
+): number {
+  return lessons.reduce((sum, l) => sum + lessonDurationSeconds(l), 0);
+}
+
+/** Course total from its lessons, with a fallback to the stored durationHours
+ *  (used only when every lesson is missing a duration). */
+export function formatCourseDuration(
+  lessons: Array<{
+    videoDurationSeconds?: number | null;
+    durationMinutes?: number | null;
+  }>,
+  fallbackHours?: number,
+): string {
+  const total = courseDurationSeconds(lessons);
+  if (total > 0) return formatDuration(total);
+  return fallbackHours ? formatHours(fallbackHours) : "";
+}
+
 export function initials(name: string): string {
   return name
     .split(/\s+/)

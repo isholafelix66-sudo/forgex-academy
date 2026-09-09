@@ -12,14 +12,19 @@ import {
   CheckCircle2,
   Clock,
   CloudUpload,
+  Download,
   ExternalLink,
   Eye,
+  FileText,
+  Link2,
   Loader2,
   Pencil,
   Plus,
+  RefreshCw,
   Rocket,
   Save,
   Trash2,
+  Wand2,
   XCircle,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -38,12 +43,32 @@ import {
   MAX_CONVEX_UPLOAD_BYTES,
   uploadFileToConvex,
 } from "@/lib/convex-upload";
-import { timeAgo } from "@/lib/format";
+import {
+  formatDuration,
+  formatLessonDuration,
+  timeAgo,
+} from "@/lib/format";
+import { loadYouTubeApi, type YTPlayer } from "@/lib/youtubeApi";
+import { youtubeId } from "@/components/learn/VideoPlayer";
 import { getAdminToken } from "@/lib/admin-session";
 import { friendlyError, isValidationError } from "@/lib/errors";
 import { cn } from "@/lib/utils";
 
 type CourseRow = FunctionReturnType<typeof api.admin.allCourses>[number];
+
+type LessonResourceDraft = {
+  name: string;
+  url: string;
+  storageId?: string;
+  kind?: "file" | "link";
+  fileType?: string;
+  fileSize?: number;
+};
+
+const formatBytes = (b: number) =>
+  b >= 1024 * 1024
+    ? `${(b / 1024 / 1024).toFixed(1)} MB`
+    : `${Math.max(1, Math.round(b / 1024))} KB`;
 
 const EMPTY_DRAFT = {
   id: undefined as string | undefined,
@@ -79,6 +104,11 @@ export default function AdminCourses() {
   const setCourseArchived = useMutation(api.admin.setCourseArchived);
   const adminDeleteCourse = useMutation(api.admin.adminDeleteCourse);
   const adminUpsertLesson = useMutation(api.admin.adminUpsertLesson);
+  const adminSetLessonVideoDuration = useMutation(api.adminLessonExtras.adminSetLessonVideoDuration);
+  const adminAddLessonResource = useMutation(api.adminLessonExtras.adminAddLessonResource);
+  const adminDeleteLessonResource = useMutation(api.adminLessonExtras.adminDeleteLessonResource);
+  const adminReplaceLessonResource = useMutation(api.adminLessonExtras.adminReplaceLessonResource);
+  const adminRecomputeCourseDuration = useMutation(api.adminLessonExtras.adminRecomputeCourseDuration);
   const adminDeleteLesson = useMutation(api.admin.adminDeleteLesson);
   const adminUpsertQuiz = useMutation(api.admin.adminUpsertQuiz);
   const adminDeleteQuiz = useMutation(api.admin.adminDeleteQuiz);
@@ -102,6 +132,8 @@ export default function AdminCourses() {
     title: string;
     order: number;
     durationMinutes: number;
+    /** Real video length in seconds once detected — authoritative display. */
+    videoDurationSeconds: number;
     image: string;
     videoType: "youtube" | "mp4" | "vimeo" | "loom" | "";
     videoUrl: string;
@@ -112,6 +144,76 @@ export default function AdminCourses() {
     transcript: string;
     notes: string;
   } | null>(null);
+
+  // YouTube duration detection (IFrame API, hidden player)
+  const [detectingDuration, setDetectingDuration] = useState(false);
+  const [durationError, setDurationError] = useState<string | null>(null);
+  const [resourceBusy, setResourceBusy] = useState<"" | "file" | "link" | number>("");
+  const [linkDraft, setLinkDraft] = useState<{ name: string; url: string } | null>(null);
+  const [deletingResource, setDeletingResource] = useState<number | null>(null);
+  const [replaceIndex, setReplaceIndex] = useState<number | null>(null);
+  const detectHostRef = useRef<HTMLDivElement | null>(null);
+  const detectPlayerRef = useRef<YTPlayer | null>(null);
+  const addResourceInputRef = useRef<HTMLInputElement | null>(null);
+  const replaceResourceInputRef = useRef<HTMLInputElement | null>(null);
+
+  /** Detect a YouTube video's real duration via the IFrame API. */
+  const detectYouTubeDuration = async () => {
+    const url = lessonDraft?.videoUrl?.trim() ?? "";
+    const id = youtubeId(url);
+    if (!id) {
+      setDurationError("Enter a valid YouTube URL first, then detect the duration.");
+      return;
+    }
+    setDetectingDuration(true);
+    setDurationError(null);
+    try {
+      const YT = await loadYouTubeApi();
+      if (detectPlayerRef.current) {
+        try { detectPlayerRef.current.destroy(); } catch { /* noop */ }
+        detectPlayerRef.current = null;
+      }
+      if (!detectHostRef.current) return;
+      const player = new YT.Player(detectHostRef.current, {
+        videoId: id,
+        width: "1",
+        height: "1",
+        playerVars: { autoplay: 0, controls: 0, disablekb: 1, playsinline: 1 },
+        events: {
+          onReady: (e) => {
+            const dur = e.target.getDuration();
+            if (dur > 0) {
+              setLessonDraft((d) =>
+                d ? { ...d, videoDurationSeconds: Math.round(dur) } : d,
+              );
+              setDurationError(null);
+              toast.success(`YouTube video detected — ${formatDuration(dur)}`);
+            } else {
+              setDurationError(
+                "Unable to retrieve YouTube video duration. Please check the YouTube URL.",
+              );
+            }
+            setTimeout(() => {
+              try { player.destroy(); } catch { /* noop */ }
+              detectPlayerRef.current = null;
+            }, 300);
+          },
+          onError: () => {
+            setDurationError(
+              "Unable to retrieve YouTube video duration. Please check the YouTube URL.",
+            );
+          },
+        },
+      });
+      detectPlayerRef.current = player;
+    } catch {
+      setDurationError(
+        "Unable to retrieve YouTube video duration. Please check the YouTube URL.",
+      );
+    } finally {
+      setDetectingDuration(false);
+    }
+  };
 
   // Quiz / assignment mini-editors
   const [quizDraft, setQuizDraft] = useState<{ id?: string; title: string; description: string; timeLimitMinutes: number; passingScorePercent: number; attemptLimit: number; published: boolean; questions: { type: string; question: string; options: string[]; answer: string; points: number; explanation: string; acceptedAnswers: string[] }[] } | null>(null);
@@ -200,6 +302,7 @@ export default function AdminCourses() {
           title: "",
           order: 1,
           durationMinutes: 10,
+          videoDurationSeconds: 0,
           image: "",
           videoType: "mp4",
           videoUrl: "",
@@ -386,7 +489,7 @@ export default function AdminCourses() {
       (lessonDraft.videoUrl || "") !== (lessonDraft.originalVideoUrl || "") ||
       (lessonDraft.videoType || "") !== (lessonDraft.originalVideoType || "");
     const url = lessonDraft.videoUrl.trim();
-    await adminUpsertLesson({
+    const savedId = await adminUpsertLesson({
       id: lessonDraft.id ? (lessonDraft.id as never) : undefined,
       courseId: editor.course._id as never,
       title: lessonDraft.title,
@@ -399,8 +502,120 @@ export default function AdminCourses() {
       transcript: lessonDraft.transcript,
       token,
     });
+    // When the video changed, sync the authoritative duration: the detected
+    // real YouTube length, or clear the stale value until the new video
+    // reports its own duration during playback.
+    if (savedId && videoChanged) {
+      await adminSetLessonVideoDuration({
+        lessonId: savedId as never,
+        token,
+        durationSeconds: lessonDraft.videoDurationSeconds > 0 ? lessonDraft.videoDurationSeconds : 0,
+      });
+    }
+    // Recompute the course total from its lessons' real durations.
+    await adminRecomputeCourseDuration({
+      courseId: editor.course._id as never,
+      token,
+    });
     toast.success(lessonDraft.id ? "Lesson updated" : "Lesson added");
     setLessonDraft(null);
+    setDurationError(null);
+    setDeletingResource(null);
+  };
+
+  /** Upload a PDF/document from the device and attach it to the lesson. */
+  const uploadResourceFile = async (file: File, replaceAt?: number) => {
+    const lessonId = lessonDraft?.id;
+    if (!lessonId) {
+      toast.error("Save the lesson first, then attach resources.");
+      return;
+    }
+    setResourceBusy(replaceAt !== undefined ? replaceAt : "file");
+    try {
+      if (!token) throw new Error("Admin session missing — reopen the admin panel.");
+      const { storageId } = await uploadFileToConvex(file, () =>
+        adminGenerateUploadUrl({ token }),
+      );
+      if (replaceAt !== undefined) {
+        await adminReplaceLessonResource({
+          lessonId: lessonId as never,
+          token,
+          index: replaceAt,
+          name: file.name,
+          storageId: storageId as never,
+          kind: "file",
+          fileType: file.type,
+          fileSize: file.size,
+        });
+        toast.success("Resource replaced.");
+      } else {
+        await adminAddLessonResource({
+          lessonId: lessonId as never,
+          token,
+          name: file.name,
+          storageId: storageId as never,
+          kind: "file",
+          fileType: file.type,
+          fileSize: file.size,
+        });
+        toast.success("Resource uploaded ✓");
+      }
+    } catch (err) {
+      toast.error(friendlyError(err, "Upload failed — please try again."));
+    } finally {
+      setResourceBusy("");
+      setReplaceIndex(null);
+      if (addResourceInputRef.current) addResourceInputRef.current.value = "";
+      if (replaceResourceInputRef.current) replaceResourceInputRef.current.value = "";
+    }
+  };
+
+  /** Attach an external link as a lesson resource. */
+  const addLinkResource = async () => {
+    const lessonId = lessonDraft?.id;
+    const name = linkDraft?.name.trim();
+    const url = linkDraft?.url.trim();
+    if (!lessonId) {
+      toast.error("Save the lesson first, then attach resources.");
+      return;
+    }
+    if (!name || !url) {
+      toast.error("Enter a name and URL for the link.");
+      return;
+    }
+    setResourceBusy("link");
+    try {
+      await adminAddLessonResource({
+        lessonId: lessonId as never,
+        token,
+        name,
+        url,
+        kind: "link",
+      });
+      toast.success("Link resource added.");
+      setLinkDraft(null);
+    } catch (err) {
+      toast.error(friendlyError(err, "Couldn't add the link."));
+    } finally {
+      setResourceBusy("");
+    }
+  };
+
+  const confirmDeleteResource = async () => {
+    const lessonId = lessonDraft?.id;
+    if (deletingResource === null || !lessonId) return;
+    try {
+      await adminDeleteLessonResource({
+        lessonId: lessonId as never,
+        token,
+        index: deletingResource,
+      });
+      toast.success("Resource removed.");
+    } catch (err) {
+      toast.error(friendlyError(err, "Couldn't remove the resource."));
+    } finally {
+      setDeletingResource(null);
+    }
   };
 
   const saveQuiz = async () => {
@@ -831,16 +1046,27 @@ export default function AdminCourses() {
                           <div className="min-w-0 flex-1">
                             <p className="truncate text-sm font-medium">{l.title}</p>
                             <p className="flex items-center gap-2 text-xs text-muted-foreground">
-                              <Clock className="size-3" /> {l.durationMinutes} min
+                              <Clock className="size-3" /> {formatLessonDuration(l)}
+                              {(l.videoDurationSeconds ?? 0) > 0 && (
+                                <span className="text-lime-300/80">· actual video duration</span>
+                              )}
                               {l.videoType ? ` · ${l.videoType}` : ""}
                               {l.muxPlaybackId ? " · Mux video" : ""}
                               {l.videoUrl ? ` · ${l.videoUrl.slice(0, 44)}${l.videoUrl.length > 44 ? "…" : ""}` : ""}
                             </p>
                           </div>
-                          <Button variant="ghost" size="icon" onClick={() => setLessonDraft({ id: l._id as string, title: l.title, order: l.order, durationMinutes: l.durationMinutes, image: l.image ?? "", videoType: (l.videoType as any) ?? "", videoUrl: l.videoUrl ?? "", originalVideoUrl: l.videoUrl ?? "", originalVideoType: ((l.videoType as any) ?? "") as "youtube" | "mp4" | "vimeo" | "loom" | "mux" | "", transcript: l.transcript ?? "", notes: l.notes })}>
+                          <Button variant="ghost" size="icon" onClick={() => setLessonDraft({ id: l._id as string, title: l.title, order: l.order, durationMinutes: l.durationMinutes, videoDurationSeconds: l.videoDurationSeconds ?? 0, image: l.image ?? "", videoType: (l.videoType as any) ?? "", videoUrl: l.videoUrl ?? "", originalVideoUrl: l.videoUrl ?? "", originalVideoType: ((l.videoType as any) ?? "") as "youtube" | "mp4" | "vimeo" | "loom" | "mux" | "", transcript: l.transcript ?? "", notes: l.notes })}>
                             <Pencil className="size-4" />
                           </Button>
-                          <Button variant="ghost" size="icon" className="text-muted-foreground hover:text-rose-300" onClick={() => void adminDeleteLesson({ id: l._id as never, token })}>
+                          <Button variant="ghost" size="icon" className="text-muted-foreground hover:text-rose-300" onClick={async () => {
+                            await adminDeleteLesson({ id: l._id as never, token });
+                            if (editor?.course) {
+                              await adminRecomputeCourseDuration({
+                                courseId: editor.course._id as never,
+                                token,
+                              });
+                            }
+                          }}>
                             <Trash2 className="size-4" />
                           </Button>
                         </div>
@@ -853,17 +1079,47 @@ export default function AdminCourses() {
                       <div className="space-y-3 rounded-xl border border-white/10 bg-black/20 p-4">
                         <p className="text-sm font-semibold">{lessonDraft?.id ? "Edit lesson" : "Add lesson"}</p>
                         <div className="grid gap-3 sm:grid-cols-2">
-                          <Input placeholder="Lesson title *" value={lessonDraft?.title ?? ""} onChange={(e) => setLessonDraft((d) => ({ ...(d ?? { title: "", order: (content?.lessons.length ?? 0) + 1, durationMinutes: 10, image: "", videoType: "", videoUrl: "", originalVideoUrl: "", originalVideoType: "", transcript: "", notes: "" }), title: e.target.value }))} className="border-white/10 bg-black/30 sm:col-span-2" />
-                          <Input type="number" placeholder="Order" value={lessonDraft?.order ?? (content?.lessons.length ?? 0) + 1} onChange={(e) => setLessonDraft((d) => ({ ...(d ?? { title: "", order: 1, durationMinutes: 10, image: "", videoType: "", videoUrl: "", originalVideoUrl: "", originalVideoType: "", transcript: "", notes: "" }), order: Number(e.target.value) }))} className="border-white/10 bg-black/30" />
-                          <Input type="number" placeholder="Minutes" value={lessonDraft?.durationMinutes ?? 10} onChange={(e) => setLessonDraft((d) => ({ ...(d ?? { title: "", order: 1, durationMinutes: 10, image: "", videoType: "", videoUrl: "", originalVideoUrl: "", originalVideoType: "", transcript: "", notes: "" }), durationMinutes: Number(e.target.value) }))} className="border-white/10 bg-black/30" />
-                          <select value={lessonDraft?.videoType ?? ""} onChange={(e) => setLessonDraft((d) => ({ ...(d ?? { title: "", order: 1, durationMinutes: 10, image: "", videoType: "", videoUrl: "", originalVideoUrl: "", originalVideoType: "", transcript: "", notes: "" }), videoType: e.target.value as "youtube" | "mp4" | "vimeo" | "loom" | "" }))} className="h-10 rounded-xl border border-white/10 bg-black/30 px-3 text-sm outline-none">
+                          <Input placeholder="Lesson title *" value={lessonDraft?.title ?? ""} onChange={(e) => setLessonDraft((d) => ({ ...(d ?? { title: "", order: (content?.lessons.length ?? 0) + 1, durationMinutes: 10, videoDurationSeconds: 0, image: "", videoType: "", videoUrl: "", originalVideoUrl: "", originalVideoType: "", transcript: "", notes: "" }), title: e.target.value }))} className="border-white/10 bg-black/30 sm:col-span-2" />
+                          <Input type="number" placeholder="Order" value={lessonDraft?.order ?? (content?.lessons.length ?? 0) + 1} onChange={(e) => setLessonDraft((d) => ({ ...(d ?? { title: "", order: 1, durationMinutes: 10, videoDurationSeconds: 0, image: "", videoType: "", videoUrl: "", originalVideoUrl: "", originalVideoType: "", transcript: "", notes: "" }), order: Number(e.target.value) }))} className="border-white/10 bg-black/30" />
+                          <Input type="number" placeholder="Minutes (fallback)" value={lessonDraft?.durationMinutes ?? 10} onChange={(e) => setLessonDraft((d) => ({ ...(d ?? { title: "", order: 1, durationMinutes: 10, videoDurationSeconds: 0, image: "", videoType: "", videoUrl: "", originalVideoUrl: "", originalVideoType: "", transcript: "", notes: "" }), durationMinutes: Number(e.target.value) }))} className="border-white/10 bg-black/30" />
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            className="gap-1.5 border-lime-400/30 text-lime-300"
+                            onClick={() => void detectYouTubeDuration()}
+                            disabled={detectingDuration}
+                          >
+                            {detectingDuration ? (
+                              <Loader2 className="size-3.5 animate-spin" />
+                            ) : (
+                              <Wand2 className="size-3.5" />
+                            )}
+                            {detectingDuration ? "Detecting…" : "Detect YouTube duration"}
+                          </Button>
+                          {(lessonDraft?.videoDurationSeconds ?? 0) > 0 && (
+                            <p className="flex items-center gap-1.5 text-xs text-lime-300/90 sm:col-span-2">
+                              <CheckCircle2 className="size-3.5 shrink-0" />
+                              YouTube video detected — actual duration is{" "}
+                              <span className="font-semibold">
+                                {formatDuration(lessonDraft!.videoDurationSeconds)}
+                              </span>
+                              (replaces the manual estimate automatically)
+                            </p>
+                          )}
+                          {durationError && (
+                            <p className="text-xs text-rose-300 sm:col-span-2">
+                              {durationError}
+                            </p>
+                          )}
+                          <select value={lessonDraft?.videoType ?? ""} onChange={(e) => setLessonDraft((d) => ({ ...(d ?? { title: "", order: 1, durationMinutes: 10, videoDurationSeconds: 0, image: "", videoType: "", videoUrl: "", originalVideoUrl: "", originalVideoType: "", transcript: "", notes: "" }), videoType: e.target.value as "youtube" | "mp4" | "vimeo" | "loom" | "", videoDurationSeconds: e.target.value === "youtube" ? d?.videoDurationSeconds ?? 0 : 0 }))} className="h-10 rounded-xl border border-white/10 bg-black/30 px-3 text-sm outline-none">
                             <option value="">No video</option>
                             <option value="youtube">YouTube</option>
                             <option value="vimeo">Vimeo</option>
                             <option value="loom">Loom</option>
                             <option value="mp4">MP4 URL</option>
                           </select>
-                          <Input placeholder="Video URL (YouTube / Vimeo / Loom / MP4)" value={lessonDraft?.videoUrl ?? ""} onChange={(e) => setLessonDraft((d) => ({ ...(d ?? { title: "", order: 1, durationMinutes: 10, image: "", videoType: "", videoUrl: "", originalVideoUrl: "", originalVideoType: "", transcript: "", notes: "" }), videoUrl: e.target.value }))} className="border-white/10 bg-black/30" />
+                          <Input placeholder="Video URL (YouTube / Vimeo / Loom / MP4)" value={lessonDraft?.videoUrl ?? ""} onChange={(e) => { setLessonDraft((d) => ({ ...(d ?? { title: "", order: 1, durationMinutes: 10, videoDurationSeconds: 0, image: "", videoType: "", videoUrl: "", originalVideoUrl: "", originalVideoType: "", transcript: "", notes: "" }), videoUrl: e.target.value, videoDurationSeconds: 0 })); setDurationError(null); }} className="border-white/10 bg-black/30" />
                           <p className="text-xs text-muted-foreground sm:col-span-2">
                             Paste your own YouTube / Vimeo / Loom / MP4 link to
                             replace the default tutorial, or clear the field and
@@ -917,13 +1173,222 @@ export default function AdminCourses() {
                               value={lessonDraft?.image || null}
                               label="Lesson image (Cloudinary)"
                               record={{ kind: "lesson", label: lessonDraft?.title || "Lesson image" }}
-                              onUploaded={(img) => setLessonDraft((d) => ({ ...(d ?? { title: "", order: 1, durationMinutes: 10, image: "", videoType: "", videoUrl: "", originalVideoUrl: "", originalVideoType: "", transcript: "", notes: "" }), image: img.secureUrl }))}
+                              onUploaded={(img) => setLessonDraft((d) => ({ ...(d ?? { title: "", order: 1, durationMinutes: 10, videoDurationSeconds: 0, image: "", videoType: "", videoUrl: "", originalVideoUrl: "", originalVideoType: "", transcript: "", notes: "" }), image: img.secureUrl }))}
                               onClear={() => setLessonDraft((d) => (d ? { ...d, image: "" } : d))}
                               compact
                             />
                           </div>
-                          <Textarea placeholder="Lesson notes" rows={2} value={lessonDraft?.notes ?? ""} onChange={(e) => setLessonDraft((d) => ({ ...(d ?? { title: "", order: 1, durationMinutes: 10, image: "", videoType: "", videoUrl: "", originalVideoUrl: "", originalVideoType: "", transcript: "", notes: "" }), notes: e.target.value }))} className="border-white/10 bg-black/30 sm:col-span-2" />
-                          <Textarea placeholder="Lesson transcript (shown under the video — preserved when you edit the lesson)" rows={3} value={lessonDraft?.transcript ?? ""} onChange={(e) => setLessonDraft((d) => ({ ...(d ?? { title: "", order: 1, durationMinutes: 10, image: "", videoType: "", videoUrl: "", originalVideoUrl: "", originalVideoType: "", transcript: "", notes: "" }), transcript: e.target.value }))} className="border-white/10 bg-black/30 sm:col-span-2" />
+                          <Textarea placeholder="Lesson notes" rows={2} value={lessonDraft?.notes ?? ""} onChange={(e) => setLessonDraft((d) => ({ ...(d ?? { title: "", order: 1, durationMinutes: 10, videoDurationSeconds: 0, image: "", videoType: "", videoUrl: "", originalVideoUrl: "", originalVideoType: "", transcript: "", notes: "" }), notes: e.target.value }))} className="border-white/10 bg-black/30 sm:col-span-2" />
+                          <Textarea placeholder="Lesson transcript (shown under the video — preserved when you edit the lesson)" rows={3} value={lessonDraft?.transcript ?? ""} onChange={(e) => setLessonDraft((d) => ({ ...(d ?? { title: "", order: 1, durationMinutes: 10, videoDurationSeconds: 0, image: "", videoType: "", videoUrl: "", originalVideoUrl: "", originalVideoType: "", transcript: "", notes: "" }), transcript: e.target.value }))} className="border-white/10 bg-black/30 sm:col-span-2" />
+
+                          {/* Resources — real uploaded files (Convex storage) + external links */}
+                          <div className="rounded-xl border border-white/10 bg-black/20 p-4 sm:col-span-2">
+                            <div className="flex items-center justify-between gap-3">
+                              <p className="text-sm font-semibold">Resources</p>
+                              {!lessonDraft?.id && (
+                                <p className="text-right text-xs text-muted-foreground">
+                                  Save the lesson first to attach resources.
+                                </p>
+                              )}
+                            </div>
+                            {lessonDraft?.id && (() => {
+                              const cur = (content?.lessons ?? []).find(
+                                (l) => l._id === lessonDraft.id,
+                              );
+                              const rows = cur?.resources ?? [];
+                              return (
+                                <div className="mt-3 space-y-2">
+                                  {rows.length === 0 && (
+                                    <p className="text-xs text-muted-foreground">
+                                      No resources yet — upload a PDF or add a
+                                      link below. Students will see View +
+                                      Download actions.
+                                    </p>
+                                  )}
+                                  {rows.map((r, i) => (
+                                    <div
+                                      key={i}
+                                      className="flex flex-wrap items-center gap-2 rounded-lg border border-white/10 bg-white/5 px-3 py-2"
+                                    >
+                                      <FileText className="size-4 shrink-0 text-lime-300" />
+                                      <div className="min-w-0 flex-1">
+                                        <p className="truncate text-xs font-medium">
+                                          {r.name}
+                                        </p>
+                                        <p className="text-[11px] text-muted-foreground">
+                                          {r.kind === "link"
+                                            ? "External link"
+                                            : `${r.fileSize ? `${formatBytes(r.fileSize)} · ` : ""}PDF / document`}
+                                        </p>
+                                      </div>
+                                      {r.kind !== "link" && r.url && (
+                                        <a
+                                          href={r.url}
+                                          target="_blank"
+                                          rel="noopener noreferrer"
+                                        >
+                                          <Button
+                                            type="button"
+                                            size="sm"
+                                            variant="outline"
+                                            className="gap-1 border-white/15"
+                                          >
+                                            <Eye className="size-3" /> View
+                                          </Button>
+                                        </a>
+                                      )}
+                                      <Button
+                                        type="button"
+                                        size="sm"
+                                        variant="outline"
+                                        className="gap-1 border-white/15"
+                                        onClick={() => {
+                                          setReplaceIndex(i);
+                                          replaceResourceInputRef.current?.click();
+                                        }}
+                                      >
+                                        {resourceBusy === i ? (
+                                          <Loader2 className="size-3 animate-spin" />
+                                        ) : (
+                                          <RefreshCw className="size-3" />
+                                        )}{" "}
+                                        Replace
+                                      </Button>
+                                      <Button
+                                        type="button"
+                                        size="sm"
+                                        variant="outline"
+                                        className="gap-1 border-rose-400/30 text-rose-300"
+                                        onClick={() => setDeletingResource(i)}
+                                      >
+                                        <Trash2 className="size-3" />
+                                      </Button>
+                                    </div>
+                                  ))}
+                                  <div className="flex flex-wrap gap-2 pt-1">
+                                    <input
+                                      ref={addResourceInputRef}
+                                      type="file"
+                                      accept="application/pdf,.pdf,.doc,.docx,.txt,.xls,.xlsx,.ppt,.pptx,.png,.jpg,.jpeg"
+                                      className="hidden"
+                                      onChange={(e) => {
+                                        const f = e.target.files?.[0];
+                                        if (f) void uploadResourceFile(f);
+                                      }}
+                                    />
+                                    <input
+                                      ref={replaceResourceInputRef}
+                                      type="file"
+                                      accept="application/pdf,.pdf,.doc,.docx,.txt,.xls,.xlsx,.ppt,.pptx,.png,.jpg,.jpeg"
+                                      className="hidden"
+                                      onChange={(e) => {
+                                        const f = e.target.files?.[0];
+                                        if (f && replaceIndex !== null)
+                                          void uploadResourceFile(f, replaceIndex);
+                                      }}
+                                    />
+                                    <Button
+                                      type="button"
+                                      size="sm"
+                                      variant="outline"
+                                      className="gap-1.5 border-lime-400/30 text-lime-300"
+                                      disabled={resourceBusy === "file"}
+                                      onClick={() =>
+                                        addResourceInputRef.current?.click()
+                                      }
+                                    >
+                                      {resourceBusy === "file" ? (
+                                        <Loader2 className="size-3.5 animate-spin" />
+                                      ) : (
+                                        <CloudUpload className="size-3.5" />
+                                      )}
+                                      {resourceBusy === "file"
+                                        ? "Uploading…"
+                                        : "Upload PDF / file"}
+                                    </Button>
+                                    <Button
+                                      type="button"
+                                      size="sm"
+                                      variant="outline"
+                                      className="gap-1.5 border-white/15"
+                                      onClick={() =>
+                                        setLinkDraft({ name: "", url: "" })
+                                      }
+                                    >
+                                      <Link2 className="size-3.5" /> Add link
+                                    </Button>
+                                  </div>
+                                  {linkDraft && (
+                                    <div className="grid gap-2 sm:grid-cols-[1fr_2fr_auto]">
+                                      <Input
+                                        placeholder="Name *"
+                                        value={linkDraft.name}
+                                        onChange={(e) =>
+                                          setLinkDraft({
+                                            ...linkDraft,
+                                            name: e.target.value,
+                                          })
+                                        }
+                                        className="border-white/10 bg-black/30"
+                                      />
+                                      <Input
+                                        placeholder="https://… *"
+                                        value={linkDraft.url}
+                                        onChange={(e) =>
+                                          setLinkDraft({
+                                            ...linkDraft,
+                                            url: e.target.value,
+                                          })
+                                        }
+                                        className="border-white/10 bg-black/30"
+                                      />
+                                      <div className="flex gap-2">
+                                        <Button
+                                          type="button"
+                                          size="sm"
+                                          variant="outline"
+                                          className="border-white/15"
+                                          onClick={() => setLinkDraft(null)}
+                                        >
+                                          Cancel
+                                        </Button>
+                                        <Button
+                                          type="button"
+                                          size="sm"
+                                          className="gap-1 bg-lime-400 font-semibold text-black hover:bg-lime-300"
+                                          disabled={resourceBusy === "link"}
+                                          onClick={() => void addLinkResource()}
+                                        >
+                                          {resourceBusy === "link" ? (
+                                            <Loader2 className="size-3 animate-spin" />
+                                          ) : (
+                                            <Plus className="size-3" />
+                                          )}{" "}
+                                          Add
+                                        </Button>
+                                      </div>
+                                    </div>
+                                  )}      {/* Resource delete confirm */}
+      <ConfirmDialog
+        open={deletingResource !== null}
+        onOpenChange={(o) => !o && setDeletingResource(null)}
+        title="Remove this resource?"
+        description="The resource is removed from the lesson and its uploaded file is deleted from storage. This cannot be undone."
+        confirmLabel="Remove resource"
+        danger
+        onConfirm={() => void confirmDeleteResource()}
+      />
+
+      {/* Hidden host for the YouTube IFrame-API duration probe */}
+      <div
+        ref={detectHostRef}
+        aria-hidden="true"
+        className="pointer-events-none fixed bottom-0 right-0 h-px w-px overflow-hidden opacity-0"
+      />
+    </div>
+  );
+})()}
+                          </div>
                         </div>
                         <div className="flex gap-2">
                           {lessonDraft && (

@@ -38,6 +38,7 @@ import {
 import { PageHeader } from "@/components/dash/PageHeader";
 import { useAuth } from "@/hooks/use-auth";
 import { cn } from "@/lib/utils";
+import { formatLessonDuration } from "@/lib/format";
 import { ImageUploader } from "@/components/media/ImageUploader";
 import { friendlyError, isBackendRejection, isValidationError } from "@/lib/errors";
 import {
@@ -1163,7 +1164,7 @@ function LessonsTab({ courseId }: { courseId: string }) {
           <PlayCircle className="size-4 shrink-0 text-muted-foreground" />
           <div className="min-w-0 flex-1">
             <p className="truncate text-sm font-medium">{l.title}</p>
-            <p className="text-xs text-muted-foreground">{l.durationMinutes} min</p>
+            <p className="text-xs text-muted-foreground">{formatLessonDuration(l)}</p>
           </div>
           <Button variant="ghost" size="sm" onClick={() => open(l)}>Edit</Button>
           <Button

@@ -33,7 +33,7 @@ import { Rating } from "@/components/site/Rating";
 import { StatusChip } from "@/pages/tutor/status";
 import { VideoPlayer } from "@/components/learn/VideoPlayer";
 import { getAdminToken } from "@/lib/admin-session";
-import { formatHours } from "@/lib/format";
+import { formatCourseDuration, formatLessonDuration } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
 const QUESTION_TYPE_LABEL: Record<string, string> = {
@@ -215,7 +215,8 @@ export default function AdminCoursePreview() {
             <div className="mt-5 flex flex-wrap items-center gap-x-6 gap-y-3 text-sm text-muted-foreground">
               <Rating value={course.rating} count={course.ratingCount} />
               <span className="inline-flex items-center gap-1.5">
-                <Clock className="size-4" /> {formatHours(course.durationHours)}
+                <Clock className="size-4" />{" "}
+                {formatCourseDuration(course.lessons, course.durationHours)}
               </span>
               <span className="inline-flex items-center gap-1.5">
                 <BookOpen className="size-4" /> {course.lessons.length} lessons
@@ -308,7 +309,7 @@ export default function AdminCoursePreview() {
             <h2 className="font-display text-2xl font-bold">Course content</h2>
             <p className="mt-1 text-sm text-muted-foreground">
               {course.lessons.length} lessons ·{" "}
-              {course.lessons.reduce((s, l) => s + l.durationMinutes, 0)} min total
+              {formatCourseDuration(course.lessons)}
             </p>
 
             {/* Inline player — verify the video actually plays before approving */}
@@ -348,7 +349,7 @@ export default function AdminCoursePreview() {
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-sm font-medium">{l.title}</p>
                     <p className="text-xs text-muted-foreground">
-                      {l.durationMinutes} min
+                      {formatLessonDuration(l)}
                       {l.videoType ? ` · ${l.videoType}` : ""}
                       {l.muxPlaybackId ? " · Mux video" : ""}
                     </p>
@@ -515,7 +516,9 @@ export default function AdminCoursePreview() {
                   </div>
                   <div className="flex items-center justify-between">
                     <span className="text-muted-foreground">Duration</span>
-                    <span className="font-medium">{formatHours(course.durationHours)}</span>
+                    <span className="font-medium">
+                      {formatCourseDuration(course.lessons, course.durationHours)}
+                    </span>
                   </div>
                   <div className="flex items-center justify-between">
                     <span className="text-muted-foreground">Lessons</span>

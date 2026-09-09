@@ -15,6 +15,7 @@
 import type { MutationCtx } from "./_generated/server";
 import { ROLES, type Question, type Resource } from "./schema";
 import { AI_COURSE_CATALOG, PLANNED_VIDEO } from "./aiCourseCatalog";
+import { recomputeCourseDuration } from "./lmsShared";
 
 const resource = (name: string, url: string): Resource => ({ name, url });
 
@@ -340,6 +341,8 @@ export async function seedAiCourses(ctx: MutationCtx): Promise<number> {
           if (Object.keys(patch).length > 0) await ctx.db.patch(l._id, patch);
         }
       }
+      // Keep the course total in sync with its lessons' durations.
+      await recomputeCourseDuration(ctx, existing._id);
       continue;
     }
 
@@ -380,6 +383,7 @@ export async function seedAiCourses(ctx: MutationCtx): Promise<number> {
         resources: cleanResources(l.r),
       });
     }
+    await recomputeCourseDuration(ctx, courseId);
 
     for (const quiz of c.quizzes) {
       await ctx.db.insert("quizzes", {

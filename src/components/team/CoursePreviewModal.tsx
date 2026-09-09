@@ -3,6 +3,7 @@ import { useQuery, useMutation, useConvexAuth } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import { Loader2, X, CheckCircle2, ArrowUpCircle, Play, ExternalLink } from "lucide-react";
 import { toast } from "sonner";
+import { formatLessonDuration } from "@/lib/format";
 
 export default function CoursePreviewModal({ courseId, onClose }: { courseId: string; onClose: () => void }) {
   // getCoursePreview requires a signed-in user (requireAuth). Password-gated
@@ -105,7 +106,7 @@ export default function CoursePreviewModal({ courseId, onClose }: { courseId: st
                 return (
                   <div key={l._id} className="rounded-xl border border-white/10 bg-white/[0.02] p-4">
                     <div className="flex items-center justify-between gap-3">
-                      <div className="min-w-0 flex-1"><p className="font-medium text-white text-sm">Lesson {idx + 1}: {l.title}</p><p className="text-xs text-white/30 mt-0.5">{l.durationMinutes} min{lq ? " • Has quiz" : ""}</p></div>
+                      <div className="min-w-0 flex-1"><p className="font-medium text-white text-sm">Lesson {idx + 1}: {l.title}</p><p className="text-xs text-white/30 mt-0.5">{formatLessonDuration(l)}{lq ? " • Has quiz" : ""}</p></div>
                       {l.videoUrl && <a href={l.videoUrl} target="_blank" rel="noreferrer" className="shrink-0 rounded-lg border border-white/10 px-2.5 py-1.5 text-[10px] font-semibold text-white/60 hover:bg-white/5"><Play className="mr-1 inline size-3" />Watch</a>}
                       {l.muxPlaybackId && <span className="shrink-0 rounded-lg bg-purple-400/10 px-2.5 py-1.5 text-[10px] font-semibold text-purple-300">MUX Video</span>}
                     </div>

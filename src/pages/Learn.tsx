@@ -9,6 +9,9 @@ import {
   CheckCircle2,
   ChevronRight,
   Clock,
+  Download,
+  ExternalLink,
+  Eye,
   FileText,
   GraduationCap,
   ListChecks,
@@ -36,11 +39,24 @@ import { EmptyState } from "@/components/site/EmptyState";
 import { useAuth } from "@/hooks/use-auth";
 import { openChatWith } from "@/lib/chat-open";
 import { cn } from "@/lib/utils";
-import { formatHours } from "@/lib/format";
+import {
+  formatCourseDuration,
+  formatLessonDuration,
+} from "@/lib/format";
 import { friendlyError } from "@/lib/errors";
 
 // Video watch percentage is no longer a gate for lesson completion.
 // Students can mark lessons complete freely; quizzes/assessments are the gate for certificates.
+
+/** Notes from the “planned recording” era began with a now-obsolete banner —
+ *  the lessons have real videos, so that leading sentence is stripped. */
+const cleanLessonNotes = (n: string) =>
+  n.replace(/^🎥 Video lesson — planned recording \(coming soon\)\.\s*/, "").trim();
+
+const formatBytes = (b: number) =>
+  b >= 1024 * 1024
+    ? `${(b / 1024 / 1024).toFixed(1)} MB`
+    : `${Math.max(1, Math.round(b / 1024))} KB`;
 
 type LessonQuizPayload = {
   _id: string;
@@ -75,6 +91,7 @@ export default function Learn() {
     isAuthenticated && course ? { courseId: course._id } : "skip",
   );
   const completeLesson = useMutation(api.learn.completeLesson);
+  const saveLessonVideoDuration = useMutation(api.learn.saveLessonVideoDuration);
   const watchHeartbeat = useMutation(api.lms.watchHeartbeat);
   const saveWatchPosition = useMutation(api.lms.saveWatchPosition);
   const submitLessonQuiz = useMutation(api.lessonquizzes.submitLessonQuiz);
@@ -85,6 +102,10 @@ export default function Learn() {
   const [examOpen, setExamOpen] = useState(false);
   const [marking, setMarking] = useState(false);
   const [justCompleted, setJustCompleted] = useState<string | null>(null);
+  const [previewResource, setPreviewResource] = useState<{
+    name: string;
+    url: string;
+  } | null>(null);
 
   /** Local progress for instant UI updates — the server is the source of
    *  truth for "is the lesson complete", but the local percent drives the
@@ -100,6 +121,11 @@ export default function Learn() {
   /** Saved resume position in seconds — player seeks here on mount. */
   const resumePosition = activeState?.resumePosition ?? 0;
   const activeLesson = activeState?.lesson ?? null;
+  /** Resources for the active lesson — storage URLs resolved server-side. */
+  const resourceRows = useQuery(
+    api.learn.lessonResources,
+    activeLesson ? { lessonId: activeLesson._id as never } : "skip",
+  );
   const completedIds = useMemo(
     () => new Set(states?.lessons.filter((l) => l.completed).map((l) => l.lesson._id) ?? []),
     [states],
@@ -112,6 +138,11 @@ export default function Learn() {
       setActiveLessonId(firstIncomplete.lesson._id);
     }
   }, [lessonStates, activeLessonId]);
+
+  // Reset the duration-persist tracker when switching lessons.
+  useEffect(() => {
+    savedDurRef.current = 0;
+  }, [activeLessonId]);
 
   if (course === undefined) {
     return (
@@ -214,6 +245,25 @@ export default function Learn() {
   const lastHbTimeRef = useRef(0);
   /** The video's duration once known. */
   const durationRef = useRef(0);
+  /** Last video duration persisted to the lesson (avoids repeat mutations). */
+  const savedDurRef = useRef(0);
+
+  /** Persist the real video duration as the lesson's authoritative length. */
+  const persistDuration = useCallback(
+    (duration: number) => {
+      if (!activeLesson) return;
+      const rounded = Math.round(duration);
+      if (rounded <= 0) return;
+      const stored = activeLesson.videoDurationSeconds ?? 0;
+      if (rounded === stored || savedDurRef.current === rounded) return;
+      savedDurRef.current = rounded;
+      void saveLessonVideoDuration({
+        lessonId: activeLesson._id as never,
+        durationSeconds: rounded,
+      });
+    },
+    [activeLesson, saveLessonVideoDuration],
+  );
 
   /**
    * Send a heartbeat to the server. Rate-limited to every ~5s while playing,
@@ -322,10 +372,16 @@ export default function Learn() {
     [activeLesson, saveWatchPosition, videoSource],
   );
 
-  /** Called when the video duration becomes known (loadedmetadata). */
-  const handleDurationReady = useCallback((duration: number) => {
-    durationRef.current = duration;
-  }, []);
+  /** Called when the video duration becomes known (loadedmetadata / YouTube
+   *  IFrame API / Mux metadata). Persists it so the course shows the REAL
+   *  video length everywhere instead of the manual estimate. */
+  const handleDurationReady = useCallback(
+    (duration: number) => {
+      durationRef.current = duration;
+      persistDuration(duration);
+    },
+    [persistDuration],
+  );
 
   /** Called when the player starts playing. */
   const handlePlay = useCallback(() => {
@@ -476,8 +532,10 @@ export default function Learn() {
               </p>
               <div className="mt-1 flex items-center gap-2 text-xs text-muted-foreground">
                 <Clock className="size-3.5" />
-                {lessonStates.reduce((s, l) => s + l.lesson.durationMinutes, 0)} min ·{" "}
-                {formatHours(course.durationHours)}
+                {formatCourseDuration(
+                  lessonStates.map((s) => s.lesson),
+                  course.durationHours,
+                )}
               </div>
             </div>
             <div className="max-h-[60vh] overflow-y-auto">
@@ -517,7 +575,7 @@ export default function Learn() {
                         {l.title}
                       </p>
                       <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                        {l.durationMinutes} min
+                        {formatLessonDuration(l)}
                         {st.quiz && (
                           <span
                             className={cn(
@@ -757,38 +815,91 @@ export default function Learn() {
               </div>
 
               {/* Notes */}
-              {activeLesson.notes && (
+              {cleanLessonNotes(activeLesson.notes) && (
                 <section className="rounded-2xl border border-white/10 bg-card p-6">
                   <h2 className="flex items-center gap-2 font-display text-base font-semibold">
                     <StickyNote className="size-4 text-lime-300" /> Lesson notes
                   </h2>
                   <p className="mt-3 break-words whitespace-pre-line text-sm leading-relaxed text-muted-foreground">
-                    {activeLesson.notes}
+                    {cleanLessonNotes(activeLesson.notes)}
                   </p>
                 </section>
               )}
 
-              {/* Resources */}
-              {activeLesson.resources.length > 0 && (
-                <section className="rounded-2xl border border-white/10 bg-card p-6">
-                  <h2 className="flex items-center gap-2 font-display text-base font-semibold">
-                    <FileText className="size-4 text-lime-300" /> Resources
-                  </h2>
-                  <div className="mt-3 flex flex-wrap gap-2">
-                    {activeLesson.resources.map((r, i) => (
-                      <a
-                        key={i}
-                        href={r.url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="inline-flex items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-3.5 py-2 text-sm transition-colors hover:border-lime-400/40 hover:text-lime-300"
+              {/* Resources — real files resolved from storage + external links */}
+              <section className="rounded-2xl border border-white/10 bg-card p-6">
+                <h2 className="flex items-center gap-2 font-display text-base font-semibold">
+                  <FileText className="size-4 text-lime-300" /> Resources
+                </h2>
+                {!resourceRows ? (
+                  <p className="mt-3 text-sm text-muted-foreground">
+                    Loading resources…
+                  </p>
+                ) : resourceRows.length === 0 ? (
+                  <p className="mt-3 text-sm text-muted-foreground">
+                    No resources available for this lesson.
+                  </p>
+                ) : (
+                  <div className="mt-4 space-y-3">
+                    {resourceRows.map((r) => (
+                      <div
+                        key={r.index}
+                        className="flex flex-col gap-3 rounded-xl border border-white/10 bg-white/5 p-4 sm:flex-row sm:items-center"
                       >
-                        <FileText className="size-3.5" /> {r.name}
-                      </a>
+                        <div className="flex min-w-0 flex-1 items-center gap-3">
+                          <FileText className="size-5 shrink-0 text-lime-300" />
+                          <div className="min-w-0">
+                            <p className="break-words text-sm font-medium">{r.name}</p>
+                            <p className="text-xs text-muted-foreground">
+                              {r.kind === "link"
+                                ? "External link"
+                                : `${r.fileSize > 0 ? `${formatBytes(r.fileSize)} · ` : ""}PDF / document`}
+                            </p>
+                          </div>
+                        </div>
+                        <div className="flex shrink-0 gap-2">
+                          {r.kind === "link" ? (
+                            <a
+                              href={r.url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                            >
+                              <Button size="sm" variant="outline" className="gap-1.5">
+                                <ExternalLink className="size-3.5" /> Open
+                              </Button>
+                            </a>
+                          ) : (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="gap-1.5"
+                              onClick={() =>
+                                setPreviewResource({ name: r.name, url: r.url })
+                              }
+                            >
+                              <Eye className="size-3.5" /> View
+                            </Button>
+                          )}
+                          <a
+                            href={r.url}
+                            download={r.kind === "file" ? r.name : undefined}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                          >
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="gap-1.5 border-lime-400/30 text-lime-300"
+                            >
+                              <Download className="size-3.5" /> Download
+                            </Button>
+                          </a>
+                        </div>
+                      </div>
                     ))}
                   </div>
-                </section>
-              )}
+                )}
+              </section>
 
               {/* Transcript */}
               {activeLesson.transcript && (
@@ -1069,6 +1180,54 @@ export default function Learn() {
               }
             />
           )}
+        </DialogContent>
+      </Dialog>
+
+      {/* In-app PDF / document viewer */}
+      <Dialog
+        open={!!previewResource}
+        onOpenChange={(o) => !o && setPreviewResource(null)}
+      >
+        <DialogContent className="h-[92vh] max-h-[92vh] w-[min(94vw,70rem)] overflow-hidden border-white/10 bg-black p-0">
+          <DialogHeader className="sr-only">
+            <DialogTitle>{previewResource?.name ?? "Resource"}</DialogTitle>
+          </DialogHeader>
+          <div className="flex h-full flex-col">
+            <div className="flex items-center justify-between gap-3 border-b border-white/10 px-4 py-2.5">
+              <p className="min-w-0 truncate text-sm font-medium">
+                {previewResource?.name}
+              </p>
+              <div className="flex shrink-0 items-center gap-2">
+                {previewResource && (
+                  <a
+                    href={previewResource.url}
+                    download
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    <Button size="sm" variant="outline" className="gap-1.5 border-lime-400/30 text-lime-300">
+                      <Download className="size-3.5" /> Download
+                    </Button>
+                  </a>
+                )}
+                <button
+                  onClick={() => setPreviewResource(null)}
+                  className="rounded-lg p-1.5 text-muted-foreground hover:bg-white/10"
+                >
+                  <X className="size-4" />
+                </button>
+              </div>
+            </div>
+            <div className="min-h-0 flex-1">
+              {previewResource && (
+                <iframe
+                  src={previewResource.url}
+                  title={previewResource.name}
+                  className="block size-full border-0"
+                />
+              )}
+            </div>
+          </div>
         </DialogContent>
       </Dialog>
 
