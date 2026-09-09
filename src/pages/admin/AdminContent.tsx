@@ -9,6 +9,7 @@ import {
   ImageIcon,
   ImageOff,
   Link2,
+  Layers,
   Loader2,
   Mail,
   MapPin,
@@ -16,6 +17,7 @@ import {
   PenSquare,
   Phone,
   Plus,
+  RotateCcw,
   Save,
   Trash2,
   Video,
@@ -28,6 +30,12 @@ import { PageHeader } from "@/components/dash/PageHeader";
 import { ImageUploader, type UploadedImage } from "@/components/admin/ImageUploader";
 import { VideoUploader } from "@/components/admin/VideoUploader";
 import type { TutorialVideoConfig } from "@/lib/tutorial-video";
+import {
+  DEFAULT_HERO_SLIDES,
+  normalizeHeroSlides,
+  type HeroSlide,
+} from "@/lib/hero-slides";
+import { toast } from "sonner";
 import { getAdminToken } from "@/lib/admin-session";
 import { toExternalHref } from "@/lib/url";
 
@@ -171,6 +179,11 @@ export default function AdminContent() {
     await contentSet({ key, value, token });
   };
 
+  /** Slide image uploaded from the admin's device (Convex storage). */
+  const saveSlideImage = (i: number, img: UploadedImage) => {
+    updateSlide(i, { src: img.secureUrl });
+  };
+
   const saveImage = async (key: string, img: UploadedImage) => {
     await contentSet({ key, value: img.secureUrl, token });
   };
@@ -197,6 +210,87 @@ export default function AdminContent() {
     } finally {
       setSavingSocials(false);
     }
+  };
+
+  // ------------------------------------------------------------------
+  // Hero slideshow manager — admin-curated slides with device uploads.
+  // Stored in siteContent under key "heroSlides"; unlimited slide count.
+  // ------------------------------------------------------------------
+  const adminSlides = normalizeHeroSlides(content?.heroSlides);
+  const usingDefaults = !Array.isArray(content?.heroSlides);
+  const [slideDrafts, setSlideDrafts] = useState<HeroSlide[] | null>(null);
+  const [savingSlides, setSavingSlides] = useState(false);
+
+  // Rebuild drafts whenever the stored value arrives or changes — but never
+  // clobber in-flight edits (drafts are authoritative until saved/reset).
+  useEffect(() => {
+    if (slideDrafts === null && content?.heroSlides !== undefined) {
+      setSlideDrafts(normalizeHeroSlides(content.heroSlides));
+    }
+  }, [content, slideDrafts]);
+
+  const slides = slideDrafts ?? adminSlides;
+
+  const updateSlide = (i: number, patch: Partial<HeroSlide>) => {
+    setSlideDrafts((prev) => {
+      const base = prev ?? adminSlides;
+      return base.map((s, j) => (j === i ? { ...s, ...patch } : s));
+    });
+  };
+
+  const addSlide = () => {
+    setSlideDrafts((prev) => {
+      const base = prev ?? adminSlides;
+      return [
+        ...base,
+        {
+          tag: "New slide",
+          headline: "Your headline here.",
+          support: "A short supporting line for this slide.",
+          ctaLabel: "Start Learning",
+          ctaTo: "/courses",
+          src: "",
+          alt: "",
+        },
+      ];
+    });
+  };
+
+  const removeSlide = (i: number) => {
+    setSlideDrafts((prev) => {
+      const base = prev ?? adminSlides;
+      return base.filter((_, j) => j !== i);
+    });
+  };
+
+  const saveSlides = async () => {
+    if (!slides.length) {
+      toast.error("Add at least one slide before saving.");
+      return;
+    }
+    const invalid = slides.findIndex((s) => !s.src.trim() || !s.headline.trim());
+    if (invalid >= 0) {
+      toast.error(
+        `Slide ${invalid + 1} needs an image and a headline before saving.`,
+      );
+      return;
+    }
+    setSavingSlides(true);
+    try {
+      await contentSet({ key: "heroSlides", value: slides, token });
+      setSlideDrafts(null);
+      toast.success("Hero slideshow updated — live on the homepage.");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to save.");
+    } finally {
+      setSavingSlides(false);
+    }
+  };
+
+  const resetSlides = () => {
+    setSlideDrafts(null);
+    void contentSet({ key: "heroSlides", value: DEFAULT_HERO_SLIDES, token });
+    toast.success("Slideshow restored to the ForgeX defaults.");
   };
 
   const loadedContact = contact ?? (content?.contact as { email?: string; phone?: string; address?: string } | undefined) ?? {};
@@ -271,6 +365,158 @@ export default function AdminContent() {
                   </>
                 )}
               </div>
+            </div>
+          </section>
+
+          {/* Hero slideshow — admin-curated, unlimited slides */}
+          <section className="rounded-2xl border border-white/10 bg-card p-6">
+            <div className="flex flex-wrap items-start justify-between gap-4">
+              <div>
+                <h2 className="font-display flex items-center gap-2 text-base font-semibold">
+                  <Layers className="size-4 text-lime-300" /> Hero slideshow
+                </h2>
+                <p className="mt-1 max-w-2xl text-sm leading-relaxed text-muted-foreground">
+                  The rotating images on the homepage hero. Add as many slides as
+                  you like, upload photos straight from your device, edit the
+                  text and buttons, or remove slides you no longer want.
+                </p>
+              </div>
+              <span className="inline-flex items-center gap-1.5 rounded-full border border-lime-400/40 bg-lime-400/10 px-3 py-1 text-xs font-semibold text-lime-300">
+                {slides.length} slide{slides.length === 1 ? "" : "s"}
+                {usingDefaults ? " · defaults" : ""}
+              </span>
+            </div>
+
+            <div className="mt-5 space-y-4">
+              {slides.map((s, i) => (
+                <div
+                  key={i}
+                  className="rounded-xl border border-white/10 bg-black/20 p-4"
+                >
+                  <div className="flex items-center justify-between gap-3">
+                    <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                      Slide {i + 1}
+                    </p>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => removeSlide(i)}
+                      className="gap-1.5 border-rose-400/30 px-2.5 py-1 text-xs text-rose-300 hover:bg-rose-400/10"
+                    >
+                      <Trash2 className="size-3.5" /> Remove
+                    </Button>
+                  </div>
+
+                  <div className="mt-3 grid gap-4 lg:grid-cols-[260px_1fr]">
+                    {/* Device upload for the slide photo */}
+                    <ImageUploader
+                      value={s.src || undefined}
+                      label="Upload photo"
+                      hint={`Slide ${i + 1} image`}
+                      adminToken={token}
+                      onUploaded={(img) => saveSlideImage(i, img)}
+                      onClear={() => updateSlide(i, { src: "" })}
+                      record={{ kind: "hero-slide", label: `Hero slide ${i + 1}` }}
+                    />
+
+                    <div className="space-y-2.5">
+                      <div className="grid gap-2.5 sm:grid-cols-2">
+                        <div>
+                          <Label className="text-xs text-muted-foreground">
+                            Tag
+                          </Label>
+                          <Input
+                            value={s.tag}
+                            onChange={(e) => updateSlide(i, { tag: e.target.value })}
+                            className="mt-1 h-9 border-white/10 bg-black/20"
+                          />
+                        </div>
+                        <div>
+                          <Label className="text-xs text-muted-foreground">
+                            Headline
+                          </Label>
+                          <Input
+                            value={s.headline}
+                            onChange={(e) =>
+                              updateSlide(i, { headline: e.target.value })
+                            }
+                            className="mt-1 h-9 border-white/10 bg-black/20"
+                          />
+                        </div>
+                      </div>
+                      <div>
+                        <Label className="text-xs text-muted-foreground">
+                          Supporting text
+                        </Label>
+                        <Input
+                          value={s.support}
+                          onChange={(e) =>
+                            updateSlide(i, { support: e.target.value })
+                          }
+                          className="mt-1 h-9 border-white/10 bg-black/20"
+                        />
+                      </div>
+                      <div className="grid gap-2.5 sm:grid-cols-2">
+                        <div>
+                          <Label className="text-xs text-muted-foreground">
+                            Button label
+                          </Label>
+                          <Input
+                            value={s.ctaLabel}
+                            onChange={(e) =>
+                              updateSlide(i, { ctaLabel: e.target.value })
+                            }
+                            className="mt-1 h-9 border-white/10 bg-black/20"
+                          />
+                        </div>
+                        <div>
+                          <Label className="text-xs text-muted-foreground">
+                            Button link (path or URL)
+                          </Label>
+                          <Input
+                            value={s.ctaTo}
+                            onChange={(e) => updateSlide(i, { ctaTo: e.target.value })}
+                            className="mt-1 h-9 border-white/10 bg-black/20"
+                            placeholder="/courses"
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <div className="mt-5 flex flex-wrap items-center gap-3">
+              <Button
+                onClick={addSlide}
+                variant="outline"
+                className="gap-2 border-lime-400/40 text-lime-300 hover:bg-lime-400/10"
+              >
+                <Plus className="size-4" /> Add slide
+              </Button>
+              <Button
+                onClick={() => void saveSlides()}
+                disabled={savingSlides}
+                className="gap-2 bg-lime-400 font-semibold text-black hover:bg-lime-300"
+              >
+                {savingSlides ? (
+                  <Loader2 className="size-4 animate-spin" />
+                ) : (
+                  <Check className="size-4" />
+                )}
+                {savingSlides ? "Saving…" : "Save slideshow"}
+              </Button>
+              <Button
+                onClick={resetSlides}
+                variant="outline"
+                className="gap-2"
+              >
+                <RotateCcw className="size-4" /> Restore defaults
+              </Button>
+              <p className="text-xs text-muted-foreground">
+                Changes go live on the homepage after saving.
+              </p>
             </div>
           </section>
 

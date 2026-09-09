@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router";
 import { useQuery } from "convex/react";
 import { motion, useReducedMotion } from "framer-motion";
@@ -21,70 +21,16 @@ import { ForgeXMotionVideo } from "@/components/site/ForgeXMotionVideo";
 import { CategoryIcon } from "@/components/site/CategoryIcon";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import {
+  normalizeHeroSlides,
+  type HeroSlide,
+} from "@/lib/hero-slides";
 
 /* ═══════════════════════════════════════════════════════════════════════
    HERO SLIDESHOW — mobile-first, human visuals, no robot imagery.
    Auto-advances every 5s, pauses on touch/pointer interaction and resumes
    3s after the last interaction. Dots sit BELOW the card, never over it.
    ═══════════════════════════════════════════════════════════════════════ */
-
-type HeroSlide = {
-  tag: string;
-  headline: string;
-  support: string;
-  ctaLabel: string;
-  ctaTo: string;
-  src: string;
-  fallbackSrc: string;
-  alt: string;
-};
-
-const HERO_SLIDES: HeroSlide[] = [
-  {
-    tag: "Learn",
-    headline: "Learn Skills That Matter.",
-    support: "Build practical skills for the real world.",
-    ctaLabel: "Start Learning",
-    ctaTo: "/courses",
-    src: "https://images.unsplash.com/photo-1522202176988-66273c2fd55f?w=1200&q=80",
-    fallbackSrc:
-      "https://images.unsplash.com/photo-1522071820081-009f0129c71c?w=1200&q=80",
-    alt: "Young people learning and building digital skills together",
-  },
-  {
-    tag: "Career Roadmap",
-    headline: "Find Your Career Path.",
-    support: "Discover where your skills can take you.",
-    ctaLabel: "Explore Roadmap",
-    ctaTo: "/roadmap",
-    src: "https://images.unsplash.com/photo-1521737711867-e3b97375f902?w=1200&q=80",
-    fallbackSrc:
-      "https://images.unsplash.com/photo-1573497019940-1c28c88b4f3e?w=1200&q=80",
-    alt: "A young professional charting their next career step in a bright workspace",
-  },
-  {
-    tag: "Build",
-    headline: "Build. Practice. Grow.",
-    support: "Turn knowledge into real experience.",
-    ctaLabel: "Start Building",
-    ctaTo: "/courses",
-    src: "https://images.unsplash.com/photo-1517694712202-14dd9538aa97?w=1200&q=80",
-    fallbackSrc:
-      "https://images.unsplash.com/photo-1454165804606-c3d57bc86b40?w=1200&q=80",
-    alt: "A person building a real project on a laptop",
-  },
-  {
-    tag: "Opportunities",
-    headline: "Turn Skills Into Opportunities.",
-    support: "Connect your learning to your future.",
-    ctaLabel: "Explore Opportunities",
-    ctaTo: "/dashboard",
-    src: "https://images.unsplash.com/photo-1556761175-5973dc0f32e7?w=1200&q=80",
-    fallbackSrc:
-      "https://images.unsplash.com/photo-1488190211105-8b0e65b80b4e?w=1200&q=80",
-    alt: "Students collaborating on career opportunities",
-  },
-];
 
 const HERO_INTERVAL_MS = 5000;
 const HERO_RESUME_MS = 3000;
@@ -102,7 +48,7 @@ function HeroImage({
   alt,
 }: {
   src: string;
-  fallbackSrc: string;
+  fallbackSrc?: string;
   alt: string;
 }) {
   const [current, setCurrent] = useState(src);
@@ -124,7 +70,7 @@ function HeroImage({
       loading="eager"
       decoding="async"
       onError={() => {
-        if (current !== fallbackSrc) setCurrent(fallbackSrc);
+        if (fallbackSrc && current !== fallbackSrc) setCurrent(fallbackSrc);
         else setFailed(true);
       }}
       className="relative h-full w-full object-cover"
@@ -133,23 +79,31 @@ function HeroImage({
 }
 
 function HeroSlideshow() {
+  // Admin-managed slides (Admin → Website & branding → Hero slideshow).
+  // While loading or when nothing is stored, `normalizeHeroSlides` renders
+  // the built-in defaults — the hero is never blank.
+  const stored = useQuery(api.public.siteContent, { key: "heroSlides" });
   const reduce = useReducedMotion();
   const [active, setActive] = useState(0);
   const wrapRef = useRef<HTMLDivElement>(null);
   const pausedRef = useRef(false);
   const resumeTimer = useRef<number | null>(null);
 
+  const slides = useMemo(() => normalizeHeroSlides(stored), [stored]);
+
   // Warm the browser image cache for every slide (and its fallback) as soon
   // as the hero mounts, so each slide's photo is always ready the moment it
   // becomes active — no blank/gradient placeholder on the first rotation.
   useEffect(() => {
-    for (const s of HERO_SLIDES) {
+    for (const s of slides) {
       const img = new Image();
       img.src = s.src;
-      const fb = new Image();
-      fb.src = s.fallbackSrc;
+      if (s.fallbackSrc) {
+        const fb = new Image();
+        fb.src = s.fallbackSrc;
+      }
     }
-  }, []);
+  }, [slides]);
 
   const pause = useCallback(() => {
     pausedRef.current = true;
@@ -190,13 +144,13 @@ function HeroSlideshow() {
   }, [pause, scheduleResume]);
 
   useEffect(() => {
-    if (reduce) return;
+    if (reduce || slides.length <= 1) return;
     const id = window.setInterval(() => {
       if (document.hidden || pausedRef.current) return;
-      setActive((prev) => (prev + 1) % HERO_SLIDES.length);
+      setActive((prev) => (prev + 1) % slides.length);
     }, HERO_INTERVAL_MS);
     return () => window.clearInterval(id);
-  }, [reduce]);
+  }, [reduce, slides.length]);
 
   useEffect(
     () => () => {
@@ -205,7 +159,7 @@ function HeroSlideshow() {
     [],
   );
 
-  const slide = HERO_SLIDES[active];
+  const slide = slides[Math.min(active, slides.length - 1)];
 
   return (
     <div ref={wrapRef} className="group">
@@ -218,9 +172,9 @@ function HeroSlideshow() {
       {/* Slide card — full-width on mobile, wider + centered on desktop */}
       <div className="relative mt-5 w-full overflow-hidden rounded-2xl ring-1 ring-white/10 sm:mt-6 lg:mx-auto lg:max-w-5xl">
         <div className="relative aspect-[4/3] w-full bg-[#05070a] sm:aspect-[16/9]">
-          {HERO_SLIDES.map((s, i) => (
+          {slides.map((s, i) => (
             <motion.div
-              key={s.tag}
+              key={`${s.tag}-${i}`}
               initial={false}
               animate={{ opacity: i === active ? 1 : 0 }}
               transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
@@ -300,9 +254,9 @@ function HeroSlideshow() {
 
       {/* Pagination dots — dedicated row BELOW the buttons, never overlapping */}
       <div className="mt-4 flex items-center justify-center gap-2">
-        {HERO_SLIDES.map((s, i) => (
+        {slides.map((s, i) => (
           <button
-            key={s.tag}
+            key={`dot-${s.tag}-${i}`}
             type="button"
             aria-label={`Go to slide ${i + 1}`}
             aria-current={i === active}
