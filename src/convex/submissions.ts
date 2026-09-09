@@ -3,6 +3,7 @@ import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import type { Doc } from "./_generated/dataModel";
 import { checkRateLimit, notify, requireUser, requireUserDoc } from "./lib";
+import { resourceValidator } from "./schema";
 import { tryCompleteCourseInternal } from "./learn";
 
 export const assignmentsByCourse = query({
@@ -24,6 +25,45 @@ export const assignmentsByCourse = query({
         submission:
           submissions.find((s) => s.assignmentId === a._id) ?? null,
       }));
+  },
+});
+
+/** ALL published assignments across the signed-in student's enrolled courses,
+ *  hydrated with the course and the student's own submission (if any). This is
+ *  the dashboard's source of truth: students must see assignments that have
+ *  NOT been submitted yet — `mySubmissions` only ever listed submitted work,
+ *  which is why posted assignments never appeared in the student dashboard. */
+export const myAssignments = query({
+  args: {},
+  handler: async (ctx) => {
+    const userId = await requireUser(ctx);
+    const enrollments = await ctx.db
+      .query("enrollments")
+      .withIndex("by_student", (q) => q.eq("studentId", userId))
+      .collect();
+    if (enrollments.length === 0) return [];
+    const courseIds = new Set(enrollments.map((e) => e.courseId));
+    const assignments = (await ctx.db.query("assignments").collect()).filter(
+      (a) => courseIds.has(a.courseId) && a.published !== false,
+    );
+    const submissions = await ctx.db
+      .query("submissions")
+      .withIndex("by_student", (q) => q.eq("studentId", userId))
+      .collect();
+    const byAssignment = new Map(submissions.map((s) => [s.assignmentId, s]));
+    const hydrated = await Promise.all(
+      assignments.map(async (a) => {
+        const course = await ctx.db.get(a.courseId);
+        return {
+          ...a,
+          course: course
+            ? { _id: course._id, title: course.title, slug: course.slug }
+            : null,
+          submission: byAssignment.get(a._id) ?? null,
+        };
+      }),
+    );
+    return hydrated.sort((a, b) => b.createdAt - a.createdAt);
   },
 });
 
@@ -68,7 +108,9 @@ export const submitAssignment = mutation({
     assignmentId: v.id("assignments"),
     text: v.string(),
     links: v.array(v.string()),
-    files: v.array(v.object({ name: v.string(), url: v.string() })),
+    // Storage-backed uploads are preferred ({name, url, storageId}); legacy
+    // callers may still send bare {name, url} pasted links.
+    files: v.array(resourceValidator),
     // Per-question answers for built assignments.
     answers: v.optional(
       v.array(
@@ -153,6 +195,46 @@ export const submitAssignment = mutation({
     // complete the course right here.
     await tryCompleteCourseInternal(ctx, user, assignment.courseId);
     return id;
+  },
+});
+
+/** Resolve freshly-uploaded attachment files into resource-shaped records
+ *  (name + authoritative server-resolved URL + storage id) so a submission
+ *  always references real stored files — never a client-invented URL. The
+ *  client uploads bytes via storage.generateUploadUrl first, then calls this
+ *  to turn the storage ids into submission-ready file records. */
+export const saveSubmittedFiles = mutation({
+  args: {
+    files: v.array(
+      v.object({
+        name: v.string(),
+        storageId: v.id("_storage"),
+        fileType: v.optional(v.string()),
+        fileSize: v.optional(v.number()),
+      }),
+    ),
+  },
+  handler: async (ctx, { files }) => {
+    const user = await requireUserDoc(ctx);
+    await checkRateLimit(ctx, `upload:${user._id}`, 60, 60 * 1000);
+    const resolved = await Promise.all(
+      files.map(async (f) => ({
+        name: f.name,
+        url: (await ctx.storage.getUrl(f.storageId)) ?? "",
+        storageId: f.storageId,
+        kind: "file" as const,
+        fileType: f.fileType,
+        fileSize: f.fileSize,
+        uploadedBy: user._id,
+        createdAt: Date.now(),
+      })),
+    );
+    if (resolved.some((f) => !f.url)) {
+      throw new Error(
+        "The file couldn't be stored — please upload it again.",
+      );
+    }
+    return resolved;
   },
 });
 

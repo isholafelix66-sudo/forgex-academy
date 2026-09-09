@@ -28,6 +28,7 @@ export default function DashboardHome() {
   const { user } = useAuth();
   const enrollments = useQuery(api.learn.myEnrollments);
   const submissions = useQuery(api.submissions.mySubmissions);
+  const assignments = useQuery(api.submissions.myAssignments);
   const announcements = useQuery(api.public.announcementsList);
   const recommendations = useQuery(api.learn.recommendations);
 
@@ -193,50 +194,73 @@ export default function DashboardHome() {
             <FileText className="size-5 text-lime-300" /> My assignments
           </h2>
           <div className="space-y-3">
-            {submissions === undefined ? (
+            {assignments === undefined ? (
               <div className="h-32 animate-pulse rounded-2xl border border-white/8 bg-card" />
-            ) : submissions.length === 0 ? (
+            ) : assignments.length === 0 ? (
               <p className="rounded-2xl border border-dashed border-white/10 p-6 text-sm text-muted-foreground">
-                No assignments yet — work you submit will show up here. 🎉
+                No assignments yet — work posted in your enrolled courses will
+                show up here. 🎉
               </p>
             ) : (
-              submissions.slice(0, 4).map((s) => {
-                const graded = s.grade !== undefined;
-                return (
-                  <Link
-                    key={s._id}
-                    to="/dashboard/assignments"
-                    className="flex items-center gap-4 rounded-2xl border border-white/10 bg-card p-4 transition-colors hover:border-lime-400/30"
-                  >
-                    <span
-                      className={
-                        graded
-                          ? "flex size-10 shrink-0 items-center justify-center rounded-xl bg-lime-400/12 text-lime-300"
-                          : "flex size-10 shrink-0 items-center justify-center rounded-xl bg-amber-400/12 text-amber-300"
-                      }
+              // Show pending (unsubmitted) work FIRST, then graded/submitted.
+              [...assignments]
+                .sort((a, b) => {
+                  const rank = (x: NonNullable<typeof assignments>[number]) =>
+                    x.submission ? 1 : 0;
+                  return rank(a) - rank(b);
+                })
+                .slice(0, 4)
+                .map((a) => {
+                  const s = a.submission;
+                  const graded = s?.grade !== undefined;
+                  return (
+                    <Link
+                      key={a._id}
+                      to="/dashboard/assignments"
+                      className="flex items-center gap-4 rounded-2xl border border-white/10 bg-card p-4 transition-colors hover:border-lime-400/30"
                     >
-                      {graded ? <CheckCircle2 className="size-5" /> : <FileText className="size-5" />}
-                    </span>
-                    <div className="min-w-0 flex-1">
-                      <p className="truncate text-sm font-medium">
-                        {s.assignment?.title ?? "Assignment"}
-                      </p>
-                      <p className="truncate text-xs text-muted-foreground">
-                        {s.course?.title ?? "Course"} · submitted {timeAgo(s.submittedAt)}
-                      </p>
-                    </div>
-                    {graded ? (
-                      <span className="shrink-0 rounded-full bg-lime-400/15 px-2.5 py-1 text-xs font-semibold text-lime-300">
-                        {s.grade}/{s.assignment?.maxScore ?? 100}
+                      <span
+                        className={
+                          graded
+                            ? "flex size-10 shrink-0 items-center justify-center rounded-xl bg-lime-400/12 text-lime-300"
+                            : s
+                              ? "flex size-10 shrink-0 items-center justify-center rounded-xl bg-blue-400/12 text-blue-300"
+                              : "flex size-10 shrink-0 items-center justify-center rounded-xl bg-amber-400/12 text-amber-300"
+                        }
+                      >
+                        {graded ? (
+                          <CheckCircle2 className="size-5" />
+                        ) : (
+                          <FileText className="size-5" />
+                        )}
                       </span>
-                    ) : (
-                      <span className="shrink-0 rounded-full bg-amber-400/15 px-2.5 py-1 text-xs font-semibold text-amber-300">
-                        Awaiting grade
-                      </span>
-                    )}
-                  </Link>
-                );
-              })
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-sm font-medium">{a.title}</p>
+                        <p className="truncate text-xs text-muted-foreground">
+                          {a.course?.title ?? "Course"}
+                          {s
+                            ? ` · submitted ${timeAgo(s.submittedAt)}`
+                            : " · to do"}
+                        </p>
+                      </div>
+                      {graded ? (
+                        <span className="shrink-0 rounded-full bg-lime-400/15 px-2.5 py-1 text-xs font-semibold text-lime-300">
+                          {s!.grade}/{a.maxScore}
+                        </span>
+                      ) : (
+                        <span
+                          className={
+                            s
+                              ? "shrink-0 rounded-full bg-blue-400/15 px-2.5 py-1 text-xs font-semibold text-blue-300"
+                              : "shrink-0 rounded-full bg-amber-400/15 px-2.5 py-1 text-xs font-semibold text-amber-300"
+                          }
+                        >
+                          {s ? "Awaiting grade" : "To do"}
+                        </span>
+                      )}
+                    </Link>
+                  );
+                })
             )}
           </div>
         </section>
