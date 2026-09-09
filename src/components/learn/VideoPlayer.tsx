@@ -81,12 +81,27 @@ function YouTubeEmbed({
     return () => window.removeEventListener("message", handler);
   }, []);
 
+  // The `origin` + `widget_referrer` params are required for reliable embeds:
+  // without them YouTube can treat the embed as suspicious traffic and show
+  // its own "verify you're not a bot" / age-check screens inside the player.
+  const origin =
+    typeof window !== "undefined" ? window.location.origin : undefined;
+  const referrer =
+    typeof window !== "undefined" ? window.location.href : undefined;
+  const params = new URLSearchParams({ rel: "0", playsinline: "1" });
+  if (origin) params.set("origin", origin);
+  if (referrer) params.set("widget_referrer", referrer);
+  if (resumePosition && resumePosition > 2) {
+    params.set("start", String(Math.floor(resumePosition)));
+  }
+
   return (
     <iframe
-      src={`https://www.youtube.com/embed/${id}?rel=0&playsinline=1${resumePosition && resumePosition > 2 ? `&start=${Math.floor(resumePosition)}` : ""}`}
+      src={`https://www.youtube-nocookie.com/embed/${id}?${params.toString()}`}
       title={title ?? "Lesson video"}
       allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share; fullscreen"
       allowFullScreen
+      referrerPolicy="strict-origin-when-cross-origin"
       className="block size-full border-0"
     />
   );
