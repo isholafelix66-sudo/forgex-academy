@@ -5,7 +5,7 @@ import { internal } from "./_generated/api";
 import { checkRateLimit, requireUser, requireUserDoc, hydrateCourses, hydrateCourse, notify, yyyymmdd, makeCertificateId } from "./lib";
 import { addMembership, ensureCommunityForCourse } from "./community";
 import { enrollmentEmail, certificateEmail } from "./emailTemplates";
-import { courseRequirements, effectiveWatchedPercent, sanitizeWatchPercent, type Requirements } from "./lmsShared";
+import { courseRequirements, effectiveWatchedPercent, recomputeCourseDuration, sanitizeWatchPercent, type Requirements } from "./lmsShared";
 
 // ---------------------------------------------------------------------------
 // Shared learning helpers (imported by lessonquizzes.ts / exams.ts)
@@ -556,6 +556,86 @@ export const completeLesson = mutation({
     // forged requests are rejected here, never trusted from the frontend.
     await completeLessonInternal(ctx, user, lessonId);
     return true;
+  },
+});
+
+/**
+ * Persist the REAL duration of a lesson's video, as reported by the player
+ * once it loads (YouTube IFrame API `getDuration()`, Mux metadata, native
+ * `loadedmetadata`). The stored `videoDurationSeconds` is the authoritative
+ * lesson length and the course total is recomputed from it — so a course
+ * automatically shows the actual video length (e.g. 1h 12m instead of a
+ * manually entered 22 min) with no admin effort. No-ops when unchanged.
+ */
+export const saveLessonVideoDuration = mutation({
+  args: {
+    lessonId: v.id("lessons"),
+    durationSeconds: v.number(),
+  },
+  handler: async (ctx, { lessonId, durationSeconds }) => {
+    const userId = await requireUser(ctx);
+    const lesson = await ctx.db.get(lessonId);
+    if (!lesson) return null;
+    const rounded = Math.max(0, Math.round(durationSeconds));
+    if (rounded <= 0) return null;
+    await checkRateLimit(ctx, `dur:${userId}`, 120, 10 * 60 * 1000, "", true);
+    if ((lesson.videoDurationSeconds ?? 0) !== rounded) {
+      await ctx.db.patch(lessonId, { videoDurationSeconds: rounded });
+    }
+    const courseDurationHours = await recomputeCourseDuration(ctx, lesson.courseId);
+    return { videoDurationSeconds: rounded, courseDurationHours };
+  },
+});
+
+/**
+ * A lesson's downloadable/viewable resources with real, current URLs.
+ *
+ * Storage-backed files (admin PDF uploads) are resolved server-side to their
+ * Convex file-storage URLs at read time — the DB only keeps the storage id,
+ * never a signed URL that expires. Placeholder links seeded before real
+ * files existed (learn.forgex.academy/…) are dropped so students never see
+ * dead “PDF” cards.
+ */
+export const lessonResources = query({
+  args: { lessonId: v.id("lessons") },
+  handler: async (ctx, { lessonId }) => {
+    const lesson = await ctx.db.get(lessonId);
+    if (!lesson) return [];
+    const PLACEHOLDER_HOSTS = ["learn.forgex.academy"];
+    const out: {
+      index: number;
+      name: string;
+      url: string;
+      storageId?: string;
+      kind: "file" | "link";
+      fileType: string;
+      fileSize: number;
+      createdAt: number;
+    }[] = [];
+    for (let i = 0; i < lesson.resources.length; i++) {
+      const r = lesson.resources[i];
+      let url = r.url ?? "";
+      if (r.storageId) {
+        try {
+          url = (await ctx.storage.getUrl(r.storageId)) ?? "";
+        } catch {
+          url = "";
+        }
+      }
+      if (!url && !r.storageId) continue;
+      if (PLACEHOLDER_HOSTS.some((h) => url.includes(h))) continue;
+      out.push({
+        index: i,
+        name: r.name,
+        url,
+        storageId: r.storageId ?? undefined,
+        kind: r.kind ?? (r.storageId ? "file" : "link"),
+        fileType: r.fileType ?? "",
+        fileSize: r.fileSize ?? 0,
+        createdAt: r.createdAt ?? 0,
+      });
+    }
+    return out;
   },
 });
 

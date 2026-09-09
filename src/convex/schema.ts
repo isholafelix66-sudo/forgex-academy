@@ -87,7 +87,17 @@ export type CourseCompletionRequirements = Infer<
 
 export const resourceValidator = v.object({
   name: v.string(),
+  /** External link URL (kind: "link") or the resolved public URL for legacy
+   *  resources. For storage-backed files this is left empty — the URL is
+   *  resolved server-side from `storageId` at read time. */
   url: v.string(),
+  /** Convex file-storage id for uploaded files (PDFs, docs…). */
+  storageId: v.optional(v.id("_storage")),
+  kind: v.optional(v.union(v.literal("file"), v.literal("link"))),
+  fileType: v.optional(v.string()),
+  fileSize: v.optional(v.number()),
+  uploadedBy: v.optional(v.id("users")),
+  createdAt: v.optional(v.number()),
 });
 export type Resource = Infer<typeof resourceValidator>;
 
@@ -249,6 +259,10 @@ const schema = defineSchema(
       title: v.string(),
       order: v.number(),
       durationMinutes: v.number(),
+      // Authoritative lesson length in seconds once the actual video's
+      // duration is known (YouTube IFrame API / Mux metadata). When set it
+      // overrides `durationMinutes` everywhere durations are shown.
+      videoDurationSeconds: v.optional(v.number()),
       videoUrl: v.optional(v.string()),
       videoType: v.optional(
         v.union(

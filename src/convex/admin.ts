@@ -607,7 +607,7 @@ export const clearTutorStudentRecords = mutation({
 // Audit log
 // ---------------------------------------------------------------------------
 
-async function audit(
+export async function audit(
   ctx: MutationCtx,
   adminId: string | undefined,
   tutorId: string | undefined,

@@ -18,6 +18,28 @@ import { AI_COURSE_CATALOG, PLANNED_VIDEO } from "./aiCourseCatalog";
 
 const resource = (name: string, url: string): Resource => ({ name, url });
 
+/**
+ * Legacy placeholder prefix on catalog lesson notes from the “planned
+ * recording” era. The lessons ship with real videos now, so notes must not
+ * start with an obsolete “coming soon” banner.
+ */
+const PLANNED_NOTE_PREFIX = /^🎥 Video lesson — planned recording \(coming soon\)\.\s*/;
+
+const cleanNotes = (n: string) => n.replace(PLANNED_NOTE_PREFIX, "").trim();
+
+/**
+ * Resource links seeded before real files existed point at a never-hosted
+ * placeholder domain — they render as dead “PDF” cards. They are dropped from
+ * the catalog and stripped from already-seeded lessons; admins upload real
+ * files through the lesson editor.
+ */
+const PLACEHOLDER_RESOURCE_HOST = "learn.forgex.academy";
+
+const cleanResources = (r: Array<[string, string]> = []) =>
+  r
+    .filter(([, u]) => !u.includes(PLACEHOLDER_RESOURCE_HOST))
+    .map(([n, u]) => resource(n, u));
+
 const SLUG = (title: string) =>
   title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
 
@@ -304,12 +326,18 @@ export async function seedAiCourses(ctx: MutationCtx): Promise<number> {
           .collect();
         for (const l of existingLessons) {
           const real = videos[l.order - 1];
+          const patch: Record<string, unknown> = {};
           if (real && l.videoUrl === PLANNED_VIDEO) {
-            await ctx.db.patch(l._id, {
-              videoUrl: real,
-              videoType: "youtube",
-            });
+            patch.videoUrl = real;
+            patch.videoType = "youtube";
           }
+          const clean = cleanNotes(l.notes ?? "");
+          if (clean !== l.notes) patch.notes = clean;
+          const kept = (l.resources ?? []).filter(
+            (r) => !r.url.includes(PLACEHOLDER_RESOURCE_HOST),
+          );
+          if (kept.length !== (l.resources ?? []).length) patch.resources = kept;
+          if (Object.keys(patch).length > 0) await ctx.db.patch(l._id, patch);
         }
       }
       continue;
@@ -347,9 +375,9 @@ export async function seedAiCourses(ctx: MutationCtx): Promise<number> {
         durationMinutes: l.m,
         videoUrl: real ?? PLANNED_VIDEO,
         videoType: real ? "youtube" : undefined,
-        notes: l.n,
+        notes: cleanNotes(l.n),
         transcript: l.tr,
-        resources: (l.r ?? []).map(([n, u]) => resource(n, u)),
+        resources: cleanResources(l.r),
       });
     }
 

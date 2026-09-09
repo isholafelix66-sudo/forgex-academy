@@ -1,9 +1,44 @@
-import { Doc } from "./_generated/dataModel";
+import { Doc, Id } from "./_generated/dataModel";
+import type { MutationCtx } from "./_generated/server";
 
 // ---------------------------------------------------------------------------
 // Pure LMS helpers shared by learn.ts (engine) and lms.ts (mutations).
-// No server imports here — keeps the module graph cycle-free.
+// Type-only imports only — keeps the module graph cycle-free.
 // ---------------------------------------------------------------------------
+
+/**
+ * Recompute a course's `durationHours` from its lessons' real durations.
+ *
+ * The authoritative per-lesson length is `videoDurationSeconds` (actual
+ * video length once known — YouTube IFrame API, Mux metadata); lessons that
+ * haven't reported one yet fall back to the manual `durationMinutes`. The
+ * course total therefore updates automatically whenever a lesson's video
+ * changes or a real duration is detected — no manual course-level duration
+ * entry required.
+ */
+export async function recomputeCourseDuration(
+  ctx: MutationCtx,
+  courseId: Id<"courses">,
+): Promise<number> {
+  const lessons = await ctx.db
+    .query("lessons")
+    .withIndex("by_course", (q) => q.eq("courseId", courseId))
+    .collect();
+  let totalSeconds = 0;
+  for (const l of lessons) {
+    if (l.videoDurationSeconds && l.videoDurationSeconds > 0) {
+      totalSeconds += l.videoDurationSeconds;
+    } else {
+      totalSeconds += (l.durationMinutes ?? 0) * 60;
+    }
+  }
+  const hours = Math.max(0, Math.round((totalSeconds / 3600) * 10) / 10);
+  const course = await ctx.db.get(courseId);
+  if (course && Math.abs(course.durationHours - hours) > 0.05) {
+    await ctx.db.patch(courseId, { durationHours: hours });
+  }
+  return hours;
+}
 
 export const DEFAULT_VIDEO_WATCH_PERCENT = 90;
 export const DEFAULT_QUIZ_PASS_PERCENT = 70;
