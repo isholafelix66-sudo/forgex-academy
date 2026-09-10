@@ -2,7 +2,7 @@ import { v } from "convex/values";
 import { getAuthUserId } from "@convex-dev/auth/server";
 import { MutationCtx, mutation, query } from "./_generated/server";
 import { Doc } from "./_generated/dataModel";
-import { checkRateLimit, requireUser } from "./lib";
+import { checkRateLimit, displayName, requireUser } from "./lib";
 
 /**
  * Recompute the aggregate `rating` / `ratingCount` stored on the course from
@@ -51,8 +51,8 @@ export const listByCourse = query({
           createdAt: r.createdAt,
           updatedAt: r.updatedAt,
           author: author
-            ? { name: author.name || "Anonymous", image: author.image ?? null }
-            : { name: "Anonymous", image: null },
+            ? { name: displayName(author), image: author.image ?? null }
+            : { name: "Member", image: null },
         };
       }),
     );

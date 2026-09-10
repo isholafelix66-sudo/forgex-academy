@@ -349,6 +349,8 @@ export default function AdminContent() {
   const desktopPicksShown = desktopPicks ?? savedDesktop;
   const mobilePicksShown =
     mobileMode === "custom" ? (mobilePicks ?? savedMobile) : desktopPicksShown;
+  const currentPicks =
+    activeSurface === "desktop" ? desktopPicksShown : mobilePicksShown;
 
   const toggleCourse = (list: "desktop" | "mobile", id: string) => {
     if (list === "desktop") {

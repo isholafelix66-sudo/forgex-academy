@@ -1,6 +1,7 @@
 import { v } from "convex/values";
 import { query, mutation } from "./_generated/server";
 import { getAuthUserId } from "@convex-dev/auth/server";
+import { nameFromEmail } from "./lib";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -1267,7 +1268,7 @@ export const listTeamDirectory = query({
       .filter((u) => !u.isSeed && u._id !== user._id)
       .map((u) => ({
         _id: u._id,
-        name: u.name ?? "Anonymous",
+        name: u.name || nameFromEmail(u.email) || "Member",
         email: u.email ?? "",
         role: u.role ?? "student",
         teamRole: u.teamRole ?? null,

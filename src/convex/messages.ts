@@ -2,7 +2,7 @@ import { getAuthUserId } from "@convex-dev/auth/server";
 import { internal } from "./_generated/api";
 import { mutation, query } from "./_generated/server";
 import { v } from "convex/values";
-import { checkRateLimit, notify, requireUser, requireUserDoc } from "./lib";
+import { checkRateLimit, displayName, notify, requireUser, requireUserDoc } from "./lib";
 
 const threadKey = (a: string, b: string) => [a, b].sort().join("|");
 
@@ -66,7 +66,7 @@ export const myConversations = query({
           other: other
             ? {
                 _id: other._id,
-                name: other.name || "Anonymous",
+                name: displayName(other),
                 image: other.image ?? null,
                 role: other.role ?? "student",
               }

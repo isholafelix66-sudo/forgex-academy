@@ -3,7 +3,7 @@ import { internal } from "./_generated/api";
 import { internalQuery, mutation, query, QueryCtx } from "./_generated/server";
 import { v } from "convex/values";
 import { ROLES, socialsValidator } from "./schema";
-import { checkRateLimit, notify, publicUser, requireUser, requireUserDoc, nameFromEmail } from "./lib";
+import { checkRateLimit, displayName, notify, publicUser, requireUser, requireUserDoc, nameFromEmail } from "./lib";
 import { welcomeEmail } from "./emailTemplates";
 import { deleteUserData } from "./admin";
 
@@ -78,7 +78,19 @@ export const presenceHeartbeat = mutation({
   handler: async (ctx) => {
     const userId = await getAuthUserId(ctx);
     if (userId === null) return false;
-    await ctx.db.patch(userId, { lastActivity: Date.now() });
+    const user = await ctx.db.get(userId);
+    const patch: Record<string, unknown> = { lastActivity: Date.now() };
+    // One-time repair for legacy accounts whose stored name is missing or
+    // literally "Anonymous": derive a friendly name from the email prefix.
+    // After the repair the condition is false, so steady-state cost is zero.
+    const stored = user?.name?.trim();
+    if (user && (!stored || stored.toLowerCase() === "anonymous")) {
+      const derived = nameFromEmail(
+        "email" in user ? String(user.email ?? "") : "",
+      );
+      if (derived) patch.name = derived;
+    }
+    await ctx.db.patch(userId, patch);
     return true;
   },
 });
@@ -104,7 +116,7 @@ export const searchUsers = query({
       .slice(0, 15)
       .map((u) => ({
         _id: u._id,
-        name: u.name || "Anonymous",
+        name: displayName(u),
         image: u.image ?? null,
         role: u.role ?? "student",
         headline: u.headline ?? null,
@@ -160,32 +172,37 @@ export const initializeUser = mutation({
           ? ROLES.TUTOR
           : ROLES.STUDENT;
     }
+    // Name capture / repair. An explicit signup name always wins. Otherwise a
+    // stored "Anonymous" (legacy accounts) or missing name gets a friendly
+    // name derived from the email prefix, so no account stays anonymous.
+    const email = "email" in user ? String(user.email ?? "") : "";
+    const trimmed = name?.trim();
+    if (trimmed) {
+      patch.name = trimmed.slice(0, 80);
+    } else if (
+      !user.name ||
+      user.name.trim() === "" ||
+      user.name.trim().toLowerCase() === "anonymous"
+    ) {
+      const derived = nameFromEmail(email);
+      if (derived) patch.name = derived;
+    }
     if (!user.onboarded) {
       patch.onboarded = true;
       // Transactional email: one-time welcome via Gmail SMTP (never blocks
       // onboarding — failures are logged, not thrown).
-      const email = "email" in user ? String(user.email ?? "") : "";
       if (email) {
         try {
           await ctx.runMutation(internal.emailData.queueSystemEmail, {
             to: email,
             subject: "Welcome to ForgeX Academy 🎉",
-            html: welcomeEmail({ name: name || "there" }).html,
+            html: welcomeEmail({ name: trimmed || "there" }).html,
             emailType: "welcome",
           });
         } catch {
           // email must never break onboarding
         }
       }
-    }
-    // Name backfill: accounts created before the email-derived naming (or
-    // any that slipped through without one) get a friendly name from their
-    // email prefix — never "Anonymous". An explicit signup name always wins;
-    // a stored name is never overwritten.
-    if (!user.name) {
-      const email = "email" in user ? String(user.email ?? "") : "";
-      const derived = nameFromEmail(email);
-      if (derived) patch.name = derived;
     }
     if (Object.keys(patch).length > 0) {
       await ctx.db.patch(user._id, patch);

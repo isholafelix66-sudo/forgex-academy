@@ -83,11 +83,15 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
 
   // Onboarding: once signed in, initialize the account (role + name). The
   // role is assigned once and never overwritten, so a tutor account stays a
-  // tutor account no matter how often they sign in afterwards.
+  // tutor account no matter how often they sign in afterwards. The pending
+  // signup name is also applied to accounts that are already onboarded —
+  // a fresh signup name should stick even if onboarding was interrupted.
   useEffect(() => {
-    if (!authLoading && isAuthenticated && user && !user.onboarded) {
+    if (!authLoading && isAuthenticated && user) {
       const pendingName = sessionStorage.getItem("fx-pending-name") ?? undefined;
-      void initializeUser({ name: pendingName, intendedRole }).catch(() => {});
+      if (!user.onboarded || (pendingName && user.name !== pendingName)) {
+        void initializeUser({ name: pendingName, intendedRole }).catch(() => {});
+      }
       sessionStorage.removeItem("fx-pending-name");
     }
   }, [authLoading, isAuthenticated, user, initializeUser, intendedRole]);

@@ -2,6 +2,7 @@ import { v } from "convex/values";
 import { query, mutation } from "./_generated/server";
 import { getAuthUserId } from "@convex-dev/auth/server";
 import { internal } from "./_generated/api";
+import { nameFromEmail } from "./lib";
 
 const teamRoleValidator = v.union(
   v.literal("academic"),
@@ -40,7 +41,7 @@ export const adminListUsers = query({
       .filter((u) => !u.isSeed)
       .map((u) => ({
         _id: u._id,
-        name: u.name ?? "Anonymous",
+        name: u.name || nameFromEmail(u.email) || "Member",
         email: u.email ?? "",
         role: u.role ?? "student",
         teamRole: u.teamRole ?? null,

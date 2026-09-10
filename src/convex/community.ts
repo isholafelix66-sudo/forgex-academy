@@ -18,7 +18,7 @@ import { getAuthUserId } from "@convex-dev/auth/server";
 import { mutation, query, QueryCtx, MutationCtx } from "./_generated/server";
 import { Doc, Id } from "./_generated/dataModel";
 import { v } from "convex/values";
-import { checkRateLimit, notify, requireUserDoc, publicUser } from "./lib";
+import { checkRateLimit, displayName, notify, requireUserDoc, publicUser } from "./lib";
 import { ROLES } from "./schema";
 
 // ---------------------------------------------------------------------------
@@ -1447,7 +1447,7 @@ export const discoverStudents = query({
           .first();
         return {
           _id: u._id,
-          name: u.name || "Anonymous",
+          name: displayName(u),
           image: u.image ?? null,
           headline: u.headline ?? null,
           role: u.role ?? "student",
@@ -1561,7 +1561,7 @@ export const myStudentConversations = query({
           conversationId: c._id,
           status: c.status,
           other: other
-            ? { _id: other._id, name: other.name || "Anonymous", image: other.image ?? null, role: other.role ?? "student", online: !!other.lastActivity && Date.now() - other.lastActivity < 60_000 }
+            ? { _id: other._id, name: displayName(other), image: other.image ?? null, role: other.role ?? "student", online: !!other.lastActivity && Date.now() - other.lastActivity < 60_000 }
             : null,
           lastMessage: last ? messagePreview(last) : null,
           lastAt: last?.createdAt ?? c.createdAt,
@@ -1662,7 +1662,7 @@ export const studentConversationMessages = query({
         status: convo.status,
         lockedReason: convo.lockedReason ?? null,
         other: other
-          ? { _id: other._id, name: other.name || "Anonymous", image: other.image ?? null, role: other.role ?? "student", online: !!other.lastActivity && Date.now() - other.lastActivity < 60_000 }
+          ? { _id: other._id, name: displayName(other), image: other.image ?? null, role: other.role ?? "student", online: !!other.lastActivity && Date.now() - other.lastActivity < 60_000 }
           : null,
       },
     };

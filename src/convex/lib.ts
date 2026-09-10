@@ -192,6 +192,22 @@ export function nameFromEmail(email: string | undefined | null): string {
     .join(" ");
 }
 
+/**
+ * Best display name for a user row: stored name first (unless it's literally
+ * "Anonymous" — a legacy artifact), then a name derived from the email
+ * prefix, then the neutral fallback. Use this everywhere a user's name is
+ * shown so no one ever appears as "Anonymous".
+ */
+export function displayName(
+  u: { name?: string | null; email?: string | null } | null | undefined,
+  fallback = "Anonymous",
+): string {
+  if (!u) return fallback;
+  const stored = u.name?.trim();
+  if (stored && stored.toLowerCase() !== "anonymous") return stored;
+  return nameFromEmail(u.email) || stored || fallback;
+}
+
 /** Public-safe projection of a user. Never shows "Anonymous" — falls back
  *  to a name derived from the email, then a neutral default. */
 export function publicUser(u: Doc<"users">) {

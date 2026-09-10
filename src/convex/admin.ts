@@ -2,7 +2,7 @@ import { internal } from "./_generated/api";
 import { mutation, query, MutationCtx } from "./_generated/server";
 import { Doc, Id } from "./_generated/dataModel";
 import { v } from "convex/values";
-import { hydrateCourse, hydrateCourses, makeAdminToken, notify, publicUser, requireAdminSession, slugify } from "./lib";
+import { displayName, hydrateCourse, hydrateCourses, makeAdminToken, notify, publicUser, requireAdminSession, slugify } from "./lib";
 import { difficultyValidator, ROLES, roleValidator, questionValidator, assignmentQuestionValidator, resourceValidator } from "./schema";
 import { messagePreview } from "./messages";
 import { recordDeletedCatalogSlug } from "./aiCourseSeed";
@@ -1983,7 +1983,7 @@ export const allConversations = query({
           .filter((u): u is Doc<"users"> => !!u)
           .map((u) => ({
             _id: u._id,
-            name: u.name || "Anonymous",
+            name: displayName(u),
             image: u.image ?? null,
             role: u.role ?? "student",
             email: u.email ?? null,
@@ -2032,7 +2032,7 @@ export const conversationMessages = query({
             sender: sender
               ? {
                   _id: sender._id,
-                  name: sender.name || "Anonymous",
+                  name: displayName(sender),
                   image: sender.image ?? null,
                   role: sender.role ?? "student",
                 }
