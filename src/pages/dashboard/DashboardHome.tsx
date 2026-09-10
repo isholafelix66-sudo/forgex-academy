@@ -1,4 +1,5 @@
 import { Link, Navigate } from "react-router";
+import { useEffect, useState } from "react";
 import { useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import {
@@ -26,6 +27,7 @@ import { timeAgo } from "@/lib/format";
 
 export default function DashboardHome() {
   const { user } = useAuth();
+  const [showNeedsNameCta, setShowNeedsNameCta] = useState(false);
   const enrollments = useQuery(api.learn.myEnrollments);
   const submissions = useQuery(api.submissions.mySubmissions);
   const announcements = useQuery(api.public.announcementsList);
@@ -51,6 +53,16 @@ export default function DashboardHome() {
   // dashboard-only CTA into profile editing — the name is still saved through
   // the same authenticated profile record.
   const needsName = !user?.name;
+
+  useEffect(() => {
+    setShowNeedsNameCta(needsName);
+  }, [needsName]);
+
+  useEffect(() => {
+    const handleNeedsName = () => setShowNeedsNameCta(true);
+    window.addEventListener("fx-student-needs-name", handleNeedsName);
+    return () => window.removeEventListener("fx-student-needs-name", handleNeedsName);
+  }, []);
 
   const inProgress = enrollments?.filter(
     (e) => e.enrollment.status === "in-progress",
@@ -229,7 +241,7 @@ export default function DashboardHome() {
       {/* First-time dashboard note — only shown when the account still needs
           a display name. This links straight to profile editing, never to a
           separate onboarding page. */}
-      {needsName && (
+      {showNeedsNameCta && (
         <div className="flex items-center gap-4 rounded-2xl border border-lime-400/25 bg-lime-400/8 p-5">
           <UserCheck className="size-8 shrink-0 text-lime-300" />
           <div className="min-w-0 flex-1">

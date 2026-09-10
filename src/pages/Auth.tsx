@@ -142,17 +142,15 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
     showNameOnboarding,
   ]);
 
-  // Role-aware landing after sign-in. A brand-new student without a name
-  // still completes the name pop-up first, then lands on ForgeX Home.
-  // Everyone else — including returning users and users with an existing name
-  // — goes straight to the public ForgeX homepage.
+  // After any sign-in the account lands on the main ForgeX website first
+  // (ForgeX Home). That is the primary entry point for students and tutors
+  // alike; there is no direct auto-route into the student dashboard login
+  // flow.
   const landingDest = useMemo(() => {
     if (authLoading || !isAuthenticated || !user) return null;
     if (showNameOnboarding) return null;
 
-    const role = user?.role;
-    if (role === "tutor") return "/tutor";
-    if (role === "admin") return "/admin";
+    if (user?.role === "admin") return "/admin";
     return "/";
   }, [
     authLoading,
@@ -168,6 +166,18 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
     landingDest,
     navigate,
   ]);
+
+  // When a freshly verified student still needs a display name, also nudge
+  // the rest of the app that it can show the dashboard "Complete your
+  // profile" CTA instead of leaving the name blank.
+  useEffect(() => {
+    if (!isAuthenticated || !user) return;
+    if (!user.name) {
+      window.dispatchEvent(
+        new CustomEvent("fx-student-needs-name"),
+      );
+    }
+  }, [isAuthenticated, user]);
 
   const sendCode = async (e?: React.FormEvent) => {
     e?.preventDefault();
@@ -607,10 +617,9 @@ export function NameOnboardingGate({ children }: { children: ReactNode }) {
 
 function AuthPage(props: AuthProps) {
   return (
-    <Suspense>
-      <NameOnboardingGate>
-        <Auth {...props} />
-      </NameOnboardingGate>
+    <Suspense>        <NameOnboardingGate>
+          <Auth {...props} />
+        </NameOnboardingGate>
     </Suspense>
   );
 }
