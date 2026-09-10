@@ -116,6 +116,7 @@ function TextEditor({
 export default function AdminContent() {
   const content = useQuery(api.public.siteContentAll);
   const contentSet = useMutation(api.admin.contentSet);
+  const deleteContent = useMutation(api.admin.deleteContent);
   const token = getAdminToken() ?? "";
   const heroImage = typeof content?.heroImage === "string" ? content.heroImage : undefined;
 
@@ -297,52 +298,104 @@ export default function AdminContent() {
 
   // ------------------------------------------------------------------
   // Featured course slideshow manager — admin picks which REAL courses
-  // appear in the homepage course showcase and in what order. Stored in
-  // siteContent under key "featuredCourseSlideshow" as an array of course
-  // ids. Removed courses remain in the catalogue.
+  // appear in the homepage course showcase and in what order, with
+  // SEPARATE desktop and mobile selections. Stored in siteContent under
+  // keys "featuredCourseSlideshow" (desktop) and
+  // "featuredCourseSlideshowMobile" (mobile; absent = mirror desktop).
+  // Removed courses remain in the catalogue.
   // ------------------------------------------------------------------
   const allCourses = useQuery(api.admin.allCourses, token ? { token } : "skip");
-  const [slidePicks, setSlidePicks] = useState<string[] | null>(null);
+  const [desktopPicks, setDesktopPicks] = useState<string[] | null>(null);
+  const [mobilePicks, setMobilePicks] = useState<string[] | null>(null);
+  const [mobileMode, setMobileMode] = useState<"mirror" | "custom">("mirror");
+  const [activeSurface, setActiveSurface] = useState<"desktop" | "mobile">("desktop");
   const [savingPicks, setSavingPicks] = useState(false);
 
-  // Rebuild drafts once the stored selection arrives; never clobber edits.
-  useEffect(() => {
-    if (slidePicks === null && content?.featuredCourseSlideshow !== undefined) {
-      const raw = content.featuredCourseSlideshow;
-      setSlidePicks(Array.isArray(raw) ? raw.filter((x): x is string => typeof x === "string") : []);
-    }
-  }, [content, slidePicks]);
-
-  const savedPicks: string[] = Array.isArray(content?.featuredCourseSlideshow)
+  // Saved values (empty until the site content query arrives).
+  const savedDesktop: string[] = Array.isArray(content?.featuredCourseSlideshow)
     ? (content.featuredCourseSlideshow as unknown[]).filter(
         (x): x is string => typeof x === "string",
       )
     : [];
-  const picks = slidePicks ?? savedPicks;
+  const savedMobile: string[] = Array.isArray(content?.featuredCourseSlideshowMobile)
+    ? (content.featuredCourseSlideshowMobile as unknown[]).filter(
+        (x): x is string => typeof x === "string",
+      )
+    : [];
 
-  const toggleCourse = (id: string) => {
-    setSlidePicks((prev) => {
-      const base = prev ?? savedPicks;
-      return base.includes(id) ? base.filter((x) => x !== id) : [...base, id];
-    });
+  // Rebuild drafts once the stored values arrive; never clobber edits.
+  useEffect(() => {
+    if (desktopPicks === null && content?.featuredCourseSlideshow !== undefined) {
+      setDesktopPicks(
+        Array.isArray(content.featuredCourseSlideshow)
+          ? (content.featuredCourseSlideshow as unknown[]).filter(
+              (x): x is string => typeof x === "string",
+            )
+          : [],
+      );
+    }
+    if (mobilePicks === null && content?.featuredCourseSlideshowMobile !== undefined) {
+      setMobilePicks(
+        Array.isArray(content.featuredCourseSlideshowMobile)
+          ? (content.featuredCourseSlideshowMobile as unknown[]).filter(
+              (x): x is string => typeof x === "string",
+            )
+          : [],
+      );
+      setMobileMode("custom");
+    }
+  }, [content]);
+
+  const desktopPicksShown = desktopPicks ?? savedDesktop;
+  const mobilePicksShown =
+    mobileMode === "custom" ? (mobilePicks ?? savedMobile) : desktopPicksShown;
+
+  const toggleCourse = (list: "desktop" | "mobile", id: string) => {
+    if (list === "desktop") {
+      setDesktopPicks((prev) => {
+        const base = prev ?? savedDesktop;
+        return base.includes(id) ? base.filter((x) => x !== id) : [...base, id];
+      });
+    } else {
+      if (mobileMode === "mirror") setMobileMode("custom");
+      setMobilePicks((prev) => {
+        const base = prev ?? savedMobile;
+        return base.includes(id) ? base.filter((x) => x !== id) : [...base, id];
+      });
+    }
   };
 
-  const movePick = (i: number, dir: -1 | 1) => {
-    setSlidePicks((prev) => {
-      const base = [...(prev ?? savedPicks)];
-      const j = i + dir;
-      if (j < 0 || j >= base.length) return base;
-      [base[i], base[j]] = [base[j], base[i]];
-      return base;
-    });
+  const movePick = (list: "desktop" | "mobile", i: number, dir: -1 | 1) => {
+    const setList = list === "desktop" ? setDesktopPicks : setMobilePicks;
+    const base = [...(list === "desktop" ? desktopPicksShown : mobilePicksShown)];
+    const j = i + dir;
+    if (j < 0 || j >= base.length) return;
+    [base[i], base[j]] = [base[j], base[i]];
+    if (list === "mobile" && mobileMode === "mirror") setMobileMode("custom");
+    setList(base);
   };
 
   const savePicks = async () => {
     setSavingPicks(true);
     try {
-      await contentSet({ key: "featuredCourseSlideshow", value: picks, token });
-      setSlidePicks(null);
-      toast.success("Course slideshow updated — live on the homepage.");
+      await contentSet({
+        key: "featuredCourseSlideshow",
+        value: desktopPicksShown,
+        token,
+      });
+      if (mobileMode === "custom") {
+        await contentSet({
+          key: "featuredCourseSlideshowMobile",
+          value: mobilePicksShown,
+          token,
+        });
+      } else {
+        // Mirror mode — drop any stored mobile override.
+        await deleteContent({ key: "featuredCourseSlideshowMobile", token });
+      }
+      setDesktopPicks(null);
+      setMobilePicks(null);
+      toast.success("Course slideshows updated — live on the homepage.");
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to save.");
     } finally {
@@ -350,12 +403,22 @@ export default function AdminContent() {
     }
   };
 
-  const clearPicks = async () => {
-    setSlidePicks([]);
+  const clearPicks = async (list: "desktop" | "mobile") => {
     try {
-      await contentSet({ key: "featuredCourseSlideshow", value: [], token });
-      setSlidePicks(null);
-      toast.success("Slideshow cleared — the homepage shows top featured courses.");
+      if (list === "desktop") {
+        await contentSet({ key: "featuredCourseSlideshow", value: [], token });
+        setDesktopPicks([]);
+      } else {
+        // Clearing mobile returns it to mirror mode.
+        await deleteContent({ key: "featuredCourseSlideshowMobile", token });
+        setMobilePicks(null);
+        setMobileMode("mirror");
+      }
+      toast.success(
+        list === "desktop"
+          ? "Desktop slideshow cleared — shows top featured courses."
+          : "Mobile slideshow now mirrors the desktop selection.",
+      );
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to clear.");
     }
@@ -436,155 +499,194 @@ export default function AdminContent() {
             </div>
           </section>
 
-          {/* Featured course slideshow — admin-curated showcase of REAL courses */}
+          {/* Featured course slideshows — separate desktop & mobile selections */}
           <section className="rounded-2xl border border-white/10 bg-card p-5 sm:p-6">
             <div className="flex flex-wrap items-start justify-between gap-4">
               <div className="min-w-0">
                 <h2 className="font-display flex items-center gap-2 text-base font-semibold">
-                  <Clapperboard className="size-4 text-lime-300" /> Featured course slideshow
+                  <Clapperboard className="size-4 text-lime-300" /> Featured course slideshows
                 </h2>
                 <p className="mt-1 max-w-2xl text-sm leading-relaxed text-muted-foreground">
                   Choose exactly which courses appear in the homepage course
-                  slideshow and in what order — desktop and mobile. Removed
-                  courses stay available in the catalogue.
+                  slideshow — with separate selections for desktop and mobile.
+                  Removed courses stay available in the catalogue.
                 </p>
               </div>
-              <span className="shrink-0 rounded-full border border-lime-400/25 bg-lime-400/10 px-3 py-1 text-xs font-medium text-lime-300">
-                {picks.length} selected
-              </span>
+              <div className="flex shrink-0 rounded-full border border-white/10 bg-black/30 p-1">
+                {(["desktop", "mobile"] as const).map((s) => (
+                  <button
+                    key={s}
+                    type="button"
+                    onClick={() => setActiveSurface(s)}
+                    className={
+                      "rounded-full px-4 py-1.5 text-xs font-semibold capitalize transition-colors " +
+                      (activeSurface === s
+                        ? "bg-lime-400 text-black"
+                        : "text-muted-foreground hover:text-foreground")
+                    }
+                  >
+                    {s}
+                  </button>
+                ))}
+              </div>
             </div>
 
-            <div className="mt-5 grid gap-4 lg:grid-cols-[1fr_340px]">
-              {/* Picker — every real course, selected ones ticked */}
-              <div className="min-w-0 rounded-xl border border-white/10 bg-black/20">
-                <p className="border-b border-white/8 px-4 py-2.5 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                  All courses ({allCourses?.length ?? "…"})
-                </p>
-                {allCourses === undefined ? (
-                  <div className="flex items-center justify-center gap-2 p-8 text-sm text-muted-foreground">
-                    <Loader2 className="size-4 animate-spin" /> Loading courses…
-                  </div>
-                ) : allCourses.length === 0 ? (
-                  <p className="p-8 text-center text-sm text-muted-foreground">
-                    No courses yet.
+            {activeSurface === "mobile" && (
+              <div className="mt-4 flex flex-wrap items-center gap-3 rounded-xl border border-white/10 bg-black/20 px-4 py-3">
+                <label className="flex min-w-0 cursor-pointer items-center gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={mobileMode === "mirror"}
+                    onChange={(e) => setMobileMode(e.target.checked ? "mirror" : "custom")}
+                    className="size-4 shrink-0 accent-lime-400"
+                  />
+                  <span className="min-w-0">
+                    Mirror the desktop selection
+                  </span>
+                </label>
+                <span className="text-xs text-muted-foreground">
+                  {mobileMode === "mirror"
+                    ? "— mobile shows the same courses as desktop."
+                    : "— pick a custom mobile order below."}
+                </span>
+              </div>
+            )}
+
+            {!(activeSurface === "mobile" && mobileMode === "mirror") && (
+              <div className="mt-5 grid gap-4 lg:grid-cols-[1fr_340px]">
+                {/* Picker — every real course, selected ones ticked */}
+                <div className="min-w-0 rounded-xl border border-white/10 bg-black/20">
+                  <p className="border-b border-white/8 px-4 py-2.5 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                    All courses ({allCourses?.length ?? "…"})
                   </p>
-                ) : (
-                  <div className="max-h-72 space-y-0.5 overflow-y-auto p-2">
-                    {allCourses.map((c) => {
-                      const idx = picks.indexOf(c._id);
-                      const chosen = idx >= 0;
-                      return (
-                        <button
-                          key={c._id}
-                          type="button"
-                          onClick={() => toggleCourse(c._id)}
-                          className={
-                            "flex w-full min-w-0 items-center gap-3 rounded-lg px-2.5 py-2 text-left transition-colors " +
-                            (chosen
-                              ? "bg-lime-400/10 text-foreground"
-                              : "hover:bg-white/5")
-                          }
-                        >
-                          <span
+                  {allCourses === undefined ? (
+                    <div className="flex items-center justify-center gap-2 p-8 text-sm text-muted-foreground">
+                      <Loader2 className="size-4 animate-spin" /> Loading courses…
+                    </div>
+                  ) : allCourses.length === 0 ? (
+                    <p className="p-8 text-center text-sm text-muted-foreground">
+                      No courses yet.
+                    </p>
+                  ) : (
+                    <div className="max-h-72 space-y-0.5 overflow-y-auto p-2">
+                      {allCourses.map((c) => {
+                        const current =
+                          activeSurface === "desktop" ? desktopPicksShown : mobilePicksShown;
+                        const idx = current.indexOf(c._id);
+                        const chosen = idx >= 0;
+                        return (
+                          <button
+                            key={c._id}
+                            type="button"
+                            onClick={() => toggleCourse(activeSurface, c._id)}
                             className={
-                              "flex size-5 shrink-0 items-center justify-center rounded border " +
+                              "flex w-full min-w-0 items-center gap-3 rounded-lg px-2.5 py-2 text-left transition-colors " +
                               (chosen
-                                ? "border-lime-400 bg-lime-400 text-black"
-                                : "border-white/20")
+                                ? "bg-lime-400/10 text-foreground"
+                                : "hover:bg-white/5")
                             }
                           >
-                            {chosen ? <Check className="size-3.5" /> : null}
-                          </span>
-                          {c.image ? (
-                            <img
-                              src={c.image}
-                              alt=""
-                              className="h-8 w-12 shrink-0 rounded object-cover"
-                            />
-                          ) : (
-                            <span className="h-8 w-12 shrink-0 rounded bg-gradient-to-br from-lime-400/30 to-emerald-500/10" />
-                          )}
-                          <span className="min-w-0 flex-1">
-                            <span className="block truncate text-sm font-medium">
-                              {c.title}
+                            <span
+                              className={
+                                "flex size-5 shrink-0 items-center justify-center rounded border " +
+                                (chosen
+                                  ? "border-lime-400 bg-lime-400 text-black"
+                                  : "border-white/20")
+                              }
+                            >
+                              {chosen ? <Check className="size-3.5" /> : null}
                             </span>
-                            <span className="block truncate text-xs text-muted-foreground">
-                              {c.category?.name ?? "Uncategorised"}
-                              {!c.published && " · draft"}
+                            {c.image ? (
+                              <img
+                                src={c.image}
+                                alt=""
+                                className="h-8 w-12 shrink-0 rounded object-cover"
+                              />
+                            ) : (
+                              <span className="h-8 w-12 shrink-0 rounded bg-gradient-to-br from-lime-400/30 to-emerald-500/10" />
+                            )}
+                            <span className="min-w-0 flex-1">
+                              <span className="block truncate text-sm font-medium">
+                                {c.title}
+                              </span>
+                              <span className="block truncate text-xs text-muted-foreground">
+                                {c.category?.name ?? "Uncategorised"}
+                                {!c.published && " · draft"}
+                              </span>
                             </span>
-                          </span>
-                          {chosen && (
-                            <span className="shrink-0 rounded-full bg-lime-400 px-1.5 py-0.5 text-[10px] font-bold text-black">
-                              #{idx + 1}
-                            </span>
-                          )}
-                        </button>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
+                            {chosen && (
+                              <span className="shrink-0 rounded-full bg-lime-400 px-1.5 py-0.5 text-[10px] font-bold text-black">
+                                #{idx + 1}
+                              </span>
+                            )}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
 
-              {/* Selected order — reorder + remove */}
-              <div className="min-w-0 rounded-xl border border-white/10 bg-black/20">
-                <p className="border-b border-white/8 px-4 py-2.5 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                  Slideshow order
-                </p>
-                {picks.length === 0 ? (
-                  <p className="p-6 text-center text-sm text-muted-foreground">
-                    No courses selected yet. Tick courses on the left to build
-                    the slideshow — top of this list shows first.
+                {/* Selected order — reorder + remove */}
+                <div className="min-w-0 rounded-xl border border-white/10 bg-black/20">
+                  <p className="border-b border-white/8 px-4 py-2.5 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                    {activeSurface === "desktop" ? "Desktop" : "Mobile"} slideshow order
                   </p>
-                ) : (
-                  <ol className="max-h-72 space-y-1.5 overflow-y-auto p-2">
-                    {picks.map((id, i) => {
-                      const c = allCourses?.find((x) => x._id === id);
-                      return (
-                        <li
-                          key={id}
-                          className="flex min-w-0 items-center gap-2 rounded-lg border border-white/8 bg-card px-2 py-1.5"
-                        >
-                          <span className="w-5 shrink-0 text-center text-xs font-bold text-lime-300">
-                            {i + 1}
-                          </span>
-                          <span className="min-w-0 flex-1 truncate text-sm">
-                            {c?.title ?? "Course"}
-                          </span>
-                          <span className="flex shrink-0 items-center">
-                            <button
-                              type="button"
-                              aria-label="Move up"
-                              disabled={i === 0}
-                              onClick={() => movePick(i, -1)}
-                              className="rounded p-1 text-muted-foreground transition-colors hover:bg-white/10 hover:text-foreground disabled:opacity-30"
-                            >
-                              <ArrowUp className="size-3.5" />
-                            </button>
-                            <button
-                              type="button"
-                              aria-label="Move down"
-                              disabled={i === picks.length - 1}
-                              onClick={() => movePick(i, 1)}
-                              className="rounded p-1 text-muted-foreground transition-colors hover:bg-white/10 hover:text-foreground disabled:opacity-30"
-                            >
-                              <ArrowDown className="size-3.5" />
-                            </button>
-                            <button
-                              type="button"
-                              aria-label="Remove from slideshow"
-                              onClick={() => toggleCourse(id)}
-                              className="rounded p-1 text-muted-foreground transition-colors hover:bg-rose-400/10 hover:text-rose-300"
-                            >
-                              <Trash2 className="size-3.5" />
-                            </button>
-                          </span>
-                        </li>
-                      );
-                    })}
-                  </ol>
-                )}
+                  {currentPicks.length === 0 ? (
+                    <p className="p-6 text-center text-sm text-muted-foreground">
+                      No courses selected yet. Tick courses on the left to build
+                      the slideshow — top of this list shows first.
+                    </p>
+                  ) : (
+                    <ol className="max-h-72 space-y-1.5 overflow-y-auto p-2">
+                      {currentPicks.map((id, i) => {
+                        const c = allCourses?.find((x) => x._id === id);
+                        return (
+                          <li
+                            key={id}
+                            className="flex min-w-0 items-center gap-2 rounded-lg border border-white/8 bg-card px-2 py-1.5"
+                          >
+                            <span className="w-5 shrink-0 text-center text-xs font-bold text-lime-300">
+                              {i + 1}
+                            </span>
+                            <span className="min-w-0 flex-1 truncate text-sm">
+                              {c?.title ?? "Course"}
+                            </span>
+                            <span className="flex shrink-0 items-center">
+                              <button
+                                type="button"
+                                aria-label="Move up"
+                                disabled={i === 0}
+                                onClick={() => movePick(activeSurface, i, -1)}
+                                className="rounded p-1 text-muted-foreground transition-colors hover:bg-white/10 hover:text-foreground disabled:opacity-30"
+                              >
+                                <ArrowUp className="size-3.5" />
+                              </button>
+                              <button
+                                type="button"
+                                aria-label="Move down"
+                                disabled={i === currentPicks.length - 1}
+                                onClick={() => movePick(activeSurface, i, 1)}
+                                className="rounded p-1 text-muted-foreground transition-colors hover:bg-white/10 hover:text-foreground disabled:opacity-30"
+                              >
+                                <ArrowDown className="size-3.5" />
+                              </button>
+                              <button
+                                type="button"
+                                aria-label="Remove from slideshow"
+                                onClick={() => toggleCourse(activeSurface, id)}
+                                className="rounded p-1 text-muted-foreground transition-colors hover:bg-rose-400/10 hover:text-rose-300"
+                              >
+                                <Trash2 className="size-3.5" />
+                              </button>
+                            </span>
+                          </li>
+                        );
+                      })}
+                    </ol>
+                  )}
+                </div>
               </div>
-            </div>
+            )}
 
             <div className="mt-5 flex flex-wrap items-center gap-3">
               <Button
@@ -597,13 +699,16 @@ export default function AdminContent() {
                 ) : (
                   <Check className="size-4" />
                 )}
-                {savingPicks ? "Saving…" : "Save slideshow"}
+                {savingPicks ? "Saving…" : "Save slideshows"}
               </Button>
-              {picks.length > 0 && (
-                <Button onClick={clearPicks} variant="outline" className="gap-2">
-                  <Trash2 className="size-4" /> Clear selection
-                </Button>
-              )}
+              <Button
+                onClick={() => clearPicks(activeSurface)}
+                variant="outline"
+                className="gap-2"
+              >
+                <Trash2 className="size-4" />
+                {activeSurface === "desktop" ? "Clear desktop" : "Use desktop selection"}
+              </Button>
               <p className="text-xs text-muted-foreground">
                 Changes go live on the homepage after saving.
               </p>

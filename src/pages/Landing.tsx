@@ -355,8 +355,8 @@ export default function Landing() {
   const reduce = useReducedMotion();
   // Admin-curated slideshows with SEPARATE desktop and mobile selections.
   const featured = useQuery(api.public.featuredCourseSlideshows);
-  const desktopList = featured?.desktop;
-  const mobileList = featured?.mobile;
+  const desktopList = featured?.desktop ?? [];
+  const mobileList = featured?.mobile ?? [];
   const categories = useQuery(api.public.categoriesList);
   const stats = useQuery(api.public.stats);
   const continueLearning = useQuery(api.public.myContinueLearning);

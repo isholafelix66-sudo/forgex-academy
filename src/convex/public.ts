@@ -41,48 +41,6 @@ export const categoriesList = query({
 });
 
 /**
- * Featured course slideshow — admin-curated.
- *
- * The admin picks an ordered list of courses in Admin → Website & branding
- * ("Featured course slideshow", stored in siteContent under the key
- * `featuredCourseSlideshow` as an array of course ids). The homepage renders
- * exactly that selection, in that order. Removed courses stay in the
- * catalogue; nothing here falls back to fake data.
- *
- * Defensive behaviour: the stored list is filtered to published, non-archived
- * courses that still exist. If nothing is saved — or every saved course has
- * since been unpublished/deleted — we fall back to the highest-rated featured
- * courses so the homepage section is never empty.
- */
-export const featuredCourses = query({
-  args: {},
-  handler: async (ctx) => {
-    const courses = await ctx.db.query("courses").collect();
-    const published = courses.filter((c) => c.published && !c.archived);
-    const byId = new Map(published.map((c) => [c._id, c]));
-
-    const saved = await ctx.db
-      .query("siteContent")
-      .withIndex("by_key", (q) => q.eq("key", "featuredCourseSlideshow"))
-      .first();
-
-    if (saved && Array.isArray(saved.value)) {
-      const picked = (saved.value as string[])
-        .map((id) => byId.get(id as Id<"courses">))
-        .filter((c): c is NonNullable<typeof c> => !!c);
-      if (picked.length > 0) return hydrateCourses(ctx, picked);
-    }
-
-    // No valid admin selection — show the top featured courses by rating.
-    const featured = published.filter((c) => c.featured);
-    return hydrateCourses(
-      ctx,
-      featured.sort((a, b) => b.rating - a.rating).slice(0, 6),
-    );
-  },
-});
-
-/**
  * Featured course slideshows — admin-curated, with SEPARATE desktop and
  * mobile selections.
  *
