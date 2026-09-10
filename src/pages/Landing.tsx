@@ -10,8 +10,10 @@ import {
   Play,
   ShieldCheck,
   Sparkles,
+  UserCheck,
 } from "lucide-react";
 import { api } from "@/convex/_generated/api";
+import { useAuth } from "@/hooks/use-auth";
 import { PageShell } from "@/components/site/PageShell";
 import { Reveal } from "@/components/site/Reveal";
 import { SectionHeading } from "@/components/site/SectionHeading";
@@ -382,6 +384,9 @@ function ContinueCover({
 
 export default function Landing() {
   const reduce = useReducedMotion();
+  const { user } = useAuth();
+  const displayName =
+    (user?.name ?? "").trim() || (user?.email ?? "").split("@")[0] || "there";
   // Admin-curated slideshows with SEPARATE desktop and mobile selections.
   const featured = useQuery(api.public.featuredCourseSlideshows);
   const desktopList = featured?.desktop ?? [];
@@ -392,6 +397,12 @@ export default function Landing() {
   const prompts = useQuery(api.prompts.listFeatured);
 
   const current = continueLearning?.[0];
+  const personalizedHeadline = current
+    ? `Pick up where ${displayName} left off`
+    : `Hello, ${displayName}!`;
+  const personalizedSupport = current
+    ? `${displayName}, your learning streak is ready to grow.`
+    : `ForgeX is built for ${displayName} — learn, build and earn. Ready when you are.`;
   const promptTeasers = prompts?.slice(0, 3);
 
   return (
@@ -399,6 +410,14 @@ export default function Landing() {
       {/* ── HERO ─────────────────────────────────────────────────────── */}
       <section className="relative mx-auto max-w-7xl px-4 pb-10 pt-8 sm:px-6 sm:pt-14">
         <HeroSlideshow />
+        <div className="mt-4 text-center">
+          <p className="text-sm font-medium text-lime-300">
+            {personalizedHeadline}
+          </p>
+          <p className="mt-1 text-xs text-muted-foreground">
+            {personalizedSupport}
+          </p>
+        </div>
       </section>
 
       {/* ── CONTINUE LEARNING — only when the signed-in student has real progress ── */}

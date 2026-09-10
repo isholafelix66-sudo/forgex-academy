@@ -1,4 +1,4 @@
-import { Suspense, useEffect, useState } from "react";
+import { Suspense, useEffect, useState, type ReactNode } from "react";
 import { useNavigate, useSearchParams } from "react-router";
 import { useMutation } from "convex/react";
 import { api } from "@/convex/_generated/api";
@@ -23,6 +23,7 @@ import {
   Mail,
   ShieldCheck,
   UserPlus,
+  UserCheck,
 } from "lucide-react";
 import { resolveRedirectAfterAuth } from "@/lib/auth-redirect";
 import { friendlyError } from "@/lib/errors";
@@ -32,7 +33,6 @@ interface AuthProps {
 }
 
 type Mode = "signin" | "signup" | "reset";
-
 function Auth({ redirectAfterAuth }: AuthProps = {}) {
   const { isLoading: authLoading, isAuthenticated, user, signIn } = useAuth();
   const initializeUser = useMutation(api.users.initializeUser);
@@ -56,11 +56,49 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
       ? "/"
       : redirect;
 
+  // First-time name onboarding: only appears immediately after a successful
+  // OTP verification for an account that still has no display name. This is
+  // a one-time pop-up, not a profile settings page. Returning users skip it.
+  const [showNameOnboarding, setShowNameOnboarding] = useState(false);
+  const [pendingName, setPendingName] = useState("");
+  const [pendingSave, setPendingSave] = useState(false);
+  const [nameError, setNameError] = useState<string | null>(null);
+  const [docsReady, setDocsReady] = useState(false);
+
+  // Do not show the name pop-up until authed and the Convex mutation layer is
+  // reachable. The routing effect uses this gate directly.
+  useEffect(() => {
+    setDocsReady(true);
+  }, []);
+
+  // Once the code is verified and the session is live, decide whether the
+  // user still needs a display name. Existing names (including a pending name
+  // from a re-authentication) are reused; otherwise we prompt once.
+  useEffect(() => {
+    if (!docsReady || authLoading || !isAuthenticated || !user) return;
+    const pendingFromSession =
+      sessionStorage.getItem("fx-pending-name") ?? undefined;
+    const needsName =
+      !user.name && (!pendingFromSession || user.name !== pendingFromSession);
+    if (needsName) {
+      setPendingName(pendingFromSession ?? "");
+      setShowNameOnboarding(true);
+    }
+    sessionStorage.removeItem("fx-pending-name");
+  }, [
+    docsReady,
+    authLoading,
+    isAuthenticated,
+    user,
+  ]);
+
   // Signing up through the Become-a-Tutor flow creates a TUTOR account
   // (pending verification), never a student account. The account's role is
   // the source of truth everywhere else, so it must be right from day one.
   const intendedRole =
     redirect.startsWith("/become-tutor") ? ("tutor" as const) : undefined;
+
+
 
   const initialMode: Mode =
     searchParams.get("mode") === "signup" ? "signup" : "signin";
@@ -81,39 +119,52 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
     return () => clearTimeout(t);
   }, [resendIn]);
 
-  // Onboarding: once signed in, initialize the account (role + name). The
-  // role is assigned once and never overwritten, so a tutor account stays a
-  // tutor account no matter how often they sign in afterwards. The pending
-  // signup name is also applied to accounts that are already onboarded —
-  // a fresh signup name should stick even if onboarding was interrupted.
+  // Onboarding: once signed in, initialize the account (role + name). This
+  // runs AFTER the name pop-up flow completes when the user is brand new.
+  // The role is assigned once and never overwritten, so a tutor account stays
+  // in the tutor portal no matter how often they sign in afterwards.
   useEffect(() => {
-    if (!authLoading && isAuthenticated && user) {
-      const pendingName = sessionStorage.getItem("fx-pending-name") ?? undefined;
-      if (!user.onboarded || (pendingName && user.name !== pendingName)) {
-        void initializeUser({ name: pendingName, intendedRole }).catch(() => {});
-      }
-      sessionStorage.removeItem("fx-pending-name");
+    if (!docsReady || authLoading || !isAuthenticated || !user) return;
+    if (showNameOnboarding || !user.name) return;
+    const pendingName = sessionStorage.getItem("fx-pending-name") ?? undefined;
+    if (!user.onboarded || (pendingName && user.name !== pendingName)) {
+      void initializeUser({ name: user.name, intendedRole }).catch(() => {});
     }
-  }, [authLoading, isAuthenticated, user, initializeUser, intendedRole]);
+    sessionStorage.removeItem("fx-pending-name");
+  }, [
+    docsReady,
+    authLoading,
+    isAuthenticated,
+    user,
+    initializeUser,
+    intendedRole,
+    showNameOnboarding,
+  ]);
 
-  // Role-aware landing after sign-in. Per the ForgeX entry flow, accounts
-  // land on the MAIN ForgeX WEBSITE first — the homepage offers the prominent
-  // "Dashboard" entry point into the student/tutor workspace. Only an
-  // explicit returnTo/redirect (deep link, ProtectedRoute) bypasses it.
-  // The account's role is the source of truth: a tutor account is never
-  // pushed into the student portal.
+  // Role-aware landing after sign-in. A brand-new student still needs their
+  // name first, so we hold navigation until the pop-up is resolved. The very
+  // final destination after a fresh account is ForgeX Home, never the
+  // dashboard home.
   useEffect(() => {
-    if (!authLoading && isAuthenticated) {
-      const role = user?.role;
-      const dest =
-        role === "tutor"
-          ? "/tutor"
-          : role === "admin"
-            ? "/admin"
-            : landingRedirect;
-      navigate(dest);
-    }
-  }, [authLoading, isAuthenticated, navigate, landingRedirect, user]);
+    if (authLoading || !isAuthenticated || !user) return;
+    if (showNameOnboarding) return;
+
+    const role = user?.role;
+    const dest =
+      role === "tutor"
+        ? "/tutor"
+        : role === "admin"
+          ? "/admin"
+          : landingRedirect;
+    navigate(dest, { replace: true });
+  }, [
+    authLoading,
+    isAuthenticated,
+    user,
+    showNameOnboarding,
+    landingRedirect,
+    navigate,
+  ]);
 
   const sendCode = async (e?: React.FormEvent) => {
     e?.preventDefault();
@@ -148,21 +199,32 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
     }
   };
 
-  const verifyCode = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setIsLoading(true);
-    setError(null);
+  const saveName = async () => {
+    const trimmed = pendingName.trim();
+    if (!trimmed) {
+      setNameError("Please enter your name so we know what to call you.");
+      return;
+    }
+    setNameError(null);
+    setPendingSave(true);
     try {
-      const formData = new FormData();
-      formData.set("email", email);
-      formData.set("code", otp);
-      await signIn("email-otp", formData);
-      // navigation happens via the auth effect above
+      const name = trimmed;
+      // Persist the display name to the authenticated user profile first.
+      // This is the single source of truth for names everywhere, including
+      // certificates, the profile area and the ForgeX homepage greeting.
+      await initializeUser({ name, intendedRole });
+      sessionStorage.removeItem("fx-pending-name");
+      setShowNameOnboarding(false);
     } catch (err) {
-      console.error("OTP verification error:", err);
-      setError("That code isn't right. Double-check and try again.");
-      setOtp("");
-      setIsLoading(false);
+      console.error("Name save error:", err);
+      setNameError(
+        friendlyError(
+          err,
+          "We couldn't save your name just now. Please try again.",
+        ),
+      );
+    } finally {
+      setPendingSave(false);
     }
   };
 
@@ -194,10 +256,28 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
     }
   };
 
+  const handleVerifyCode = (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsLoading(true);
+    setError(null);
+    try {
+      const formData = new FormData();
+      formData.set("email", email);
+      formData.set("code", otp);
+      void signIn("email-otp", formData);
+    } catch (err) {
+      console.error("OTP verification error:", err);
+      setError("That code isn't right. Double-check and try again.");
+      setOtp("");
+      setIsLoading(false);
+    }
+  };
+
   const resetFlow = () => {
     setMode("reset");
     setStep("form");
     setError(null);
+    setShowNameOnboarding(false);
   };
 
   const switchMode = (m: Mode) => {
@@ -329,7 +409,7 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
                 )}
               </form>
             ) : (
-              <form onSubmit={verifyCode} className="space-y-4">
+              <form onSubmit={handleVerifyCode} className="space-y-4">
                 <div className="rounded-2xl border border-lime-400/25 bg-lime-400/8 p-4 text-center">
                   <ShieldCheck className="mx-auto size-6 text-lime-300" />
                   <p className="mt-2 text-sm font-medium">
@@ -437,15 +517,100 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
           </p>
         </div>
       </div>
+      {showNameOnboarding && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center px-4 bg-black/60 backdrop-blur-sm"
+          role="presentation"
+        >
+          <div
+            className="w-full max-w-sm"
+            aria-hidden
+            style={{ paddingTop: "env(safe-area-inset-top, 0px)" }}
+          />
+        </div>
+      )}
       <Footer />
     </div>
   );
 }
 
-export default function AuthPage(props: AuthProps) {
+export function NameOnboardingGate({ children }: { children: ReactNode }) {
+  const { isLoading: authLoading, isAuthenticated, user } = useAuth();
+  const navigate = useNavigate();
+  const [showGate, setShowGate] = useState(false);
+  const initializeUser = useMutation(api.users.initializeUser);
+
+  // Only intercept a fresh account that still needs a display name after the
+  // Convex session is live. Authenticated users that already have a name are
+  // let through immediately.
+  useEffect(() => {
+    setShowGate(
+      !authLoading &&
+        isAuthenticated &&
+        !!user &&
+        !user.name,
+    );
+  }, [authLoading, isAuthenticated, user]);
+
+  // Persist name and route straight to ForgeX Home, never to profile settings.
+  const handleContinue = async () => {
+    const name = prompt("What should we call you?");
+    const trimmed = (name ?? "").trim();
+    if (!trimmed) return;
+    try {
+      await initializeUser({ name: trimmed, intendedRole: undefined });
+    } catch (err) {
+      console.error("Name save error:", err);
+    }
+    setShowGate(false);
+    navigate("/", { replace: true });
+  };
+
+  if (showGate && !authLoading) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-background p-4">
+        <div className="w-full max-w-sm rounded-2xl border border-lime-400/20 bg-black/40 p-5 shadow-2xl backdrop-blur-xl sm:p-7">
+          <div className="mx-auto mb-2 flex size-10 items-center justify-center rounded-full bg-lime-400/15 text-lime-300">
+            <UserPlus className="size-5" />
+          </div>
+          <h2 className="font-display text-center text-xl font-bold tracking-tight text-white">
+            Welcome to ForgeX 👋
+          </h2>
+          <p className="mt-2 text-center text-sm text-muted-foreground">
+            Before you continue, tell us your name.
+          </p>
+          <p className="mt-1 text-center text-[11px] text-muted-foreground/70">
+            This will also be used on your certificates.
+          </p>
+          <div className="mt-5 flex gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              className="flex-1 border-white/15 bg-black/30 text-muted-foreground"
+              onClick={() => setShowGate(false)}
+            >
+              Skip for now
+            </Button>
+            <Button type="button" onClick={handleContinue} className="flex-1 gap-2 bg-lime-400 font-semibold text-black">
+              Continue <ArrowRight className="size-4" />
+            </Button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  return <>{children}</>;
+}
+
+function AuthPage(props: AuthProps) {
   return (
     <Suspense>
-      <Auth {...props} />
+      <NameOnboardingGate>
+        <Auth {...props} />
+      </NameOnboardingGate>
     </Suspense>
   );
 }
+
+export default AuthPage;
