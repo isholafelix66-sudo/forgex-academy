@@ -1,4 +1,4 @@
-import { Suspense, useEffect, useState, type ReactNode } from "react";
+import { Suspense, useEffect, useMemo, useState, type ReactNode } from "react";
 import { useNavigate, useSearchParams } from "react-router";
 import { useMutation } from "convex/react";
 import { api } from "@/convex/_generated/api";
@@ -64,6 +64,7 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
   const [pendingSave, setPendingSave] = useState(false);
   const [nameError, setNameError] = useState<string | null>(null);
   const [docsReady, setDocsReady] = useState(false);
+  const [pendingResolved, setPendingResolved] = useState(false);
 
   // Do not show the name pop-up until authed and the Convex mutation layer is
   // reachable. The routing effect uses this gate directly.
@@ -141,28 +142,30 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
     showNameOnboarding,
   ]);
 
-  // Role-aware landing after sign-in. A brand-new student still needs their
-  // name first, so we hold navigation until the pop-up is resolved. The very
-  // final destination after a fresh account is ForgeX Home, never the
-  // dashboard home.
-  useEffect(() => {
-    if (authLoading || !isAuthenticated || !user) return;
-    if (showNameOnboarding) return;
+  // Role-aware landing after sign-in. A brand-new student without a name
+  // still completes the name pop-up first, then lands on ForgeX Home.
+  // Everyone else — including returning users and users with an existing name
+  // — goes straight to the public ForgeX homepage.
+  const landingDest = useMemo(() => {
+    if (authLoading || !isAuthenticated || !user) return null;
+    if (showNameOnboarding) return null;
 
     const role = user?.role;
-    const dest =
-      role === "tutor"
-        ? "/tutor"
-        : role === "admin"
-          ? "/admin"
-          : landingRedirect;
-    navigate(dest, { replace: true });
+    if (role === "tutor") return "/tutor";
+    if (role === "admin") return "/admin";
+    return "/";
   }, [
     authLoading,
     isAuthenticated,
     user,
     showNameOnboarding,
-    landingRedirect,
+  ]);
+
+  useEffect(() => {
+    if (!landingDest) return;
+    navigate(landingDest, { replace: true });
+  }, [
+    landingDest,
     navigate,
   ]);
 
@@ -563,7 +566,6 @@ export function NameOnboardingGate({ children }: { children: ReactNode }) {
       console.error("Name save error:", err);
     }
     setShowGate(false);
-    navigate("/", { replace: true });
   };
 
   if (showGate && !authLoading) {
