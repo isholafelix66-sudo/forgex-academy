@@ -12,6 +12,7 @@ import {
   GraduationCap,
   Percent,
   Sparkles,
+  UserCheck,
   Wand2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -44,6 +45,12 @@ export default function DashboardHome() {
     adminRecommended && adminRecommended.length > 0
       ? adminRecommended
       : recommendations;
+
+  // First-time landing inside the dashboard: if the account has no display
+  // name yet, prompt once here instead of blocking the whole app. This is a
+  // dashboard-only CTA into profile editing — the name is still saved through
+  // the same authenticated profile record.
+  const needsName = !user?.name;
 
   const inProgress = enrollments?.filter(
     (e) => e.enrollment.status === "in-progress",
@@ -218,6 +225,29 @@ export default function DashboardHome() {
             ))}
           </div>
       </section>
+
+      {/* First-time dashboard note — only shown when the account still needs
+          a display name. This links straight to profile editing, never to a
+          separate onboarding page. */}
+      {needsName && (
+        <div className="flex items-center gap-4 rounded-2xl border border-lime-400/25 bg-lime-400/8 p-5">
+          <UserCheck className="size-8 shrink-0 text-lime-300" />
+          <div className="min-w-0 flex-1">
+            <p className="font-display font-semibold">
+              Complete your profile
+            </p>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Add your name so certificates and greetings show correctly.
+            </p>
+          </div>
+          <Link to="/dashboard/profile">
+            <Button className="shrink-0 gap-2 bg-lime-400 font-semibold text-black hover:bg-lime-300">
+              Edit profile
+              <ArrowRight className="size-4" />
+            </Button>
+          </Link>
+        </div>
+      )}
 
       {/* Recommendations */}
       <section>

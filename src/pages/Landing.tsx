@@ -385,7 +385,7 @@ function ContinueCover({
 export default function Landing() {
   const reduce = useReducedMotion();
   const { user } = useAuth();
-  const displayName =
+  const personalizedName =
     (user?.name ?? "").trim() || (user?.email ?? "").split("@")[0] || "there";
   // Admin-curated slideshows with SEPARATE desktop and mobile selections.
   const featured = useQuery(api.public.featuredCourseSlideshows);
@@ -398,26 +398,36 @@ export default function Landing() {
 
   const current = continueLearning?.[0];
   const personalizedHeadline = current
-    ? `Pick up where ${displayName} left off`
-    : `Hello, ${displayName}!`;
-  const personalizedSupport = current
-    ? `${displayName}, your learning streak is ready to grow.`
-    : `ForgeX is built for ${displayName} — learn, build and earn. Ready when you are.`;
+    ? `Pick up where ${personalizedName} left off`
+    : `Hello, ${personalizedName}!`;
   const promptTeasers = prompts?.slice(0, 3);
+
+  // Public ForgeX homepage only: after sign-in the user lands here first,
+  // then uses the prominent Dashboard entry point to move into the
+  // student/tutor workspace. ForgeX Home is the primary landing experience,
+  // not the dashboard home.
+  const showDashboardEntry = !!user;
 
   return (
     <PageShell>
       {/* ── HERO ─────────────────────────────────────────────────────── */}
       <section className="relative mx-auto max-w-7xl px-4 pb-10 pt-8 sm:px-6 sm:pt-14">
         <HeroSlideshow />
-        <div className="mt-4 text-center">
+      {showDashboardEntry && (
+        <div className="mt-5 flex flex-col items-center gap-3">
           <p className="text-sm font-medium text-lime-300">
             {personalizedHeadline}
           </p>
-          <p className="mt-1 text-xs text-muted-foreground">
-            {personalizedSupport}
-          </p>
+          <div className="flex flex-col gap-3 sm:flex-row sm:gap-3">
+            <Link
+              to="/dashboard"
+              className="rounded-full border border-lime-400/30 bg-lime-400/10 px-5 py-2 text-sm font-semibold text-lime-300 transition-colors hover:bg-lime-400/18 hover:text-lime-200 sm:px-6 w-full sm:w-auto text-center"
+            >
+              Enter Dashboard
+            </Link>
+          </div>
         </div>
+      )}
       </section>
 
       {/* ── CONTINUE LEARNING — only when the signed-in student has real progress ── */}
