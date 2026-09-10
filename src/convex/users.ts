@@ -3,7 +3,7 @@ import { internal } from "./_generated/api";
 import { internalQuery, mutation, query, QueryCtx } from "./_generated/server";
 import { v } from "convex/values";
 import { ROLES, socialsValidator } from "./schema";
-import { checkRateLimit, notify, publicUser, requireUser, requireUserDoc } from "./lib";
+import { checkRateLimit, notify, publicUser, requireUser, requireUserDoc, nameFromEmail } from "./lib";
 import { welcomeEmail } from "./emailTemplates";
 import { deleteUserData } from "./admin";
 
@@ -178,7 +178,15 @@ export const initializeUser = mutation({
         }
       }
     }
-    if (name && !user.name) patch.name = name;
+    // Name backfill: accounts created before the email-derived naming (or
+    // any that slipped through without one) get a friendly name from their
+    // email prefix — never "Anonymous". An explicit signup name always wins;
+    // a stored name is never overwritten.
+    if (!user.name) {
+      const email = "email" in user ? String(user.email ?? "") : "";
+      const derived = nameFromEmail(email);
+      if (derived) patch.name = derived;
+    }
     if (Object.keys(patch).length > 0) {
       await ctx.db.patch(user._id, patch);
     }

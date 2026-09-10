@@ -15,7 +15,7 @@ import { api } from "@/convex/_generated/api";
 import { PageShell } from "@/components/site/PageShell";
 import { Reveal } from "@/components/site/Reveal";
 import { SectionHeading } from "@/components/site/SectionHeading";
-import { CourseCard } from "@/components/site/CourseCard";
+import { CourseCard, type CourseCardData } from "@/components/site/CourseCard";
 import { MotionCarousel } from "@/components/site/MotionCarousel";
 import { CourseSlideshow } from "@/components/site/CourseSlideshow";
 import { ForgeXMotionVideo } from "@/components/site/ForgeXMotionVideo";
@@ -353,7 +353,10 @@ const VALUE_PROPS = [
 
 export default function Landing() {
   const reduce = useReducedMotion();
-  const featured = useQuery(api.public.featuredCourses);
+  // Admin-curated slideshows with SEPARATE desktop and mobile selections.
+  const featured = useQuery(api.public.featuredCourseSlideshows);
+  const desktopList = featured?.desktop;
+  const mobileList = featured?.mobile;
   const categories = useQuery(api.public.categoriesList);
   const stats = useQuery(api.public.stats);
   const continueLearning = useQuery(api.public.myContinueLearning);
@@ -476,7 +479,7 @@ export default function Landing() {
                 />
               ))}
             </div>
-          ) : featured.length === 0 ? (
+          ) : desktopList.length === 0 && mobileList.length === 0 ? (
             <div className="rounded-2xl border border-white/10 bg-card p-8 text-center">
               <p className="text-sm text-muted-foreground">
                 New courses are being prepared — check back soon.
@@ -484,28 +487,37 @@ export default function Landing() {
             </div>
           ) : (
             <>
-              {/* MOBILE/TABLET — native swipe carousel, unchanged. */}
+              {/* MOBILE/TABLET — native swipe carousel fed by the admin's
+                  MOBILE selection (mirrors the desktop selection when no
+                  separate mobile list was saved). */}
               <div className="md:hidden">
-                <MotionCarousel
-                  items={featured}
-                  getKey={(c) => c._id}
-                  ariaLabel="Featured courses"
-                  itemClassName="w-[78vw] max-w-[300px] sm:w-[320px]"
-                  renderItem={(c) => <CourseCard course={c} className="h-full" />}
-                />
-                <Link
-                  to="/courses"
-                  className="mt-4 inline-flex items-center gap-1 text-sm font-medium text-lime-300 hover:underline"
-                >
-                  View all courses <ArrowRight className="size-3.5" />
-                </Link>
+                {mobileList.length > 0 && (
+                  <>
+                    <MotionCarousel
+                      items={mobileList}
+                      getKey={(c) => c._id}
+                      ariaLabel="Featured courses"
+                      itemClassName="w-[78vw] max-w-[300px] sm:w-[320px]"
+                      renderItem={(c) => <CourseCard course={c} className="h-full" />}
+                    />
+                    <Link
+                      to="/courses"
+                      className="mt-4 inline-flex items-center gap-1 text-sm font-medium text-lime-300 hover:underline"
+                    >
+                      View all courses <ArrowRight className="size-3.5" />
+                    </Link>
+                  </>
+                )}
               </div>
 
-              {/* DESKTOP (md+) — premium admin-curated slideshow: pages of
-                  course cards with prev/next, autoplay and active dots.
-                  Separate renderer so the mobile carousel is untouched. */}
+              {/* DESKTOP (md+) — premium admin-curated slideshow fed by the
+                  admin's DESKTOP selection: pages of course cards with
+                  prev/next, autoplay and active dots. Separate renderer so
+                  the mobile carousel is untouched. */}
               <div className="hidden md:block">
-                <CourseSlideshow courses={featured} />
+                {desktopList.length > 0 && (
+                  <CourseSlideshow courses={desktopList} />
+                )}
               </div>
             </>
           )}

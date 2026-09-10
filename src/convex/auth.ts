@@ -5,6 +5,7 @@ import { Password } from "@convex-dev/auth/providers/Password";
 import { Value } from "convex/values";
 import { type MutationCtx } from "./_generated/server";
 import { emailOtp } from "./auth/emailOtp";
+import { nameFromEmail } from "./lib";
 
 export const { auth, signIn, signOut, store, isAuthenticated } = convexAuth({
   providers: [
@@ -62,8 +63,14 @@ export const { auth, signIn, signOut, store, isAuthenticated } = convexAuth({
         const best = real[0];
         if (best) return best._id;
       }
+      // Accounts created without an explicit name (the common Email-OTP
+      // path) get a friendly name derived from their email prefix, so no one
+      // is ever saved or shown as "Anonymous".
       return await db.insert("users", {
-        name: typeof profile.name === "string" ? profile.name : undefined,
+        name:
+          typeof profile.name === "string" && profile.name.trim()
+            ? profile.name.trim()
+            : nameFromEmail(profile.email) || undefined,
         email: typeof profile.email === "string" ? profile.email : undefined,
         image: typeof profile.image === "string" ? profile.image : undefined,
         emailVerificationTime: profile.emailVerified ? Date.now() : undefined,

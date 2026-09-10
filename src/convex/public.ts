@@ -82,6 +82,57 @@ export const featuredCourses = query({
   },
 });
 
+/**
+ * Featured course slideshows — admin-curated, with SEPARATE desktop and
+ * mobile selections.
+ *
+ * The admin picks ordered course lists in Admin → Website & branding:
+ * - `featuredCourseSlideshow`       → desktop slideshow
+ * - `featuredCourseSlideshowMobile` → mobile slideshow (absent = mirror the
+ *   desktop selection)
+ *
+ * The homepage renders exactly the saved selection, in the saved order.
+ * Removed courses stay in the catalogue; nothing here falls back to fake
+ * data. Stored lists are filtered to published, non-archived courses that
+ * still exist; if nothing valid is saved for desktop we fall back to the
+ * highest-rated featured courses so the section is never empty.
+ */
+export const featuredCourseSlideshows = query({
+  args: {},
+  handler: async (ctx) => {
+    const courses = await ctx.db.query("courses").collect();
+    const published = courses.filter((c) => c.published && !c.archived);
+    const byId = new Map(published.map((c) => [c._id, c]));
+
+    const resolveSaved = async (key: string) => {
+      const saved = await ctx.db
+        .query("siteContent")
+        .withIndex("by_key", (q) => q.eq("key", key))
+        .first();
+      if (saved && Array.isArray(saved.value)) {
+        const picked = (saved.value as string[])
+          .map((id) => byId.get(id as Id<"courses">))
+          .filter((c): c is NonNullable<typeof c> => !!c);
+        if (picked.length > 0) return hydrateCourses(ctx, picked);
+      }
+      return null;
+    };
+
+    // No valid desktop selection — show the top featured courses by rating.
+    const fallback = async () => {
+      const featured = published.filter((c) => c.featured);
+      return hydrateCourses(
+        ctx,
+        featured.sort((a, b) => b.rating - a.rating).slice(0, 6),
+      );
+    };
+
+    const desktop = (await resolveSaved("featuredCourseSlideshow")) ?? (await fallback());
+    const mobile = (await resolveSaved("featuredCourseSlideshowMobile")) ?? desktop;
+    return { desktop, mobile };
+  },
+});
+
 /** Featured tutors — only those with featuredOnHomepage = true. */
 export const featuredTutors = query({
   args: {},

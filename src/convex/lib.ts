@@ -170,11 +170,34 @@ export async function requireAdminSession(
 export const isTutorUser = (u: Doc<"users"> | null | undefined) =>
   u?.role === ROLES.TUTOR && !!u?.verified;
 
-/** Public-safe projection of a user. */
+/**
+ * Derive a friendly name from an email address: everything before the "@",
+ * cleaned up (dots/underscores/plus-addressing split off, digits dropped,
+ * capitalized). "felix.ishola24@gmail.com" → "Felix", "aisha_b" → "Aisha B".
+ * Used as the initial display name for accounts created without one, so no
+ * one ever shows up as "Anonymous".
+ */
+export function nameFromEmail(email: string | undefined | null): string {
+  if (!email) return "";
+  const local = email.split("@")[0]?.trim() ?? "";
+  if (!local) return "";
+  const first = local
+    .replace(/[._+-].*$/, "") // drop separators and anything after them
+    .replace(/\d+$/, "") // drop trailing digits
+    .trim();
+  if (!first) return "";
+  return first
+    .split(/\s+/)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1).toLowerCase())
+    .join(" ");
+}
+
+/** Public-safe projection of a user. Never shows "Anonymous" — falls back
+ *  to a name derived from the email, then a neutral default. */
 export function publicUser(u: Doc<"users">) {
   return {
     _id: u._id,
-    name: u.name || "Anonymous",
+    name: u.name || nameFromEmail(u.email) || "Learner",
     image: u.image ?? null,
     headline: u.headline ?? null,
     role: u.role ?? ROLES.STUDENT,
