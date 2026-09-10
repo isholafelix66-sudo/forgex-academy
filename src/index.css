@@ -134,6 +134,18 @@
   body {
     overflow-x: clip;
   }
+  /* Global overflow guard: unbreakable words (URLs, long titles, emails)
+     and oversized media can never push a page wider than the viewport.
+     Layouts that intentionally scroll horizontally (carousels, tables,
+     steppers) opt out with their own overflow-x-auto containers. */
+  body :where(p, h1, h2, h3, h4, h5, h6, li, td, th, span, a, code, pre) {
+    overflow-wrap: break-word;
+  }
+  img,
+  video,
+  iframe {
+    max-width: 100%;
+  }
   /* iOS Safari: block the pull-to-refresh gesture at BOTH levels. Pulling
      down on an already-at-top page re-navigates (re-runs index.html), which
      reads as a random full-page refresh — most often triggered from the

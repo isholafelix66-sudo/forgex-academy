@@ -38,18 +38,6 @@ export default function DashboardShell() {
 
   const sections = [
     {
-      // Public ForgeX homepage — no label so it sits at the very top of the
-      // sidebar, above the Learning section.
-      items: [
-        {
-          to: "/",
-          label: "Explore ForgeX",
-          icon: <Globe className="size-4" />,
-          end: true,
-        },
-      ],
-    },
-    {
       label: "Learning",
       items: [
         { to: "/dashboard", label: "Dashboard", icon: <LayoutDashboard className="size-4" />, end: true },
@@ -160,7 +148,7 @@ export default function DashboardShell() {
     {
       items: [
         { to: "/dashboard/support", label: "Need Help?", icon: <HelpCircle className="size-4" /> },
-        { to: "/", label: "Explore ForgeX", icon: <Globe className="size-4" /> },
+        { to: "/", label: "Back to ForgeX home", icon: <Globe className="size-4" /> },
       ],
     },
   ];

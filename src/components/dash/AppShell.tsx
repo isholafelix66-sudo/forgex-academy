@@ -1,6 +1,6 @@
 import { useEffect, type ReactNode } from "react";
 import { Link, NavLink, Outlet, useLocation, useNavigate } from "react-router";
-import { LogOut } from "lucide-react";
+import { Home as HomeIcon, LogOut } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/hooks/use-auth";
@@ -84,6 +84,17 @@ export function AppShell({
       </div>
 
       <nav className="flex-1 space-y-6 overflow-y-auto px-3 py-5">
+        {/* ForgeX Home — first item in the sidebar on every dashboard.
+            Links to the main public ForgeX website homepage (/), never the
+            dashboard home, keeping the public site and the authenticated
+            workspace clearly separated. Inter 600, 15px, -0.01em. */}
+        <Link
+          to="/"
+          className="flex items-center gap-3 rounded-xl border border-lime-400/20 bg-lime-400/6 px-3 py-2.5 text-[15px] font-semibold tracking-[-0.01em] text-foreground transition-colors hover:border-lime-400/40 hover:bg-lime-400/12 hover:text-lime-300"
+        >
+          <HomeIcon className="size-4 shrink-0 text-lime-400" />
+          <span className="flex-1 truncate">ForgeX Home</span>
+        </Link>
         {sections.map((section, i) => (
           <div key={i}>
             {section.label && (
@@ -176,11 +187,21 @@ export function AppShell({
       {/* Main */}
       <div className="flex min-w-0 flex-1 flex-col md:pl-64">
         {banner}
-        <header className="sticky top-0 z-30 flex h-16 items-center justify-between border-b border-white/8 bg-background/85 px-4 backdrop-blur-xl sm:px-6">
+        <header className="sticky top-0 z-30 flex h-16 items-center justify-between gap-2 border-b border-white/8 bg-background/85 px-4 backdrop-blur-xl sm:px-6">
           <div className="flex min-w-0 items-center gap-3">
-            <h1 className="font-display min-w-0 truncate text-lg font-bold">{title}</h1>
+            <h1 className="font-display min-w-0 truncate text-base font-bold sm:text-lg">{title}</h1>
           </div>
-          <div className="flex shrink-0 items-center gap-2">
+          <div className="flex min-w-0 shrink-0 items-center gap-2">
+            {/* ForgeX Home — visible on every screen size, including small
+                phones (14px/600 on mobile, 15px/600 from sm). Goes to the
+                main public website homepage, NOT the dashboard home. */}
+            <Link
+              to="/"
+              className="inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full border border-white/12 bg-white/5 px-3 py-2 text-[14px] font-semibold tracking-[-0.01em] text-foreground transition-colors hover:border-lime-400/40 hover:bg-lime-400/10 hover:text-lime-300 sm:px-3.5 sm:text-[15px]"
+            >
+              <HomeIcon className="size-4 shrink-0 text-lime-400" />
+              ForgeX Home
+            </Link>
             {/* roleLink intentionally NOT duplicated in the header — the
                 sidebar (≥768px) is the single source for dashboard links, so
                 desktop never shows the same Dashboard link twice. */}

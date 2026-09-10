@@ -43,6 +43,19 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
     redirectAfterAuth,
   );
 
+  // ForgeX entry flow: a fresh sign-in lands on the MAIN ForgeX WEBSITE
+  // homepage first. The homepage shows the prominent "Dashboard" entry
+  // point; from there users switch into their workspace, and "ForgeX Home"
+  // in the dashboards returns them here. Only an explicit returnTo/redirect
+  // (deep link, protected-route bounce, header Dashboard button) bypasses
+  // the homepage and goes straight to the intended destination.
+  const cameFromDeepLink = !!searchParams.get("returnTo");
+  const landingRedirect = cameFromDeepLink
+    ? redirect
+    : redirect === "/dashboard"
+      ? "/"
+      : redirect;
+
   // Signing up through the Become-a-Tutor flow creates a TUTOR account
   // (pending verification), never a student account. The account's role is
   // the source of truth everywhere else, so it must be right from day one.
@@ -79,11 +92,12 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
     }
   }, [authLoading, isAuthenticated, user, initializeUser, intendedRole]);
 
-  // Role-aware landing after sign-in. The account's role is the source of
-  // truth: a tutor ALWAYS goes to the tutor dashboard (the verification gate
-  // shows its own screen until an admin verifies), an admin to the admin
-  // area, and only students land on the student dashboard. A tutor account
-  // is never pushed into the student portal.
+  // Role-aware landing after sign-in. Per the ForgeX entry flow, accounts
+  // land on the MAIN ForgeX WEBSITE first — the homepage offers the prominent
+  // "Dashboard" entry point into the student/tutor workspace. Only an
+  // explicit returnTo/redirect (deep link, ProtectedRoute) bypasses it.
+  // The account's role is the source of truth: a tutor account is never
+  // pushed into the student portal.
   useEffect(() => {
     if (!authLoading && isAuthenticated) {
       const role = user?.role;
@@ -92,10 +106,10 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
           ? "/tutor"
           : role === "admin"
             ? "/admin"
-            : redirect;
+            : landingRedirect;
       navigate(dest);
     }
-  }, [authLoading, isAuthenticated, navigate, redirect, user]);
+  }, [authLoading, isAuthenticated, navigate, landingRedirect, user]);
 
   const sendCode = async (e?: React.FormEvent) => {
     e?.preventDefault();

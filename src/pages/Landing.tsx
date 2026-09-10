@@ -17,6 +17,7 @@ import { Reveal } from "@/components/site/Reveal";
 import { SectionHeading } from "@/components/site/SectionHeading";
 import { CourseCard } from "@/components/site/CourseCard";
 import { MotionCarousel } from "@/components/site/MotionCarousel";
+import { CourseSlideshow } from "@/components/site/CourseSlideshow";
 import { ForgeXMotionVideo } from "@/components/site/ForgeXMotionVideo";
 import { CategoryIcon } from "@/components/site/CategoryIcon";
 import { Button } from "@/components/ui/button";
@@ -500,34 +501,11 @@ export default function Landing() {
                 </Link>
               </div>
 
-              {/* DESKTOP (md+) — 4-column grid with staggered entrance and
-                  a rich lift/tilt/glow hover. Split into its own renderer so
-                  the mobile carousel and desktop grid never interfere. */}
-              <div className="hidden gap-5 md:grid md:grid-cols-4">
-                {featured.map((c, i) => (
-                  <motion.div
-                    key={c._id}
-                    initial={{ opacity: 0, y: 28, scale: 0.97 }}
-                    whileInView={{ opacity: 1, y: 0, scale: 1 }}
-                    viewport={{ once: true, margin: "-60px" }}
-                    transition={{
-                      duration: 0.55,
-                      delay: i * 0.08,
-                      ease: [0.22, 1, 0.36, 1],
-                    }}
-                    whileHover={{ y: -5, scale: 1.015 }}
-                    style={{
-                      transformPerspective: 900,
-                      transformOrigin: "center",
-                      transitionTimingFunction: "cubic-bezier(0.22, 1, 0.36, 1)",
-                    }}
-                    className="group/card h-full"
-                  >
-                    <div className="relative h-full rounded-2xl transition-shadow duration-300 group-hover/card:shadow-[0_20px_45px_-18px_rgba(166,255,0,0.28)]">
-                      <CourseCard course={c} className="h-full" />
-                    </div>
-                  </motion.div>
-                ))}
+              {/* DESKTOP (md+) — premium admin-curated slideshow: pages of
+                  course cards with prev/next, autoplay and active dots.
+                  Separate renderer so the mobile carousel is untouched. */}
+              <div className="hidden md:block">
+                <CourseSlideshow courses={featured} />
               </div>
             </>
           )}
