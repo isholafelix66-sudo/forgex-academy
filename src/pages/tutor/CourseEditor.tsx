@@ -36,6 +36,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { PageHeader } from "@/components/dash/PageHeader";
+import { SafeImage } from "@/components/site/SafeImage";
 import { useAuth } from "@/hooks/use-auth";
 import { cn } from "@/lib/utils";
 import { formatLessonDuration } from "@/lib/format";
@@ -422,10 +423,15 @@ function DetailsForm({
           <Label>Course thumbnail</Label>
           {form.image ? (
             <div className="flex flex-wrap items-center gap-4 rounded-xl border border-white/10 bg-black/20 p-3">
-              <img
+              <SafeImage
                 src={form.image}
                 alt="Course thumbnail"
                 className="h-20 w-32 rounded-lg border border-white/10 object-cover"
+                fallback={
+                  <div className="flex h-20 w-32 items-center justify-center rounded-lg border border-white/10 bg-black/30 text-xs text-muted-foreground">
+                    Preview unavailable
+                  </div>
+                }
               />
               <div className="min-w-0 flex-1">
                 <p className="text-sm text-lime-300/90">✓ Thumbnail uploaded</p>

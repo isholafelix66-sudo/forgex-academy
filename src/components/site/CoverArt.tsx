@@ -5,11 +5,11 @@ import { courseCoverFor } from "@/lib/course-covers";
 
 /**
  * A course cover: layered dark surface with a category-colored glow,
- * subtle grid and a big icon/emoji. If an uploaded cover image is missing
- * or fails to load, the cover gracefully falls back to the gradient + icon
- * treatment instead of showing a broken image. Passing the course `slug`
- * also supplies a real curated photo for seeded courses until an admin
- * uploads a custom cover (uploads always win).
+ * subtle grid and a big icon/emoji. Cover sources are tried in order —
+ * admin-uploaded image → curated photo for the course slug → gradient +
+ * icon — so a dead or deleted URL (expired Cloudinary asset, removed stock
+ * photo) silently steps down to the next source instead of ever showing a
+ * broken image or a bare icon where a photo should be.
  */
 export function CoverArt({
   gradient,
@@ -26,15 +26,20 @@ export function CoverArt({
   className?: string;
   iconClassName?: string;
 }) {
-  const [imgFailed, setImgFailed] = useState(false);
-  // Admin-uploaded cover wins; otherwise use the curated photo for this
-  // seeded course (if any).
-  const effectiveImage = image ?? courseCoverFor(slug);
+  // URLs that failed to load this session. A URL is only given one chance;
+  // the browser won't re-request a dead asset on every render anyway.
+  const [failed, setFailed] = useState<Set<string>>(() => new Set());
+  const curated = courseCoverFor(slug);
 
-  // Reset when the image changes (e.g. admin re-uploads a course cover).
+  // Reset when the sources change (e.g. admin re-uploads a course cover).
   useEffect(() => {
-    setImgFailed(false);
-  }, [effectiveImage]);
+    setFailed(new Set());
+  }, [image, curated]);
+
+  const chain = [image, curated].filter(
+    (src): src is string => !!src && !failed.has(src),
+  );
+  const effectiveImage = chain[0];
 
   return (
     <div
@@ -56,13 +61,20 @@ export function CoverArt({
           coverClass(gradient),
         )}
       />
-      {effectiveImage && !imgFailed ? (
+      {effectiveImage ? (
         <img
+          key={effectiveImage}
           src={effectiveImage}
           alt=""
           loading="lazy"
           decoding="async"
-          onError={() => setImgFailed(true)}
+          onError={() =>
+            setFailed((prev) => {
+              const next = new Set(prev);
+              next.add(effectiveImage);
+              return next;
+            })
+          }
           className="relative size-full object-cover"
         />
       ) : (
