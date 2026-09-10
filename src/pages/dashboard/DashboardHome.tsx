@@ -29,6 +29,7 @@ export default function DashboardHome() {
   const submissions = useQuery(api.submissions.mySubmissions);
   const announcements = useQuery(api.public.announcementsList);
   const recommendations = useQuery(api.learn.recommendations);
+  const adminRecommended = useQuery(api.learn.recommendedCourses);
 
   // Role is the source of truth: this is the STUDENT dashboard. A tutor (or
   // admin) account is never shown student content here — they belong in
@@ -36,6 +37,13 @@ export default function DashboardHome() {
   // messaging — stay reachable for tutors via their own shell.)
   if (user?.role === "tutor") return <Navigate to="/tutor" replace />;
   if (user?.role === "admin") return <Navigate to="/admin" replace />;
+
+  // Admin picks win when present; otherwise fall back to the existing
+  // personalized recommendations query.
+  const shownRecommendations =
+    adminRecommended && adminRecommended.length > 0
+      ? adminRecommended
+      : recommendations;
 
   const inProgress = enrollments?.filter(
     (e) => e.enrollment.status === "in-progress",
@@ -217,9 +225,9 @@ export default function DashboardHome() {
           <Sparkles className="size-5 text-lime-300" />
           <h2 className="font-display text-xl font-bold">Recommended for you</h2>
         </div>
-        {recommendations && recommendations.length > 0 ? (
+        {shownRecommendations && shownRecommendations.length > 0 ? (
           <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
-            {recommendations.slice(0, 3).map((c) => (
+            {shownRecommendations.map((c) => (
               <CourseCard key={c._id} course={c} />
             ))}
           </div>
@@ -227,7 +235,7 @@ export default function DashboardHome() {
           <div className="flex items-center gap-4 rounded-2xl border border-white/10 bg-card p-6">
             <GraduationCap className="size-8 shrink-0 text-lime-300" />
             <p className="text-sm text-muted-foreground">
-              Enroll in a course to unlock personalized recommendations.
+              Recommended courses are currently unavailable.
             </p>
           </div>
         )}

@@ -11,6 +11,26 @@ import { courseRequirements, effectiveWatchedPercent, recomputeCourseDuration, s
 // Shared learning helpers (imported by lessonquizzes.ts / exams.ts)
 // ---------------------------------------------------------------------------
 
+export const recommendedCourses = query({
+  args: {},
+  handler: async (ctx) => {
+    const content = await ctx.db
+      .query("siteContent")
+      .withIndex("by_key", (q) => q.eq("key", "recommendedCourseIds"))
+      .first();
+    const ids =
+      Array.isArray(content?.value) &&
+      content.value.every((x): x is string => typeof x === "string")
+        ? content.value
+        : [];
+    if (!ids.length) return [];
+    const courses = await ctx.db.query("courses").collect();
+    const set = new Set(ids);
+    const selected = courses.filter((c) => set.has(c._id.toString()) && c.published && !c.archived);
+    return hydrateCourses(ctx, selected.sort((a, b) => ids.indexOf(a._id.toString()) - ids.indexOf(b._id.toString())));
+  },
+});
+
 export async function enrollmentFor(
   ctx: QueryCtx | MutationCtx,
   studentId: Id<"users">,

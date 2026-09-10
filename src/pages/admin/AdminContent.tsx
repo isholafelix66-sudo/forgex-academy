@@ -311,6 +311,78 @@ export default function AdminContent() {
   const [activeSurface, setActiveSurface] = useState<"desktop" | "mobile">("desktop");
   const [savingPicks, setSavingPicks] = useState(false);
 
+  // Recommended courses — admin-controlled student dashboard recommendations.
+  const currentRecommended: string[] =
+    Array.isArray(content?.recommendedCourseIds)
+      ? (content.recommendedCourseIds as unknown[]).filter(
+          (x): x is string => typeof x === "string",
+        )
+      : [];
+  const [recommendedDrafts, setRecommendedDrafts] = useState<string[] | null>(null);
+  const [savingRecommended, setSavingRecommended] = useState(false);
+
+  useEffect(() => {
+    if (
+      recommendedDrafts === null &&
+      content?.recommendedCourseIds !== undefined
+    ) {
+      setRecommendedDrafts(
+        Array.isArray(content.recommendedCourseIds)
+          ? (content.recommendedCourseIds as unknown[]).filter(
+              (x): x is string => typeof x === "string",
+            )
+          : [],
+      );
+    }
+  }, [content]);
+
+  const recommendedList =
+    recommendedDrafts ?? currentRecommended;
+
+  const toggleRecommended = (id: string) => {
+    setRecommendedDrafts((prev) => {
+      const base = prev ?? recommendedList;
+      return base.includes(id)
+        ? base.filter((x) => x !== id)
+        : [...base, id];
+    });
+  };
+
+  const moveRecommended = (i: number, dir: -1 | 1) => {
+    const base = [...recommendedList];
+    const j = i + dir;
+    if (j < 0 || j >= base.length) return;
+    [base[i], base[j]] = [base[j], base[i]];
+    setRecommendedDrafts(base);
+  };
+
+  const saveRecommended = async () => {
+    setSavingRecommended(true);
+    try {
+      await contentSet({
+        key: "recommendedCourseIds",
+        value: recommendedList,
+        token,
+      });
+      setRecommendedDrafts(null);
+      toast.success("Recommended courses updated — live on the dashboard.");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to save.");
+    } finally {
+      setSavingRecommended(false);
+    }
+  };
+
+  const clearRecommended = async () => {
+    try {
+      await deleteContent({ key: "recommendedCourseIds", token });
+      setRecommendedDrafts([]);
+      toast.success("Recommended courses cleared — section is now hidden.");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to clear.");
+    }
+  };
+
   // Saved values (empty until the site content query arrives).
   const savedDesktop: string[] = Array.isArray(content?.featuredCourseSlideshow)
     ? (content.featuredCourseSlideshow as unknown[]).filter(
@@ -498,6 +570,183 @@ export default function AdminContent() {
                   </>
                 )}
               </div>
+            </div>
+          </section>
+
+          {/* Recommended courses — admin-picked courses shown as “Recommended for You” on the student dashboard */}
+          <section className="rounded-2xl border border-white/10 bg-card p-5 sm:p-6">
+            <div className="flex flex-wrap items-start justify-between gap-4">
+              <div className="min-w-0">
+                <h2 className="font-display flex items-center gap-2 text-base font-semibold">
+                  <Layers className="size-4 text-lime-300" /> Recommended for you
+                </h2>
+                <p className="mt-1 max-w-2xl text-sm leading-relaxed text-muted-foreground">
+                  Choose the courses that appear under “Recommended for You” on the student dashboard. Pick from real published courses, reorder them and save — unselect everything to hide the section.
+                </p>
+              </div>
+              <span className="inline-flex items-center gap-1.5 rounded-full border border-lime-400/40 bg-lime-400/10 px-3 py-1 text-xs font-semibold text-lime-300">
+                {recommendedList.length} selected
+              </span>
+            </div>
+
+            <div className="mt-5 grid gap-4 lg:grid-cols-[1fr_340px]">
+              {/* Picker — every real course, selected ones ticked */}
+              <div className="min-w-0 rounded-xl border border-white/10 bg-black/20">
+                <p className="border-b border-white/8 px-4 py-2.5 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                  All published courses ({allCourses?.filter(Boolean).length ?? "…"})
+                </p>
+                {allCourses === undefined ? (
+                  <div className="flex items-center justify-center gap-2 p-8 text-sm text-muted-foreground">
+                    <Loader2 className="size-4 animate-spin" /> Loading courses…
+                  </div>
+                ) : allCourses.filter(Boolean).length === 0 ? (
+                  <p className="p-8 text-center text-sm text-muted-foreground">
+                    No courses yet.
+                  </p>
+                ) : (
+                  <div className="max-h-72 space-y-0.5 overflow-y-auto p-2">
+                    {allCourses
+                      .filter(Boolean)
+                      .map((c) => {
+                        if (!c) return null;
+                        const chosen = recommendedList.includes(c._id);
+                        return (
+                          <button
+                            key={c._id}
+                            type="button"
+                            onClick={() => toggleRecommended(c._id)}
+                            className={
+                              "flex w-full min-w-0 items-center gap-3 rounded-lg px-2.5 py-2 text-left transition-colors " +
+                              (chosen
+                                ? "bg-lime-400/10 text-foreground"
+                                : "hover:bg-white/5")
+                            }
+                          >
+                            <span
+                              className={
+                                "flex size-5 shrink-0 items-center justify-center rounded border " +
+                                (chosen
+                                  ? "border-lime-400 bg-lime-400 text-black"
+                                  : "border-white/20")
+                              }
+                            >
+                              {chosen ? <Check className="size-3.5" /> : null}
+                            </span>
+                            {c.image ? (
+                              <img
+                                src={c.image}
+                                alt=""
+                                className="h-8 w-12 shrink-0 rounded object-cover"
+                              />
+                            ) : (
+                              <span className="h-8 w-12 shrink-0 rounded bg-gradient-to-br from-lime-400/30 to-emerald-500/10" />
+                            )}
+                            <span className="min-w-0 flex-1">
+                              <span className="block truncate text-sm font-medium">
+                                {c.title}
+                              </span>
+                              <span className="block truncate text-xs text-muted-foreground">
+                                {c.category?.name ?? "Uncategorised"}
+                                {!c.published && " · draft"}
+                              </span>
+                            </span>
+                            {chosen && (
+                              <span className="shrink-0 rounded-full bg-lime-400 px-1.5 py-0.5 text-[10px] font-bold text-black">
+                                #{currentRecommended.indexOf(c._id) + 1}
+                              </span>
+                            )}
+                          </button>
+                        );
+                      })}
+                  </div>
+                )}
+              </div>
+
+              {/* Selected order — reorder + remove */}
+              <div className="min-w-0 rounded-xl border border-white/10 bg-black/20">
+                <p className="border-b border-white/8 px-4 py-2.5 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                  Recommended order
+                </p>
+                {recommendedList.length === 0 ? (
+                  <p className="p-6 text-center text-sm text-muted-foreground">
+                    No courses selected. Tick courses on the left to build the
+                    Recommended for You list — top of this list shows first.
+                  </p>
+                ) : (
+                  <ol className="max-h-72 space-y-1.5 overflow-y-auto p-2">
+                    {recommendedList.map((id, i) => {
+                      const c = allCourses?.find((x) => x._id === id);
+                      return (
+                        <li
+                          key={id}
+                          className="flex min-w-0 items-center gap-2 rounded-lg border border-white/8 bg-card px-2 py-1.5"
+                        >
+                          <span className="w-5 shrink-0 text-center text-xs font-bold text-lime-300">
+                            {i + 1}
+                          </span>
+                          <span className="min-w-0 flex-1 truncate text-sm">
+                            {c?.title ?? "Course"}
+                          </span>
+                          <span className="flex shrink-0 items-center">
+                            <button
+                              type="button"
+                              aria-label="Move up"
+                              disabled={i === 0}
+                              onClick={() => moveRecommended(i, -1)}
+                              className="rounded p-1 text-muted-foreground transition-colors hover:bg-white/10 hover:text-foreground disabled:opacity-30"
+                            >
+                              <ArrowUp className="size-3.5" />
+                            </button>
+                            <button
+                              type="button"
+                              aria-label="Move down"
+                              disabled={i === recommendedList.length - 1}
+                              onClick={() => moveRecommended(i, 1)}
+                              className="rounded p-1 text-muted-foreground transition-colors hover:bg-white/10 hover:text-foreground disabled:opacity-30"
+                            >
+                              <ArrowDown className="size-3.5" />
+                            </button>
+                            <button
+                              type="button"
+                              aria-label="Remove from recommendations"
+                              onClick={() => toggleRecommended(id)}
+                              className="rounded p-1 text-muted-foreground transition-colors hover:bg-rose-400/10 hover:text-rose-300"
+                            >
+                              <Trash2 className="size-3.5" />
+                            </button>
+                          </span>
+                        </li>
+                      );
+                    })}
+                  </ol>
+                )}
+              </div>
+            </div>
+
+            <div className="mt-5 flex flex-wrap items-center gap-3">
+              <Button
+                onClick={saveRecommended}
+                disabled={savingRecommended || !currentRecommended.length}
+                className="gap-2 bg-lime-400 font-semibold text-black hover:bg-lime-300"
+              >
+                {savingRecommended ? (
+                  <Loader2 className="size-4 animate-spin" />
+                ) : (
+                  <Check className="size-4" />
+                )}
+                {savingRecommended ? "Saving…" : "Save recommendations"}
+              </Button>
+              <Button
+                onClick={clearRecommended}
+                variant="outline"
+                className="gap-2"
+              >
+                <Trash2 className="size-4" />
+                Clear recommendations
+              </Button>
+              <p className="text-xs text-muted-foreground">
+                Changes go live on the student dashboard after saving.
+              </p>
             </div>
           </section>
 
