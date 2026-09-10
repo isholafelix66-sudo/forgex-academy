@@ -23,6 +23,27 @@ export const ensureSeedDataInternal = internalMutation({
     }).handler(ctx, args),
 });
 
+/**
+ * Seeded stock-photo cover URLs that have died upstream (deleted Unsplash
+ * uploads → HTTP 404 in the browser). The seed swaps any stored course cover
+ * that still matches one of these for the fresh seed image, so existing
+ * databases self-repair on the next seed run instead of showing broken
+ * course images. Admin-uploaded covers never match, so they are never touched.
+ */
+const KNOWN_DEAD_IMAGE_URLS = [
+  "https://images.unsplash.com/photo-1547334411-58a4a0e8e5a5?w=1200&q=80", // Photoshop Mastery / Pro Workflows (pre-2026 fix)
+];
+
+/** Replacement cover per course slug for the known-dead URLs above.
+ *  `*` is the fallback for courses without a specific replacement. */
+const SEED_IMAGE_FIXES: Record<string, string> = {
+  "photoshop-mastery":
+    "https://images.unsplash.com/photo-1611162617213-7d7a39e9b1d7?w=1200&q=80",
+  "photoshop-pro-workflows":
+    "https://images.unsplash.com/photo-1572044162444-ad60f128bdea?w=1200&q=80",
+  "*": "https://images.unsplash.com/photo-1561070791-2526d30994b5?w=1200&q=80",
+};
+
 const VIDS = [
   "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4",
   "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ElephantsDream.mp4",
@@ -364,6 +385,24 @@ export const ensureSeedData = mutation({
     const missingCourses = EXPECTED_COURSE_SLUGS.filter(
       (s) => !seededSlugs.has(s) && !deletedCatalogSlugs.has(s),
     );
+    // ------------------------------------------------------------------
+    // Broken-cover repair — runs BEFORE the short-circuit so an existing,
+    // already-complete database still gets its dead seeded cover photos
+    // swapped for the fresh seed images (e.g. a stock-photo URL that died
+    // upstream). Only exact matches of known-dead URLs are patched; the
+    // repair is a no-op once every match has been fixed.
+    // ------------------------------------------------------------------
+    if (KNOWN_DEAD_IMAGE_URLS.length > 0 && seededSlugs.size > 0) {
+      const deadSet = new Set(KNOWN_DEAD_IMAGE_URLS);
+      for (const c of await ctx.db.query("courses").collect()) {
+        if (c.image && deadSet.has(c.image)) {
+          const fresh = SEED_IMAGE_FIXES[c.slug] ?? SEED_IMAGE_FIXES["*"];
+          if (fresh) {
+            await ctx.db.patch(c._id, { image: fresh });
+          }
+        }
+      }
+    }
     if (
       existing &&
       anyCourse &&
@@ -852,7 +891,7 @@ export const ensureSeedData = mutation({
       description: "Layers, masks, selections, retouching, color correction and social media design — with follow-along practicals in every lesson.",
       long: "Stop watching and start doing. This course takes you through the Photoshop skills working designers actually use: the interface, layers, masks, the pen tool, adjustment layers, blending modes, smart objects, retouching, background removal and color correction — each topic with a follow-along practical and a deliverable you can submit.",
       categoryId: catDesign, tutorId: tSofia, roadmapId: design.id, levelId: design.levelIds[2],
-      difficulty: "intermediate", hours: 30, rating: 4.9, ratingCount: 388, gradient: "sky", icon: "🖌️", image: "https://images.unsplash.com/photo-1547334411-58a4a0e8e5a5?w=1200&q=80",
+      difficulty: "intermediate", hours: 30, rating: 4.9, ratingCount: 388, gradient: "sky", icon: "🖌️", image: "https://images.unsplash.com/photo-1611162617213-7d7a39e9b1d7?w=1200&q=80",
       prerequisites: ["Design Fundamentals"], skills: ["Photoshop", "Layer masks", "Pen tool", "Retouching", "Color correction"],
       featured: true,
       lessons: [
@@ -1006,7 +1045,7 @@ export const ensureSeedData = mutation({
       description: "Frequency separation, advanced compositing, actions, batch processing and client delivery — the professional Photoshop toolkit.",
       long: "You know the tools; now work like a professional. This course covers the advanced techniques working designers and retouchers use daily: frequency separation retouching, advanced composites, smart workflows, actions and batch processing, print-ready delivery and client-style projects.",
       categoryId: catDesign, tutorId: tSofia, roadmapId: design.id, levelId: design.levelIds[4],
-      difficulty: "professional", hours: 28, rating: 4.9, ratingCount: 203, gradient: "sky", icon: "🖌️", image: "https://images.unsplash.com/photo-1547334411-58a4a0e8e5a5?w=1200&q=80",
+      difficulty: "professional", hours: 28, rating: 4.9, ratingCount: 203, gradient: "sky", icon: "🖌️", image: "https://images.unsplash.com/photo-1572044162444-ad60f128bdea?w=1200&q=80",
       prerequisites: ["Photoshop Mastery"], skills: ["Frequency separation", "Compositing", "Actions & batch", "Print delivery", "Client workflow"],
       featured: false,
       lessons: [

@@ -36,7 +36,7 @@ export const COURSE_COVER_IMAGES: Record<string, string> = {
   "professional-graphic-design":
     "https://images.unsplash.com/photo-1561070791-2526d30994b5?w=1200&q=80",
   "photoshop-mastery":
-    "https://images.unsplash.com/photo-1547334411-58a4a0e8e5a5?w=1200&q=80",
+    "https://images.unsplash.com/photo-1611162617213-7d7a39e9b1d7?w=1200&q=80",
   "video-editing-with-capcut":
     "https://images.unsplash.com/photo-1561070791-2526d30994b5?w=1200&q=80",
   // AI & modern-work courses

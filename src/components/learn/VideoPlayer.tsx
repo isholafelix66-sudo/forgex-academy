@@ -406,15 +406,7 @@ export function VideoPlayer({
 
   if (!url) {
     if (image) {
-      return (
-        <div className="aspect-video w-full max-w-full overflow-hidden rounded-2xl border border-white/10 bg-black">
-          <img
-            src={image}
-            alt={title ?? "Lesson image"}
-            className="size-full object-cover"
-          />
-        </div>
-      );
+      return <LessonCover image={image} alt={title ?? "Lesson image"} />;
     }
     return (
       <div className="flex aspect-video w-full max-w-full flex-col items-center justify-center gap-3 rounded-2xl border border-white/10 bg-black/40 text-center">
@@ -570,6 +562,31 @@ function NativeVideo({
       >
         Your browser doesn&apos;t support video playback.
       </video>
+    </div>
+  );
+}
+
+/** Static lesson cover image that never shows a broken-image icon — if the
+ *  photo fails to load it falls back to the branded placeholder. */
+function LessonCover({ image, alt }: { image: string; alt: string }) {
+  const [failed, setFailed] = useState(false);
+  if (failed) {
+    return (
+      <div className="flex aspect-video w-full max-w-full items-center justify-center rounded-2xl border border-white/10 bg-gradient-to-br from-[#10150e] via-[#0a0d0a] to-[#1a2410] text-center">
+        <p className="px-6 text-sm text-muted-foreground">
+          Cover unavailable — open the lesson notes and resources below.
+        </p>
+      </div>
+    );
+  }
+  return (
+    <div className="aspect-video w-full max-w-full overflow-hidden rounded-2xl border border-white/10 bg-black">
+      <img
+        src={image}
+        alt={alt}
+        onError={() => setFailed(true)}
+        className="size-full object-cover"
+      />
     </div>
   );
 }

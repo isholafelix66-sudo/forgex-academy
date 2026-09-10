@@ -22,6 +22,7 @@ import { ForgeXMotionVideo } from "@/components/site/ForgeXMotionVideo";
 import { CategoryIcon } from "@/components/site/CategoryIcon";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { courseCoverFor } from "@/lib/course-covers";
 import {
   normalizeHeroSlides,
   type HeroSlide,
@@ -351,6 +352,34 @@ const VALUE_PROPS = [
   { icon: ShieldCheck, title: "Verified", sub: "certificates" },
 ];
 
+/** Cover for the "Continue learning" card that never shows a broken image:
+ *  if the stored course photo fails to load it swaps to the curated cover,
+ *  and finally to the course's emoji icon. */
+function ContinueCover({
+  image,
+  slug,
+  icon,
+}: {
+  image?: string | null;
+  slug: string;
+  icon?: string | null;
+}) {
+  const [failed, setFailed] = useState(false);
+  const effective = failed ? (courseCoverFor(slug) ?? null) : (image ?? null);
+  return effective ? (
+    <img
+      src={effective}
+      alt=""
+      onError={() => setFailed(true)}
+      className="h-full w-full object-cover"
+    />
+  ) : (
+    <span className="flex h-full w-full items-center justify-center text-2xl">
+      {icon ?? "📘"}
+    </span>
+  );
+}
+
 export default function Landing() {
   const reduce = useReducedMotion();
   // Admin-curated slideshows with SEPARATE desktop and mobile selections.
@@ -392,17 +421,11 @@ export default function Landing() {
               className="card-lift mt-4 flex items-center gap-4 rounded-2xl border border-white/10 bg-card p-4"
             >
               <div className="relative hidden h-16 w-24 shrink-0 overflow-hidden rounded-xl bg-gradient-to-br from-lime-400/25 to-emerald-500/10 sm:block">
-                {current.course.image ? (
-                  <img
-                    src={current.course.image}
-                    alt=""
-                    className="h-full w-full object-cover"
-                  />
-                ) : (
-                  <span className="flex h-full w-full items-center justify-center text-2xl">
-                    {current.course.icon ?? "📘"}
-                  </span>
-                )}
+                <ContinueCover
+                  image={current.course.image}
+                  slug={current.course.slug}
+                  icon={current.course.icon}
+                />
               </div>
               <div className="min-w-0 flex-1">
                 <p className="truncate font-display text-base font-semibold">
