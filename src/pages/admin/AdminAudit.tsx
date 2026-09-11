@@ -55,13 +55,16 @@ export default function AdminAudit() {
                 <Avatar name={l.adminName} className="size-8" />
                 <div className="min-w-0 flex-1">
                   <p className="text-sm">
-                    <span className="font-semibold">{l.adminName}</span>{" "}
-                    <span className="text-muted-foreground">→</span>{" "}
+                    <span className="font-semibold">{l.adminName}</span>
+                    <span className="text-muted-foreground"> → </span>
                     <span className="font-medium text-lime-300">{l.action}</span>
-                    <span className="text-muted-foreground"> — {l.detail}</span>
-                  </p>
-                    {l.tutorName ? ` · tutor: ${l.tutorName}` : ""}
-                    {l.reason ? ` · ${l.reason}` : ""}
+                    <span className="text-muted-foreground"> &mdash; {l.detail}</span>
+                    {l.tutorName && (
+                      <span className="text-muted-foreground"> &middot; tutor: {l.tutorName}</span>
+                    )}
+                    {l.reason && (
+                      <span className="text-muted-foreground"> &middot; {l.reason}</span>
+                    )}
                   </p>
                 </div>
                 <span className="shrink-0 text-xs text-muted-foreground">{formatDate(l.createdAt)}</span>
