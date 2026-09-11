@@ -1,4 +1,4 @@
-import { Suspense, useEffect, useMemo, useState, type ReactNode } from "react";
+import { Suspense, useEffect, useMemo, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router";
 import { useMutation } from "convex/react";
 import { api } from "@/convex/_generated/api";
@@ -43,18 +43,11 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
     redirectAfterAuth,
   );
 
-  // ForgeX entry flow: a fresh sign-in lands on the MAIN ForgeX WEBSITE
-  // homepage first. The homepage shows the prominent "Dashboard" entry
-  // point; from there users switch into their workspace, and "ForgeX Home"
-  // in the dashboards returns them here. Only an explicit returnTo/redirect
-  // (deep link, protected-route bounce, header Dashboard button) bypasses
-  // the homepage and goes straight to the intended destination.
-  const cameFromDeepLink = !!searchParams.get("returnTo");
-  const landingRedirect = cameFromDeepLink
-    ? redirect
-    : redirect === "/dashboard"
-      ? "/"
-      : redirect;
+  // ForgeX entry flow: signing in ALWAYS lands on the MAIN ForgeX WEBSITE
+  // homepage ("ForgeX Home") first — for students and tutors alike, even if
+  // the sign-in started from a protected route. Admin accounts go to the
+  // admin dashboard. Profile settings is never a post-login destination;
+  // editing the profile stays available inside the dashboard.
 
   // First-time name onboarding: only appears immediately after a successful
   // OTP verification for an account that still has no display name. This is
@@ -64,7 +57,6 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
   const [pendingSave, setPendingSave] = useState(false);
   const [nameError, setNameError] = useState<string | null>(null);
   const [docsReady, setDocsReady] = useState(false);
-  const [pendingResolved, setPendingResolved] = useState(false);
 
   // Do not show the name pop-up until authed and the Convex mutation layer is
   // reachable. The routing effect uses this gate directly.
@@ -532,14 +524,73 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
       </div>
       {showNameOnboarding && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center px-4 bg-black/60 backdrop-blur-sm"
-          role="presentation"
+          className="fixed inset-0 z-50 flex items-end justify-center overflow-y-auto bg-black/60 px-4 pb-[max(1rem,env(safe-area-inset-bottom,0px))] pt-16 backdrop-blur-sm sm:items-center sm:py-10"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="fx-name-onboarding-title"
         >
-          <div
-            className="w-full max-w-sm"
-            aria-hidden
-            style={{ paddingTop: "env(safe-area-inset-top, 0px)" }}
-          />
+          <div className="w-full max-w-sm rounded-3xl border border-lime-400/25 bg-card p-6 shadow-2xl sm:p-7">
+            <div className="mx-auto flex size-11 items-center justify-center rounded-2xl bg-lime-400/15 text-lime-300">
+              <UserCheck className="size-5" />
+            </div>
+            <h2
+              id="fx-name-onboarding-title"
+              className="font-display mt-4 text-center text-xl font-bold tracking-tight"
+            >
+              Welcome to ForgeX 👋
+            </h2>
+            <p className="mt-2 text-center text-sm text-muted-foreground">
+              Before you continue, tell us your name.
+            </p>
+            <p className="mt-1 text-center text-[11px] text-muted-foreground/80">
+              This is the name we'll use on your certificates.
+            </p>
+
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                void saveName();
+              }}
+              className="mt-5 space-y-3"
+            >
+              <div>
+                <label className="mb-1.5 block text-sm font-medium" htmlFor="fx-onboarding-name">
+                  Full name
+                </label>
+                <Input
+                  id="fx-onboarding-name"
+                  autoFocus
+                  value={pendingName}
+                  onChange={(e) => {
+                    setPendingName(e.target.value);
+                    if (nameError) setNameError(null);
+                  }}
+                  placeholder="Enter your name"
+                  disabled={pendingSave}
+                  className="h-11 border-white/10 bg-black/20"
+                />
+              </div>
+
+              {nameError && (
+                <p className="rounded-xl border border-rose-400/25 bg-rose-400/8 p-3 text-sm text-rose-300">
+                  {nameError}
+                </p>
+              )}
+
+              <Button
+                type="submit"
+                disabled={pendingSave || !pendingName.trim()}
+                className="w-full gap-2 bg-lime-400 font-semibold text-black hover:bg-lime-300"
+              >
+                {pendingSave ? <Loader2 className="size-4 animate-spin" /> : null}
+                {pendingSave ? "Saving…" : "Continue"}
+              </Button>
+            </form>
+
+            <p className="mt-3 text-center text-[11px] text-muted-foreground/80">
+              You can change this any time from your profile settings.
+            </p>
+          </div>
         </div>
       )}
       <Footer />
@@ -547,79 +598,10 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
   );
 }
 
-export function NameOnboardingGate({ children }: { children: ReactNode }) {
-  const { isLoading: authLoading, isAuthenticated, user } = useAuth();
-  const navigate = useNavigate();
-  const [showGate, setShowGate] = useState(false);
-  const initializeUser = useMutation(api.users.initializeUser);
-
-  // Only intercept a fresh account that still needs a display name after the
-  // Convex session is live. Authenticated users that already have a name are
-  // let through immediately.
-  useEffect(() => {
-    setShowGate(
-      !authLoading &&
-        isAuthenticated &&
-        !!user &&
-        !user.name,
-    );
-  }, [authLoading, isAuthenticated, user]);
-
-  // Persist name and route straight to ForgeX Home, never to profile settings.
-  const handleContinue = async () => {
-    const name = prompt("What should we call you?");
-    const trimmed = (name ?? "").trim();
-    if (!trimmed) return;
-    try {
-      await initializeUser({ name: trimmed, intendedRole: undefined });
-    } catch (err) {
-      console.error("Name save error:", err);
-    }
-    setShowGate(false);
-  };
-
-  if (showGate && !authLoading) {
-    return (
-      <div className="flex min-h-screen items-center justify-center bg-background p-4">
-        <div className="w-full max-w-sm rounded-2xl border border-lime-400/20 bg-black/40 p-5 shadow-2xl backdrop-blur-xl sm:p-7">
-          <div className="mx-auto mb-2 flex size-10 items-center justify-center rounded-full bg-lime-400/15 text-lime-300">
-            <UserPlus className="size-5" />
-          </div>
-          <h2 className="font-display text-center text-xl font-bold tracking-tight text-white">
-            Welcome to ForgeX 👋
-          </h2>
-          <p className="mt-2 text-center text-sm text-muted-foreground">
-            Before you continue, tell us your name.
-          </p>
-          <p className="mt-1 text-center text-[11px] text-muted-foreground/70">
-            This will also be used on your certificates.
-          </p>
-          <div className="mt-5 flex gap-2">
-            <Button
-              type="button"
-              variant="outline"
-              className="flex-1 border-white/15 bg-black/30 text-muted-foreground"
-              onClick={() => setShowGate(false)}
-            >
-              Skip for now
-            </Button>
-            <Button type="button" onClick={handleContinue} className="flex-1 gap-2 bg-lime-400 font-semibold text-black">
-              Continue <ArrowRight className="size-4" />
-            </Button>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  return <>{children}</>;
-}
-
 function AuthPage(props: AuthProps) {
   return (
-    <Suspense>        <NameOnboardingGate>
-          <Auth {...props} />
-        </NameOnboardingGate>
+    <Suspense>
+      <Auth {...props} />
     </Suspense>
   );
 }
