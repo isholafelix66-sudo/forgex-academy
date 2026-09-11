@@ -1,17 +1,28 @@
-import { useRef, useState } from "react";
+import { useRef, useEffect, useState } from "react";
 import { Link, useParams } from "react-router";
 import { useAction, useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import { toast } from "sonner";
-import { Award, CheckCircle2, Download, ImageDown, Loader2 } from "lucide-react";
+import {
+  ArrowRight,
+  Award,
+  CheckCircle2,
+  Download,
+  ImageDown,
+  Loader2,
+  UserCheck,
+} from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { PageShell } from "@/components/site/PageShell";
 import { Reveal } from "@/components/site/Reveal";
 import { EmptyState } from "@/components/site/EmptyState";
 import { CertificateView } from "@/components/site/CertificateTemplate";
-import { Button } from "@/components/ui/button";
 import { saveCertificateFile } from "@/lib/certificate-download";
 import { exportCertificateImage, saveExportedImage } from "@/lib/certificate-export";
 import { buildCertificatePdf } from "@/lib/certificate-pdf";
+import { friendlyError } from "@/lib/errors";
+import { useAuth } from "@/hooks/use-auth";
 
 type ExportKind = "pdf" | "jpg";
 
@@ -21,6 +32,8 @@ export default function VerifyCertificate() {
     certificateId: certificateId ?? "",
   });
   const branding = useQuery(api.public.certificateBranding);
+  const user = useAuth().user;
+  const updateProfile = useMutation(api.users.updateProfile);
   const generateCertificate = useAction(api.apitemplate.generateCertificate);
 
   // Points at the unscaled 1280×905 certificate design node used for capture.
@@ -39,9 +52,13 @@ export default function VerifyCertificate() {
     setExporting(kind);
     setExportError(null);
     try {
+      if (ownerNeedsName) {
+        if (!captureReady) throw new Error("The certificate isn't ready yet. Please try again.");
+        setExporting(null);
+        throw new Error("name-required");
+      }
       if (kind === "pdf") {
-        // 1) Primary: server-side vector PDF via APITemplate — no page
-        //    chrome, exact design. Needs a signed-in session + API key.
+        // 1) Primary: server-side vector PDF via APITemplate.
         try {
           const file = await generateCertificate({
             certificateId: cert.certificateId,
@@ -49,17 +66,14 @@ export default function VerifyCertificate() {
           });
           await saveCertificateFile(file.fileName, file.mime, file.base64);
         } catch (serverErr) {
-          // 2) Fallback that ALWAYS works, even signed-out or with a
-          //    missing/broken key: capture the certificate on screen and
-          //    embed that JPG into a single A4-landscape PDF page.
+          // 2) Fallback that ALWAYS works: capture the certificate on screen
+          //    and embed that JPG into a single A4-landscape PDF page.
           console.warn(
             "[certificate] Server-side PDF failed — using client-side fallback:",
             serverErr,
           );
           const node = captureRef.current;
-          if (!node) {
-            throw new Error("The certificate isn't ready yet. Please try again.");
-          }
+          if (!node) throw new Error("The certificate isn't ready yet. Please try again.");
           const image = await exportCertificateImage(node);
           const pdf = await buildCertificatePdf(
             image.dataUrl,
@@ -69,12 +83,8 @@ export default function VerifyCertificate() {
           await saveCertificateFile(pdf.fileName, pdf.mime, pdf.base64);
         }
       } else {
-        // Client-side JPG (PNG fallback) captured from the certificate on
-        // screen — no external service, only the certificate itself.
         const node = captureRef.current;
-        if (!node) {
-          throw new Error("The certificate isn't ready yet. Please try again.");
-        }
+        if (!node) throw new Error("The certificate isn't ready yet. Please try again.");
         const image = await exportCertificateImage(node);
         await saveExportedImage(
           image.dataUrl,
@@ -84,11 +94,13 @@ export default function VerifyCertificate() {
         );
       }
       toast.success(
-        kind === "pdf"
-          ? "Certificate PDF downloaded"
-          : "Certificate image downloaded",
+        kind === "pdf" ? "Certificate PDF downloaded" : "Certificate image downloaded",
       );
     } catch (e) {
+      if (e instanceof Error && e.message === "name-required") {
+        toast.error("Add your name to your profile before downloading this certificate.");
+        return;
+      }
       const message =
         e instanceof Error && e.message
           ? e.message
@@ -126,6 +138,108 @@ export default function VerifyCertificate() {
             }
           />
         </section>
+      </PageShell>
+    );
+  }
+
+  async function handleSetName(e: React.FormEvent) {
+    e.preventDefault();
+    const trimmed = name.trim();
+    if (!trimmed) {
+      setNameError("Please enter your name before we can finish the certificate.");
+      return;
+    }
+    setSavingName(true);
+    setNameError(null);
+    try {
+      await updateProfile({ name: trimmed });
+      classNameSetName(false);
+      toast.success("Name saved — your certificate is ready.");
+    } catch (err) {
+      console.error("Name save error:", err);
+      setNameError(
+        friendlyError(
+          err,
+          "We couldn't save your name just now. Please try again.",
+        ),
+      );
+    } finally {
+      setSavingName(false);
+    }
+  }
+
+  if (ownerNeedsName) {
+    return (
+      <PageShell>
+        <div className="mx-auto max-w-md px-4 py-16 sm:px-6">
+          <div className="mx-auto flex size-12 items-center justify-center rounded-full bg-lime-400/15 text-lime-300">
+            <Award className="size-6" />
+          </div>
+          <h1 className="font-display mt-5 text-2xl font-bold text-center">
+            Certificate waiting
+          </h1>
+          <p className="mt-2 text-center text-muted-foreground">
+            This certificate won&rsquo;t be released with a placeholder on it.
+          </p>
+
+          <form onSubmit={handleSetName} className="mt-8 rounded-3xl border border-lime-400/25 bg-card p-6">
+            <div className="mx-auto flex size-11 items-center justify-center rounded-2xl bg-lime-400/15 text-lime-300">
+              <UserCheck className="size-5" />
+            </div>
+            <h2 className="font-display mt-4 text-center text-lg font-bold">
+              What should we call you?
+            </h2>
+            <p className="mt-1 text-center text-sm text-muted-foreground">
+              This is the name that will appear on your certificate.
+            </p>
+
+            <div className="mt-5">
+              <label className="mb-1.5 block text-sm font-medium" htmlFor="cv-name">
+                Full name
+              </label>
+              {nameError && (
+                <p className="mb-2 text-sm text-rose-300">{nameError}</p>
+              )}
+              <Input
+                id="cv-name"
+                autoFocus
+                value={name}
+                onChange={(e) => {
+                  setName(e.target.value);
+                  if (nameError) setNameError(null);
+                }}
+                placeholder="Your certificate name"
+                disabled={savingName}
+                className="h-11 border-white/10 bg-black/30"
+              />
+            </div>
+
+            <div className="mt-5">
+              <Button
+                type="submit"
+                disabled={savingName || !name.trim()}
+                className="w-full gap-2 bg-lime-400 font-semibold text-black hover:bg-lime-300"
+              >
+                {savingName ? (
+                  <>
+                    <Loader2 className="size-4 animate-spin" />
+                    Saving & finishing…
+                  </>
+                ) : (
+                  <>
+                    Confirm name & unlock certificate
+                    <ArrowRight className="size-4" />
+                  </>
+                )}
+              </Button>
+            </div>
+          </form>
+
+          <p className="mt-6 text-center text-[11px] text-muted-foreground/80">
+            You can change this later from your profile settings, but the name
+            is locked when the certificate is issued.
+          </p>
+        </div>
       </PageShell>
     );
   }
