@@ -174,16 +174,14 @@ export const initializeUser = mutation({
           ? ROLES.TUTOR
           : ROLES.STUDENT;
     }
-    // Name capture. A name the learner actually typed always wins and is
-    // marked confirmed. The auth provider's email-derived placeholder
-    // ("adedoyinaadedokun") is not a real name: it is cleared so the
-    // first-time name popup asks for a real one, and a passthrough call that
-    // only re-sends that placeholder never saves it back.
+    // Name capture. A supplied name is always a name the learner typed (the
+    // first-time popup, or the Become-a-Tutor signup) — it is saved and marked
+    // confirmed. A call with no name never resurrects the auth provider's
+    // email-derived placeholder ("adedoyinaadedokun"); any placeholder is
+    // cleared instead so the name popup prompts for the real thing.
     const email = "email" in user ? String(user.email ?? "") : "";
     const trimmed = name?.trim();
-    const storedName = user.name?.trim() ?? "";
-    if (trimmed && trimmed !== storedName) {
-      // A genuinely new value (name popup or profile edit).
+    if (trimmed) {
       patch.name = trimmed.slice(0, 80);
       patch.nameConfirmed = true;
     } else if (!hasRealName(user)) {

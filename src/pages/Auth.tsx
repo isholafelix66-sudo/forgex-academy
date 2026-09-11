@@ -92,12 +92,18 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
   // in the tutor portal no matter how often they sign in afterwards.
   useEffect(() => {
     if (!docsReady || authLoading || !isAuthenticated || !user) return;
-    if (!user.name) return;
     const pendingName = sessionStorage.getItem("fx-pending-name") ?? undefined;
     if (!user.onboarded || (pendingName && user.name !== pendingName)) {
-      void initializeUser({ name: user.name, intendedRole }).catch(() => {});
+      void initializeUser({
+        // Never send the auth provider's email-derived placeholder back —
+        // that would re-save it as if the learner had chosen it.
+        name: user.needsName ? undefined : user.name,
+        intendedRole,
+      }).catch(() => {});
+      // When a real name was consumed, drop the leftover signup prefill. While
+      // the profile still needs a name the name popup owns this key.
+      if (!user.needsName) sessionStorage.removeItem("fx-pending-name");
     }
-    sessionStorage.removeItem("fx-pending-name");
   }, [
     docsReady,
     authLoading,

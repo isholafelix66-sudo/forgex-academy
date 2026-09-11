@@ -29,11 +29,31 @@ export function NameSetupDialog() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [prefilled, setPrefilled] = useState(false);
+  // Set the moment a save succeeds so the popup disappears immediately,
+  // without waiting for the reactive profile query to round-trip.
+  const [saved, setSaved] = useState(false);
 
   // `needsName` is computed server-side from the profile record, so a name
   // the learner never chose (missing, legacy "Anonymous", or the auth
   // provider's email-derived placeholder) counts as "no name".
-  const open = !isLoading && isAuthenticated && !!user && !!user.needsName;
+  const open =
+    !saved && !isLoading && isAuthenticated && !!user && !!user.needsName;
+
+  const userId = user?._id ?? null;
+
+  // A different account signing in starts with a clean popup.
+  useEffect(() => {
+    setSaved(false);
+    setPrefilled(false);
+    setName("");
+    setError(null);
+  }, [userId]);
+
+  // Re-arm once the profile no longer needs a name, so the popup can appear
+  // again if the name is ever removed from the profile later.
+  useEffect(() => {
+    if (user && !user.needsName) setSaved(false);
+  }, [user]);
 
   // Prefill with a name typed during signup — the learner never has to enter
   // it twice. Optional: the field is still editable and required.
@@ -65,6 +85,8 @@ export function NameSetupDialog() {
       });
       sessionStorage.removeItem("fx-pending-name");
       sessionStorage.removeItem("fx-intended-role");
+      // Disappear immediately — success is authoritative here.
+      setSaved(true);
       // Admins belong in their own workspace; everyone else goes to ForgeX
       // Home, never to profile settings.
       if (user?.role !== "admin") navigate("/", { replace: true });
