@@ -440,6 +440,8 @@ const schema = defineSchema(
       passed: v.boolean(),
       submittedAt: v.number(),
       timeTakenSeconds: v.optional(v.number()),
+      examTitle: v.string(),
+      examPassPercent: v.number(),
     })
       .index("by_student", ["studentId"])
       .index("by_exam", ["examId"]),

@@ -1,6 +1,6 @@
 import { useRef, useEffect, useState } from "react";
 import { Link, useParams } from "react-router";
-import { useAction, useQuery } from "convex/react";
+import { useAction, useMutation, useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import { toast } from "sonner";
 import {
@@ -36,19 +36,32 @@ export default function VerifyCertificate() {
   const updateProfile = useMutation(api.users.updateProfile);
   const generateCertificate = useAction(api.apitemplate.generateCertificate);
 
-  // Points at the unscaled 1280×905 certificate design node used for capture.
-  const captureRef = useRef<HTMLDivElement>(null);
-
+  const captureRef = useRef<HTMLDivElement | null>(null);
   const [exporting, setExporting] = useState<ExportKind | null>(null);
   const [exportError, setExportError] = useState<string | null>(null);
+
+  const [name, setName] = useState("");
+  const [nameError, setNameError] = useState<string | null>(null);
+  const [savingName, setSavingName] = useState(false);
+  const [captureReady, setCaptureReady] = useState(false);
+
+  useEffect(() => {
+    setCaptureReady(true);
+  }, []);
 
   const verifyUrl =
     typeof window !== "undefined"
       ? `${window.location.origin}/verify/${certificateId}`
       : "";
 
-  async function handleDownload(kind: ExportKind) {
-    if (!cert || exporting !== null) return; // prevent duplicate generation
+  const ownerNeedsName =
+    cert &&
+    user &&
+    user._id === cert.studentId &&
+    !!user.needsName;
+
+  const handleDownload = async (kind: ExportKind) => {
+    if (!cert || exporting !== null) return;
     setExporting(kind);
     setExportError(null);
     try {
@@ -58,16 +71,13 @@ export default function VerifyCertificate() {
         throw new Error("name-required");
       }
       if (kind === "pdf") {
-        // 1) Primary: server-side vector PDF via APITemplate.
         try {
           const file = await generateCertificate({
             certificateId: cert.certificateId,
-            verifyUrl: `${window.location.origin}/verify/${cert.certificateId}`,
+            verifyUrl,
           });
           await saveCertificateFile(file.fileName, file.mime, file.base64);
         } catch (serverErr) {
-          // 2) Fallback that ALWAYS works: capture the certificate on screen
-          //    and embed that JPG into a single A4-landscape PDF page.
           console.warn(
             "[certificate] Server-side PDF failed — using client-side fallback:",
             serverErr,
@@ -111,7 +121,34 @@ export default function VerifyCertificate() {
     } finally {
       setExporting(null);
     }
-  }
+  };
+
+  const handleSetName = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const trimmed = name.trim();
+    if (!trimmed) {
+      setNameError("Please enter your name before we can finish the certificate.");
+      return;
+    }
+    setSavingName(true);
+    setNameError(null);
+    try {
+      await updateProfile({ name: trimmed });
+      setName("");
+      setSavingName(false);
+      toast.success("Name saved — your certificate is ready.");
+    } catch (err) {
+      console.error("Name save error:", err);
+      setNameError(
+        friendlyError(
+          err,
+          "We couldn't save your name just now. Please try again.",
+        ),
+      );
+    } finally {
+      setSavingName(false);
+    }
+  };
 
   if (cert === undefined) {
     return (
@@ -140,32 +177,6 @@ export default function VerifyCertificate() {
         </section>
       </PageShell>
     );
-  }
-
-  async function handleSetName(e: React.FormEvent) {
-    e.preventDefault();
-    const trimmed = name.trim();
-    if (!trimmed) {
-      setNameError("Please enter your name before we can finish the certificate.");
-      return;
-    }
-    setSavingName(true);
-    setNameError(null);
-    try {
-      await updateProfile({ name: trimmed });
-      classNameSetName(false);
-      toast.success("Name saved — your certificate is ready.");
-    } catch (err) {
-      console.error("Name save error:", err);
-      setNameError(
-        friendlyError(
-          err,
-          "We couldn't save your name just now. Please try again.",
-        ),
-      );
-    } finally {
-      setSavingName(false);
-    }
   }
 
   if (ownerNeedsName) {
@@ -269,7 +280,7 @@ export default function VerifyCertificate() {
             }}
             branding={branding}
             verifyUrl={verifyUrl}
-            captureRef={captureRef}
+            captureRef={(el) => { captureRef.current = el; }}
             className="overflow-hidden rounded-3xl border border-white/15 shadow-2xl shadow-black/40"
           />
         </Reveal>
@@ -288,8 +299,6 @@ export default function VerifyCertificate() {
               )}
               Download as PDF
             </Button>
-            {/* the image download is a real JPG captured from the certificate
-                itself — no page chrome, no external image service */}
             <Button
               onClick={() => handleDownload("jpg")}
               disabled={exporting !== null}

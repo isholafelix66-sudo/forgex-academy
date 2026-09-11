@@ -57,10 +57,9 @@ export default function AdminAudit() {
                   <p className="text-sm">
                     <span className="font-semibold">{l.adminName}</span>{" "}
                     <span className="text-muted-foreground">→</span>{" "}
-                    <span className="font-medium capitalize text-lime-300">{l.action}</span>
+                    <span className="font-medium text-lime-300">{l.action}</span>
+                    <span className="text-muted-foreground"> — {l.detail}</span>
                   </p>
-                  <p className="truncate text-xs text-muted-foreground">
-                    {l.detail}
                     {l.tutorName ? ` · tutor: ${l.tutorName}` : ""}
                     {l.reason ? ` · ${l.reason}` : ""}
                   </p>

@@ -86,6 +86,8 @@ export const submitFinalExam = mutation({
       passed,
       submittedAt: Date.now(),
       timeTakenSeconds,
+      examTitle: exam.title,
+      examPassPercent: exam.passPercent,
     });
 
     if (passed) {
