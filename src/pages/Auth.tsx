@@ -23,7 +23,6 @@ import {
   Mail,
   ShieldCheck,
   UserPlus,
-  UserCheck,
 } from "lucide-react";
 import { resolveRedirectAfterAuth } from "@/lib/auth-redirect";
 import { friendlyError } from "@/lib/errors";
@@ -49,41 +48,16 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
   // admin dashboard. Profile settings is never a post-login destination;
   // editing the profile stays available inside the dashboard.
 
-  // First-time name onboarding: only appears immediately after a successful
-  // OTP verification for an account that still has no display name. This is
-  // a one-time pop-up, not a profile settings page. Returning users skip it.
-  const [showNameOnboarding, setShowNameOnboarding] = useState(false);
-  const [pendingName, setPendingName] = useState("");
-  const [pendingSave, setPendingSave] = useState(false);
-  const [nameError, setNameError] = useState<string | null>(null);
+  // The first-time name pop-up lives in the global NameSetupDialog: it shows
+  // whenever the signed-in profile has no name — anywhere in the app, across
+  // refreshes — and saving it writes to the same authenticated profile record.
   const [docsReady, setDocsReady] = useState(false);
 
-  // Do not show the name pop-up until authed and the Convex mutation layer is
-  // reachable. The routing effect uses this gate directly.
+  // Do not run onboarding side effects until authed and the Convex mutation
+  // layer is reachable.
   useEffect(() => {
     setDocsReady(true);
   }, []);
-
-  // Once the code is verified and the session is live, decide whether the
-  // user still needs a display name. Existing names (including a pending name
-  // from a re-authentication) are reused; otherwise we prompt once.
-  useEffect(() => {
-    if (!docsReady || authLoading || !isAuthenticated || !user) return;
-    const pendingFromSession =
-      sessionStorage.getItem("fx-pending-name") ?? undefined;
-    const needsName =
-      !user.name && (!pendingFromSession || user.name !== pendingFromSession);
-    if (needsName) {
-      setPendingName(pendingFromSession ?? "");
-      setShowNameOnboarding(true);
-    }
-    sessionStorage.removeItem("fx-pending-name");
-  }, [
-    docsReady,
-    authLoading,
-    isAuthenticated,
-    user,
-  ]);
 
   // Signing up through the Become-a-Tutor flow creates a TUTOR account
   // (pending verification), never a student account. The account's role is
@@ -118,7 +92,7 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
   // in the tutor portal no matter how often they sign in afterwards.
   useEffect(() => {
     if (!docsReady || authLoading || !isAuthenticated || !user) return;
-    if (showNameOnboarding || !user.name) return;
+    if (!user.name) return;
     const pendingName = sessionStorage.getItem("fx-pending-name") ?? undefined;
     if (!user.onboarded || (pendingName && user.name !== pendingName)) {
       void initializeUser({ name: user.name, intendedRole }).catch(() => {});
@@ -131,7 +105,6 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
     user,
     initializeUser,
     intendedRole,
-    showNameOnboarding,
   ]);
 
   // After any sign-in the account lands on the main ForgeX website first
@@ -140,16 +113,10 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
   // flow.
   const landingDest = useMemo(() => {
     if (authLoading || !isAuthenticated || !user) return null;
-    if (showNameOnboarding) return null;
 
     if (user?.role === "admin") return "/admin";
     return "/";
-  }, [
-    authLoading,
-    isAuthenticated,
-    user,
-    showNameOnboarding,
-  ]);
+  }, [authLoading, isAuthenticated, user]);
 
   useEffect(() => {
     if (!landingDest) return;
@@ -182,6 +149,11 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
       if (mode === "signup" && name.trim()) {
         sessionStorage.setItem("fx-pending-name", name.trim());
       }
+      // Preserve the Become-a-Tutor intent for the global name pop-up, which
+      // is what actually saves the name for a brand-new account.
+      if (intendedRole === "tutor") {
+        sessionStorage.setItem("fx-intended-role", "tutor");
+      }
       await signIn("email-otp", formData);
       setStep("code");
       setResendIn(60);
@@ -201,35 +173,6 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
         ),
       );
       setIsLoading(false);
-    }
-  };
-
-  const saveName = async () => {
-    const trimmed = pendingName.trim();
-    if (!trimmed) {
-      setNameError("Please enter your name so we know what to call you.");
-      return;
-    }
-    setNameError(null);
-    setPendingSave(true);
-    try {
-      const name = trimmed;
-      // Persist the display name to the authenticated user profile first.
-      // This is the single source of truth for names everywhere, including
-      // certificates, the profile area and the ForgeX homepage greeting.
-      await initializeUser({ name, intendedRole });
-      sessionStorage.removeItem("fx-pending-name");
-      setShowNameOnboarding(false);
-    } catch (err) {
-      console.error("Name save error:", err);
-      setNameError(
-        friendlyError(
-          err,
-          "We couldn't save your name just now. Please try again.",
-        ),
-      );
-    } finally {
-      setPendingSave(false);
     }
   };
 
@@ -282,7 +225,6 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
     setMode("reset");
     setStep("form");
     setError(null);
-    setShowNameOnboarding(false);
   };
 
   const switchMode = (m: Mode) => {
@@ -522,77 +464,6 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
           </p>
         </div>
       </div>
-      {showNameOnboarding && (
-        <div
-          className="fixed inset-0 z-50 flex items-end justify-center overflow-y-auto bg-black/60 px-4 pb-[max(1rem,env(safe-area-inset-bottom,0px))] pt-16 backdrop-blur-sm sm:items-center sm:py-10"
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby="fx-name-onboarding-title"
-        >
-          <div className="w-full max-w-sm rounded-3xl border border-lime-400/25 bg-card p-6 shadow-2xl sm:p-7">
-            <div className="mx-auto flex size-11 items-center justify-center rounded-2xl bg-lime-400/15 text-lime-300">
-              <UserCheck className="size-5" />
-            </div>
-            <h2
-              id="fx-name-onboarding-title"
-              className="font-display mt-4 text-center text-xl font-bold tracking-tight"
-            >
-              Welcome to ForgeX 👋
-            </h2>
-            <p className="mt-2 text-center text-sm text-muted-foreground">
-              Before you continue, tell us your name.
-            </p>
-            <p className="mt-1 text-center text-[11px] text-muted-foreground/80">
-              This is the name we'll use on your certificates.
-            </p>
-
-            <form
-              onSubmit={(e) => {
-                e.preventDefault();
-                void saveName();
-              }}
-              className="mt-5 space-y-3"
-            >
-              <div>
-                <label className="mb-1.5 block text-sm font-medium" htmlFor="fx-onboarding-name">
-                  Full name
-                </label>
-                <Input
-                  id="fx-onboarding-name"
-                  autoFocus
-                  value={pendingName}
-                  onChange={(e) => {
-                    setPendingName(e.target.value);
-                    if (nameError) setNameError(null);
-                  }}
-                  placeholder="Enter your name"
-                  disabled={pendingSave}
-                  className="h-11 border-white/10 bg-black/20"
-                />
-              </div>
-
-              {nameError && (
-                <p className="rounded-xl border border-rose-400/25 bg-rose-400/8 p-3 text-sm text-rose-300">
-                  {nameError}
-                </p>
-              )}
-
-              <Button
-                type="submit"
-                disabled={pendingSave || !pendingName.trim()}
-                className="w-full gap-2 bg-lime-400 font-semibold text-black hover:bg-lime-300"
-              >
-                {pendingSave ? <Loader2 className="size-4 animate-spin" /> : null}
-                {pendingSave ? "Saving…" : "Continue"}
-              </Button>
-            </form>
-
-            <p className="mt-3 text-center text-[11px] text-muted-foreground/80">
-              You can change this any time from your profile settings.
-            </p>
-          </div>
-        </div>
-      )}
       <Footer />
     </div>
   );

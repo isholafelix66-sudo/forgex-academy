@@ -19,6 +19,7 @@ import { registerServiceWorker } from "@/lib/sw";
 import { scrollToTopInstant } from "@/lib/scroll";
 import { PublicLayout } from "@/components/site/PublicLayout";
 import { ConnectionBanner } from "@/components/network/ConnectionBanner";
+import { NameSetupDialog } from "@/components/NameSetupDialog";
 import { AiSupportAssistant } from "@/components/site/AiSupportAssistant";
 import {
   isNetworkRelatedError,
@@ -1032,6 +1033,10 @@ createRoot(document.getElementById("root")!).render(
             </Routes>
             </RouteBoundary>
           </Suspense>
+          {/* First-time profile name setup — global, driven by the profile
+              record so it survives refreshes and never reappears once a name
+              has been saved. */}
+          <NameSetupDialog />
         </BrowserRouter>
             <ConnectionBanner />
             <Toaster />
