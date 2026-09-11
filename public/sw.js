@@ -20,8 +20,11 @@
  * purged instead of being served forever.
  * v4: purge pre-theme-era shells once so no client ever boots from a stale
  *     app shell (which surfaced as random full-page reloads on mobile).
+ * v5: never cache dev-server source modules (see the fetch handler) — those
+ *     URLs are not content-hashed, so stale-while-revalidate served the OLD
+ *     bundle for a page load and brand-new UI simply appeared to be missing.
  */
-const VERSION = "forgex-shell-v4";
+const VERSION = "forgex-shell-v5";
 const SHELL_CACHE = `${VERSION}-shell`;
 const FONT_CACHE = `${VERSION}-fonts`;
 
@@ -85,6 +88,16 @@ self.addEventListener("fetch", (event) => {
   if (url.pathname === "/sw.js") {
     return; // fall through to network
   }
+
+  // Only content-hashed production build assets (/assets/…) are immutable and
+  // safe to cache forever. Everything else same-origin is NOT content-hashed:
+  // dev-server source modules (/src/…, /@vite/…, /node_modules/…) change on
+  // every edit, and caching them made a reload boot the previous build — so a
+  // newly added component appeared to be missing. Send those to the network.
+  if (!url.pathname.startsWith("/assets/")) {
+    return; // fall through to network
+  }
+
   event.respondWith(staleWhileRevalidate(request, SHELL_CACHE));
 });
 
