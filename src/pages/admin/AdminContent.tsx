@@ -581,7 +581,7 @@ export default function AdminContent() {
                   <Layers className="size-4 text-lime-300" /> Recommended for you
                 </h2>
                 <p className="mt-1 max-w-2xl text-sm leading-relaxed text-muted-foreground">
-                  Choose the courses that appear under “Recommended for You” on the student dashboard. Pick from real published courses, reorder them and save — unselect everything to hide the section.
+                  Pick the recommended course pool from real published courses, reorder it and save. Each student sees a personalised mix from this pool: courses they already take are skipped and their interest categories are ranked first, so recommendations differ per individual. Clear the selection to fall back to automatic personalised recommendations.
                 </p>
               </div>
               <span className="inline-flex items-center gap-1.5 rounded-full border border-lime-400/40 bg-lime-400/10 px-3 py-1 text-xs font-semibold text-lime-300">
@@ -652,7 +652,7 @@ export default function AdminContent() {
                             </span>
                             {chosen && (
                               <span className="shrink-0 rounded-full bg-lime-400 px-1.5 py-0.5 text-[10px] font-bold text-black">
-                                #{currentRecommended.indexOf(c._id) + 1}
+                                #{recommendedList.indexOf(c._id) + 1}
                               </span>
                             )}
                           </button>
@@ -726,7 +726,7 @@ export default function AdminContent() {
             <div className="mt-5 flex flex-wrap items-center gap-3">
               <Button
                 onClick={saveRecommended}
-                disabled={savingRecommended || !currentRecommended.length}
+                disabled={savingRecommended}
                 className="gap-2 bg-lime-400 font-semibold text-black hover:bg-lime-300"
               >
                 {savingRecommended ? (

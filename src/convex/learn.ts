@@ -1,3 +1,4 @@
+import { getAuthUserId } from "@convex-dev/auth/server";
 import { mutation, query, MutationCtx, QueryCtx } from "./_generated/server";
 import { v } from "convex/values";
 import { Doc, Id } from "./_generated/dataModel";
@@ -11,6 +12,23 @@ import { courseRequirements, effectiveWatchedPercent, recomputeCourseDuration, s
 // Shared learning helpers (imported by lessonquizzes.ts / exams.ts)
 // ---------------------------------------------------------------------------
 
+/** Deterministic per-account hash — same student always gets the same mix,
+ *  different students get a different starting point in the pool. */
+function stableHash(value: string) {
+  let h = 0;
+  for (let i = 0; i < value.length; i++) h = (h * 31 + value.charCodeAt(i)) | 0;
+  return Math.abs(h);
+}
+
+/** Admin-curated "Recommended for You" pool, personalised per individual.
+ *
+ *  Admin picks the pool and its order (siteContent.recommendedCourseIds);
+ *  every student then sees their own mix of it:
+ *    • courses they already take are skipped,
+ *    • categories they are studying / finished rank first,
+ *    • the remainder is rotated by a stable per-account hash, so two students
+ *      with the same interests still see a different combination.
+ *  With no admin selection the whole published catalogue is used as the pool. */
 export const recommendedCourses = query({
   args: {},
   handler: async (ctx) => {
@@ -23,11 +41,55 @@ export const recommendedCourses = query({
       content.value.every((x): x is string => typeof x === "string")
         ? content.value
         : [];
-    if (!ids.length) return [];
-    const courses = await ctx.db.query("courses").collect();
-    const set = new Set(ids);
-    const selected = courses.filter((c) => set.has(c._id.toString()) && c.published && !c.archived);
-    return hydrateCourses(ctx, selected.sort((a, b) => ids.indexOf(a._id.toString()) - ids.indexOf(b._id.toString())));
+
+    const all = await ctx.db.query("courses").collect();
+    const published = all.filter((c) => c.published && !c.archived);
+
+    // Admin pool (catalogue-wide when the admin hasn't curated anything yet).
+    const pool = ids.length
+      ? ids
+          .map((id) => published.find((c) => c._id.toString() === id))
+          .filter((c): c is Doc<"courses"> => !!c)
+      : published;
+    if (!pool.length) return [];
+
+    const userId = await getAuthUserId(ctx);
+    const enrollments = userId
+      ? await ctx.db
+          .query("enrollments")
+          .withIndex("by_student", (q) => q.eq("studentId", userId))
+          .collect()
+      : [];
+    const enrolledIds = new Set(enrollments.map((e) => e.courseId.toString()));
+    const interestCats = new Set<string>();
+    for (const e of enrollments) {
+      if (e.status !== "completed" && e.progress <= 0) continue;
+      const c = all.find((x) => x._id === e.courseId);
+      if (c) interestCats.add(c.categoryId.toString());
+    }
+
+    // Never recommend something the student is already taking — the dashboard
+    // falls back to automatic recommendations when nothing here is fresh.
+    const usable = pool.filter((c) => !enrolledIds.has(c._id.toString()));
+    if (!usable.length) return [];
+
+    const rotation = userId ? stableHash(userId.toString()) % usable.length : 0;
+    const rotated = [...usable.slice(rotation), ...usable.slice(0, rotation)];
+
+    const picked = rotated
+      .map((course, index) => ({
+        course,
+        score:
+          (interestCats.has(course.categoryId.toString()) ? 100 : 0) +
+          (course.rating ?? 0) +
+          // keeps the admin's own ordering meaningful inside each tier
+          (usable.length - index) / (usable.length + 1),
+      }))
+      .sort((a, b) => b.score - a.score)
+      .slice(0, 6)
+      .map((s) => s.course);
+
+    return hydrateCourses(ctx, picked);
   },
 });
 
