@@ -174,19 +174,17 @@ export const initializeUser = mutation({
           ? ROLES.TUTOR
           : ROLES.STUDENT;
     }
-    // Name capture. A supplied name is always a name the learner typed (the
-    // first-time popup, or the Become-a-Tutor signup) — it is saved and marked
-    // confirmed. A call with no name never resurrects the auth provider's
-    // email-derived placeholder ("adedoyinaadedokun"); any placeholder is
-    // cleared instead so the name popup prompts for the real thing.
+    // Name capture. A supplied name is always real and learner-chosen (from
+    // the first-time popup or profile editing) — saved and marked confirmed.
+    // A call with no name never resurrects the auth provider's email-derived
+    // placeholder ("adedoyinaadedokun"); any such placeholder is cleared now
+    // so the name popup prompts for the real thing on a fresh account.
     const email = "email" in user ? String(user.email ?? "") : "";
     const trimmed = name?.trim();
     if (trimmed) {
       patch.name = trimmed.slice(0, 80);
       patch.nameConfirmed = true;
     } else if (!hasRealName(user)) {
-      // Missing, legacy "Anonymous", or the email-derived placeholder — stay
-      // nameless so the name popup prompts for a real one.
       patch.name = undefined;
       patch.nameConfirmed = false;
     }
@@ -200,7 +198,7 @@ export const initializeUser = mutation({
             to: email,
             subject: "Welcome to ForgeX Academy 🎉",
             html: welcomeEmail({
-              name: typeof patch.name === "string" ? patch.name : "there",
+              name: (patch.name || "there") as string,
             }).html,
             emailType: "welcome",
           });

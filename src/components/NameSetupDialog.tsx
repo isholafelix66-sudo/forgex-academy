@@ -87,9 +87,9 @@ export function NameSetupDialog() {
       sessionStorage.removeItem("fx-intended-role");
       // Disappear immediately — success is authoritative here.
       setSaved(true);
-      // Admins belong in their own workspace; everyone else goes to ForgeX
-      // Home, never to profile settings.
-      if (user?.role !== "admin") navigate("/", { replace: true });
+      // Everyone lands on ForgeX Home after setting a name — no separate
+      // role-driven destination, no profile settings page, no redirection.
+      navigate("/", { replace: true });
     } catch (err) {
       console.error("Name setup error:", err);
       setError(
