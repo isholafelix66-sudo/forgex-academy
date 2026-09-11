@@ -193,27 +193,50 @@ export function nameFromEmail(email: string | undefined | null): string {
 }
 
 /**
- * Best display name for a user row: stored name first (unless it's literally
- * "Anonymous" — a legacy artifact), then a name derived from the email
- * prefix, then the neutral fallback. Use this everywhere a user's name is
- * shown so no one ever appears as "Anonymous".
+ * True when the profile carries a name the learner actually chose.
+ *
+ * Brand-new accounts are seeded by the auth provider with a placeholder built
+ * from the email prefix ("adedoyinaadedokun") — that reads as a surname and
+ * given name run together, and must never be treated as a real name. Names
+ * confirmed through the name popup or profile editing are always real.
+ */
+export function hasRealName(
+  u:
+    | { name?: string | null; email?: string | null; nameConfirmed?: boolean }
+    | null
+    | undefined,
+): boolean {
+  if (!u) return false;
+  const stored = u.name?.trim();
+  if (!stored) return false;
+  if (stored.toLowerCase() === "anonymous") return false;
+  if (u.nameConfirmed) return true;
+  const derived = nameFromEmail(u.email);
+  return !(!!derived && stored.toLowerCase() === derived.toLowerCase());
+}
+
+/**
+ * Best display name for a user row: the name the learner actually set, or a
+ * neutral fallback. Names are NEVER derived from the email address — an email
+ * prefix produces wrong, run-together names ("adedoyinaadedokun") and the
+ * profile name is captured by the first-time name popup instead.
  */
 export function displayName(
   u: { name?: string | null; email?: string | null } | null | undefined,
-  fallback = "Anonymous",
+  fallback = "ForgeX learner",
 ): string {
   if (!u) return fallback;
   const stored = u.name?.trim();
   if (stored && stored.toLowerCase() !== "anonymous") return stored;
-  return nameFromEmail(u.email) || stored || fallback;
+  return fallback;
 }
 
-/** Public-safe projection of a user. Never shows "Anonymous" — falls back
- *  to a name derived from the email, then a neutral default. */
+/** Public-safe projection of a user. Never shows "Anonymous" — falls back to
+ *  a neutral default, never to a name derived from the email address. */
 export function publicUser(u: Doc<"users">) {
   return {
     _id: u._id,
-    name: u.name || nameFromEmail(u.email) || "Learner",
+    name: displayName(u, "Learner"),
     image: u.image ?? null,
     headline: u.headline ?? null,
     role: u.role ?? ROLES.STUDENT,

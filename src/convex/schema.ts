@@ -148,6 +148,11 @@ const schema = defineSchema(
       socials: v.optional(socialsValidator),
       verified: v.optional(v.boolean()), // verified tutor
       onboarded: v.optional(v.boolean()),
+      // True only once the learner has chosen their own display name (the
+      // first-time name popup or profile editing). The auth provider seeds
+      // brand-new accounts with an email-derived placeholder that must never
+      // be treated as a real name.
+      nameConfirmed: v.optional(v.boolean()),
       isSeed: v.optional(v.boolean()), // demo/system account created by the seed
       adminAccess: v.optional(v.boolean()), // unlocked via the /admin password gate
       suspended: v.optional(v.boolean()), // account disabled by an admin

@@ -30,7 +30,10 @@ export function NameSetupDialog() {
   const [error, setError] = useState<string | null>(null);
   const [prefilled, setPrefilled] = useState(false);
 
-  const open = !isLoading && isAuthenticated && !!user && !user.name;
+  // `needsName` is computed server-side from the profile record, so a name
+  // the learner never chose (missing, legacy "Anonymous", or the auth
+  // provider's email-derived placeholder) counts as "no name".
+  const open = !isLoading && isAuthenticated && !!user && !!user.needsName;
 
   // Prefill with a name typed during signup — the learner never has to enter
   // it twice. Optional: the field is still editable and required.

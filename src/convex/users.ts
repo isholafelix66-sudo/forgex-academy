@@ -3,7 +3,7 @@ import { internal } from "./_generated/api";
 import { internalQuery, mutation, query, QueryCtx } from "./_generated/server";
 import { v } from "convex/values";
 import { ROLES, socialsValidator } from "./schema";
-import { checkRateLimit, displayName, notify, publicUser, requireUser, requireUserDoc, nameFromEmail } from "./lib";
+import { checkRateLimit, displayName, hasRealName, notify, publicUser, requireUser, requireUserDoc } from "./lib";
 import { welcomeEmail } from "./emailTemplates";
 import { deleteUserData } from "./admin";
 
@@ -15,7 +15,10 @@ export const currentUser = query({
   handler: async (ctx) => {
     const user = await getCurrentUser(ctx);
     if (user === null) return null;
-    return user;
+    // `needsName` drives the first-time name popup: true while the profile has
+    // no real, learner-chosen name (missing, legacy "Anonymous", or the
+    // email-derived placeholder the auth provider seeds).
+    return { ...user, needsName: !hasRealName(user) };
   },
 });
 
@@ -80,15 +83,14 @@ export const presenceHeartbeat = mutation({
     if (userId === null) return false;
     const user = await ctx.db.get(userId);
     const patch: Record<string, unknown> = { lastActivity: Date.now() };
-    // One-time repair for legacy accounts whose stored name is missing or
-    // literally "Anonymous": derive a friendly name from the email prefix.
-    // After the repair the condition is false, so steady-state cost is zero.
-    const stored = user?.name?.trim();
-    if (user && (!stored || stored.toLowerCase() === "anonymous")) {
-      const derived = nameFromEmail(
-        "email" in user ? String(user.email ?? "") : "",
-      );
-      if (derived) patch.name = derived;
+    // Name hygiene: brand-new accounts are seeded by the auth provider with a
+    // placeholder built from the email prefix ("adedoyinaadedokun"), which
+    // reads as a surname and given name run together. Clear any placeholder or
+    // legacy "Anonymous" name the learner never confirmed, so the first-time
+    // name popup asks for their real name instead. Names the learner confirmed
+    // are never touched.
+    if (user && !hasRealName(user) && user.name?.trim()) {
+      patch.name = undefined;
     }
     await ctx.db.patch(userId, patch);
     return true;
@@ -172,20 +174,23 @@ export const initializeUser = mutation({
           ? ROLES.TUTOR
           : ROLES.STUDENT;
     }
-    // Name capture / repair. An explicit signup name always wins. Otherwise a
-    // stored "Anonymous" (legacy accounts) or missing name gets a friendly
-    // name derived from the email prefix, so no account stays anonymous.
+    // Name capture. A name the learner actually typed always wins and is
+    // marked confirmed. The auth provider's email-derived placeholder
+    // ("adedoyinaadedokun") is not a real name: it is cleared so the
+    // first-time name popup asks for a real one, and a passthrough call that
+    // only re-sends that placeholder never saves it back.
     const email = "email" in user ? String(user.email ?? "") : "";
     const trimmed = name?.trim();
-    if (trimmed) {
+    const storedName = user.name?.trim() ?? "";
+    if (trimmed && trimmed !== storedName) {
+      // A genuinely new value (name popup or profile edit).
       patch.name = trimmed.slice(0, 80);
-    } else if (
-      !user.name ||
-      user.name.trim() === "" ||
-      user.name.trim().toLowerCase() === "anonymous"
-    ) {
-      const derived = nameFromEmail(email);
-      if (derived) patch.name = derived;
+      patch.nameConfirmed = true;
+    } else if (!hasRealName(user)) {
+      // Missing, legacy "Anonymous", or the email-derived placeholder — stay
+      // nameless so the name popup prompts for a real one.
+      patch.name = undefined;
+      patch.nameConfirmed = false;
     }
     if (!user.onboarded) {
       patch.onboarded = true;
@@ -196,7 +201,9 @@ export const initializeUser = mutation({
           await ctx.runMutation(internal.emailData.queueSystemEmail, {
             to: email,
             subject: "Welcome to ForgeX Academy 🎉",
-            html: welcomeEmail({ name: trimmed || "there" }).html,
+            html: welcomeEmail({
+              name: typeof patch.name === "string" ? patch.name : "there",
+            }).html,
             emailType: "welcome",
           });
         } catch {
@@ -229,6 +236,8 @@ export const updateProfile = mutation({
     const patch: Record<string, unknown> = {};
     if (args.name !== undefined) {
       patch.name = args.name.trim().slice(0, 80);
+      // The learner chose this name in profile editing — it is real.
+      patch.nameConfirmed = true;
     }
     if (args.image !== undefined) {
       patch.image = args.image.trim().slice(0, 500);

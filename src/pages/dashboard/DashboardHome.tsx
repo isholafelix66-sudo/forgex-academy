@@ -52,7 +52,7 @@ export default function DashboardHome() {
   // name yet, prompt once here instead of blocking the whole app. This is a
   // dashboard-only CTA into profile editing — the name is still saved through
   // the same authenticated profile record.
-  const needsName = !user?.name;
+  const needsName = !!user?.needsName;
 
   useEffect(() => {
     setShowNeedsNameCta(needsName);
