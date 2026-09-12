@@ -32,6 +32,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { VideoPlayer, youtubeId } from "@/components/learn/VideoPlayer";
 import { resolveLessonVideo } from "@/lib/lesson-videos";
 import { QuizRunner, type QuizData, type QuizSubmitResult } from "@/components/learn/QuizRunner";
+import { ExamRunner, type ExamData } from "@/components/learn/ExamRunner";
 import { DifficultyBadge } from "@/components/site/DifficultyBadge";
 import { Rating } from "@/components/site/Rating";
 import { Avatar } from "@/components/site/Avatar";
@@ -100,6 +101,7 @@ export default function Learn() {
   const [activeLessonId, setActiveLessonId] = useState<string | null>(null);
   const [quizOpen, setQuizOpen] = useState<LessonQuizPayload | null>(null);
   const [examOpen, setExamOpen] = useState(false);
+  const [examPay, setExamPay] = useState<ExamData | null>(null);
   const [marking, setMarking] = useState(false);
   const [justCompleted, setJustCompleted] = useState<string | null>(null);
   const [previewResource, setPreviewResource] = useState<{
@@ -474,6 +476,13 @@ export default function Learn() {
 
   const handleQuizResult = (lessonId: string, result: QuizSubmitResult) => {
     if (result.passed) advanceAfterComplete(lessonId);
+  };
+
+  const handleExamResult = (result: { passed: boolean }) => {
+    if (result.passed) {
+      const nextIncomplete = lessonStates.find((l) => !l.completed && !l.locked);
+      if (nextIncomplete) setActiveLessonId(nextIncomplete.lesson._id);
+    }
   };
 
   const selectLesson = (state: (typeof lessonStates)[number]) => {
@@ -1056,7 +1065,19 @@ export default function Learn() {
                         : `Complete all ${lessonStates.length} lessons to unlock the exam (${doneCount}/${lessonStates.length}).`}
                     </p>
                     <Button
-                      onClick={() => setExamOpen(true)}
+                      onClick={() => {
+                        setExamPay({
+                          _id: exam._id as string,
+                          courseId: course._id,
+                          title: exam.title || "Final exam",
+                          description: exam.description || "One exam covering everything in this course — pass it to earn your certificate.",
+                          timeLimitMinutes: exam.timeLimitMinutes,
+                          questions: exam.questions,
+                          passPercent: exam.passPercent,
+                          totalMarks: exam.totalMarks,
+                        });
+                        setExamOpen(true);
+                      }}
                       disabled={!states?.allLessonsComplete || !!bestExam?.passed}
                       className={cn(
                         "w-full shrink-0 gap-2 sm:w-auto",
@@ -1081,6 +1102,28 @@ export default function Learn() {
                     </Button>
                   </div>
                 </section>
+              )}
+
+              {/* Final exam modal */}
+              {examPay && (
+                <Dialog open={examOpen} onOpenChange={setExamOpen}>
+                  <DialogContent className="max-h-[90vh] overflow-y-auto p-0">
+                    <DialogHeader className="sr-only">
+                      <DialogTitle>Final exam</DialogTitle>
+                    </DialogHeader>
+                    <div className="p-6 sm:p-8">
+                      <ExamRunner
+                        exam={examPay}
+                        allowRetry={!bestExam?.passed}
+                        onExit={() => {
+                          setExamOpen(false);
+                          setExamPay(null);
+                        }}
+                        onResult={handleExamResult}
+                      />
+                    </div>
+                  </DialogContent>
+                </Dialog>
               )}
 
               {/* Completion banner */}
