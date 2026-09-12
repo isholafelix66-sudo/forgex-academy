@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useMutation } from "convex/react";
 import { api } from "@/convex/_generated/api";
-import { useSubmitExam } from "@/lib/exam-client";
 import {
   AlertCircle,
   CheckCircle2,
@@ -14,7 +14,7 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
 type Question = {
-  type: "multiple-choice" | "true-false" | "shortanswer";
+  type: "multiple-choice" | "true-false" | "short-answer";
   question: string;
   options?: string[];
   answer?: string;
@@ -189,14 +189,15 @@ export function ExamRunner({
     let score = 0;
     let gradedMax = 0;
     let pending = false;
-    for (const q of exam.questions) {
+    for (let i = 0; i < exam.questions.length; i++) {
+      const q = exam.questions[i];
       const points = q.points ?? 1;
-      if (q.type === "short_answer") {
+      if (q.type === "short-answer") {
         pending = true;
         continue;
       }
       gradedMax += points;
-      const given = normalize(answers[exam.questions.indexOf(q)] ?? "");
+      const given = normalize(answers[i] ?? "");
       if (given && given === normalize(q.answer ?? "")) {
         score += points;
       }
@@ -248,7 +249,7 @@ export function ExamRunner({
   finishRef.current = finish;
 
   const unanswered = useMemo(
-    () => exam.questions.filter((q) => !answers[exam.questions.indexOf(q)]).length,
+    () => exam.questions.filter((q, i) => !answers[i]).length,
     [answers, exam.questions],
   );
 
@@ -338,7 +339,7 @@ export function ExamRunner({
         <div className="mx-auto mt-6 max-w-lg space-y-3 text-left">
           {exam.questions.map((q, i) => {
             const given = answers[i];
-            const isAuto = q.type !== "short_answer";
+            const isAuto = q.type !== "short-answer";
             const correct =
               isAuto && normalize(given ?? "") === normalize(q.answer ?? "");
             return (
@@ -435,9 +436,7 @@ export function ExamRunner({
         >
           <Clock className="size-4" />
           {Math.floor(secondsLeft / 60)}:
-          {secondsLeft % 60
-            .toString()
-            .padStart(2, "0")}
+          {String(Math.max(0, secondsLeft) % 60).padStart(2, "0")}
         </span>
       </div>
 
