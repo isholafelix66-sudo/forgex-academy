@@ -582,8 +582,11 @@ export const ensureSeedData = mutation({
           .collect();
         for (const quiz of courseQuizzes) {
           if (quiz.questions.length < QUIZ_QUESTION_TARGET) {
-            await ctx.db.patch(quiz._id, {
-              questions: padQuizQuestions(quiz.questions),
+            await ctx.db.patch(quiz._id, {                questions: padQuizQuestions(
+                  quiz.questions,
+                  course.slug,
+                  i,
+                ),
               updatedAt: Date.now(),
             });
           }
@@ -611,7 +614,11 @@ export const ensureSeedData = mutation({
           totalMarks: 60,
           passPercent: 60,
           timeLimitMinutes: 45,
-          questions: buildFinalExamQuestions(titles),
+          questions: buildFinalExamQuestions(
+            courseLessons.map((l) => ({ title: l.title, notes: l.notes })),
+            course.slug,
+            courseQuizzes.flatMap((q) => q.questions),
+          ),
           published: true,
           createdAt: Date.now(),
         });
@@ -938,7 +945,7 @@ export const ensureSeedData = mutation({
         await ctx.db.insert("quizzes", {
           courseId: courseId as never, tutorId: c.tutorId as never,
           title: quiz.t, description: quiz.d,
-          timeLimitMinutes: quiz.time, questions: padQuizQuestions(quiz.qs), createdAt: Date.now(),
+          timeLimitMinutes: quiz.time,            questions: padQuizQuestions(quiz.qs, undefined, j), createdAt: Date.now(),
         });
       }
 
@@ -956,7 +963,11 @@ export const ensureSeedData = mutation({
           totalMarks: 60,
           passPercent: 60,
           timeLimitMinutes: 45,
-          questions: buildFinalExamQuestions(c.lessons.map((l) => l.t)),
+          questions: buildFinalExamQuestions(
+            c.lessons.map((l) => ({ title: l.t, notes: l.n })),
+            SLUG(c.title),
+            c.quizzes.flatMap((q) => q.qs),
+          ),
           published: true,
           createdAt: Date.now(),
         });
