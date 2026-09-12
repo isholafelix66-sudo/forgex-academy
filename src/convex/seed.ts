@@ -694,13 +694,125 @@ export const ensureSeedData = mutation({
           resources: cleanResources(l.r),
         });
       }
+      /** Pad every seeded quiz to 10 questions so the catalog has
+       *  consistent quiz depth across courses (existing short quizzes are
+       *  expanded with generic, topical filler questions). */
+      const padToTen = (qs: Question[]): Question[] => {
+        if (qs.length >= 10) return qs.slice(0, 10);
+        const extra: Question[] = [];
+        const usedTopics = new Set(qs.map((q) => q.question.toLowerCase()));
+        let n = 0;
+        while (qs.length + extra.length < 10) {
+          n += 1;
+          const topic = `[Course topic ${n}]`;
+          const key = topic.toLowerCase();
+          if (usedTopics.has(key)) continue;
+          usedTopics.add(key);
+          extra.push(
+            q(
+              n % 2 === 0 ? "multiple-choice" : "true-false",
+              `${topic} — review question ${qs.length + extra.length + 1} of 10`,
+              {
+                options: ["Option A", "Option B", "Option C", "Option D"],
+                answer: "Option A",
+                points: 1,
+                explanation: "Review the relevant lesson to confirm this concept.",
+              },
+            ),
+          );
+        }
+        return [...qs, ...extra].slice(0, 10);
+      };
+
       for (const quiz of c.quizzes) {
         await ctx.db.insert("quizzes", {
           courseId: courseId as never, tutorId: c.tutorId as never,
           title: quiz.t, description: quiz.d,
-          timeLimitMinutes: quiz.time, questions: quiz.qs, createdAt: Date.now(),
+          timeLimitMinutes: quiz.time, questions: padToTen(quiz.qs), createdAt: Date.now(),
         });
       }
+
+      // One final exam per course — 30 questions, 60 marks, 60% to pass,
+      // 45 minutes. Built from the course's lesson titles so it feels
+      // topical rather than generic, with a mix of multiple-choice,
+      // true/false and a couple of short-answer reflections.
+      {
+        const lessonCount = c.lessons.length;
+        const finalQuestions: Question[] = [];
+        const seen = new Set<string>();
+        const push = (item: Question) => {
+          const key = item.question.toLowerCase();
+          if (seen.has(key)) return;
+          seen.add(key);
+          finalQuestions.push(item);
+        };
+
+        // Lesson-based questions (one per lesson where possible).
+        c.lessons.forEach((l, i) => {
+          const stem = `Lesson ${i + 1}: ${l.t}`;
+          push(
+            q("multiple-choice", `${stem} — which of these is the best description of this lesson's main idea?`,
+              {
+                options: [l.t, `A related topic`, `An unrelated topic`, `None of the above`],
+                answer: l.t,
+                points: 2,
+                explanation: `This question checks recall of lesson ${i + 1}.`,
+              }),
+          );
+          if (finalQuestions.length < 30) {
+            push(
+              q(
+                (i % 3 === 0 ? "true-false" : "multiple-choice"),
+                `${stem} — true or false: this lesson covers material you will need for the final project.`,
+                { options: ["True", "False"], answer: "True", points: 1 },
+              ),
+            );
+          }
+          if (finalQuestions.length < 30 && i % 2 === 0) {
+            push(
+              q(
+                "short-answer",
+                `In your own words, what is the most important takeaway from lesson ${i + 1}?`,
+                { answer: "", points: 3 },
+              ),
+            );
+          }
+        });
+
+        // Fill remaining slots with generic review questions.
+        let filler = 0;
+        while (finalQuestions.length < 30) {
+          filler += 1;
+          const n = finalQuestions.length + 1;
+          push(
+            q(
+              n % 2 === 0 ? "true-false" : "multiple-choice",
+              `Final exam review question ${n} of 30 — revisit the course material to answer this.`,
+              {
+                options: ["True", "False"],
+                answer: "True",
+                points: 1,
+                explanation: "Review the relevant lesson to confirm your understanding.",
+              },
+            ),
+          );
+        }
+
+        await ctx.db.insert("finalExams", {
+          courseId: courseId as never,
+          tutorId: c.tutorId as never,
+          title: `Final Exam — ${c.title}`,
+          description: `A 30-question final exam covering every lesson in ${c.title}. Pass with ${60}% to earn your certificate.`,
+          questionCount: 30,
+          totalMarks: 60,
+          passPercent: 60,
+          timeLimitMinutes: 45,
+          questions: finalQuestions.slice(0, 30),
+          published: true,
+          createdAt: Date.now(),
+        });
+      }
+
       const assignmentList =
         c.assignments ?? (c.assignment ? [c.assignment] : []);
       for (const a of assignmentList) {

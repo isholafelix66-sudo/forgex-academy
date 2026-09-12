@@ -495,6 +495,40 @@ export default function Learn() {
   const bestScore = (quizId: string) =>
     attempts?.filter((a) => a.quizId === quizId).sort((a, b) => b.score - a.score)[0];
 
+  const attemptHistory = exam && exam.attempts.length > 1 ? (
+    <div className="mt-4 rounded-xl border border-white/10 bg-black/20 p-4">
+      <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+        Final exam attempts
+      </p>
+      <ul className="mt-2 space-y-2">
+        {[...exam.attempts]
+          .sort((a, b) => b.submittedAt - a.submittedAt)
+          .map((a) => (
+            <li key={a._id} className="flex flex-wrap items-center gap-2 text-xs">
+              <span className="min-w-0 flex-1 truncate font-medium">
+                {a.examTitle ?? "Final exam"}
+              </span>
+              <span className="shrink-0 rounded-full bg-white/5 px-2 py-0.5 font-mono">
+                {a.score}/{a.totalMarks ?? exam.totalMarks} ({a.percent}%)
+              </span>
+              <span className="shrink-0">
+                {a.passed ? (
+                  <Badge className="bg-lime-400/15 text-lime-300">Passed</Badge>
+                ) : (
+                  <Badge className="bg-red-400/15 text-red-300">
+                    Failed — {a.examPassPercent ?? exam.passPercent}% to pass
+                  </Badge>
+                )}
+              </span>
+              <span className="shrink-0 text-muted-foreground">
+                {new Date(a.submittedAt).toLocaleDateString()}
+              </span>
+            </li>
+          ))}
+      </ul>
+    </div>
+  ) : null;
+
   return (
     <div className="min-h-screen bg-background">
       {/* Top bar */}
@@ -1012,6 +1046,7 @@ export default function Learn() {
                       </div>
                     </div>
                   </div>
+                  {attemptHistory}
                   <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
                     <p className="text-xs text-muted-foreground">
                       {states?.allLessonsComplete
