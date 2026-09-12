@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useMutation } from "convex/react";
 import { api } from "@/convex/_generated/api";
+import { useSubmitExam } from "@/lib/exam-client";
 import {
   AlertCircle,
   CheckCircle2,
@@ -14,7 +14,7 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
 type Question = {
-  type: "multiple-choice" | "true-false" | "short-answer";
+  type: "multiple-choice" | "true-false" | "shortanswer";
   question: string;
   options?: string[];
   answer?: string;
