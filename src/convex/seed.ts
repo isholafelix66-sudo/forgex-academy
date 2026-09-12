@@ -561,10 +561,19 @@ export const ensureSeedData = mutation({
           .collect();
         for (let qi = 0; qi < courseQuizzes.length; qi += 1) {
           const quiz = courseQuizzes[qi];
-          if (quiz.questions.length < QUIZ_QUESTION_TARGET) {
+          const nonGenericQuestions = quiz.questions.filter(
+            (q) =>
+              !q.question.includes("Review question") &&
+              !q.question.includes("check your understanding of this course"),
+          );
+          const hasGenericQuestions = quiz.questions.length !== nonGenericQuestions.length;
+          if (
+            quiz.questions.length < QUIZ_QUESTION_TARGET ||
+            hasGenericQuestions
+          ) {
             await ctx.db.patch(quiz._id, {
               questions: padQuizQuestionsWithIndex(
-                quiz.questions,
+                nonGenericQuestions,
                 course.slug,
                 qi,
               ),
@@ -604,10 +613,17 @@ export const ensureSeedData = mutation({
             published: true,
             createdAt: Date.now(),
           });
-        } else if (existingExam.questions.length < FINAL_EXAM_QUESTION_TARGET) {
-          // Existing exam has fewer than 30 questions — rebuild with
-          // course-specific questions so learners get topical exam content
-          // rather than generic fillers.
+        } else if (
+          existingExam.questions.length < FINAL_EXAM_QUESTION_TARGET ||
+          existingExam.questions.some(
+            (q) =>
+              q.question.includes("Final exam review question") ||
+              q.question.includes("revisit the course material"),
+          )
+        ) {
+          // Existing exam has fewer than 30 questions OR contains generic
+          // review questions — rebuild with course-specific questions so
+          // learners get topical exam content rather than generic fillers.
           await ctx.db.patch(existingExam._id, {
             questions: buildFinalExamQuestions(
               lessonsWithNotes,
