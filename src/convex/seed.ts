@@ -330,14 +330,14 @@ const GENERIC_EXAM_FILLER =
 /** Brings a quiz up to 10 questions using the course's hand-authored bank
  *  (matched by course slug + quiz order). Falls back to generic review
  *  fillers only if no bank entry exists yet. */
-function padQuizQuestions(
+function padQuizQuestionsWithIndex(
   questions: Question[],
-  slug?: string,
-  quizIndex = 0,
+  slug: string,
+  quizIndex: number,
 ): Question[] {
   const out = [...questions];
   const used = new Set(out.map((item) => item.question.trim().toLowerCase()));
-  const add = (item: Question) => {
+  const addItem = (item: Question) => {
     const key = item.question.trim().toLowerCase();
     if (used.has(key)) return;
     used.add(key);
@@ -346,33 +346,13 @@ function padQuizQuestions(
   if (slug) {
     for (const item of quizAdditionsFor(slug, quizIndex)) {
       if (out.length >= QUIZ_QUESTION_TARGET) break;
-      add(item);
+      addItem(item);
     }
-  }
-  let n = 0;
-  while (out.length < QUIZ_QUESTION_TARGET) {
-    n += 1;
-    const stem = `Review question ${out.length + 1} of ${QUIZ_QUESTION_TARGET} — check your understanding of this course.`;
-    if (used.has(stem.toLowerCase())) continue;
-    used.add(stem.toLowerCase());
-    out.push(
-      n % 2 === 0
-        ? q("multiple-choice", stem, {
-            options: ["Option A", "Option B", "Option C", "Option D"],
-            answer: "Option A",
-            points: 1,
-            explanation: "Revisit the relevant lesson to confirm this concept.",
-          })
-        : q("true-false", stem, {
-            options: ["True", "False"],
-            answer: "True",
-            points: 1,
-            explanation: "Revisit the relevant lesson to confirm this concept.",
-          }),
-    );
   }
   return out;
 }
+
+[read_files: showing lines 318-342 of 1864. Use code_search to locate the part you need and read a window around it, call read_files { path, offset, limit ].
 
 /** Builds the 30-question final exam for a course. Priority order:
  *   1. the hand-authored bank of course-specific questions,
@@ -385,6 +365,29 @@ function buildFinalExamQuestions(
   lessons: Array<{ title: string; notes?: string }>,
   slug?: string,
   quizQuestions: Question[] = [],
+  quizIndex = 0,
+): Question[] {
+  const out: Question[] = [];
+  const seen = new Set<string>();
+  const push = (item: Question) => {
+    const key = item.question.trim().toLowerCase();
+    if (seen.has(key)) return;
+    seen.add(key);
+    out.push(withShuffledOptions(item));
+  };
+
+[read_files: showing lines 318-346 of 1864. Use code_search to locate the part you need and read a window around it, call read_files { path, offset, limit ]/** Builds the 30-question final exam for a course. Priority order:
+ *   1. the hand-authored bank of course-specific questions,
+ *   2. the course's own checkpoint (quiz) questions,
+ *   3. recall questions built from the real lesson titles and notes,
+ *   4. generic fillers only as a last resort.
+ *  Every added multiple-choice question has its options shuffled so the
+ *  correct answer is not always in the same slot. */
+function buildFinalExamQuestions(
+  lessons: Array<{ title: string; notes?: string }>,
+  slug?: string,
+  quizQuestions: Question[] = [],
+  quizIndex = 0,
 ): Question[] {
   const out: Question[] = [];
   const seen = new Set<string>();
@@ -582,10 +585,9 @@ export const ensureSeedData = mutation({
           .collect();
         for (const quiz of courseQuizzes) {
           if (quiz.questions.length < QUIZ_QUESTION_TARGET) {
-            await ctx.db.patch(quiz._id, {                questions: padQuizQuestions(
+            await ctx.db.patch(quiz._id, {            questions: padQuizQuestions(
                   quiz.questions,
                   course.slug,
-                  i,
                 ),
               updatedAt: Date.now(),
             });
@@ -944,8 +946,8 @@ export const ensureSeedData = mutation({
       for (const quiz of c.quizzes) {
         await ctx.db.insert("quizzes", {
           courseId: courseId as never, tutorId: c.tutorId as never,
-          title: quiz.t, description: quiz.d,
-          timeLimitMinutes: quiz.time,            questions: padQuizQuestions(quiz.qs, undefined, j), createdAt: Date.now(),
+          title: quiz.t, description: quiz.d,          timeLimitMinutes: quiz.time,
+            questions: padQuizQuestions(quiz.qs, SLUG(c.title) ?? ""), createdAt: Date.now(),
         });
       }
 
@@ -966,7 +968,7 @@ export const ensureSeedData = mutation({
           questions: buildFinalExamQuestions(
             c.lessons.map((l) => ({ title: l.t, notes: l.n })),
             SLUG(c.title),
-            c.quizzes.flatMap((q) => q.qs),
+            courseQuizzes.flatMap((q) => q.questions),
           ),
           published: true,
           createdAt: Date.now(),
