@@ -352,31 +352,7 @@ function padQuizQuestionsWithIndex(
   return out;
 }
 
-[read_files: showing lines 318-342 of 1864. Use code_search to locate the part you need and read a window around it, call read_files { path, offset, limit ].
-
 /** Builds the 30-question final exam for a course. Priority order:
- *   1. the hand-authored bank of course-specific questions,
- *   2. the course's own checkpoint (quiz) questions,
- *   3. recall questions built from the real lesson titles and notes,
- *   4. generic fillers only as a last resort.
- *  Every added multiple-choice question has its options shuffled so the
- *  correct answer is not always in the same slot. */
-function buildFinalExamQuestions(
-  lessons: Array<{ title: string; notes?: string }>,
-  slug?: string,
-  quizQuestions: Question[] = [],
-  quizIndex = 0,
-): Question[] {
-  const out: Question[] = [];
-  const seen = new Set<string>();
-  const push = (item: Question) => {
-    const key = item.question.trim().toLowerCase();
-    if (seen.has(key)) return;
-    seen.add(key);
-    out.push(withShuffledOptions(item));
-  };
-
-[read_files: showing lines 318-346 of 1864. Use code_search to locate the part you need and read a window around it, call read_files { path, offset, limit ]/** Builds the 30-question final exam for a course. Priority order:
  *   1. the hand-authored bank of course-specific questions,
  *   2. the course's own checkpoint (quiz) questions,
  *   3. recall questions built from the real lesson titles and notes,
@@ -573,8 +549,7 @@ export const ensureSeedData = mutation({
     // and never rewrites tutor-authored questions or exams.
     // ------------------------------------------------------------------
     const healQuizAndExamDepth = async () => {
-      const seededSlugSet = new Set(EXPECTED_COURSE_SLUGS);
-      for (const course of await ctx.db.query("courses").collect()) {
+      const seededSlugSet = new Set(EXPECTED_COURSE_SLUGS);      for (const course of await ctx.db.query("courses").collect()) {
         if (!seededSlugSet.has(course.slug) || deletedCatalogSlugs.has(course.slug)) {
           continue;
         }
@@ -583,12 +558,15 @@ export const ensureSeedData = mutation({
           .query("quizzes")
           .withIndex("by_course", (q2) => q2.eq("courseId", course._id))
           .collect();
-        for (const quiz of courseQuizzes) {
+        for (let qi = 0; qi < courseQuizzes.length; qi += 1) {
+          const quiz = courseQuizzes[qi];
           if (quiz.questions.length < QUIZ_QUESTION_TARGET) {
-            await ctx.db.patch(quiz._id, {            questions: padQuizQuestions(
-                  quiz.questions,
-                  course.slug,
-                ),
+            await ctx.db.patch(quiz._id, {
+              questions: padQuizQuestionsWithIndex(
+                quiz.questions,
+                course.slug,
+                qi,
+              ),
               updatedAt: Date.now(),
             });
           }
@@ -943,17 +921,27 @@ export const ensureSeedData = mutation({
           resources: cleanResources(l.r),
         });
       }
-      for (const quiz of c.quizzes) {
+      for (let qi = 0; qi < c.quizzes.length; qi += 1) {
+        const quiz = c.quizzes[qi];
         await ctx.db.insert("quizzes", {
           courseId: courseId as never, tutorId: c.tutorId as never,
-          title: quiz.t, description: quiz.d,          timeLimitMinutes: quiz.time,
-            questions: padQuizQuestions(quiz.qs, SLUG(c.title) ?? ""), createdAt: Date.now(),
+          title: quiz.t, description: quiz.d,
+          timeLimitMinutes: quiz.time,
+          questions: padQuizQuestionsWithIndex(quiz.qs, slug, qi),
+          createdAt: Date.now(),
         });
       }
 
+      // Collect the freshly-inserted checkpoint quiz questions so the final
+      // exam can reuse any tutor-authored items when rebuilding its 30-question
+      // bank on re-seed (fresh seed also passes them for topical depth).
+      const courseQuizzes = c.quizzes.map((quiz, qi) => ({
+        questions: padQuizQuestionsWithIndex(quiz.qs, slug, qi),
+      }));
+
       // One final exam per course — 30 questions, 60 marks, 60% to pass,
-      // 45 minutes. Built from the course's lesson titles so it feels
-      // topical rather than generic, with a mix of multiple-choice,
+      // 45 minutes. Built from the course's real lesson titles and notes so
+      // it feels topical rather than generic, with a mix of multiple-choice,
       // true/false and a couple of short-answer reflections.
       {
         await ctx.db.insert("finalExams", {
@@ -967,7 +955,7 @@ export const ensureSeedData = mutation({
           timeLimitMinutes: 45,
           questions: buildFinalExamQuestions(
             c.lessons.map((l) => ({ title: l.t, notes: l.n })),
-            SLUG(c.title),
+            slug,
             courseQuizzes.flatMap((q) => q.questions),
           ),
           published: true,
