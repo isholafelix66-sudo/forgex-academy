@@ -4,6 +4,10 @@ import { checkRateLimit } from "./lib";
 import { ROLES, type Question, type Resource } from "./schema";
 import { PROMPT_CATEGORIES, PROMPT_SEED } from "./promptSeedData";
 import { getDeletedCatalogSlugs, seedAiCourses } from "./aiCourseSeed";
+import {
+  bankQuestionsFor,
+  quizAdditionsFor,
+} from "./quizBank";
 
 /**
  * Internal wrapper so the scheduler can re-run the idempotent catalog seed.
@@ -287,10 +291,64 @@ const FINAL_EXAM_QUESTION_TARGET = 30;
 
 /** Pads a quiz up to the 10-question target with review items. Quizzes that
  *  already carry 10+ questions are returned untouched. */
-function padQuizQuestions(questions: Question[]): Question[] {
-  if (questions.length >= QUIZ_QUESTION_TARGET) return questions;
+/** Deterministic pseudo-shuffle so the correct option never always sits in
+ *  the same position — stable across re-seeds (seeded by the question text). */
+function seededShuffle<T>(items: T[], seedText: string): T[] {
+  const arr = [...items];
+  let h = 2166136261;
+  for (let i = 0; i < seedText.length; i += 1) {
+    h ^= seedText.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  for (let i = arr.length - 1; i > 0; i -= 1) {
+    h = Math.imul(h ^ (h >>> 15), 2246822507);
+    h ^= h >>> 13;
+    const j = Math.abs(h) % (i + 1);
+    [arr[i], arr[j]] = [arr[j], arr[i]];
+  }
+  return arr;
+}
+
+/** Shuffle a multiple-choice question's options (true/false stays True/False). */
+function withShuffledOptions(item: Question): Question {
+  if (
+    item.type !== "multiple-choice" ||
+    !item.options ||
+    item.options.length < 2
+  ) {
+    return item;
+  }
+  return { ...item, options: seededShuffle(item.options, item.question) };
+}
+
+/** Matches the old generic review fillers seeded into quizzes/exams so the
+ *  self-heal pass can swap them for real, course-specific questions. */
+const GENERIC_QUIZ_FILLER = /^Review question \d+ of \d+/;
+const GENERIC_EXAM_FILLER =
+  /best describes this lesson's main idea|Final exam review question \d+ of \d+|this lesson covers material you will need|In your own words, what is the most important takeaway from lesson/;
+
+/** Brings a quiz up to 10 questions using the course's hand-authored bank
+ *  (matched by course slug + quiz order). Falls back to generic review
+ *  fillers only if no bank entry exists yet. */
+function padQuizQuestions(
+  questions: Question[],
+  slug?: string,
+  quizIndex = 0,
+): Question[] {
   const out = [...questions];
   const used = new Set(out.map((item) => item.question.trim().toLowerCase()));
+  const add = (item: Question) => {
+    const key = item.question.trim().toLowerCase();
+    if (used.has(key)) return;
+    used.add(key);
+    out.push(withShuffledOptions(item));
+  };
+  if (slug) {
+    for (const item of quizAdditionsFor(slug, quizIndex)) {
+      if (out.length >= QUIZ_QUESTION_TARGET) break;
+      add(item);
+    }
+  }
   let n = 0;
   while (out.length < QUIZ_QUESTION_TARGET) {
     n += 1;
@@ -316,48 +374,58 @@ function padQuizQuestions(questions: Question[]): Question[] {
   return out;
 }
 
-/** Builds the standard 30-question final exam for a course from its lesson
- *  titles: recall, true/false and reflection questions, then generic review
- *  fillers to reach the target. */
-function buildFinalExamQuestions(lessonTitles: string[]): Question[] {
+/** Builds the 30-question final exam for a course. Priority order:
+ *   1. the hand-authored bank of course-specific questions,
+ *   2. the course's own checkpoint (quiz) questions,
+ *   3. recall questions built from the real lesson titles and notes,
+ *   4. generic fillers only as a last resort.
+ *  Every added multiple-choice question has its options shuffled so the
+ *  correct answer is not always in the same slot. */
+function buildFinalExamQuestions(
+  lessons: Array<{ title: string; notes?: string }>,
+  slug?: string,
+  quizQuestions: Question[] = [],
+): Question[] {
   const out: Question[] = [];
   const seen = new Set<string>();
   const push = (item: Question) => {
     const key = item.question.trim().toLowerCase();
     if (seen.has(key)) return;
     seen.add(key);
-    out.push(item);
+    out.push(withShuffledOptions(item));
   };
 
-  lessonTitles.forEach((title, i) => {
-    const stem = `Lesson ${i + 1}: ${title}`;
+  if (slug) {
+    for (const item of bankQuestionsFor(slug)) push(item);
+  }
+  for (const item of quizQuestions) push(item);
+
+  for (const [i, lesson] of lessons.entries()) {
+    if (out.length >= FINAL_EXAM_QUESTION_TARGET) break;
+    const desc = (lesson.notes ?? "").trim();
+    const others = lessons.filter((_, j) => j !== i);
+    const otherNotes = others
+      .map((l) => (l.notes ?? "").trim())
+      .filter((d) => d && d !== desc)
+      .slice(0, 3);
+    const otherTitles = others.map((l) => l.title).slice(0, 3);
+    if (!desc || otherNotes.length < 3) continue;
     push(
-      q("multiple-choice", `${stem} — which of these best describes this lesson's main idea?`, {
-        options: [title, "A different but related topic", "An unrelated topic", "None of the above"],
-        answer: title,
-        points: 2,
-        explanation: `This question checks recall of lesson ${i + 1}.`,
-      }),
+      q(
+        "multiple-choice",
+        `Which of these best describes what the lesson "${lesson.title}" covers?`,
+        { options: [desc, ...otherNotes], answer: desc, points: 2 },
+      ),
     );
-    if (out.length < FINAL_EXAM_QUESTION_TARGET) {
-      push(
-        q(
-          i % 3 === 0 ? "true-false" : "multiple-choice",
-          `${stem} — true or false: this lesson covers material you will need for the final project.`,
-          { options: ["True", "False"], answer: "True", points: 1 },
-        ),
-      );
-    }
-    if (out.length < FINAL_EXAM_QUESTION_TARGET && i % 2 === 0) {
-      push(
-        q(
-          "short-answer",
-          `In your own words, what is the most important takeaway from lesson ${i + 1}?`,
-          { answer: "", points: 3 },
-        ),
-      );
-    }
-  });
+    if (out.length >= FINAL_EXAM_QUESTION_TARGET) break;
+    push(
+      q(
+        "multiple-choice",
+        `In which lesson of this course would you learn: "${desc}"?`,
+        { options: [lesson.title, ...otherTitles], answer: lesson.title, points: 2 },
+      ),
+    );
+  }
 
   let n = out.length;
   while (out.length < FINAL_EXAM_QUESTION_TARGET) {

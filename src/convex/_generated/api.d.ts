@@ -46,6 +46,7 @@ import type * as notifications from "../notifications.js";
 import type * as promptSeedData from "../promptSeedData.js";
 import type * as prompts from "../prompts.js";
 import type * as public_ from "../public.js";
+import type * as quizBank from "../quizBank.js";
 import type * as quizgen from "../quizgen.js";
 import type * as quizgenInternal from "../quizgenInternal.js";
 import type * as quizzes from "../quizzes.js";
@@ -109,6 +110,7 @@ declare const fullApi: ApiFromModules<{
   promptSeedData: typeof promptSeedData;
   prompts: typeof prompts;
   public: typeof public_;
+  quizBank: typeof quizBank;
   quizgen: typeof quizgen;
   quizgenInternal: typeof quizgenInternal;
   quizzes: typeof quizzes;
