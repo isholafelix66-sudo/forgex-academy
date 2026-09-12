@@ -549,7 +549,8 @@ export const ensureSeedData = mutation({
     // and never rewrites tutor-authored questions or exams.
     // ------------------------------------------------------------------
     const healQuizAndExamDepth = async () => {
-      const seededSlugSet = new Set(EXPECTED_COURSE_SLUGS);      for (const course of await ctx.db.query("courses").collect()) {
+      const seededSlugSet = new Set(EXPECTED_COURSE_SLUGS);
+      for (const course of await ctx.db.query("courses").collect()) {
         if (!seededSlugSet.has(course.slug) || deletedCatalogSlugs.has(course.slug)) {
           continue;
         }
@@ -576,32 +577,46 @@ export const ensureSeedData = mutation({
           .query("finalExams")
           .withIndex("by_course", (q2) => q2.eq("courseId", course._id))
           .first();
-        if (existingExam) continue;
         const courseLessons = await ctx.db
           .query("lessons")
           .withIndex("by_courseId", (q2) => q2.eq("courseId", course._id))
           .collect();
         if (courseLessons.length === 0) continue;
-        const titles = [...courseLessons]
+        const lessonsWithNotes = courseLessons
           .sort((a, b) => a.order - b.order)
-          .map((l) => l.title);
-        await ctx.db.insert("finalExams", {
-          courseId: course._id,
-          tutorId: course.tutorId,
-          title: `Final Exam — ${course.title}`,
-          description: `A ${FINAL_EXAM_QUESTION_TARGET}-question final exam covering every lesson in ${course.title}. Pass with 60% to earn your certificate.`,
-          questionCount: FINAL_EXAM_QUESTION_TARGET,
-          totalMarks: 60,
-          passPercent: 60,
-          timeLimitMinutes: 45,
-          questions: buildFinalExamQuestions(
-            courseLessons.map((l) => ({ title: l.title, notes: l.notes })),
-            course.slug,
-            courseQuizzes.flatMap((q) => q.questions),
-          ),
-          published: true,
-          createdAt: Date.now(),
-        });
+          .map((l) => ({ title: l.title, notes: l.notes }));
+        const courseQuizQuestions = courseQuizzes.flatMap((q) => q.questions);
+        if (!existingExam) {
+          await ctx.db.insert("finalExams", {
+            courseId: course._id,
+            tutorId: course.tutorId,
+            title: `Final Exam — ${course.title}`,
+            description: `A ${FINAL_EXAM_QUESTION_TARGET}-question final exam covering every lesson in ${course.title}. Pass with 60% to earn your certificate.`,
+            questionCount: FINAL_EXAM_QUESTION_TARGET,
+            totalMarks: 60,
+            passPercent: 60,
+            timeLimitMinutes: 45,
+            questions: buildFinalExamQuestions(
+              lessonsWithNotes,
+              course.slug,
+              courseQuizQuestions,
+            ),
+            published: true,
+            createdAt: Date.now(),
+          });
+        } else if (existingExam.questions.length < FINAL_EXAM_QUESTION_TARGET) {
+          // Existing exam has fewer than 30 questions — rebuild with
+          // course-specific questions so learners get topical exam content
+          // rather than generic fillers.
+          await ctx.db.patch(existingExam._id, {
+            questions: buildFinalExamQuestions(
+              lessonsWithNotes,
+              course.slug,
+              courseQuizQuestions,
+            ),
+            questionCount: FINAL_EXAM_QUESTION_TARGET,
+          });
+        }
       }
     };
 
