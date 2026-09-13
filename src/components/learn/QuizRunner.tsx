@@ -33,21 +33,18 @@ function QuestionCard({
   total,
   selected,
   onSelect,
-  courseTitle,
 }: {
   question: Question;
   index: number;
   total: number;
   selected: string;
   onSelect: (v: string) => void;
-  courseTitle?: string;
 }) {
-  // Use the actual question text from the question bank, not a generic placeholder
-  const displayQuestion = question.question && question.question.length > 10
-    ? question.question
-    : courseTitle
-      ? `Review question ${index + 1} of ${total} — check your understanding of "${courseTitle}".`
-      : `Review question ${index + 1} of ${total} — check your understanding of this course.`;
+  // Always show the real question text from the question bank. The old
+  // generic "Review question N of 10" placeholder is gone — a missing question
+  // renders as a plain position label instead of course-generic filler.
+  const displayQuestion =
+    question.question?.trim() || `Question ${index + 1} of ${total}`;
 
   return (
     <div className="rounded-2xl border border-white/10 bg-card p-6">
@@ -174,8 +171,6 @@ export function QuizRunner({
   >;
   /** Called after submission with the graded result. */
   onResult?: (result: QuizSubmitResult) => void;
-  /** Course title for display in question placeholders. */
-  courseTitle?: string;
 }) {
   const submitQuiz = useMutation(api.quizzes.submitQuiz);
   const [phase, setPhase] = useState<Phase>("intro");
@@ -483,7 +478,6 @@ export function QuizRunner({
         total={quiz.questions.length}
         selected={answers[current] ?? ""}
         onSelect={(v) => setAnswers((a) => ({ ...a, [current]: v }))}
-        courseTitle={courseTitle}
       />
 
       {/* Progress dots */}

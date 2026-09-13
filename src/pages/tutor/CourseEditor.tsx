@@ -188,7 +188,7 @@ const emptyExam: ExamDraft = {
   description: "Covers the whole course.",
   questionCount: 10,
   totalMarks: 100,
-  passPercent: 60,
+  passPercent: 40,
   timeLimitMinutes: 30,
   published: false,
   questions: [],

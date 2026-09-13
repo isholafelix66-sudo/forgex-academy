@@ -288,6 +288,10 @@ function q(
  *  questions and exams are never removed or overwritten. */
 const QUIZ_QUESTION_TARGET = 10;
 const FINAL_EXAM_QUESTION_TARGET = 30;
+/** Final exams pass at 40%. */
+const FINAL_EXAM_PASS_PERCENT = 40;
+
+type LessonLike = { title: string; notes?: string };
 
 /** Pads a quiz up to the 10-question target with review items. Quizzes that
  *  already carry 10+ questions are returned untouched. */
@@ -323,17 +327,75 @@ function withShuffledOptions(item: Question): Question {
 
 /** Matches the old generic review fillers seeded into quizzes/exams so the
  *  self-heal pass can swap them for real, course-specific questions. */
-const GENERIC_QUIZ_FILLER = /^Review question \d+ of \d+/;
-const GENERIC_EXAM_FILLER =
-  /best describes this lesson's main idea|Final exam review question \d+ of \d+|this lesson covers material you will need|In your own words, what is the most important takeaway from lesson/;
+/** True for placeholder questions created by earlier seed versions. The
+ *  self-heal pass swaps these for real, course-specific questions so a
+ *  learner never sees “Review question N of 10” filler again. */
+function isGenericQuestion(item: { question?: string }): boolean {
+  const text = (item.question ?? "").trim();
+  if (text.length === 0) return true;
+  return (
+    /^Review question \d+ of \d+/i.test(text) ||
+    /^Final exam review question \d+ of \d+/i.test(text) ||
+    text.includes("check your understanding of this course") ||
+    text.includes("revisit the course material") ||
+    text.includes("best describes this lesson's main idea")
+  );
+}
+
+/**
+ * Course-specific recall questions built from the lesson titles and notes the
+ * course actually ships. `round` selects a different question stem so callers
+ * can keep generating distinct items until they reach their target. Nothing
+ * here is generic — every option is quoted from real lesson content.
+ */
+function lessonRecallQuestions(lessons: LessonLike[], round: number): Question[] {
+  const out: Question[] = [];
+  for (const [i, lesson] of lessons.entries()) {
+    const desc = (lesson.notes ?? "").trim();
+    if (!desc) continue;
+    const others = lessons.filter((_, j) => j !== i);
+    const otherNotes = others
+      .map((l) => (l.notes ?? "").trim())
+      .filter((d) => d && d !== desc);
+    const otherTitles = others.map((l) => l.title);
+    if (otherNotes.length < 3 || otherTitles.length < 3) continue;
+    if (round % 3 === 0) {
+      out.push(
+        q(
+          "multiple-choice",
+          `Which of these best describes what the lesson "${lesson.title}" covers?`,
+          { options: [desc, ...otherNotes.slice(0, 3)], answer: desc, points: 2 },
+        ),
+      );
+    } else if (round % 3 === 1) {
+      out.push(
+        q(
+          "multiple-choice",
+          `In which lesson of this course would you learn: "${desc}"?`,
+          { options: [lesson.title, ...otherTitles.slice(0, 3)], answer: lesson.title, points: 2 },
+        ),
+      );
+    } else {
+      out.push(
+        q(
+          "multiple-choice",
+          `Which lesson covers the idea: "${desc}"?`,
+          { options: [lesson.title, ...otherTitles.slice(0, 3)], answer: lesson.title, points: 2 },
+        ),
+      );
+    }
+  }
+  return out;
+}
 
 /** Brings a quiz up to 10 questions using the course's hand-authored bank
- *  (matched by course slug + quiz order). Falls back to generic review
- *  fillers only if no bank entry exists yet. */
+ *  (matched by course slug + quiz order), then pulls real lesson-recall
+ *  questions if the bank runs out. Never emits generic filler. */
 function padQuizQuestionsWithIndex(
   questions: Question[],
   slug: string,
   quizIndex: number,
+  lessons: LessonLike[] = [],
 ): Question[] {
   const out = [...questions];
   const used = new Set(out.map((item) => item.question.trim().toLowerCase()));
@@ -349,18 +411,27 @@ function padQuizQuestionsWithIndex(
       addItem(item);
     }
   }
+  // Safety net: if the bank is exhausted, build course-specific recall
+  // questions from the real lesson content so the quiz still reaches 10.
+  for (let round = 0; out.length < QUIZ_QUESTION_TARGET && round < 8; round += 1) {
+    for (const item of lessonRecallQuestions(lessons, round + quizIndex)) {
+      if (out.length >= QUIZ_QUESTION_TARGET) break;
+      addItem(item);
+    }
+  }
   return out;
 }
 
 /** Builds the 30-question final exam for a course. Priority order:
  *   1. the hand-authored bank of course-specific questions,
  *   2. the course's own checkpoint (quiz) questions,
- *   3. recall questions built from the real lesson titles and notes,
- *   4. generic fillers only as a last resort.
+ *   3. recall questions built from the real lesson titles and notes.
+ *  Generic "Final exam review question N" fillers were removed entirely —
+ *  the lesson-recall rounds always supply enough course-specific items.
  *  Every added multiple-choice question has its options shuffled so the
  *  correct answer is not always in the same slot. */
 function buildFinalExamQuestions(
-  lessons: Array<{ title: string; notes?: string }>,
+  lessons: LessonLike[],
   slug?: string,
   quizQuestions: Question[] = [],
   quizIndex = 0,
@@ -379,56 +450,18 @@ function buildFinalExamQuestions(
   }
   for (const item of quizQuestions) push(item);
 
-  for (const [i, lesson] of lessons.entries()) {
-    if (out.length >= FINAL_EXAM_QUESTION_TARGET) break;
-    const desc = (lesson.notes ?? "").trim();
-    const others = lessons.filter((_, j) => j !== i);
-    const otherNotes = others
-      .map((l) => (l.notes ?? "").trim())
-      .filter((d) => d && d !== desc)
-      .slice(0, 3);
-    const otherTitles = others.map((l) => l.title).slice(0, 3);
-    if (!desc || otherNotes.length < 3) continue;
-    push(
-      q(
-        "multiple-choice",
-        `Which of these best describes what the lesson "${lesson.title}" covers?`,
-        { options: [desc, ...otherNotes], answer: desc, points: 2 },
-      ),
-    );
-    if (out.length >= FINAL_EXAM_QUESTION_TARGET) break;
-    push(
-      q(
-        "multiple-choice",
-        `In which lesson of this course would you learn: "${desc}"?`,
-        { options: [lesson.title, ...otherTitles], answer: lesson.title, points: 2 },
-      ),
-    );
-  }
-
-  let n = out.length;
-  while (out.length < FINAL_EXAM_QUESTION_TARGET) {
-    n += 1;
-    const multipleChoice = n % 2 === 1;
-    push(
-      q(
-        multipleChoice ? "multiple-choice" : "true-false",
-        `Final exam review question ${out.length + 1} of ${FINAL_EXAM_QUESTION_TARGET} — revisit the course material to answer this.`,
-        multipleChoice
-          ? {
-              options: ["Option A", "Option B", "Option C", "Option D"],
-              answer: "Option A",
-              points: 1,
-              explanation: "Review the relevant lesson to confirm your understanding.",
-            }
-          : {
-              options: ["True", "False"],
-              answer: "True",
-              points: 1,
-              explanation: "Review the relevant lesson to confirm your understanding.",
-            },
-      ),
-    );
+  // Course-specific recall questions until the exam reaches 30 questions.
+  // Several stems per lesson guarantee enough distinct items without ever
+  // emitting generic filler.
+  for (
+    let round = 0;
+    out.length < FINAL_EXAM_QUESTION_TARGET && round < 12;
+    round += 1
+  ) {
+    for (const item of lessonRecallQuestions(lessons, round + quizIndex)) {
+      if (out.length >= FINAL_EXAM_QUESTION_TARGET) break;
+      push(item);
+    }
   }
   return out.slice(0, FINAL_EXAM_QUESTION_TARGET);
 }
@@ -554,7 +587,16 @@ export const ensureSeedData = mutation({
         if (!seededSlugSet.has(course.slug) || deletedCatalogSlugs.has(course.slug)) {
           continue;
         }
-        // Every seeded quiz carries at least 10 questions.
+        // Course lessons (real titles + notes) are needed by both the quiz
+        // padder and the exam builder so nothing falls back to generic text.
+        const courseLessons = await ctx.db
+          .query("lessons")
+          .withIndex("by_courseId", (q2) => q2.eq("courseId", course._id))
+          .collect();
+        const lessonsWithNotes = courseLessons
+          .sort((a, b) => a.order - b.order)
+          .map((l) => ({ title: l.title, notes: l.notes }));
+        // Every seeded quiz carries at least 10 course-specific questions.
         const courseQuizzes = await ctx.db
           .query("quizzes")
           .withIndex("by_course", (q2) => q2.eq("courseId", course._id))
@@ -562,20 +604,19 @@ export const ensureSeedData = mutation({
         for (let qi = 0; qi < courseQuizzes.length; qi += 1) {
           const quiz = courseQuizzes[qi];
           const nonGenericQuestions = quiz.questions.filter(
-            (q) =>
-              !q.question.includes("Review question") &&
-              !q.question.includes("check your understanding of this course"),
+            (item) => !isGenericQuestion(item),
           );
-          const hasGenericQuestions = quiz.questions.length !== nonGenericQuestions.length;
-          if (
+          const needsRepair =
             quiz.questions.length < QUIZ_QUESTION_TARGET ||
-            hasGenericQuestions
-          ) {
+            nonGenericQuestions.length !== quiz.questions.length ||
+            nonGenericQuestions.length < QUIZ_QUESTION_TARGET;
+          if (needsRepair) {
             await ctx.db.patch(quiz._id, {
               questions: padQuizQuestionsWithIndex(
                 nonGenericQuestions,
                 course.slug,
                 qi,
+                lessonsWithNotes,
               ),
               updatedAt: Date.now(),
             });
@@ -586,51 +627,46 @@ export const ensureSeedData = mutation({
           .query("finalExams")
           .withIndex("by_course", (q2) => q2.eq("courseId", course._id))
           .first();
-        const courseLessons = await ctx.db
-          .query("lessons")
-          .withIndex("by_courseId", (q2) => q2.eq("courseId", course._id))
-          .collect();
-        if (courseLessons.length === 0) continue;
-        const lessonsWithNotes = courseLessons
-          .sort((a, b) => a.order - b.order)
-          .map((l) => ({ title: l.title, notes: l.notes }));
+        if (lessonsWithNotes.length === 0) continue;
         const courseQuizQuestions = courseQuizzes.flatMap((q) => q.questions);
-        if (!existingExam) {
-          await ctx.db.insert("finalExams", {
-            courseId: course._id,
-            tutorId: course.tutorId,
-            title: `Final Exam — ${course.title}`,
-            description: `A ${FINAL_EXAM_QUESTION_TARGET}-question final exam covering every lesson in ${course.title}. Pass with 60% to earn your certificate.`,
-            questionCount: FINAL_EXAM_QUESTION_TARGET,
-            totalMarks: 60,
-            passPercent: 60,
-            timeLimitMinutes: 45,
-            questions: buildFinalExamQuestions(
-              lessonsWithNotes,
-              course.slug,
-              courseQuizQuestions,
-            ),
-            published: true,
-            createdAt: Date.now(),
-          });
-        } else if (
+        // Rebuild when the exam is missing, short, or still contains the
+        // generic fillers older seeds shipped.
+        const examNeedsRebuild =
+          !existingExam ||
           existingExam.questions.length < FINAL_EXAM_QUESTION_TARGET ||
-          existingExam.questions.some(
-            (q) =>
-              q.question.includes("Final exam review question") ||
-              q.question.includes("revisit the course material"),
-          )
-        ) {
-          // Existing exam has fewer than 30 questions OR contains generic
-          // review questions — rebuild with course-specific questions so
-          // learners get topical exam content rather than generic fillers.
+          existingExam.questions.some((item) => isGenericQuestion(item));
+        if (examNeedsRebuild) {
+          const questions = buildFinalExamQuestions(
+            lessonsWithNotes,
+            course.slug,
+            courseQuizQuestions,
+          );
+          if (existingExam) {
+            await ctx.db.patch(existingExam._id, {
+              questions,
+              questionCount: questions.length,
+              passPercent: FINAL_EXAM_PASS_PERCENT,
+            });
+          } else {
+            await ctx.db.insert("finalExams", {
+              courseId: course._id,
+              tutorId: course.tutorId,
+              title: `Final Exam — ${course.title}`,
+              description: `A ${FINAL_EXAM_QUESTION_TARGET}-question final exam covering every lesson in ${course.title}. Pass with ${FINAL_EXAM_PASS_PERCENT}% to earn your certificate.`,
+              questionCount: questions.length,
+              totalMarks: 60,
+              passPercent: FINAL_EXAM_PASS_PERCENT,
+              timeLimitMinutes: 45,
+              questions,
+              published: true,
+              createdAt: Date.now(),
+            });
+          }
+        } else if (existingExam.passPercent !== FINAL_EXAM_PASS_PERCENT) {
+          // Keep the pass mark at the current 40% even for exams that are
+          // otherwise fine.
           await ctx.db.patch(existingExam._id, {
-            questions: buildFinalExamQuestions(
-              lessonsWithNotes,
-              course.slug,
-              courseQuizQuestions,
-            ),
-            questionCount: FINAL_EXAM_QUESTION_TARGET,
+            passPercent: FINAL_EXAM_PASS_PERCENT,
           });
         }
       }
@@ -952,13 +988,14 @@ export const ensureSeedData = mutation({
           resources: cleanResources(l.r),
         });
       }
+      const courseLessons = c.lessons.map((l) => ({ title: l.t, notes: l.n }));
       for (let qi = 0; qi < c.quizzes.length; qi += 1) {
         const quiz = c.quizzes[qi];
         await ctx.db.insert("quizzes", {
           courseId: courseId as never, tutorId: c.tutorId as never,
           title: quiz.t, description: quiz.d,
           timeLimitMinutes: quiz.time,
-          questions: padQuizQuestionsWithIndex(quiz.qs, slug, qi),
+          questions: padQuizQuestionsWithIndex(quiz.qs, slug, qi, courseLessons),
           createdAt: Date.now(),
         });
       }
@@ -967,25 +1004,24 @@ export const ensureSeedData = mutation({
       // exam can reuse any tutor-authored items when rebuilding its 30-question
       // bank on re-seed (fresh seed also passes them for topical depth).
       const courseQuizzes = c.quizzes.map((quiz, qi) => ({
-        questions: padQuizQuestionsWithIndex(quiz.qs, slug, qi),
+        questions: padQuizQuestionsWithIndex(quiz.qs, slug, qi, courseLessons),
       }));
 
-      // One final exam per course — 30 questions, 60 marks, 60% to pass,
+      // One final exam per course — 30 questions, 60 marks, 40% to pass,
       // 45 minutes. Built from the course's real lesson titles and notes so
-      // it feels topical rather than generic, with a mix of multiple-choice,
-      // true/false and a couple of short-answer reflections.
+      // it stays topical, with no generic filler questions.
       {
         await ctx.db.insert("finalExams", {
           courseId: courseId as never,
           tutorId: c.tutorId as never,
           title: `Final Exam — ${c.title}`,
-          description: `A ${FINAL_EXAM_QUESTION_TARGET}-question final exam covering every lesson in ${c.title}. Pass with 60% to earn your certificate.`,
+          description: `A ${FINAL_EXAM_QUESTION_TARGET}-question final exam covering every lesson in ${c.title}. Pass with ${FINAL_EXAM_PASS_PERCENT}% to earn your certificate.`,
           questionCount: FINAL_EXAM_QUESTION_TARGET,
           totalMarks: 60,
-          passPercent: 60,
+          passPercent: FINAL_EXAM_PASS_PERCENT,
           timeLimitMinutes: 45,
           questions: buildFinalExamQuestions(
-            c.lessons.map((l) => ({ title: l.t, notes: l.n })),
+            courseLessons,
             slug,
             courseQuizzes.flatMap((q) => q.questions),
           ),

@@ -8,7 +8,8 @@ import { RequireTutor } from "@/components/RequireRole";
 import { RequireTeamAuth } from "@/components/RequireTeamAuth";
 import { VlyToolbar } from "../vly-toolbar-readonly.tsx";
 import { ConvexAuthProvider } from "@convex-dev/auth/react";
-import { ConvexReactClient } from "convex/react";
+import { ConvexReactClient, useMutation } from "convex/react";
+import { api } from "@/convex/_generated/api";
 import React, { StrictMode, useEffect, lazy, Suspense, useState, LazyExoticComponent, ComponentType } from "react";
 import { RefreshCw } from "lucide-react";
 import { createRoot } from "react-dom/client";
@@ -856,6 +857,35 @@ function OfflineBadge() {
   );
 }
 
+// Critical: this component lives inside the Convex provider tree.
+
+/**
+ * Catalog self-heal — the Convex cron repairs the seeded catalog every 12h,
+ * so a freshly published deploy can still show stale quiz/exam content until
+ * it runs. Triggering the same idempotent seed once per browser session makes
+ * those repairs (10-question quizzes, 30-question final exams, 40% pass mark,
+ * no generic filler) apply as soon as a visitor loads the app. Best-effort:
+ * it never surfaces errors into the UI, and the session guard means it runs
+ * at most once per tab session.
+ */
+function CatalogSelfHeal() {
+  const updateCatalog = useMutation(api.seed.ensureSeedData);
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const KEY = "forgex:catalog-self-heal";
+    try {
+      if (sessionStorage.getItem(KEY)) return;
+      sessionStorage.setItem(KEY, "1");
+    } catch {
+      // Private-mode / blocked storage — fall through and heal anyway.
+    }
+    void updateCatalog({}).catch(() => {
+      // A failed heal is harmless: the cron retries automatically.
+    });
+  }, [updateCatalog]);
+  return null;
+}
+
 // Fast navigation: warm up lazy route chunks on hover/focus/touch.
 attachRoutePrefetch();
 
@@ -880,6 +910,7 @@ createRoot(document.getElementById("root")!).render(
             or initial bundle for visitors. Rendered inside the router so it
             can hide itself on screens that have their own composer. */}
         <OfflineBadge />
+        <CatalogSelfHeal />
         <BrowserRouter>
           <RouteSyncer />
           <ScrollToTop />
