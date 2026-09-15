@@ -162,18 +162,16 @@ function HeroSlideshow() {
   );
 
   return (
-    <div ref={wrapRef} className="group">
-      {/* ═══════════════════════════════════════════════════════════
-          DESKTOP (lg+): full-viewport hero — image fills the screen,
-          tagline at top, content at bottom, dots at the very bottom.
-          MOBILE/TABLET: normal flow (tagline → card → dots).
-         ═══════════════════════════════════════════════════════════ */}
+    <div ref={wrapRef} className="group relative lg:h-screen lg:overflow-hidden lg:rounded-2xl">
+      {/* Brand tagline — above card on mobile, overlaid top on desktop */}
+      <h1 className="font-display text-center text-3xl font-bold tracking-tight text-foreground sm:text-4xl lg:absolute lg:inset-x-0 lg:top-10 lg:z-20 lg:text-5xl lg:text-white">
+        Discover. Express.{" "}
+        <span className="text-gradient">Build.</span>
+      </h1>
 
-      {/* Hero container — full-viewport on desktop, auto-height on mobile */}
-      <div className="relative -mx-4 w-[calc(100%+2rem)] overflow-hidden sm:-mx-6 sm:w-[calc(100%+3rem)] sm:mt-6 lg:mx-0 lg:w-full lg:h-screen lg:rounded-none">
-
-        {/* ── Image slides — background layer ────────────────────── */}
-        <div className="relative aspect-[4/3] w-full bg-[#05070a] sm:aspect-[16/9] lg:absolute lg:inset-0 lg:h-full lg:aspect-auto">
+      {/* Slide card — auto-height on mobile, fills viewport on desktop */}
+      <div className="relative -mx-4 mt-5 w-[calc(100%+2rem)] overflow-hidden sm:-mx-6 sm:w-[calc(100%+3rem)] sm:mt-6 lg:mx-0 lg:mt-0 lg:w-full lg:absolute lg:inset-0">
+        <div className="relative aspect-[4/3] w-full bg-[#05070a] sm:aspect-[16/9] lg:h-full lg:aspect-auto">
           {slides.map((s, i) => (
             <motion.div
               key={`${s.tag}-${i}`}
@@ -194,29 +192,8 @@ function HeroSlideshow() {
               />
               <HeroImage src={s.src} fallbackSrc={s.fallbackSrc} alt={s.alt} />
               <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/90 via-black/30 to-transparent" />
-            </motion.div>
-          ))}
-        </div>
-
-        {/* ── Content overlay — tagline, slide text, CTAs, dots ──── */}
-        <div className="absolute inset-0 z-10 flex flex-col justify-between p-5 sm:p-7">
-          {/* Top: brand tagline */}
-          <h1 className="font-display text-center text-3xl font-bold tracking-tight text-white sm:text-4xl lg:pt-10 lg:text-5xl">
-            Discover. Express.{" "}
-            <span className="text-gradient">Build.</span>
-          </h1>
-
-          {/* Bottom: slide text + CTAs + dots */}
-          <div className="flex flex-col items-center text-center">
-            {/* Slide text + CTAs — one active slide at a time */}
-            {slides.map((s, i) => (
-              <div
-                key={`content-${s.tag}-${i}`}
-                className={cn(
-                  "flex flex-col items-center transition-opacity duration-500",
-                  i === active ? "opacity-100" : "pointer-events-none absolute opacity-0",
-                )}
-              >
+              {/* Slide text + CTAs — inside each slide (original mobile layout) */}
+              <div className="absolute inset-x-0 bottom-0 z-10 flex flex-col p-5 sm:p-7 lg:items-center lg:pb-20 lg:text-center">
                 <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-lime-300">
                   {s.tag}
                 </p>
@@ -248,37 +225,37 @@ function HeroSlideshow() {
                   </Button>
                 </div>
               </div>
-            ))}
-
-            {/* Pagination dots */}
-            <div className="mt-5 flex items-center justify-center gap-2">
-              {slides.map((s, i) => (
-                <button
-                  key={`dot-${s.tag}-${i}`}
-                  type="button"
-                  aria-label={`Go to slide ${i + 1}`}
-                  aria-current={i === active}
-                  onClick={() => {
-                    pause();
-                    setActive(i);
-                    scheduleResume();
-                  }}
-                  className="p-1"
-                >
-                  <span
-                    className={cn(
-                      "block h-1.5 rounded-full transition-all duration-500",
-                      i === active
-                        ? "w-6 bg-lime-400 shadow-[0_0_10px_rgba(166,255,0,0.6)]"
-                        : "w-1.5 bg-white/25 hover:bg-white/45",
-                    )}
-                    style={{ transitionTimingFunction: "cubic-bezier(0.22,1,0.36,1)" }}
-                  />
-                </button>
-              ))}
-            </div>
-          </div>
+            </motion.div>
+          ))}
         </div>
+      </div>
+
+      {/* Pagination dots — below card on mobile, overlaid bottom on desktop */}
+      <div className="mt-4 flex items-center justify-center gap-2 lg:absolute lg:bottom-6 lg:inset-x-0 lg:z-20 lg:mt-0">
+        {slides.map((s, i) => (
+          <button
+            key={`dot-${s.tag}-${i}`}
+            type="button"
+            aria-label={`Go to slide ${i + 1}`}
+            aria-current={i === active}
+            onClick={() => {
+              pause();
+              setActive(i);
+              scheduleResume();
+            }}
+            className="p-1"
+          >
+            <span
+              className={cn(
+                "block h-1.5 rounded-full transition-all duration-500",
+                i === active
+                  ? "w-6 bg-lime-400 shadow-[0_0_10px_rgba(166,255,0,0.6)]"
+                  : "w-1.5 bg-white/25 hover:bg-white/45",
+              )}
+              style={{ transitionTimingFunction: "cubic-bezier(0.22,1,0.36,1)" }}
+            />
+          </button>
+        ))}
       </div>
 
       {/* Benefits — compact row beneath the hero */}
