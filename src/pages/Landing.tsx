@@ -67,8 +67,8 @@ function HeroImage({
     <img
       src={current}
       alt={alt}
-      width={1200}
-      height={800}
+      width={1920}
+      height={1080}
       loading="eager"
       decoding="async"
       onError={() => {
@@ -170,8 +170,8 @@ function HeroSlideshow() {
       </h1>
 
       {/* Slide card — full-width on mobile, wider + centered on desktop */}
-      <div className="relative mt-5 w-full overflow-hidden rounded-2xl ring-1 ring-white/10 sm:mt-6 lg:mx-auto lg:max-w-5xl">
-        <div className="relative aspect-[4/3] w-full bg-[#05070a] sm:aspect-[16/9]">
+      <div className="relative -mx-4 mt-5 w-[calc(100%+2rem)] overflow-hidden sm:-mx-6 sm:w-[calc(100%+3rem)] sm:mt-6 lg:mx-0 lg:w-full lg:rounded-none lg:ring-0">
+        <div className="relative aspect-[4/3] w-full bg-[#05070a] sm:aspect-[16/9] lg:h-[85vh] lg:max-h-[900px] lg:min-h-[600px]">
           {slides.map((s, i) => (
             <motion.div
               key={`${s.tag}-${i}`}

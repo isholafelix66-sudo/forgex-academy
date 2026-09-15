@@ -28,9 +28,9 @@ export const DEFAULT_HERO_SLIDES: HeroSlide[] = [
     support: "Build practical skills for the real world.",
     ctaLabel: "Start Learning",
     ctaTo: "/courses",
-    src: "https://images.unsplash.com/photo-1522202176988-66273c2fd55f?w=1200&q=80",
+    src: "https://images.unsplash.com/photo-1522202176988-66273c2fd55f?w=1920&q=80",
     fallbackSrc:
-      "https://images.unsplash.com/photo-1522071820081-009f0129c71c?w=1200&q=80",
+      "https://images.unsplash.com/photo-1522071820081-009f0129c71c?w=1920&q=80",
     alt: "Young people learning and building digital skills together",
   },
   {
@@ -39,9 +39,9 @@ export const DEFAULT_HERO_SLIDES: HeroSlide[] = [
     support: "Discover where your skills can take you.",
     ctaLabel: "Explore Roadmap",
     ctaTo: "/roadmap",
-    src: "https://images.unsplash.com/photo-1521737711867-e3b97375f902?w=1200&q=80",
+    src: "https://images.unsplash.com/photo-1521737711867-e3b97375f902?w=1920&q=80",
     fallbackSrc:
-      "https://images.unsplash.com/photo-1573497019940-1c28c88b4f3e?w=1200&q=80",
+      "https://images.unsplash.com/photo-1573497019940-1c28c88b4f3e?w=1920&q=80",
     alt: "A young professional charting their next career step in a bright workspace",
   },
   {
@@ -50,9 +50,9 @@ export const DEFAULT_HERO_SLIDES: HeroSlide[] = [
     support: "Turn knowledge into real experience.",
     ctaLabel: "Start Building",
     ctaTo: "/courses",
-    src: "https://images.unsplash.com/photo-1517694712202-14dd9538aa97?w=1200&q=80",
+    src: "https://images.unsplash.com/photo-1517694712202-14dd9538aa97?w=1920&q=80",
     fallbackSrc:
-      "https://images.unsplash.com/photo-1454165804606-c3d57bc86b40?w=1200&q=80",
+      "https://images.unsplash.com/photo-1454165804606-c3d57bc86b40?w=1920&q=80",
     alt: "A person building a real project on a laptop",
   },
   {
@@ -61,9 +61,9 @@ export const DEFAULT_HERO_SLIDES: HeroSlide[] = [
     support: "Connect your learning to your future.",
     ctaLabel: "Explore Opportunities",
     ctaTo: "/dashboard",
-    src: "https://images.unsplash.com/photo-1556761175-5973dc0f32e7?w=1200&q=80",
+    src: "https://images.unsplash.com/photo-1556761175-5973dc0f32e7?w=1920&q=80",
     fallbackSrc:
-      "https://images.unsplash.com/photo-1488190211105-8b0e65b80b4e?w=1200&q=80",
+      "https://images.unsplash.com/photo-1488190211105-8b0e65b80b4e?w=1920&q=80",
     alt: "Students collaborating on career opportunities",
   },
 ];
