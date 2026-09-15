@@ -163,15 +163,17 @@ function HeroSlideshow() {
 
   return (
     <div ref={wrapRef} className="group">
-      {/* Brand tagline — compact, exactly as requested */}
-      <h1 className="font-display text-center text-3xl font-bold tracking-tight text-foreground sm:text-4xl lg:text-5xl">
-        Discover. Express.{" "}
-        <span className="text-gradient">Build.</span>
-      </h1>
+      {/* ═══════════════════════════════════════════════════════════
+          DESKTOP (lg+): full-viewport hero — image fills the screen,
+          tagline at top, content at bottom, dots at the very bottom.
+          MOBILE/TABLET: normal flow (tagline → card → dots).
+         ═══════════════════════════════════════════════════════════ */}
 
-      {/* Slide card — full-width on mobile, wider + centered on desktop */}
-      <div className="relative -mx-4 mt-5 w-[calc(100%+2rem)] overflow-hidden sm:-mx-6 sm:w-[calc(100%+3rem)] sm:mt-6 lg:mx-0 lg:w-full lg:rounded-none lg:ring-0">
-        <div className="relative aspect-[4/3] w-full bg-[#05070a] sm:aspect-[16/9] lg:h-[85vh] lg:max-h-[900px] lg:min-h-[600px]">
+      {/* Hero container — full-viewport on desktop, auto-height on mobile */}
+      <div className="relative -mx-4 w-[calc(100%+2rem)] overflow-hidden sm:-mx-6 sm:w-[calc(100%+3rem)] sm:mt-6 lg:mx-0 lg:w-full lg:h-screen lg:rounded-none">
+
+        {/* ── Image slides — background layer ────────────────────── */}
+        <div className="relative aspect-[4/3] w-full bg-[#05070a] sm:aspect-[16/9] lg:absolute lg:inset-0 lg:h-full lg:aspect-auto">
           {slides.map((s, i) => (
             <motion.div
               key={`${s.tag}-${i}`}
@@ -191,9 +193,30 @@ function HeroSlideshow() {
                 className="absolute inset-0 bg-gradient-to-br from-[#10150e] via-[#0a0d0a] to-[#1a2410]"
               />
               <HeroImage src={s.src} fallbackSrc={s.fallbackSrc} alt={s.alt} />
-              <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/90 via-black/35 to-transparent" />
-              {/* Desktop: hero text + CTAs are one centered, bottom-anchored block. Mobile/tablet stay left-aligned as before. */}
-              <div className="absolute inset-x-0 bottom-0 z-10 flex flex-col p-5 sm:p-7 lg:items-center lg:pb-8 lg:text-center">
+              <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/90 via-black/30 to-transparent" />
+            </motion.div>
+          ))}
+        </div>
+
+        {/* ── Content overlay — tagline, slide text, CTAs, dots ──── */}
+        <div className="absolute inset-0 z-10 flex flex-col justify-between p-5 sm:p-7">
+          {/* Top: brand tagline */}
+          <h1 className="font-display text-center text-3xl font-bold tracking-tight text-white sm:text-4xl lg:pt-10 lg:text-5xl">
+            Discover. Express.{" "}
+            <span className="text-gradient">Build.</span>
+          </h1>
+
+          {/* Bottom: slide text + CTAs + dots */}
+          <div className="flex flex-col items-center text-center">
+            {/* Slide text + CTAs — one active slide at a time */}
+            {slides.map((s, i) => (
+              <div
+                key={`content-${s.tag}-${i}`}
+                className={cn(
+                  "flex flex-col items-center transition-opacity duration-500",
+                  i === active ? "opacity-100" : "pointer-events-none absolute opacity-0",
+                )}
+              >
                 <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-lime-300">
                   {s.tag}
                 </p>
@@ -203,10 +226,7 @@ function HeroSlideshow() {
                 <p className="mt-2 max-w-sm text-[13px] leading-relaxed text-white/80 sm:text-sm lg:max-w-xl">
                   {s.support}
                 </p>
-                {/* CTAs — DESKTOP ONLY (lg+): dedicated buttons inside the
-                    hero card, centered directly beneath the text. Mobile and
-                    tablet read the slide text without buttons; they reach
-                    courses via the nav. */}
+                {/* CTAs — desktop only */}
                 <div className="mt-5 hidden items-center gap-4 lg:flex">
                   <Button
                     asChild
@@ -228,37 +248,37 @@ function HeroSlideshow() {
                   </Button>
                 </div>
               </div>
-            </motion.div>
-          ))}
-        </div>
-      </div>
+            ))}
 
-      {/* Pagination dots — dedicated row BELOW the card, never overlapping */}
-      <div className="mt-4 flex items-center justify-center gap-2">
-        {slides.map((s, i) => (
-          <button
-            key={`dot-${s.tag}-${i}`}
-            type="button"
-            aria-label={`Go to slide ${i + 1}`}
-            aria-current={i === active}
-            onClick={() => {
-              pause();
-              setActive(i);
-              scheduleResume();
-            }}
-            className="p-1"
-          >
-            <span
-              className={cn(
-                "block h-1.5 rounded-full transition-all duration-500",
-                i === active
-                  ? "w-6 bg-lime-400 shadow-[0_0_10px_rgba(166,255,0,0.6)]"
-                  : "w-1.5 bg-white/25 hover:bg-white/45",
-              )}
-              style={{ transitionTimingFunction: "cubic-bezier(0.22,1,0.36,1)" }}
-            />
-          </button>
-        ))}
+            {/* Pagination dots */}
+            <div className="mt-5 flex items-center justify-center gap-2">
+              {slides.map((s, i) => (
+                <button
+                  key={`dot-${s.tag}-${i}`}
+                  type="button"
+                  aria-label={`Go to slide ${i + 1}`}
+                  aria-current={i === active}
+                  onClick={() => {
+                    pause();
+                    setActive(i);
+                    scheduleResume();
+                  }}
+                  className="p-1"
+                >
+                  <span
+                    className={cn(
+                      "block h-1.5 rounded-full transition-all duration-500",
+                      i === active
+                        ? "w-6 bg-lime-400 shadow-[0_0_10px_rgba(166,255,0,0.6)]"
+                        : "w-1.5 bg-white/25 hover:bg-white/45",
+                    )}
+                    style={{ transitionTimingFunction: "cubic-bezier(0.22,1,0.36,1)" }}
+                  />
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
       </div>
 
       {/* Benefits — compact row beneath the hero */}
