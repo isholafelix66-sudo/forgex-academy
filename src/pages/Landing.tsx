@@ -170,7 +170,7 @@ function HeroSlideshow() {
       </h1>
 
       {/* Slide card — auto-height on mobile, fills viewport on desktop */}
-      <div className="relative -mx-4 mt-5 w-[calc(100%+2rem)] overflow-hidden sm:-mx-6 sm:w-[calc(100%+3rem)] sm:mt-6 lg:mx-0 lg:mt-0 lg:w-full lg:absolute lg:inset-0">
+      <div className="relative mx-4 mt-5 overflow-hidden rounded-2xl ring-1 ring-white/10 sm:mx-6 sm:mt-6 lg:mx-0 lg:mt-0 lg:w-full lg:rounded-2xl lg:ring-1 lg:ring-white/10 lg:absolute lg:inset-0">
         <div className="relative aspect-[4/3] w-full bg-[#05070a] sm:aspect-[16/9] lg:h-full lg:aspect-auto">
           {slides.map((s, i) => (
             <motion.div
