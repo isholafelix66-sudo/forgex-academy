@@ -1,0 +1,14 @@
+# Bun package-manager configuration.
+#
+# Build/CI containers for this project have intermittently inherited a global bun
+# cache that cannot be materialized into node_modules, which made `bun install`
+# fail with:
+#
+#   FileNotFound: failed copying files from cache to destination for package <pkg>
+#   Failed to install N packages
+#
+# Disabling reads from the global cache makes bun download and write its own cache
+# under node_modules/.cache (regenerated with node_modules), so an install no
+# longer depends on whatever cache state the environment happened to inherit.
+[install.cache]
+disable = true
