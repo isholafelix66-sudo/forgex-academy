@@ -124,7 +124,7 @@ export default function StudentDMThread() {
   }
 
   return (
-    <div className="flex h-[calc(100dvh-7.5rem)] flex-col gap-4">
+    <div className="flex h-[calc(100dvh-12rem)] min-h-[26rem] flex-col gap-4 overflow-hidden md:h-[calc(100dvh-7.5rem)]">
       {/* Header */}
       <div className="flex items-center gap-3 rounded-2xl border border-white/10 bg-card px-4 py-3">
         <Button variant="ghost" size="icon" asChild className="shrink-0 text-muted-foreground">
@@ -193,7 +193,7 @@ export default function StudentDMThread() {
       )}
 
       {/* Messages */}
-      <div className="flex min-h-0 flex-1 flex-col rounded-2xl border border-white/10 bg-card">
+      <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl border border-white/10 bg-card">
         <MessageThread
           messages={messages}
           myUserId={myUserId}

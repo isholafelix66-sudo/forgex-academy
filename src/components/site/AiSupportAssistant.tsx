@@ -150,35 +150,6 @@ export function AiSupportAssistant() {
     } else {
       void handleAiSend(userLine);
     }
-
-    const handleAiSendWrapped = async (userLine: AiMessage) => {
-      try {
-        if (!latest?._id) {
-          setGuestMessages((prev) => [
-            ...prev,
-            {
-              role: "ai",
-              body: "No active session yet — open the assistant again in a moment and we’ll pick up where you left off.",
-            } as GuestMessage,
-          ]);
-          setSending(false);
-          return;
-        }
-        const reply = await sendAi({ text: userLine.body, sessionId: latest._id });
-        const replyBody = reply.reply ?? "";
-        setGuestMessages((prev) => [...prev, { role: "ai", body: replyBody }]);
-      } catch (err) {
-        console.error("[AiSupport] sendAi failed", err);
-        setGuestMessages((prev) => [
-          ...prev,
-          {
-            role: "ai",
-            body: "I’m having trouble reaching the assistant right now. Please try again in a moment, or use the Contact page for human help.",
-          } as GuestMessage,
-        ]);
-      }
-      setSending(false);
-    };
   };
 
   const persistGuestMessages = (messages?: GuestMessage[]) => {
@@ -211,10 +182,24 @@ export function AiSupportAssistant() {
   };
 
   const handleAiSend = async (userLine: AiMessage) => {
+    // Fallback: the session query may still be loading. Never let the send
+    // button get stuck — tell the user and release the composer.
+    const sessionId = latest?._id;
+    if (!sessionId) {
+      setGuestMessages((prev) => [
+        ...prev,
+        {
+          role: "ai",
+          body: "One moment — I'm setting up your session. Please send that again in a second.",
+        } as GuestMessage,
+      ]);
+      setSending(false);
+      return;
+    }
     try {
       const reply = await sendAi({
         text: userLine.body,
-        sessionId: latest!._id,
+        sessionId,
       });
       const replyBody: string = (reply as any).reply ?? "";
       setGuestMessages((prev) => [...prev, { role: "ai", body: replyBody } as GuestMessage]);
@@ -241,6 +226,16 @@ export function AiSupportAssistant() {
   const visibleMessages = isAuthenticated
     ? messagesFromLatest?.map((m) => ({ role: m.role, body: m.body })) ?? []
     : guestMessages;
+
+  // Keep the newest message in view on every device. Without this the panel
+  // showed the transcript from the top and you had to scroll down to read the
+  // latest reply. We pin to the bottom whenever messages change, the assistant
+  // starts/finishes thinking, or the panel is reopened.
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    el.scrollTop = el.scrollHeight;
+  }, [visibleMessages.length, sending, open]);
 
   return (
     <>
@@ -301,7 +296,7 @@ export function AiSupportAssistant() {
           {/* Messages */}
           <div
             ref={scrollRef}
-            className="flex-1 overflow-y-auto px-3 py-3 space-y-3"
+            className="min-h-0 flex-1 space-y-3 overflow-y-auto overscroll-contain px-3 py-3"
             data-ai-assistant-panel
           >
             {visibleMessages.length === 0 ? (

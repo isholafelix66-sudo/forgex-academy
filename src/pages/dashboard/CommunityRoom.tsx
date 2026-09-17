@@ -627,7 +627,7 @@ export default function CommunityRoom() {
   );
 
   return (
-    <div className="flex h-[calc(100dvh-7.5rem)] flex-col gap-4">
+    <div className="flex h-[calc(100dvh-12rem)] min-h-[30rem] flex-col gap-4 overflow-hidden md:h-[calc(100dvh-7.5rem)]">
       {/* Header */}
       <div className="flex flex-wrap items-center gap-3 rounded-2xl border border-white/10 bg-card px-4 py-3">
         <Button variant="ghost" size="icon" asChild className="shrink-0 text-muted-foreground">
@@ -1045,7 +1045,7 @@ export default function CommunityRoom() {
 
       <div className="flex min-h-0 flex-1 gap-4">
         {/* Messages */}
-        <div className="flex min-h-0 min-w-0 flex-1 flex-col rounded-2xl border border-white/10 bg-card">
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-2xl border border-white/10 bg-card">
           {discussionView ? (
             <div className="flex items-center gap-2 border-b border-white/8 bg-lime-400/8 px-3 py-2 text-xs">
               <Button

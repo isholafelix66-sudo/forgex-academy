@@ -37,7 +37,7 @@ export default function Messages() {
   const markRead = useMutation(api.messages.markThreadRead);
   const sendMessage = useMutation(api.messages.sendMessage);
 
-  const bottomRef = useRef<HTMLDivElement>(null);
+  const threadScrollRef = useRef<HTMLDivElement>(null);
 
   const active = conversations?.find((c) => c.threadId === threadId);
 
@@ -45,9 +45,14 @@ export default function Messages() {
     if (threadId) void markRead({ threadId });
   }, [threadId, markRead, thread?.length]);
 
+  // Pin the transcript to the newest message. Scrolling the container itself
+  // (rather than a sentinel via scrollIntoView) keeps the page from jumping and
+  // works the same on mobile and desktop.
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [thread?.length]);
+    const el = threadScrollRef.current;
+    if (!el) return;
+    el.scrollTop = el.scrollHeight;
+  }, [thread?.length, threadId]);
 
   // Once the first message creates the thread, open it automatically.
   useEffect(() => {
@@ -156,7 +161,7 @@ export default function Messages() {
         </div>
 
         {/* Thread */}
-        <div className="flex min-h-[420px] flex-col rounded-2xl border border-white/10 bg-card">
+        <div className="flex h-[65dvh] min-h-[420px] flex-col overflow-hidden rounded-2xl border border-white/10 bg-card lg:h-[calc(100dvh-12rem)]">
           {!threadId || !active ? (
             <div className="flex flex-1 flex-col items-center justify-center p-10 text-center">
               <MessageSquare className="size-8 text-muted-foreground/50" />
@@ -179,7 +184,10 @@ export default function Messages() {
                 </div>
               </div>
 
-              <div className="flex-1 space-y-3 overflow-y-auto p-4">
+              <div
+                ref={threadScrollRef}
+                className="min-h-0 flex-1 space-y-3 overflow-y-auto overscroll-contain p-4"
+              >
                 {thread?.map((m) => (
                   <ChatBubble
                     key={m._id}
@@ -187,7 +195,6 @@ export default function Messages() {
                     mine={m.senderId === user?._id}
                   />
                 ))}
-                <div ref={bottomRef} />
               </div>
 
               <div className="border-t border-white/10 p-3">
