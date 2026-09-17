@@ -6,14 +6,15 @@ import { displayName, guardOwnerAccount, hydrateCourse, hydrateCourses, notify, 
 import { difficultyValidator, ROLES, roleValidator, questionValidator, assignmentQuestionValidator, resourceValidator } from "./schema";
 import { messagePreview } from "./messages";
 import { recordDeletedCatalogSlug } from "./aiCourseSeed";
+import { verifyPassword } from "./adminCrypto";
 
 // ---------------------------------------------------------------------------
 // Admin password gate (access is URL-only: /admin + this password)
 //
-// The Admin Dashboard is unlocked purely by the access password. No user
-// account is involved — the password gate issues a session token that every
-// admin function validates. Default password: "Discovery" (case-insensitive),
-// overridable via the ADMIN_ACCESS_PASSWORD environment key.
+// The Admin Dashboard is unlocked by the access password. Once Owner
+// security is initialized, the gate validates against the HASHED Owner
+// password (so the OTP-protected password change immediately applies to
+// the gate); before setup it falls back to the env/default password.
 // ---------------------------------------------------------------------------
 
 // The dashboard password is ALSO the Owner credential: entering it mints an
@@ -23,7 +24,7 @@ import { recordDeletedCatalogSlug } from "./aiCourseSeed";
 import { ADMIN_ACCESS_PASSWORD } from "./lib";
 import { createOwnerSession } from "./adminSecurity";
 
-/** Verify the admin access password and circular import is a no-op here. */
+/** Case-insensitive password match (the default password is a word). */
 const matches = (a: string, b: string) =>
   a.trim().toLowerCase() === b.trim().toLowerCase();
 
@@ -48,7 +49,18 @@ export const verifyAccessPassword = mutation({
         "Too many attempts. The admin gate is temporarily locked — try again in 15 minutes.",
       );
     }
-    if (!matches(password, ADMIN_PASSWORD)) {
+    // Prefer the hashed Owner password once Owner security exists (so the
+    // OTP-protected password change applies to this gate immediately);
+    // before setup, fall back to the env/default password.
+    const security = await ctx.db
+      .query("adminSecurity")
+      .withIndex("by_kind", (q) => q.eq("kind", "singleton"))
+      .first();
+    const ok =
+      security?.passwordHash
+        ? await verifyPassword(password, security.passwordHash)
+        : matches(password, ADMIN_ACCESS_PASSWORD);
+    if (!ok) {
       await ctx.db.insert("auditLogs", {
         action: "admin-password-failed",
         detail: "Incorrect admin access password attempt",
@@ -74,6 +86,9 @@ export const isAdminUnlocked = query({
       .withIndex("by_token", (q) => q.eq("token", token))
       .first();
     if (!session) return false;
+    // Server-side revocation: a signed-out session is rejected immediately,
+    // before the 12h TTL would expire it anyway.
+    if (session.revokedAt) return false;
     return Date.now() - session.createdAt <= 12 * 60 * 60 * 1000;
   },
 });

@@ -47,7 +47,8 @@ function AdminGate({ onUnlocked }: { onUnlocked: (token: string) => void }) {
     setLoading(true);
     setError(null);
     try {
-      const { token } = await verify({ password });
+      // Label the session so the Security section can show which device it is.
+      const { token } = await verify({ password, label: deviceLabel() });
       onUnlocked(token);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Incorrect password.");
@@ -96,6 +97,35 @@ function AdminGate({ onUnlocked }: { onUnlocked: (token: string) => void }) {
 
 import { useIdleAdminLock } from "@/lib/use-idle-admin-lock";
 
+/** Short human-readable device description for the Security section. */
+function deviceLabel(): string {
+  if (typeof navigator === "undefined") return "Admin session";
+  const ua = navigator.userAgent;
+  const os = /Windows/i.test(ua)
+    ? "Windows"
+    : /Mac OS X|Macintosh/i.test(ua)
+      ? "Mac"
+      : /Android/i.test(ua)
+        ? "Android"
+        : /iPhone|iPad|iPod/i.test(ua)
+          ? "iOS"
+          : /Linux/i.test(ua)
+            ? "Linux"
+            : "Unknown OS";
+  const browser = /Edg\//i.test(ua)
+    ? "Edge"
+    : /OPR\//i.test(ua)
+      ? "Opera"
+      : /Chrome\//i.test(ua)
+        ? "Chrome"
+        : /Safari\//i.test(ua)
+          ? "Safari"
+          : /Firefox\//i.test(ua)
+            ? "Firefox"
+            : "Browser";
+  return `${browser} · ${os}`;
+}
+
 export default function AdminShell() {
   const [token, setToken] = useState<string | null>(() => getAdminToken());
   const unlocked = useQuery(
@@ -135,6 +165,21 @@ export default function AdminShell() {
     setAdminToken(t);
     setToken(t);
   };
+
+  // Session heartbeat: keeps lastSeenAt fresh so the Security section shows
+  // genuinely-active devices. Silent — never disturbs the admin UI.
+  const heartbeat = useMutation(api.adminSecurity.heartbeatSession);
+  useEffect(() => {
+    if (!token || unlocked !== true) return;
+    const beat = () => {
+      heartbeat({ token }).catch(() => {
+        // Heartbeat failures are non-fatal; the next tick retries.
+      });
+    };
+    beat();
+    const id = setInterval(beat, 60 * 1000);
+    return () => clearInterval(id);
+  }, [token, unlocked, heartbeat]);
 
   // Auto-lock: after ADMIN_IDLE_LOCK_MS with no user activity, the admin
   // session is cleared and the password gate is shown again.

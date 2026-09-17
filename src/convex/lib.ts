@@ -120,8 +120,9 @@ export async function guardOwnerAccount(
   }
 
   // 2) No one can ever create another Owner — the role is permanently held
-  //    by the single protected account (if it exists).
-  if (nextRole === ROLES.OWNER && user.role !== ROLES.OWNER) {
+  //    by the single protected account (and any attempt to grant it to a
+  //    non-owner account is rejected outright).
+  if (nextRole === ROLES.OWNER) {
     throw new Error(
       "The Owner role cannot be granted to any account. Owner is a permanent, single security identity.",
     );
