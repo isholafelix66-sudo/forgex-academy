@@ -23,6 +23,7 @@ import { PageHeader } from "@/components/dash/PageHeader";
 import { Avatar } from "@/components/site/Avatar";
 import { ImageUploader } from "@/components/media/ImageUploader";
 import { getAdminToken } from "@/lib/admin-session";
+import type { Id } from "@/convex/_generated/dataModel";
 import { toast } from "sonner";
 
 type AdminProfileData = {
@@ -32,7 +33,7 @@ type AdminProfileData = {
 };
 
 type SessionRow = {
-  _id: string;
+  _id: Id<"adminSessions">;
   label: string;
   createdAt: number;
   lastSeenAt: number;
@@ -728,7 +729,7 @@ function SessionsCard({ token }: { token: string }) {
 
   const revoke = async (s: SessionRow) => {
     try {
-      await revokeOne({ token, sessionId: s._id as never });
+      await revokeOne({ token, sessionId: s._id });
       toast.success(`Signed out "${s.label}".`);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Could not sign out that device.");
