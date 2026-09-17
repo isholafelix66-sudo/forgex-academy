@@ -6,12 +6,14 @@ import { Infer, v } from "convex/values";
 // Roles
 // ---------------------------------------------------------------------------
 export const ROLES = {
+  OWNER: "owner",
   ADMIN: "admin",
   TUTOR: "tutor",
   STUDENT: "student",
 } as const;
 
 export const roleValidator = v.union(
+  v.literal(ROLES.OWNER),
   v.literal(ROLES.ADMIN),
   v.literal(ROLES.TUTOR),
   v.literal(ROLES.STUDENT),
@@ -742,7 +744,71 @@ const schema = defineSchema(
     adminSessions: defineTable({
       token: v.string(),
       createdAt: v.number(),
+      /** Short human-readable label ("Admin profile") identifying the device
+       *  that minted this session — shown in the Security section. */
+      label: v.optional(v.string()),
+      /** Epoch ms of the last verified activity on this session (heartbeat
+       *  from the dashboard) — lets the Security section list active sessions
+       *  and lets revoked sessions be distinguished from expired ones. */
+      lastSeenAt: v.optional(v.number()),
+      /** Epoch ms at which the session was revoked (sign-out-all-devices,
+       *  owner password change, or manual revocation). Revoked sessions are
+       *  rejected server-side even before the 12h TTL check. */
+      revokedAt: v.optional(v.number()),
+      /** True ONLY for sessions minted by the Owner security gate
+       *  (bootstrap/verifyOwner). Only these sessions can perform
+       *  Owner-level actions (password change, security email, role guards). */
+      ownerSession: v.optional(v.boolean()),
     }).index("by_token", ["token"]),
+
+    /**
+     * Owner-level admin security identity — separate from `users`.
+     *
+     * There is at most ONE document in this table (guarded by
+     * `adminSecurity.ensureOwner`). It holds:
+     *  - the immutable Owner identity and security email (OTP target),
+     *  - the hashed admin access password (Owner can change it via OTP),
+     *  - in-flight password-change OTPs and one-time recovery codes.
+     *
+     * Everything here is only ever mutated by Owner-authenticated calls.
+     */
+    adminSecurity: defineTable({
+      /** Fixed 1 for the singleton. */
+      kind: v.literal("singleton"),
+      /** Human-readable Owner name shown in the Security section. */
+      ownerName: v.string(),
+      /** Verified security email — the ONLY destination for security OTPs. */
+      securityEmail: v.string(),
+      /** PBKDF2 hash (`salt:hash`) of the admin access password. */
+      passwordHash: v.optional(v.string()),
+      /** In-flight password change: current-password verified until this ms. */
+      pendingPasswordChange: v.optional(
+        v.object({
+          newPasswordHash: v.string(),
+          otpHash: v.string(),
+          otpExpiresAt: v.number(),
+          otpAttempts: v.number(),
+          requestedAt: v.number(),
+          /** Session token that initiated the change (kept logged in). */
+          sessionToken: v.string(),
+        }),
+      ),
+      /** In-flight security-email change: OTP-confirmed by the Owner. */
+      pendingEmailChange: v.optional(
+        v.object({
+          newEmail: v.string(),
+          otpHash: v.string(),
+          otpExpiresAt: v.number(),
+          otpAttempts: v.number(),
+          requestedAt: v.number(),
+          sessionToken: v.string(),
+        }),
+      ),
+      /** One-time recovery code hash for the password gate (owner only). */
+      recoveryCodeHash: v.optional(v.string()),
+      recoveryCodeExpiresAt: v.optional(v.number()),
+      updatedAt: v.number(),
+    }).index("by_kind", ["kind"]),
 
     /** Fixed-window rate-limit counters. One doc per bucket key (e.g.
      *  `contact:<email>`, `msg:<userId>`, `quiz:<userId>`, `upload:<userId>`).

@@ -2,7 +2,7 @@ import { internal } from "./_generated/api";
 import { mutation, query, MutationCtx } from "./_generated/server";
 import { Doc, Id } from "./_generated/dataModel";
 import { v } from "convex/values";
-import { displayName, hydrateCourse, hydrateCourses, makeAdminToken, notify, publicUser, requireAdminSession, slugify } from "./lib";
+import { displayName, guardOwnerAccount, hydrateCourse, hydrateCourses, notify, publicUser, requireAdminSession, slugify } from "./lib";
 import { difficultyValidator, ROLES, roleValidator, questionValidator, assignmentQuestionValidator, resourceValidator } from "./schema";
 import { messagePreview } from "./messages";
 import { recordDeletedCatalogSlug } from "./aiCourseSeed";
@@ -16,15 +16,22 @@ import { recordDeletedCatalogSlug } from "./aiCourseSeed";
 // overridable via the ADMIN_ACCESS_PASSWORD environment key.
 // ---------------------------------------------------------------------------
 
-const ADMIN_PASSWORD = process.env.ADMIN_ACCESS_PASSWORD ?? "Discovery";
+// The dashboard password is ALSO the Owner credential: entering it mints an
+// ownerSession=true token — the ONLY kind of session that can change the
+// password (via OTP to the security email), update the security email, or
+// revoke sessions. A leaked session token alone can do none of those things.
+import { ADMIN_ACCESS_PASSWORD } from "./lib";
+import { createOwnerSession } from "./adminSecurity";
 
+/** Verify the admin access password and circular import is a no-op here. */
 const matches = (a: string, b: string) =>
   a.trim().toLowerCase() === b.trim().toLowerCase();
 
 /** Verify the admin access password and mint a session token. */
 export const verifyAccessPassword = mutation({
-  args: { password: v.string() },
-  handler: async (ctx, { password }) => {
+  /** `label` tags the session for the Security section device list. */
+  args: { password: v.string(), label: v.optional(v.string()) },
+  handler: async (ctx, { password, label }) => {
     // Brute-force protection: after 8 failed attempts within 15 minutes the
     // gate locks until the window rolls over. Failures are tracked in the
     // audit log so the lock is persistent (restarts don't reset it).
@@ -49,8 +56,10 @@ export const verifyAccessPassword = mutation({
       });
       throw new Error("Incorrect access password.");
     }
-    const token = makeAdminToken();
-    await ctx.db.insert("adminSessions", { token, createdAt: Date.now() });
+    // Any successful gate unlock is an Owner-level session (the password IS
+    // the Owner credential). Owner actions still require re-verifying the
+    // password and an OTP, so this never weakens day-to-day admin work.
+    const token = await createOwnerSession(ctx, label);
     await audit(ctx, undefined, undefined, "admin-access", "Admin dashboard unlocked with password");
     return { token };
   },
@@ -235,6 +244,8 @@ export const suspendUser = mutation({
   args: { userId: v.id("users"), token: v.string() },
   handler: async (ctx, { userId, token }) => {
     await requireAdminSession(ctx, token);
+    // Owner account can never be suspended/modified from user management.
+    await guardOwnerAccount(ctx, userId);
     await ctx.db.patch(userId, { suspended: true });
     await audit(ctx, undefined, userId, "user-suspended", `User suspended: ${(await ctx.db.get(userId))?.name ?? userId}`);
     return true;
@@ -259,6 +270,9 @@ export const deleteUser = mutation({
   args: { userId: v.id("users"), token: v.string() },
   handler: async (ctx, { userId, token }) => {
     await requireAdminSession(ctx, token);
+    // Server-side Owner protection: the protected Owner account can never be
+    // deleted — regardless of what the UI shows.
+    await guardOwnerAccount(ctx, userId);
     const user = await ctx.db.get(userId);
     if (!user) return false;
     await deleteUserData(ctx, userId);
@@ -271,6 +285,9 @@ export const setUserRole = mutation({
   args: { userId: v.id("users"), role: roleValidator, token: v.string() },
   handler: async (ctx, { userId, role, token }) => {
     await requireAdminSession(ctx, token);
+    // Server-side guards: the protected Owner account can never be
+    // downgraded/replaced, and no second Owner can ever be created.
+    await guardOwnerAccount(ctx, userId, role);
     await ctx.db.patch(userId, { role });
     await notify(ctx, {
       userId,

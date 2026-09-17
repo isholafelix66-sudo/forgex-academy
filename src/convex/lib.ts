@@ -1,7 +1,15 @@
 import { getAuthUserId } from "@convex-dev/auth/server";
 import { MutationCtx, QueryCtx } from "./_generated/server";
-import { Doc } from "./_generated/dataModel";
-import { ROLES } from "./schema";
+import { Doc, Id } from "./_generated/dataModel";
+import { ROLES, type Role } from "./schema";
+
+/**
+ * The admin access password. Lives here so both the admin gate (admin.ts)
+ * and Owner security bootstrap (adminSecurity.ts) compare against the same
+ * server-side value — never client-supplied.
+ */
+export const ADMIN_ACCESS_PASSWORD =
+  process.env.ADMIN_ACCESS_PASSWORD ?? "Discovery";
 
 /** Throw if not signed in, otherwise return the user id. */
 export async function requireUser(
@@ -66,11 +74,57 @@ export async function checkRateLimit(
   return true;
 }
 
-/** Require the caller to be an admin. */
+/** Require the caller to be an admin (or the Owner, which is higher). */
 export async function requireAdmin(ctx: QueryCtx | MutationCtx) {
   const user = await requireUserDoc(ctx);
-  if (user.role !== ROLES.ADMIN) {
+  if (user.role !== ROLES.ADMIN && user.role !== ROLES.OWNER) {
     throw new Error("Admin access required.");
+  }
+  return user;
+}
+
+/**
+ * True when the target user account IS the protected Owner account. Owner
+ * accounts can never be deleted, downgraded, or role-changed by another
+ * admin — enforced server-side in the user-management mutations (admin.ts).
+ */
+export function isOwnerAccount(
+  user: Doc<"users"> | null | undefined,
+): boolean {
+  return user?.role === ROLES.OWNER;
+}
+
+/**
+ * Server-side guard for mutations that touch another account's role or
+ * existence. The protected Owner account can never be:
+ *  - deleted,
+ *  - downgraded to a lower role,
+ *  - role-changed by any caller except via an Owner session, and
+ *  - the "owner" role can never be granted to anyone else (no second Owner).
+ * Call AFTER validating the caller's own admin session.
+ */
+export async function guardOwnerAccount(
+  ctx: QueryCtx | MutationCtx,
+  userId: Id<"users">,
+  nextRole?: Role,
+): Promise<Doc<"users">> {
+  const user = await ctx.db.get(userId);
+  if (!user) throw new Error("User not found.");
+
+  // 1) The protected Owner account can never be deleted or have its role
+  //    changed by anyone other than the Owner's own session.
+  if (user.role === ROLES.OWNER) {
+    throw new Error(
+      "The Owner account is protected. Owner-level security actions must be performed from the Owner's Security section.",
+    );
+  }
+
+  // 2) No one can ever create another Owner — the role is permanently held
+  //    by the single protected account (if it exists).
+  if (nextRole === ROLES.OWNER && user.role !== ROLES.OWNER) {
+    throw new Error(
+      "The Owner role cannot be granted to any account. Owner is a permanent, single security identity.",
+    );
   }
   return user;
 }
@@ -147,23 +201,46 @@ export function makeAdminToken(): string {
 }
 
 /**
- * Require a valid, unexpired admin session token. The admin dashboard is
- * unlocked purely by the access password — no user account is involved.
+ * Require a valid, unexpired, unrevoked admin session token. The admin
+ * dashboard is unlocked purely by the access password — no user account is
+ * involved.
+ *
+ * Revocation (sign-out other devices / owner password change) is enforced
+ * HERE, server-side: a revoked token is rejected even while its 12h TTL
+ * would still allow it.
  */
 export async function requireAdminSession(
   ctx: QueryCtx | MutationCtx,
   token: string,
 ): Promise<boolean> {
+  await getValidAdminSession(ctx, token);
+  return true;
+}
+
+/**
+ * Same as `requireAdminSession` but returns the live session document so
+ * callers can identify the current device, list other sessions, or stamp
+ * activity. Throws exactly like `requireAdminSession`.
+ */
+export async function getValidAdminSession(
+  ctx: QueryCtx | MutationCtx,
+  token: string,
+): Promise<Doc<"adminSessions">> {
   if (!token) throw new Error("Admin access required.");
   const session = await ctx.db
     .query("adminSessions")
     .withIndex("by_token", (q) => q.eq("token", token))
     .first();
   if (!session) throw new Error("Admin access required.");
+  if (session.revokedAt) {
+    throw new Error(
+      "This admin session was signed out. Sign in again with the access password.",
+    );
+  }
   if (Date.now() - session.createdAt > ADMIN_SESSION_TTL) {
     throw new Error("Admin session expired. Enter the access password again.");
   }
-  return true;
+  return session;
 }
 
 
