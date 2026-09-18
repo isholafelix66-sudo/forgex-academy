@@ -64,6 +64,13 @@ function run(step, bin, args, memoryMb) {
 //   FileNotFound: failed copying files from cache to destination for package X
 //   Failed to install N packages
 //
+// NOTE: `bun install` also reports that failure when a package it has to
+// RE-materialize is missing from node_modules (reproduced by deleting any
+// installed dir and re-running install), yet it still leaves a complete tree
+// behind and exits non-zero. Healing can therefore never fix the install's
+// exit code — which is why this repair runs here, as its own process on a
+// settled tree, and not from the postinstall hook during the install itself.
+//
 // bun still reports partial success ("513 packages installed") while dropping
 // a different set each run, and the damage is not always an empty directory —
 // we have seen packages whose package.json survived but dist/ or .d.ts type
@@ -74,12 +81,16 @@ function run(step, bin, args, memoryMb) {
 //
 //   1. Pre-flight check (fast, heuristic): every direct dependency must
 //      resolve via require(), every installed dir must have its manifest,
-//      and the main entry's declared .d.ts must exist. On damage, the broken
-//      dirs are deleted and the install re-run (up to 2 passes). Deliberately
-//      conservative to avoid false positives on healthy trees: subpath and
-//      wildcard exports are not validated (several packages legitimately
-//      declare type paths they don't ship), and type-only @types/* packages
-//      are not require()-checked (they have no JS entry).
+//      the main entry's declared .d.ts must exist, and every installed
+//      package (transitive ones included) must still have at least one of
+//      the entry files its manifest declares. On damage, the broken dirs are
+//      deleted and the install re-run (up to 2 passes). Deliberately
+//      conservative to avoid false positives on healthy trees — verified
+//      against all 539 installed packages: subpath and wildcard exports are
+//      not validated (several packages legitimately declare type paths they
+//      don't ship), entries are matched with Node-style extension fallback,
+//      and type-only @types/* packages are not require()-checked (they have
+//      no JS entry).
 //   2. Failure fallback: if tsc/vite still report missing modules after the
 //      pre-flight, node_modules is wiped and reinstalled from scratch, and
 //      the failed step is retried once. Slow, but it runs only when healing
@@ -95,6 +106,49 @@ const flag = (set, name, reason) => {
   if (debug) console.error(`[heal-debug] ${name}: ${reason}`);
   set.add(name);
 };
+
+/**
+ * Every file path a manifest declares as an entry point (`main`, `module`, and
+ * the file leaves of `exports`). Wildcard templates are skipped — packages
+ * legitimately declare type paths they do not ship.
+ */
+function declaredEntries(manifest) {
+  const out = [];
+  for (const key of ["main", "module"]) {
+    const value = manifest[key];
+    if (typeof value === "string" && !value.includes("*")) out.push(value);
+  }
+  const visit = (node) => {
+    if (typeof node === "string") {
+      if (!node.includes("*")) out.push(node);
+      return;
+    }
+    if (!node || typeof node !== "object") return;
+    for (const value of Object.values(node)) visit(value);
+  };
+  visit(manifest.exports);
+  return out;
+}
+
+// CJS packages routinely declare extensionless entries (`"main": "index"`) and
+// directory entries, so a candidate counts as present if any Node-style
+// resolution of it lands on a real file.
+const ENTRY_SUFFIXES = [
+  "",
+  ".js",
+  ".mjs",
+  ".cjs",
+  ".json",
+  "/index.js",
+  "/index.mjs",
+  "/index.cjs",
+];
+
+function anyEntryExists(dir, entries) {
+  return entries.some((rel) =>
+    ENTRY_SUFFIXES.some((suffix) => existsSync(path.join(dir, rel + suffix))),
+  );
+}
 
 function findBrokenDeps() {
   const projectRequire = createRequire(path.join(process.cwd(), "package.json"));
@@ -163,8 +217,17 @@ function findBrokenDeps() {
     }
   }
 
-  // Sweep every installed dir for a missing manifest (partial copies of
-  // transitive deps). Dot-entries (.bin, .cache, …) are not packages.
+  // Sweep EVERY installed dir — transitive dependencies included. This is the
+  // only layer that can see transitive damage: the loop above only resolves
+  // direct dependencies, and a partial copy of a transitive dep leaves the
+  // manifest in place, so a manifest-existence test alone misses it. Both
+  // observed shapes are caught here:
+  //   - the manifest itself is gone, and
+  //   - the manifest survived but not one entry file it declares exists
+  //     (e.g. `@csstools/css-tokenizer`, a jsdom dependency that shipped only
+  //     its package.json while dist/ vanished — it broke `vitest` outright).
+  // Dot-entries (.bin, .cache, …) are not packages.
+  const installedDirs = [];
   let nmEntries = [];
   try {
     nmEntries = readdirSync("node_modules");
@@ -174,23 +237,44 @@ function findBrokenDeps() {
   for (const entry of nmEntries) {
     if (entry.startsWith(".")) continue;
     if (!entry.startsWith("@")) {
-      if (!existsSync(path.join("node_modules", entry, "package.json"))) {
-        flag(broken, entry, "sweep: package.json missing");
-      }
+      installedDirs.push(entry);
       continue;
     }
     let scoped = [];
     try {
       scoped = readdirSync(path.join("node_modules", entry));
     } catch {
+      installedDirs.push(entry); // unreadable scope — flagged below
       continue;
     }
     for (const name of scoped) {
-      if (name.startsWith(".")) continue;
-        if (!existsSync(path.join("node_modules", entry, name, "package.json"))) {
-          flag(broken, `${entry}/${name}`, "sweep: package.json missing");
-        }
-      }
+      if (!name.startsWith(".")) installedDirs.push(`${entry}/${name}`);
+    }
+  }
+
+  for (const name of installedDirs) {
+    const dir = path.join("node_modules", ...name.split("/"));
+    const manifestPath = path.join(dir, "package.json");
+    if (!existsSync(manifestPath)) {
+      flag(broken, name, "sweep: package.json missing");
+      continue;
+    }
+    let manifest;
+    try {
+      manifest = JSON.parse(readFileSync(manifestPath, "utf8"));
+    } catch (err) {
+      flag(broken, name, `sweep: package.json unreadable: ${err.message}`);
+      continue;
+    }
+    const entries = declaredEntries(manifest);
+    // No declared entry at all (meta packages) is not damage.
+    if (entries.length > 0 && !anyEntryExists(dir, entries)) {
+      flag(
+        broken,
+        name,
+        `sweep: no declared entry file exists (${entries.slice(0, 2).join(", ")})`,
+      );
+    }
   }
 
   return [...broken];
@@ -223,11 +307,9 @@ function healDependencies() {
         console.warn(`[build] could not remove node_modules/${name}: ${err.message}`);
       }
     }
-    // FORGE_DEP_HEAL stops the nested install's postinstall from re-entering
-    // healing (the nested install IS the healing step).
     const res = spawnSync(installer, ["install"], {
       stdio: "inherit",
-      env: { ...process.env, FORGE_DEP_HEAL: "1" },
+      env: process.env,
     });
     if (res.error) {
       console.warn(`[build] healing install failed to start: ${res.error.message}`);
@@ -273,7 +355,7 @@ function resetNodeModules() {
   }
   const res = spawnSync(installer, ["install"], {
     stdio: "inherit",
-    env: { ...process.env, FORGE_DEP_HEAL: "1" },
+    env: process.env,
   });
   return !res.error && res.status === 0;
 }
