@@ -1,14 +1,25 @@
 # Bun package-manager configuration.
 #
-# Build/CI containers for this project have intermittently inherited a global bun
-# cache that cannot be materialized into node_modules, which made `bun install`
-# fail with:
+# Build containers for this project kept failing with:
 #
 #   FileNotFound: failed copying files from cache to destination for package <pkg>
 #   Failed to install N packages
 #
-# Disabling reads from the global cache makes bun download and write its own cache
-# under node_modules/.cache (regenerated with node_modules), so an install no
-# longer depends on whatever cache state the environment happened to inherit.
+# Root cause: bun materializes its download cache at node_modules/.cache —
+# INSIDE the synced workspace. The platform's file-sync layer intermittently
+# drops files while copying (it has been losing node_modules and build
+# artifacts all along), so cache entries themselves became incomplete. Every
+# build container then inherited a poisoned cache and failed while extracting
+# packages FROM it (the FileNotFound lines are cache reads, before extraction).
+# Disabling the cache (disable = true) just moved the poison into the same
+# workspace — the failures continued.
+#
+# Fix: keep the cache OUTSIDE the workspace (in /tmp), where the sync layer
+# cannot reach it. It is content-addressed and shared across builds; if the
+# container's /tmp starts empty, bun simply repopulates it. Verified hono-
+# style: with a clean cache source, installs (cold, warm, and damage-repair)
+# exit 0. Verified on bun 1.3.14 that `install.cache.dir` IS honored while
+# `install.backend` is NOT (the preinstall hook / heal script pass
+# --backend=copyfile explicitly instead).
 [install.cache]
-disable = true
+dir = "/tmp/forgex-bun-cache"

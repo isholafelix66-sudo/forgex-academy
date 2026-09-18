@@ -120,7 +120,12 @@ function declaredEntries(manifest) {
   }
   const visit = (node) => {
     if (typeof node === "string") {
-      if (!node.includes("*")) out.push(node);
+      // package.json is itself an exports leaf in almost every package and
+      // always exists, so counting it would mask real damage (e.g. dist/
+      // vanished while the manifest survived).
+      if (!node.includes("*") && path.posix.basename(node) !== "package.json") {
+        out.push(node);
+      }
       return;
     }
     if (!node || typeof node !== "object") return;
@@ -280,6 +285,25 @@ function findBrokenDeps() {
   return [...broken];
 }
 
+/**
+ * Remove bun's old workspace-local cache (node_modules/.cache) from the
+ * disable=true era. bunfig.toml now points the cache at /tmp, but stale
+ * entries inside the synced workspace remain reachable if bun ever reads
+ * them (e.g. a bunfig-less install), and they are the known-poisoned source
+ * of the FileNotFound failures. Cache dirs always regenerate, so removal is
+ * safe. Optional to keep (tiny, dot-dir, one filesystem op).
+ */
+function purgeWorkspaceCache() {
+  const cacheDir = path.join("node_modules", ".cache");
+  if (!existsSync(cacheDir)) return;
+  try {
+    rmSync(cacheDir, { recursive: true, force: true });
+    console.log("[build] removed stale workspace bun cache (node_modules/.cache)");
+  } catch (err) {
+    console.warn(`[build] could not remove node_modules/.cache: ${err.message}`);
+  }
+}
+
 function healDependencies() {
   const broken = findBrokenDeps();
   if (broken.length === 0) return;
@@ -307,9 +331,12 @@ function healDependencies() {
         console.warn(`[build] could not remove node_modules/${name}: ${err.message}`);
       }
     }
-    const res = spawnSync(installer, ["install"], {
+    // copyfile backend = plain copies, no hardlinks — the safest
+    // materialization on this filesystem. FORGE_PREINSTALL=1 stops the
+    // preinstall hook from re-entering on this repair install.
+    const res = spawnSync(installer, ["install", "--backend=copyfile"], {
       stdio: "inherit",
-      env: process.env,
+      env: { ...process.env, FORGE_PREINSTALL: "1" },
     });
     if (res.error) {
       console.warn(`[build] healing install failed to start: ${res.error.message}`);
@@ -353,9 +380,9 @@ function resetNodeModules() {
     console.warn(`[build] could not remove node_modules: ${err.message}`);
     return false;
   }
-  const res = spawnSync(installer, ["install"], {
+  const res = spawnSync(installer, ["install", "--backend=copyfile"], {
     stdio: "inherit",
-    env: process.env,
+    env: { ...process.env, FORGE_PREINSTALL: "1" },
   });
   return !res.error && res.status === 0;
 }
@@ -418,6 +445,7 @@ if (process.argv.includes("--heal")) {
   process.exit(0);
 }
 
+purgeWorkspaceCache();
 healDependencies();
 
 // ── Convex codegen (best-effort) ───────────────────────────────────────
