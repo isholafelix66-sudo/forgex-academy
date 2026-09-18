@@ -95,6 +95,7 @@ export { default as ImageOff } from "lucide-react/dist/esm/icons/image-off.js";
 export { default as ImagePlus } from "lucide-react/dist/esm/icons/image-plus.js";
 export { default as Inbox } from "lucide-react/dist/esm/icons/inbox.js";
 export { default as InfoIcon } from "lucide-react/dist/esm/icons/info.js";
+export { default as Crown } from "lucide-react/dist/esm/icons/crown.js";
 export { default as KeyRound } from "lucide-react/dist/esm/icons/key-round.js";
 export { default as Layers } from "lucide-react/dist/esm/icons/layers.js";
 export { default as LayoutDashboard } from "lucide-react/dist/esm/icons/layout-dashboard.js";

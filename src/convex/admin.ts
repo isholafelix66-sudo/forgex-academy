@@ -28,6 +28,26 @@ import { createOwnerSession } from "./adminSecurity";
 const matches = (a: string, b: string) =>
   a.trim().toLowerCase() === b.trim().toLowerCase();
 
+/**
+ * Verify an admin access password against the current gate secret (hashed
+ * Owner password once security is initialized, env/default before). Used by
+ * the gate itself and by security-sensitive mutations that must re-confirm
+ * the password (role changes, Owner promotion).
+ */
+async function verifyAccessPasswordValue(
+  ctx: MutationCtx,
+  password: string,
+): Promise<boolean> {
+  if (!password.trim()) return false;
+  const security = await ctx.db
+    .query("adminSecurity")
+    .withIndex("by_kind", (q) => q.eq("kind", "singleton"))
+    .first();
+  return security?.passwordHash
+    ? await verifyPassword(password, security.passwordHash)
+    : matches(password, ADMIN_ACCESS_PASSWORD);
+}
+
 /** Verify the admin access password and mint a session token. */
 export const verifyAccessPassword = mutation({
   /** `label` tags the session for the Security section device list. */
@@ -297,11 +317,27 @@ export const deleteUser = mutation({
 });
 
 export const setUserRole = mutation({
-  args: { userId: v.id("users"), role: roleValidator, token: v.string() },
-  handler: async (ctx, { userId, role, token }) => {
+  args: {
+    userId: v.id("users"),
+    role: roleValidator,
+    token: v.string(),
+    /** The caller's admin access password — required for every role change. */
+    accessPassword: v.string(),
+  },
+  handler: async (ctx, { userId, role, token, accessPassword }) => {
     await requireAdminSession(ctx, token);
+    // Role changes are security-sensitive: they move account powers around.
+    // The caller must re-enter the admin access password — the same secret
+    // used to unlock the dashboard — so a hijacked tab can't silently
+    // promote accounts. Verified server-side against the same source as the
+    // gate (hashed Owner password once security is set up, env/default before).
+    const ok = await verifyAccessPasswordValue(ctx, accessPassword);
+    if (!ok) {
+      await audit(ctx, undefined, userId, "role-change-blocked", `Role change blocked: incorrect admin password`);
+      throw new Error("Incorrect admin password. Enter your current access password to change roles.");
+    }
     // Server-side guards: the protected Owner account can never be
-    // downgraded/replaced, and no second Owner can ever be created.
+    // downgraded/replaced, and no Owner can be granted here.
     await guardOwnerAccount(ctx, userId, role);
     await ctx.db.patch(userId, { role });
     await notify(ctx, {
@@ -321,12 +357,112 @@ export const setUserRole = mutation({
   },
 });
 
+/**
+ * Promote an account to the platform Owner. This is the ONLY path that grants
+ * the "owner" role (plain role changes reject it), and it requires:
+ *  - a valid admin session, and
+ *  - the current admin access password, re-entered by the caller.
+ *
+ * Exactly one Owner account may exist. Promoting a second account replaces
+ * the previous Owner (demoted to admin), which is audited — the alternative
+ * (an immutable singleton owner user row) made recovery impossible if the
+ * original owner account had to change. The protected adminSecurity identity
+ * (security email, password, OTPs) is NOT affected by this table-level role.
+ */
+export const promoteToOwner = mutation({
+  args: {
+    userId: v.id("users"),
+    token: v.string(),
+    accessPassword: v.string(),
+  },
+  handler: async (ctx, { userId, token, accessPassword }) => {
+    await requireAdminSession(ctx, token);
+    const ok = await verifyAccessPasswordValue(ctx, accessPassword);
+    if (!ok) {
+      await audit(ctx, undefined, userId, "owner-promote-blocked", "Owner promotion blocked: incorrect admin password");
+      throw new Error("Incorrect admin password. Enter your current access password to promote an Owner.");
+    }
+    const target = await ctx.db.get(userId);
+    if (!target) throw new Error("User not found.");
+    if (target.role === ROLES.OWNER) return true; // already Owner — no-op
+    if (target.isSeed) {
+      throw new Error("Seeded demo accounts cannot become the Owner.");
+    }
+
+    // Demote any existing Owner (there can be only one) to plain admin.
+    const users = await ctx.db.query("users").collect();
+    for (const u of users) {
+      if (u.role === ROLES.OWNER && u._id !== userId) {
+        await ctx.db.patch(u._id, { role: ROLES.ADMIN });
+        await audit(ctx, undefined, u._id, "owner-demoted", `Owner role moved to ${target.name ?? target.email ?? userId}; this account is now an admin`);
+      }
+    }
+    await ctx.db.patch(userId, { role: ROLES.OWNER });
+    await audit(ctx, undefined, userId, "owner-promoted", `${target.name ?? target.email ?? userId} is now the platform Owner`);
+    await notify(ctx, {
+      userId,
+      title: "You are now the platform Owner 👑",
+      body: "An administrator promoted your account. The Owner account cannot be signed out remotely or removed from user management.",
+      type: "role",
+      link: "/dashboard",
+    });
+    return true;
+  },
+});
+
 export const setUserVerified = mutation({
   args: { userId: v.id("users"), verified: v.boolean(), token: v.string() },
   handler: async (ctx, { userId, verified, token }) => {
     await requireAdminSession(ctx, token);
     await ctx.db.patch(userId, { verified });
     return true;
+  },
+});
+
+/**
+ * Force sign-out: delete every auth session for a user so all their signed-in
+ * devices are logged out immediately. Any admin can do this to any account
+ * EXCEPT the Owner account, which can never be signed out remotely (server-
+ * side enforced, not just hidden in the UI). Sessions are deleted outright —
+ * together with their refresh tokens — so a stolen token cannot be replayed.
+ */
+export const forceSignOutUser = mutation({
+  args: { userId: v.id("users"), token: v.string() },
+  handler: async (ctx, { userId, token }) => {
+    await requireAdminSession(ctx, token);
+    const target = await ctx.db.get(userId);
+    if (!target) throw new Error("User not found.");
+    // Server-side Owner protection — mirrors guardOwnerAccount for sign-outs.
+    if (target.role === ROLES.OWNER) {
+      throw new Error("The Owner account cannot be signed out remotely.");
+    }
+    const sessions = await ctx.db
+      .query("authSessions")
+      .withIndex("userId", (q) => q.eq("userId", userId))
+      .collect();
+    let revoked = 0;
+    for (const session of sessions) {
+      // Delete the session and every refresh token that belongs to it, the
+      // same way @convex-dev/auth's own invalidateSessions does.
+      await ctx.db.delete(session._id);
+      const refreshTokens = await ctx.db
+        .query("authRefreshTokens")
+        .withIndex("sessionIdAndParentRefreshTokenId", (q) =>
+          q.eq("sessionId", session._id),
+        )
+        .collect();
+      for (const rt of refreshTokens) await ctx.db.delete(rt._id);
+      revoked += 1;
+    }
+    await audit(ctx, undefined, userId, "user-force-signout", `Signed out ${revoked} session${revoked === 1 ? "" : "s"}: ${target.name ?? target.email ?? userId}`);
+    await notify(ctx, {
+      userId,
+      title: "You were signed out",
+      body: "An administrator signed your account out of all devices. Sign in again to continue.",
+      type: "security",
+      link: "/auth",
+    });
+    return { revoked };
   },
 });
 

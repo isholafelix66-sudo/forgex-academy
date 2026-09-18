@@ -5,9 +5,12 @@ import { api } from "@/convex/_generated/api";
 import {
   BadgeCheck,
   Ban,
+  Crown,
   Eye,
   FlaskConical,
   GraduationCap,
+  KeyRound,
+  LogOut,
   RotateCcw,
   Search,
   ShieldCheck,
@@ -15,6 +18,7 @@ import {
   Users,
   X,
 } from "lucide-react";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -41,6 +45,7 @@ import { getAdminToken } from "@/lib/admin-session";
 
 const ROLE_TABS = [
   { key: undefined, label: "All" },
+  { key: "owner", label: "Owner" },
   { key: "student", label: "Students" },
   { key: "tutor", label: "Tutors" },
   { key: "admin", label: "Admins" },
@@ -63,6 +68,14 @@ export default function AdminUsers() {
   const [viewing, setViewing] = useState<UserRow | null>(null);
   const [deleting, setDeleting] = useState<UserRow | null>(null);
   const [suspending, setSuspending] = useState<UserRow | null>(null);
+  /** Pending role change — resolved with the admin password in a dialog. */
+  const [roleChange, setRoleChange] = useState<{
+    user: UserRow;
+    nextRole: "owner" | "admin" | "tutor" | "student";
+  } | null>(null);
+  const [rolePassword, setRolePassword] = useState("");
+  const [roleBusy, setRoleBusy] = useState(false);
+  const [signingOut, setSigningOut] = useState<UserRow | null>(null);
   const token = getAdminToken() ?? "";
 
   const users = useQuery(
@@ -70,11 +83,58 @@ export default function AdminUsers() {
     token ? { search: search || undefined, role, status, token } : "skip",
   );
   const setUserRole = useMutation(api.admin.setUserRole);
+  const promoteToOwner = useMutation(api.admin.promoteToOwner);
   const setUserVerified = useMutation(api.admin.setUserVerified);
   const setTutorHomepageFeature = useMutation(api.admin.setTutorHomepageFeature);
   const suspendUser = useMutation(api.admin.suspendUser);
   const reactivateUser = useMutation(api.admin.reactivateUser);
   const deleteUser = useMutation(api.admin.deleteUser);
+  const forceSignOutUser = useMutation(api.admin.forceSignOutUser);
+
+  /** Confirm a role change with the admin password (Owner uses promoteToOwner). */
+  const confirmRoleChange = async () => {
+    if (!roleChange) return;
+    setRoleBusy(true);
+    try {
+      if (roleChange.nextRole === "owner") {
+        await promoteToOwner({
+          userId: roleChange.user._id as never,
+          token,
+          accessPassword: rolePassword,
+        });
+      } else {
+        await setUserRole({
+          userId: roleChange.user._id as never,
+          role: roleChange.nextRole,
+          token,
+          accessPassword: rolePassword,
+        });
+      }
+      setRoleChange(null);
+      setRolePassword("");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Could not update the role.");
+    } finally {
+      setRoleBusy(false);
+    }
+  };
+
+  /** Remote sign-out — deletes every auth session for the account. */
+  const confirmSignOut = async () => {
+    if (!signingOut) return;
+    setRoleBusy(true);
+    try {
+      const res = await forceSignOutUser({ userId: signingOut._id as never, token });
+      toast.success(
+        `Signed out ${res.revoked} session${res.revoked === 1 ? "" : "s"} for ${signingOut.name}.`,
+      );
+      setSigningOut(null);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Could not sign out the account.");
+    } finally {
+      setRoleBusy(false);
+    }
+  };
 
   const duplicates = useQuery(
     api.admin.duplicateAccounts,
@@ -201,9 +261,15 @@ export default function AdminUsers() {
                       <Ban className="size-3" /> Suspended
                     </span>
                   )}
-                  <span className="rounded-full bg-white/8 px-2 py-0.5 text-[10px] font-semibold capitalize text-muted-foreground">
-                    {u.role}
-                  </span>
+                  {u.role === "owner" ? (
+                    <span className="inline-flex items-center gap-1 rounded-full bg-lime-400 px-2 py-0.5 text-[10px] font-bold text-black">
+                      <Crown className="size-3" /> Owner
+                    </span>
+                  ) : (
+                    <span className="rounded-full bg-white/8 px-2 py-0.5 text-[10px] font-semibold capitalize text-muted-foreground">
+                      {u.role}
+                    </span>
+                  )}
                   {u.verified && (
                     <span className="inline-flex items-center gap-1 rounded-full bg-lime-400/12 px-2 py-0.5 text-[10px] font-semibold text-lime-300">
                       <BadgeCheck className="size-3" /> Verified tutor
@@ -222,15 +288,21 @@ export default function AdminUsers() {
                 </Button>
                 <select
                   value={u.role}
-                  onChange={(e) => void setUserRole({ userId: u._id as never, role: e.target.value as never, token })}
+                  onChange={(e) => {
+                    const nextRole = e.target.value as "owner" | "admin" | "tutor" | "student";
+                    if (nextRole === u.role) return;
+                    setRoleChange({ user: u, nextRole });
+                    e.target.value = u.role;
+                  }}
                   className={cn(
                     "h-9 rounded-lg border border-white/10 bg-black/20 px-2.5 text-xs outline-none",
-                    u.role === "admin" && "text-lime-300",
+                    (u.role === "admin" || u.role === "owner") && "text-lime-300",
                   )}
                 >
                   <option value="student">Student</option>
                   <option value="tutor">Tutor</option>
                   <option value="admin">Admin</option>
+                  <option value="owner">Owner</option>
                 </select>
                 {u.role === "tutor" && (
                   <Button
@@ -265,7 +337,7 @@ export default function AdminUsers() {
                     {u.featuredOnHomepage ? "★ Homepage" : "Homepage"}
                   </Button>
                 )}
-                {u.suspended ? (
+                {u.role === "owner" ? null : u.suspended ? (
                   <Button
                     variant="outline"
                     size="sm"
@@ -284,15 +356,28 @@ export default function AdminUsers() {
                     <Ban className="size-3.5" /> Suspend
                   </Button>
                 )}
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="text-muted-foreground hover:text-rose-300"
-                  onClick={() => setDeleting(u)}
-                  title="Permanently delete"
-                >
-                  <Trash2 className="size-4" />
-                </Button>
+                {u.role !== "owner" && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="gap-1.5 text-muted-foreground hover:text-rose-300"
+                    onClick={() => setSigningOut(u)}
+                    title="Sign this account out of all devices"
+                  >
+                    <LogOut className="size-3.5" /> Sign out
+                  </Button>
+                )}
+                {u.role !== "owner" && (
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="text-muted-foreground hover:text-rose-300"
+                    onClick={() => setDeleting(u)}
+                    title="Permanently delete"
+                  >
+                    <Trash2 className="size-4" />
+                  </Button>
+                )}
               </div>
             </div>
           ))}
@@ -561,6 +646,87 @@ export default function AdminUsers() {
               }}
             >
               <X className="mr-1 size-3.5" /> Confirm delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Role change — requires the current admin access password */}
+      <AlertDialog
+        open={!!roleChange}
+        onOpenChange={(o) => {
+          if (!o) {
+            setRoleChange(null);
+            setRolePassword("");
+          }
+        }}
+      >
+        <AlertDialogContent className="border-white/10 bg-card">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="font-display flex items-center gap-2">
+              {roleChange?.nextRole === "owner" ? (
+                <>
+                  <Crown className="size-4 text-lime-300" /> Make {roleChange?.user.name} the Owner?
+                </>
+              ) : (
+                <>
+                  <KeyRound className="size-4 text-lime-300" /> Change role to {roleChange?.nextRole}
+                </>
+              )}
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              {roleChange?.nextRole === "owner"
+                ? "The Owner is the highest role: they cannot be signed out remotely or deleted. Any previous Owner is demoted to admin. This requires your current admin password."
+                : "Role changes move account powers around, so your current admin password is required."}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <Input
+            type="password"
+            value={rolePassword}
+            onChange={(e) => setRolePassword(e.target.value)}
+            placeholder="Current admin password"
+            className="h-10 border-white/10 bg-black/20"
+            autoFocus
+          />
+          <AlertDialogFooter>
+            <AlertDialogCancel className="border-white/10">Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="gap-1.5 bg-lime-400 font-semibold text-black hover:bg-lime-300"
+              disabled={roleBusy || !rolePassword}
+              onClick={(e) => {
+                e.preventDefault();
+                void confirmRoleChange();
+              }}
+            >
+              <ShieldCheck className="size-4" />
+              {roleChange?.nextRole === "owner" ? "Promote to Owner" : "Confirm role change"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Remote sign-out confirm */}
+      <AlertDialog open={!!signingOut} onOpenChange={(o) => !o && setSigningOut(null)}>
+        <AlertDialogContent className="border-white/10 bg-card">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="font-display flex items-center gap-2">
+              <LogOut className="size-4 text-rose-300" /> Sign out {signingOut?.name} everywhere?
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              Every signed-in session for this account is ended immediately —
+              web and mobile. They will need to sign in again to keep using the
+              platform. The Owner account cannot be signed out this way.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel className="border-white/10">Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-rose-500 font-semibold text-white hover:bg-rose-400"
+              onClick={() => {
+                void confirmSignOut();
+              }}
+            >
+              Sign out everywhere
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

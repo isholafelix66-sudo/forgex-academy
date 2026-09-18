@@ -119,12 +119,12 @@ export async function guardOwnerAccount(
     );
   }
 
-  // 2) No one can ever create another Owner — the role is permanently held
-  //    by the single protected account (and any attempt to grant it to a
-  //    non-owner account is rejected outright).
+  // 2) No second Owner may be created through user management. Owner is
+  //    promoted exclusively via promoteToOwner (requires the current admin
+  //    password), never by a plain role change.
   if (nextRole === ROLES.OWNER) {
     throw new Error(
-      "The Owner role cannot be granted to any account. Owner is a permanent, single security identity.",
+      "The Owner role cannot be assigned here. Use the Owner promotion flow (requires the current admin password).",
     );
   }
   return user;

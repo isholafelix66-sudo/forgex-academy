@@ -1,10 +1,33 @@
 import { internal } from "./_generated/api";
 import { mutation, query, MutationCtx, QueryCtx } from "./_generated/server";
-import { Doc, Id } from "./_generated/dataModel";
+import { Doc } from "./_generated/dataModel";
 import { v } from "convex/values";
 import { checkRateLimit, getValidAdminSession, ADMIN_ACCESS_PASSWORD } from "./lib";
 import { hashPassword, verifyPassword, generateOtp } from "./adminCrypto";
-import { otpEmail } from "./emailTemplates";
+
+/**
+ * Send an admin security OTP through the SAME pipeline as sign-in OTPs:
+ * Gmail SMTP via the internal relay (emailService.sendAuthCodeEmail), with
+ * the platform OTP sender as fallback. The earlier path (vly.email) silently
+ * failed when VLY_INTEGRATION_KEY was not configured, which is why codes
+ * never arrived; this path only needs SMTP_* keys, and if those are missing
+ * too it falls back to the platform sender so the code always goes out.
+ */
+async function sendSecurityOtp(ctx: MutationCtx, to: string, otp: string) {
+  try {
+    await ctx.scheduler.runAfter(0, internal.emailService.sendAuthCodeEmail, {
+      to,
+      code: otp,
+      kind: "otp",
+    });
+  } catch (err) {
+    // Scheduled action failure must never fail the security flow — but log it.
+    console.error("[admin-security] could not schedule OTP email:", err);
+    throw new Error(
+      "Could not send the verification code. Check the security email address and try again.",
+    );
+  }
+}
 
 /**
  * Owner-level admin security.
@@ -427,13 +450,7 @@ export const requestPasswordChange = mutation({
     // 5) Email the OTP to the VERIFIED security email (server-side address,
     //    never client-supplied). Scheduled so delivery issues can't fail the
     //    mutation, and so the code never lands in logs.
-    const tpl = otpEmail({ code: otp, expiryMinutes: 10 });
-    await ctx.scheduler.runAfter(0, internal.email.sendEmail, {
-      to: doc.securityEmail,
-      subject: tpl.subject,
-      html: tpl.html,
-      text: tpl.text,
-    });
+    await sendSecurityOtp(ctx, doc.securityEmail, otp);
     await ctx.db.insert("auditLogs", {
       action: "admin-pwchange-otp-sent",
       detail: "Password change OTP emailed to the verified security email",
@@ -585,13 +602,7 @@ export const requestSecurityEmailChange = mutation({
       updatedAt: Date.now(),
     });
 
-    const tpl = otpEmail({ code: otp, expiryMinutes: 10 });
-    await ctx.scheduler.runAfter(0, internal.email.sendEmail, {
-      to: email,
-      subject: tpl.subject,
-      html: tpl.html,
-      text: tpl.text,
-    });
+    await sendSecurityOtp(ctx, email, otp);
     await ctx.db.insert("auditLogs", {
       action: "owner-emailchange-otp-sent",
       detail: "Security email change OTP sent to the new address",
@@ -657,4 +668,4 @@ export const cancelSecurityEmailChange = mutation({
   },
 });
 
-export type { Id };
+

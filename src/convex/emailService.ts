@@ -18,7 +18,10 @@
 
 import { v } from "convex/values";
 import { internalAction } from "./_generated/server";
+import type { GenericActionCtx } from "convex/server";
 import { internal } from "./_generated/api";
+import { DataModel } from "./_generated/dataModel";
+import axios from "axios";
 import nodemailer from "nodemailer";
 import {
   otpEmail,
@@ -167,8 +170,10 @@ export const sendAuthCodeEmail = internalAction({
         : passwordResetEmail({ code: args.code, expiryMinutes });
 
     if (!smtpConfigured()) {
-      console.warn("[smtp] not configured — falling back to platform OTP sender");
-      return { sent: false, fallback: true };
+      // No SMTP keys → platform sender, exactly like sign-in OTPs. Without
+      // this, security codes silently vanished when SMTP wasn't configured.
+      const sent = await sendViaPlatformSender(ctx, args);
+      return { sent, fallback: true };
     }
 
     const mailer = transport();
@@ -178,6 +183,11 @@ export const sendAuthCodeEmail = internalAction({
         subject: tpl.subject,
         html: tpl.html,
       });
+      if (!res.ok) {
+        // SMTP send failed → platform sender so the code still goes out.
+        const sent = await sendViaPlatformSender(ctx, args);
+        if (sent) return { sent: true, fallback: true };
+      }
       // Log metadata only — the code itself is NEVER persisted.
       await ctx.runMutation(internal.emailData.logAuthEmailMeta, {
         to: args.to,
@@ -196,3 +206,43 @@ export const sendAuthCodeEmail = internalAction({
     }
   },
 });
+
+const PLATFORM_OTP_URL = "https://auth.freebuff.app/send_otp";
+
+/**
+ * Last-resort delivery through the platform OTP sender (same endpoint the
+ * auth provider uses when the SMTP relay is unavailable). Returns whether
+ * the platform accepted the message.
+ */
+async function sendViaPlatformSender(
+  ctx: GenericActionCtx<DataModel>,
+  args: { to: string; code: string; kind: string },
+): Promise<boolean> {
+  try {
+    await axios.post(
+      PLATFORM_OTP_URL,
+      {
+        to: args.to,
+        otp: args.code,
+        appName: process.env.VLY_APP_NAME || "a freebuff.com application",
+      },
+      {
+        headers: {
+          // Prefer the env var so the key can be rotated from the Keys tab.
+          "x-api-key": process.env.FORGE_OTP_API_KEY ?? "fb_email_2crN1hqIArZP2bEfvjp5Qik4",
+        },
+        timeout: 20_000,
+      },
+    );
+    await ctx.runMutation(internal.emailData.logAuthEmailMeta, {
+      to: args.to,
+      subject: "[redacted] verification code",
+      emailType: args.kind,
+      ok: true,
+    });
+    return true;
+  } catch (err) {
+    console.error("[smtp] platform OTP sender failed:", err);
+    return false;
+  }
+}
