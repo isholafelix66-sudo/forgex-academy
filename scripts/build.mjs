@@ -223,7 +223,12 @@ function healDependencies() {
         console.warn(`[build] could not remove node_modules/${name}: ${err.message}`);
       }
     }
-    const res = spawnSync(installer, ["install"], { stdio: "inherit" });
+    // FORGE_DEP_HEAL stops the nested install's postinstall from re-entering
+    // healing (the nested install IS the healing step).
+    const res = spawnSync(installer, ["install"], {
+      stdio: "inherit",
+      env: { ...process.env, FORGE_DEP_HEAL: "1" },
+    });
     if (res.error) {
       console.warn(`[build] healing install failed to start: ${res.error.message}`);
       return;
@@ -266,7 +271,10 @@ function resetNodeModules() {
     console.warn(`[build] could not remove node_modules: ${err.message}`);
     return false;
   }
-  const res = spawnSync(installer, ["install"], { stdio: "inherit" });
+  const res = spawnSync(installer, ["install"], {
+    stdio: "inherit",
+    env: { ...process.env, FORGE_DEP_HEAL: "1" },
+  });
   return !res.error && res.status === 0;
 }
 
@@ -316,6 +324,15 @@ function runWithHeal(step, bin, args, memoryMb) {
 // standalone to inspect the tree without healing or building.
 if (process.argv.includes("--heal-check")) {
   for (const name of findBrokenDeps()) console.log(name);
+  process.exit(0);
+}
+
+// --heal mode: repair the dependency tree and exit, without building. The
+// postinstall hook invokes this — it is the only code we get to run during a
+// `bun install` that reports partial failures, which is exactly when the tree
+// is left damaged and must be repaired before the next install can be a no-op.
+if (process.argv.includes("--heal")) {
+  healDependencies();
   process.exit(0);
 }
 
