@@ -9,6 +9,7 @@
   },
   "scripts": {
     "dev": "vite",
+    "preinstall": "node scripts/preinstall-safe-install.cjs",
     "build": "node scripts/build.mjs",
     "postinstall": "node scripts/install-tsc-wrapper.mjs",
     "lint": "eslint .",
