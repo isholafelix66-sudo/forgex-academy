@@ -1,5 +1,6 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
+  "installCommand": "node scripts/install-deps.mjs",
   "rewrites": [
     { "source": "/((?!assets/).*)", "destination": "/index.html" }
   ],

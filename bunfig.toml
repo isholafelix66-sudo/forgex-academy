@@ -1,25 +1,21 @@
 # Bun package-manager configuration.
 #
-# Build containers for this project kept failing with:
+# Context: the deploy build container runs on a single virtiofs mount, where
+# bun's default `--backend=hardlink` materialization intermittently fails
+# part-way through a cold install:
 #
-#   FileNotFound: failed copying files from cache to destination for package <pkg>
-#   Failed to install N packages
+#   FileNotFound: failed copying files from cache to destination for package X
+#   Failed to install N packages            (bun exits 1 -> the build aborts)
 #
-# Root cause: bun materializes its download cache at node_modules/.cache —
-# INSIDE the synced workspace. The platform's file-sync layer intermittently
-# drops files while copying (it has been losing node_modules and build
-# artifacts all along), so cache entries themselves became incomplete. Every
-# build container then inherited a poisoned cache and failed while extracting
-# packages FROM it (the FileNotFound lines are cache reads, before extraction).
-# Disabling the cache (disable = true) just moved the poison into the same
-# workspace — the failures continued.
+# The install step itself is what fixes that: "installCommand" in vercel.json
+# runs scripts/install-deps.mjs, which installs with `--backend=copyfile`
+# (plain copies, no hardlinks) and only exits 0 once the tree is verified
+# complete. `--backend` has no bunfig equivalent — every bunfig spelling still
+# hardlinks — so it must be passed on the command line.
 #
-# Fix: keep the cache OUTSIDE the workspace (in /tmp), where the sync layer
-# cannot reach it. It is content-addressed and shared across builds; if the
-# container's /tmp starts empty, bun simply repopulates it. Verified hono-
-# style: with a clean cache source, installs (cold, warm, and damage-repair)
-# exit 0. Verified on bun 1.3.14 that `install.cache.dir` IS honored while
-# `install.backend` is NOT (the preinstall hook / heal script pass
-# --backend=copyfile explicitly instead).
+# This file keeps bun's download cache OUT of the workspace so a from-scratch
+# node_modules rebuild in the install step never discards it, and so no cache
+# state is ever carried inside the synced tree. It is content-addressed; a
+# cold container simply repopulates it.
 [install.cache]
 dir = "/tmp/forgex-bun-cache"

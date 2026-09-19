@@ -1,61 +1,32 @@
 #!/usr/bin/env node
 /**
- * Preinstall hook — make sure the dependency tree is complete BEFORE the
- * outer `bun install` plans its work.
+ * Preinstall hook — read-only health check.
  *
- * Why this exists:
+ * History
+ * -------
+ * This hook used to REPAIR the tree (delete damaged package dirs, then run a
+ * nested `bun install --backend=copyfile`) because the build container's
+ * `bun install` kept failing with
  *
- *   The build container's `bun install` intermittently fails with
+ *   FileNotFound: failed copying files from cache to destination for package X
+ *   Failed to install N packages
  *
- *     FileNotFound: failed copying files from cache to destination for package X
- *     Failed to install N packages
+ * That never helped: bun runs lifecycle scripts AFTER it has materialized
+ * node_modules, so by the time this hook runs the outer install's exit code —
+ * the only thing that aborts the deploy — is already decided. And a nested
+ * install makes two installers write node_modules at the same time.
  *
- *   and exits non-zero, which aborts the deploy build before any healing
- *   could run.
+ * Where the fix lives now
+ * -----------------------
+ * The install step itself (scripts/install-deps.mjs, wired through vercel.json
+ * → installCommand) installs with `--backend=copyfile` up front — plain copies
+ * rather than the hardlinks that intermittently fail on this virtiofs mount —
+ * and then verifies and repairs the tree after the install has finished.
  *
- * Root cause (identified 2026-09-18):
- *
- *   bun's download cache lives INSIDE the synced workspace
- *   (node_modules/.cache). The platform's file-sync layer intermittently
- *   drops files while copying — it has been losing node_modules files all
- *   along — so the cache entries themselves became incomplete. Each build
- *   container then inherited a poisoned cache and failed while READING from
- *   it (the FileNotFound lines are cache reads that happen before
- *   extraction). bunfig's `[install.cache] dir = "/tmp/forgex-bun-cache"`
- *   (see bunfig.toml) moves the cache outside the workspace, which removes
- *   the source of the poison; this hook is the second line of defence.
- *
- * What this hook does now:
- *
- *   Before the outer install starts, it verifies that every installed
- *   package still has a readable manifest and at least one declared entry
- *   file. If anything is damaged, it deletes the broken dirs and repairs
- *   the tree with a copyfile-backend install (plain copies, no hardlinks —
- *   the safest materialization on this filesystem). When the tree is
- *   already healthy, this costs a few hundred milliseconds and the outer
- *   install becomes a warm no-op that exits 0.
- *
- * Recursion guard:
- *
- *   FORGE_PREINSTALL=1 marks the hook's own child installs, whose
- *   lifecycle scripts must not recurse.
+ * So this hook only reports: verify-only, always exit 0, never mutate.
  */
-if (process.env.FORGE_PREINSTALL === "1") {
-  process.exit(0);
-}
-
-const { spawnSync } = require("node:child_process");
-const { existsSync, readdirSync, readFileSync, rmSync, statSync } = require("node:fs");
+const { existsSync, readdirSync, readFileSync } = require("node:fs");
 const path = require("node:path");
-
-const installer = process.env.npm_config_user_agent?.startsWith("npm")
-  ? "npm"
-  : "bun";
-
-// npm's cache is content-addressed and has never hit this failure mode.
-if (installer !== "bun") {
-  process.exit(0);
-}
 
 /** Every non-wildcard entry path a manifest declares (main/module/exports). */
 function declaredEntries(manifest) {
@@ -104,7 +75,7 @@ function findIncomplete() {
   try {
     nmEntries = readdirSync("node_modules");
   } catch {
-    return []; // no node_modules — the outer install will create it fresh
+    return null; // no node_modules yet — nothing to report
   }
   const names = [];
   const push = (scope, name) => {
@@ -120,7 +91,7 @@ function findIncomplete() {
     try {
       scoped = readdirSync(path.join("node_modules", entry));
     } catch {
-      names.push(entry); // unreadable scope dir — let the repair handle it
+      names.push(entry); // unreadable scope dir
       continue;
     }
     for (const name of scoped) push(entry, name);
@@ -129,14 +100,6 @@ function findIncomplete() {
   const broken = [];
   for (const name of names) {
     const dir = path.join("node_modules", ...name.split("/"));
-    let st;
-    try {
-      st = statSync(dir);
-    } catch {
-      broken.push(name);
-      continue;
-    }
-    if (!st.isDirectory()) continue;
     const manifestPath = path.join(dir, "package.json");
     if (!existsSync(manifestPath)) {
       broken.push(name);
@@ -155,48 +118,21 @@ function findIncomplete() {
   return broken;
 }
 
-const broken = findIncomplete();
-if (broken.length === 0) {
-  console.log(
-    "[preinstall] dependency tree verified complete — outer install can proceed",
-  );
-  process.exit(0);
-}
-
-console.log(
-  `[preinstall] ${broken.length} package(s) incomplete in node_modules ` +
-    `(${broken.slice(0, 5).join(", ")}${broken.length > 5 ? ", …" : ""}) — repairing before the outer install`,
-);
-
-// bun trusts any existing dir with a manifest, so broken dirs must be deleted
-// first or the reinstall would skip them.
-for (const name of broken) {
-  try {
-    rmSync(path.join("node_modules", ...name.split("/")), {
-      recursive: true,
-      force: true,
-    });
-  } catch (err) {
-    console.warn(`[preinstall] could not remove node_modules/${name}: ${err.message}`);
+try {
+  const broken = findIncomplete();
+  if (broken === null) {
+    console.log("[preinstall] no node_modules yet — install will populate it");
+  } else if (broken.length === 0) {
+    console.log("[preinstall] existing dependency tree looks complete");
+  } else {
+    console.warn(
+      `[preinstall] ${broken.length} package(s) look incomplete ` +
+        `(${broken.slice(0, 5).join(", ")}${broken.length > 5 ? ", …" : ""}) — ` +
+        `the install step verifies and repairs the tree when it finishes`,
+    );
   }
+} catch (err) {
+  // A diagnostic hook must never be able to fail the install.
+  console.warn(`[preinstall] check skipped: ${err && err.message}`);
 }
-
-// copyfile backend = plain copies, no hardlinks: the safest materialization
-// on this filesystem, and independent of any cache entry state.
-const args = ["install", "--backend=copyfile"];
-const res = spawnSync(installer, args, {
-  stdio: "inherit",
-  env: { ...process.env, FORGE_PREINSTALL: "1" },
-});
-
-if (res.error) {
-  console.error(`[preinstall] repair install failed to start: ${res.error.message}`);
-  process.exit(1);
-}
-if (res.status !== 0) {
-  console.error(
-    `[preinstall] repair install exited ${res.status} — failing with this clear error instead of bun's "Failed to install N packages".`,
-  );
-  process.exit(res.status ?? 1);
-}
-console.log("[preinstall] repair completed — outer install will reconcile");
+process.exit(0);
