@@ -169,9 +169,15 @@ function HeroSlideshow() {
         <span className="text-gradient">Build.</span>
       </h1>
 
-      {/* Slide card — auto-height on mobile, fills viewport on desktop */}
-      <div className="relative mx-4 mt-5 overflow-hidden rounded-2xl ring-1 ring-white/10 sm:mx-6 sm:mt-6 lg:mx-0 lg:mt-0 lg:w-full lg:rounded-2xl lg:ring-1 lg:ring-white/10 lg:absolute lg:inset-0">
-        <div className="relative aspect-[4/3] w-full bg-[#05070a] sm:aspect-[16/9] lg:h-full lg:aspect-auto">
+      {/* Slide card — auto-height on mobile, fills viewport on desktop.
+          Mobile/tablet: the card spans the page's own gutter (16px on
+          phones, 24px from sm) instead of adding a second inset on top of
+          it, so it reads noticeably larger while still never touching the
+          screen edge. The 5/4 portrait-ish frame gives the photo a little
+          more height than the old 4/3, and max-h keeps it inside short
+          (landscape) viewports. Desktop is untouched. */}
+      <div className="relative mt-5 overflow-hidden rounded-2xl ring-1 ring-white/10 sm:mt-6 lg:absolute lg:inset-0 lg:mt-0 lg:w-full lg:rounded-2xl lg:ring-1 lg:ring-white/10">
+        <div className="relative aspect-[5/4] max-h-[68vh] w-full bg-[#05070a] sm:aspect-[16/9] sm:max-h-[70vh] lg:h-full lg:max-h-none lg:aspect-auto">
           {slides.map((s, i) => (
             <motion.div
               key={`${s.tag}-${i}`}
