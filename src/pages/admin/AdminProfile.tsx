@@ -25,6 +25,7 @@ import { ImageUploader } from "@/components/media/ImageUploader";
 import { getAdminToken } from "@/lib/admin-session";
 import type { Id } from "@/convex/_generated/dataModel";
 import { toast } from "sonner";
+import { friendlyError } from "@/lib/errors";
 
 type AdminProfileData = {
   name?: string;
@@ -243,7 +244,7 @@ function OwnerSetup({ token }: { token: string }) {
       });
       toast.success("Owner security initialized. Use the new password at the gate next time.");
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Setup failed.");
+      toast.error(friendlyError(err, "Setup failed."));
     } finally {
       setBusy(false);
     }
@@ -373,7 +374,7 @@ function PasswordChangeCard({
       setOtp("");
       toast.success(`Code sent to ${res.sentTo}. It expires in 10 minutes.`);
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Could not send the code.");
+      toast.error(friendlyError(err, "Could not send the code."));
     } finally {
       setBusy(false);
     }
@@ -392,7 +393,7 @@ function PasswordChangeCard({
       setConfirmNew("");
       setOtp("");
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Confirmation failed.");
+      toast.error(friendlyError(err, "Confirmation failed."));
     } finally {
       setBusy(false);
     }
@@ -575,7 +576,7 @@ function SecurityEmailCard({
       setOtp("");
       toast.success(`Code sent to ${res.sentTo}.`);
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Could not send the code.");
+      toast.error(friendlyError(err, "Could not send the code."));
     } finally {
       setBusy(false);
     }
@@ -591,7 +592,7 @@ function SecurityEmailCard({
       setNewEmail("");
       setOtp("");
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Confirmation failed.");
+      toast.error(friendlyError(err, "Confirmation failed."));
     } finally {
       setBusy(false);
     }
@@ -721,7 +722,7 @@ function SessionsCard({ token }: { token: string }) {
         `Signed out ${res.revoked} other device${res.revoked === 1 ? "" : "s"}. This device stays signed in.`,
       );
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Could not sign out other devices.");
+      toast.error(friendlyError(err, "Could not sign out other devices."));
     } finally {
       setBusy(false);
     }
@@ -732,7 +733,7 @@ function SessionsCard({ token }: { token: string }) {
       await revokeOne({ token, sessionId: s._id });
       toast.success(`Signed out "${s.label}".`);
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Could not sign out that device.");
+      toast.error(friendlyError(err, "Could not sign out that device."));
     }
   };
 

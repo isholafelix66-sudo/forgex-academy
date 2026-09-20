@@ -234,6 +234,10 @@ export const usersList = query({
           isAnonymous: !!u.isAnonymous,
           isSeed: !!u.isSeed,
           suspended: !!u.suspended,
+          // True for the permanent Owner account (by role or by the
+          // designated Owner email) — its role can never be changed, so the
+          // UI locks it instead of offering a role picker.
+          isProtectedOwner: isOwnerAccount(u) || isDesignatedOwnerEmail(u.email),
           lastActivity: u.lastActivity ?? null,
           appStatus: app?.status ?? null,
           enrollments: enrollments.filter((e) => e.studentId === u._id).length,
@@ -244,7 +248,9 @@ export const usersList = query({
       })
       .filter((u) => {
         if (q && !u.name.toLowerCase().includes(q) && !(u.email ?? "").toLowerCase().includes(q)) return false;
-        if (role && u.role !== role) return false;
+        // The Owner tab also matches the permanent Owner account even before
+        // its stored role has synced to "owner".
+        if (role && u.role !== role && !(role === ROLES.OWNER && u.isProtectedOwner)) return false;
         if (status === "suspended" && !u.suspended) return false;
         if (status === "verified" && !(u.role === ROLES.TUTOR && u.verified)) return false;
         if (status === "approved" && u.appStatus !== "approved") return false;
@@ -326,19 +332,32 @@ export const setUserRole = mutation({
   },
   handler: async (ctx, { userId, role, token, accessPassword }) => {
     await requireAdminSession(ctx, token);
+    // Server-side guards run FIRST: the protected Owner account can never be
+    // downgraded/replaced and no Owner can be granted here, no matter what
+    // password is supplied. Checking before the password means an Owner role
+    // can never be changed even by a caller holding the admin password.
+    const target = await guardOwnerAccount(ctx, userId, role);
     // Role changes are security-sensitive: they move account powers around.
     // The caller must re-enter the admin access password — the same secret
     // used to unlock the dashboard — so a hijacked tab can't silently
     // promote accounts. Verified server-side against the same source as the
     // gate (hashed Owner password once security is set up, env/default before).
+    if (role === target.role) return true; // nothing to do — no password needed
     const ok = await verifyAccessPasswordValue(ctx, accessPassword);
     if (!ok) {
       await audit(ctx, undefined, userId, "role-change-blocked", `Role change blocked: incorrect admin password`);
       throw new Error("Incorrect admin password. Enter your current access password to change roles.");
     }
-    // Server-side guards: the protected Owner account can never be
-    // downgraded/replaced, and no Owner can be granted here.
-    await guardOwnerAccount(ctx, userId, role);
+    // The Owner account is permanently the Owner account: re-check right
+    // before the write so no earlier read can be used to slip past the guard.
+    const fresh = await ctx.db.get(userId);
+    if (!fresh) throw new Error("User not found.");
+    if (isOwnerAccount(fresh) || isDesignatedOwnerEmail(fresh.email)) {
+      await audit(ctx, undefined, userId, "role-change-blocked", `Role change blocked: the Owner account is permanent`);
+      throw new Error(
+        "The Owner account is permanent — it cannot be changed to another role.",
+      );
+    }
     await ctx.db.patch(userId, { role });
     await notify(ctx, {
       userId,
@@ -377,14 +396,14 @@ export const promoteToOwner = mutation({
   },
   handler: async (ctx, { userId, token, accessPassword }) => {
     await requireAdminSession(ctx, token);
+    const target = await ctx.db.get(userId);
+    if (!target) throw new Error("User not found.");
+    if (isOwnerAccount(target)) return true; // already Owner — no-op
     const ok = await verifyAccessPasswordValue(ctx, accessPassword);
     if (!ok) {
       await audit(ctx, undefined, userId, "owner-promote-blocked", "Owner promotion blocked: incorrect admin password");
       throw new Error("Incorrect admin password. Enter your current access password to promote an Owner.");
     }
-    const target = await ctx.db.get(userId);
-    if (!target) throw new Error("User not found.");
-    if (isOwnerAccount(target)) return true; // already Owner — no-op
     if (target.isSeed) {
       throw new Error("Seeded demo accounts cannot become the Owner.");
     }
@@ -562,6 +581,11 @@ export const mergeDuplicateAccounts = mutation({
     const keeper = await ctx.db.get(keeperId);
     const duplicate = await ctx.db.get(duplicateId);
     if (!keeper || !duplicate) throw new Error("Account not found.");
+    // The permanent Owner account can never be merged away — merging deletes
+    // the duplicate row, so it is treated exactly like a delete here.
+    if (isOwnerAccount(duplicate) || isDesignatedOwnerEmail(duplicate.email)) {
+      throw new Error("The Owner account cannot be merged into another account.");
+    }
     const kEmail = (keeper.email ?? "").trim().toLowerCase();
     const dEmail = (duplicate.email ?? "").trim().toLowerCase();
     if (!kEmail || kEmail !== dEmail) {
@@ -667,9 +691,13 @@ export const mergeDuplicateAccounts = mutation({
       .collect();
     for (const c of courses) await ctx.db.patch(c._id, { tutorId: keeperId });
 
-    // Promote the keeper if the duplicate was the privileged account
+    // Promote the keeper if the duplicate was the privileged account. The
+    // protected Owner account keeps its role unconditionally.
     const keeperRole = keeper.role ?? "student";
+    const keeperIsProtected =
+      isOwnerAccount(keeper) || isDesignatedOwnerEmail(keeper.email);
     if (
+      !keeperIsProtected &&
       duplicate.role === ROLES.TUTOR &&
       (keeperRole !== ROLES.TUTOR || (!keeper.verified && duplicate.verified))
     ) {
@@ -1050,8 +1078,12 @@ export const reviewTutorApplication = mutation({
             i += 1;
           }
         }
+        // The permanent Owner account never takes the tutor role — approving
+        // its application must not silently demote the platform Owner.
+        const protectedOwner =
+          isOwnerAccount(user) || isDesignatedOwnerEmail(user.email);
         await ctx.db.patch(tutorId, {
-          role: ROLES.TUTOR,
+          ...(protectedOwner ? {} : { role: ROLES.TUTOR }),
           verified: nextVerified,
           name: user.name || app.fullName,
           headline: user.headline || app.professionalTitle,

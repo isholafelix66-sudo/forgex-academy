@@ -33,6 +33,7 @@ import { Input } from "@/components/ui/input";
 import { AppShell } from "@/components/dash/AppShell";
 import { clearAdminToken, getAdminToken, setAdminToken } from "@/lib/admin-session";
 import { toast } from "sonner";
+import { friendlyError } from "@/lib/errors";
 
 /** Password gate — /admin is reachable only with the admin access password.
  *  No user account is required: the password mints a session token. */
@@ -51,7 +52,7 @@ function AdminGate({ onUnlocked }: { onUnlocked: (token: string) => void }) {
       const { token } = await verify({ password, label: deviceLabel() });
       onUnlocked(token);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Incorrect password.");
+      setError(friendlyError(err, "Incorrect password."));
       setLoading(false);
     }
   };

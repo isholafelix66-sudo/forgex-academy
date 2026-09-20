@@ -184,7 +184,9 @@ export async function guardOwnerAccount(
   //    its role changed by anyone other than the Owner's own session.
   if (isOwnerAccount(user) || isDesignatedOwnerEmail(user.email)) {
     throw new Error(
-      "The Owner account is protected. Owner-level security actions must be performed from the Owner's Security section.",
+      nextRole !== undefined && nextRole !== ROLES.OWNER
+        ? "The Owner account is permanent — it cannot be changed to another role, even with the admin password."
+        : "The Owner account is protected. Owner-level security actions must be performed from the Owner's Security section.",
     );
   }
 

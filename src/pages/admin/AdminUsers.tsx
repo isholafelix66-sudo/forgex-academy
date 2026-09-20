@@ -10,6 +10,7 @@ import {
   FlaskConical,
   GraduationCap,
   KeyRound,
+  Lock,
   LogOut,
   RotateCcw,
   Search,
@@ -40,6 +41,7 @@ import {
 import { PageHeader } from "@/components/dash/PageHeader";
 import { Avatar } from "@/components/site/Avatar";
 import { cn } from "@/lib/utils";
+import { friendlyError } from "@/lib/errors";
 import { formatDateShort, timeAgo } from "@/lib/format";
 import { getAdminToken } from "@/lib/admin-session";
 
@@ -94,6 +96,15 @@ export default function AdminUsers() {
   /** Confirm a role change with the admin password (Owner uses promoteToOwner). */
   const confirmRoleChange = async () => {
     if (!roleChange) return;
+    // The Owner account's role is permanent — never even ask for a password.
+    if (roleChange.user.isProtectedOwner) {
+      setRoleChange(null);
+      setRolePassword("");
+      toast.error(
+        "The Owner account is permanent — it cannot be changed to another role.",
+      );
+      return;
+    }
     setRoleBusy(true);
     try {
       if (roleChange.nextRole === "owner") {
@@ -113,7 +124,7 @@ export default function AdminUsers() {
       setRoleChange(null);
       setRolePassword("");
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Could not update the role.");
+      toast.error(friendlyError(err, "Could not update the role."));
     } finally {
       setRoleBusy(false);
     }
@@ -130,7 +141,7 @@ export default function AdminUsers() {
       );
       setSigningOut(null);
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Could not sign out the account.");
+      toast.error(friendlyError(err, "Could not sign out the account."));
     } finally {
       setRoleBusy(false);
     }
@@ -261,7 +272,7 @@ export default function AdminUsers() {
                       <Ban className="size-3" /> Suspended
                     </span>
                   )}
-                  {u.role === "owner" ? (
+                  {u.isProtectedOwner ? (
                     <span className="inline-flex items-center gap-1 rounded-full bg-lime-400 px-2 py-0.5 text-[10px] font-bold text-black">
                       <Crown className="size-3" /> Owner
                     </span>
@@ -286,24 +297,35 @@ export default function AdminUsers() {
                 <Button variant="ghost" size="sm" className="gap-1.5" onClick={() => setViewing(u)}>
                   <Eye className="size-3.5" /> View
                 </Button>
-                <select
-                  value={u.role}
-                  onChange={(e) => {
-                    const nextRole = e.target.value as "owner" | "admin" | "tutor" | "student";
-                    if (nextRole === u.role) return;
-                    setRoleChange({ user: u, nextRole });
-                    e.target.value = u.role;
-                  }}
-                  className={cn(
-                    "h-9 rounded-lg border border-white/10 bg-black/20 px-2.5 text-xs outline-none",
-                    (u.role === "admin" || u.role === "owner") && "text-lime-300",
-                  )}
-                >
-                  <option value="student">Student</option>
-                  <option value="tutor">Tutor</option>
-                  <option value="admin">Admin</option>
-                  <option value="owner">Owner</option>
-                </select>
+                {u.isProtectedOwner ? (
+                  /* The Owner role is permanent — no role picker is offered,
+                     because the backend refuses the change regardless. */
+                  <span
+                    className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-lime-400/30 bg-lime-400/10 px-2.5 text-xs font-semibold text-lime-300"
+                    title="The Owner role is permanent — it cannot be changed to another role, even with the admin password."
+                  >
+                    <Lock className="size-3.5" /> Owner (locked)
+                  </span>
+                ) : (
+                  <select
+                    value={u.role}
+                    onChange={(e) => {
+                      const nextRole = e.target.value as "owner" | "admin" | "tutor" | "student";
+                      if (nextRole === u.role) return;
+                      setRoleChange({ user: u, nextRole });
+                      e.target.value = u.role;
+                    }}
+                    className={cn(
+                      "h-9 rounded-lg border border-white/10 bg-black/20 px-2.5 text-xs outline-none",
+                      (u.role === "admin" || u.role === "owner") && "text-lime-300",
+                    )}
+                  >
+                    <option value="student">Student</option>
+                    <option value="tutor">Tutor</option>
+                    <option value="admin">Admin</option>
+                    <option value="owner">Owner</option>
+                  </select>
+                )}
                 {u.role === "tutor" && (
                   <Button
                     variant="outline"
@@ -337,7 +359,7 @@ export default function AdminUsers() {
                     {u.featuredOnHomepage ? "★ Homepage" : "Homepage"}
                   </Button>
                 )}
-                {u.role === "owner" ? null : u.suspended ? (
+                {u.isProtectedOwner ? null : u.suspended ? (
                   <Button
                     variant="outline"
                     size="sm"
@@ -356,7 +378,7 @@ export default function AdminUsers() {
                     <Ban className="size-3.5" /> Suspend
                   </Button>
                 )}
-                {u.role !== "owner" && (
+                {!u.isProtectedOwner && (
                   <Button
                     variant="ghost"
                     size="sm"
@@ -367,7 +389,7 @@ export default function AdminUsers() {
                     <LogOut className="size-3.5" /> Sign out
                   </Button>
                 )}
-                {u.role !== "owner" && (
+                {!u.isProtectedOwner && (
                   <Button
                     variant="ghost"
                     size="icon"

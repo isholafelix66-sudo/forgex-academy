@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { useQuery, useMutation, useConvexAuth } from "convex/react";
 import { api } from "@/convex/_generated/api";
+import { friendlyError } from "@/lib/errors";
 import { useAuth } from "@/hooks/use-auth";
 import {
   Loader2,
@@ -107,7 +108,7 @@ function TeamAccessPanel() {
       toast.success("Team role assigned successfully");
       setEditingId(null);
     } catch (err: any) {
-      toast.error(err?.message || "Failed to assign role");
+      toast.error(friendlyError(err, "Failed to assign role"));
     } finally { setSaving(false); }
   };
 
@@ -118,7 +119,7 @@ function TeamAccessPanel() {
       toast.success("Team role removed");
       setEditingId(null);
     } catch (err: any) {
-      toast.error(err?.message || "Failed to remove role");
+      toast.error(friendlyError(err, "Failed to remove role"));
     } finally { setSaving(false); }
   };
 
@@ -388,7 +389,7 @@ function AdminMessagesPanel() {
     try {
       await sendConvMsg({ conversationId: selectedId as any, body: newMsg.trim() });
       setNewMsg("");
-    } catch (err: any) { toast.error(err.message); }
+    } catch (err) { toast.error(friendlyError(err, "Something went wrong.")); }
   };
 
   const handleStartConversation = async () => {
@@ -405,7 +406,7 @@ function AdminMessagesPanel() {
       setRecipientId(null);
       setConvSubject("");
       setSearchUser("");
-    } catch (err: any) { toast.error(err.message); }
+    } catch (err) { toast.error(friendlyError(err, "Something went wrong.")); }
   };
 
   if (!isAuthenticated) {
