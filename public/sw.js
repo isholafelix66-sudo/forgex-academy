@@ -23,8 +23,18 @@
  * v5: never cache dev-server source modules (see the fetch handler) — those
  *     URLs are not content-hashed, so stale-while-revalidate served the OLD
  *     bundle for a page load and brand-new UI simply appeared to be missing.
+ * v6: never cache or serve a DEV document. A dev-server HTML page embeds
+ *     module URLs (`?html-proxy&index=N.js`, `/@vite/…`) that only exist
+ *     inside the Vite process that produced them; once the server restarts,
+ *     the cached shell requests dead URLs and the server answers with
+ *     "No matching HTML proxy module found". Dev no longer registers a
+ *     worker at all, and this version refuses to replay dev documents even
+ *     if an older worker is still installed.
  */
-const VERSION = "forgex-shell-v5";
+const VERSION = "forgex-shell-v6";
+
+/** Dev-server documents (Vite proxy/wrapper URLs) must never be cached. */
+const DEV_DOCUMENT_RE = /html-proxy|\/@vite\/|\/@react-refresh/;
 const SHELL_CACHE = `${VERSION}-shell`;
 const FONT_CACHE = `${VERSION}-fonts`;
 
@@ -125,23 +135,39 @@ async function networkFirstNavigation(request) {
   if (fresh && fresh.ok) {
     // Success: return the fresh page. Cache it in the background, but a
     // cache failure must never downgrade this to the stale shell (which
-    // references old hashed chunks and breaks after a deploy).
-    await safeCachePut(cache, request, fresh);
-    await safeCachePut(cache, "/index.html", fresh);
+    // references old hashed chunks and breaks after a deploy). A dev-server
+    // document is served but never stored — its module URLs are bound to the
+    // running Vite process and are meaningless once it restarts.
+    if (!(await isDevDocument(fresh))) {
+      await safeCachePut(cache, request, fresh);
+      await safeCachePut(cache, "/index.html", fresh);
+    }
     return fresh;
   }
 
   // Network genuinely failed (offline / 5xx) — fall back to the last good
-  // shell so the SPA still boots.
+  // shell so the SPA still boots. Dev documents are skipped: replaying one
+  // sends the browser after module URLs the server no longer has.
   try {
     const cached = await cache.match(request, { ignoreSearch: true });
-    if (cached) return cached;
+    if (cached && !(await isDevDocument(cached))) return cached;
     const shell = await cache.match("/index.html");
-    if (shell) return shell;
+    if (shell && !(await isDevDocument(shell))) return shell;
   } catch {
     // cache API unavailable — nothing to fall back to
   }
   return fresh || Response.error();
+}
+
+/** True when a response body is a dev-server (Vite) document. Failures to
+ *  read the body are treated as production so ordinary pages are unaffected. */
+async function isDevDocument(response) {
+  try {
+    const text = await response.clone().text();
+    return DEV_DOCUMENT_RE.test(text);
+  } catch {
+    return false;
+  }
 }
 
 async function staleWhileRevalidate(request, cacheName) {
