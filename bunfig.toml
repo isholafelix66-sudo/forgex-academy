@@ -1,21 +1,25 @@
 # Bun package-manager configuration.
 #
-# Context: the deploy build container runs on a single virtiofs mount, where
-# bun's default `--backend=hardlink` materialization intermittently fails
-# part-way through a cold install:
+# Two failure modes hit the deploy build's install step here:
 #
-#   FileNotFound: failed copying files from cache to destination for package X
-#   Failed to install N packages            (bun exits 1 -> the build aborts)
+#   1. bun 1.3.x could read a download-cache entry while another bun process was
+#      rewriting it, which surfaced as a random handful of
 #
-# The install step itself is what fixes that: "installCommand" in vercel.json
-# runs scripts/install-deps.mjs, which installs with `--backend=copyfile`
-# (plain copies, no hardlinks) and only exits 0 once the tree is verified
-# complete. `--backend` has no bunfig equivalent — every bunfig spelling still
-# hardlinks — so it must be passed on the command line.
+#        FileNotFound: failed copying files from cache to destination for package X
+#        Failed to install N packages            (bun exits 1 -> the build aborts)
 #
-# This file keeps bun's download cache OUT of the workspace so a from-scratch
-# node_modules rebuild in the install step never discards it, and so no cache
-# state is ever carried inside the synced tree. It is content-addressed; a
-# cold container simply repopulates it.
+#      (oven-sh/bun#37830 — fixed in bun 1.4.0). package.json therefore pins
+#      `packageManager: "bun@1.4.2"`, and scripts/install-deps.mjs (run by
+#      vercel.json's installCommand) additionally gives its own install a
+#      private cache and installs with `--backend=copyfile` so it never shares
+#      a cache and never materializes by hardlink. `--backend` has no bunfig
+#      equivalent — every bunfig spelling still hardlinks — so it must be
+#      passed on the command line.
+#
+#   2. Keeping the cache inside the workspace meant `node_modules` churn was
+#      carried through the synced tree.
+#
+# This file keeps bun's download cache OUT of the workspace. It is
+# content-addressed, so a cold container simply repopulates it.
 [install.cache]
 dir = "/tmp/forgex-bun-cache"
