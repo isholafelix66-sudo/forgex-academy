@@ -34,8 +34,8 @@ export function RequireTeam({ children }: { children: ReactNode }) {
     );
   }
 
-  // Admins bypass team membership check
-  if (user?.role === "admin") {
+  // Admins (and the Owner) bypass team membership check
+  if (user?.role === "admin" || user?.role === "owner") {
     return children;
   }
 

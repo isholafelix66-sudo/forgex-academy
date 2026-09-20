@@ -59,6 +59,15 @@ export function AppShell({
   const identityImage = user?.image ?? (isAdmin ? adminProfile.image : undefined);
   const identityRole = user?.role ?? (isAdmin ? adminProfile.title || "admin" : "guest");
 
+  // Where the profile logo points. The password-gated Admin Dashboard has no
+  // user account, so its avatar must open the Admin profile settings
+  // (/admin/profile) — without this it rendered as a dead, unclickable logo.
+  const profileLink = isAdmin
+    ? "/admin/profile"
+    : hasAccount
+      ? "/dashboard/profile"
+      : null;
+
   const handleSignOut = async () => {
     await signOut();
     navigate("/");
@@ -159,7 +168,13 @@ export function AppShell({
 
       <div className="border-t border-white/8 p-3">
         <div className="flex items-center gap-3 rounded-xl px-2 py-2">
-          <Avatar name={identityName} image={identityImage} className="size-9" />
+          {profileLink ? (
+            <Link to={profileLink} title="Profile settings" aria-label="Profile settings">
+              <Avatar name={identityName} image={identityImage} className="size-9" />
+            </Link>
+          ) : (
+            <Avatar name={identityName} image={identityImage} className="size-9" />
+          )}
           <div className="min-w-0 flex-1">
             <p className="truncate text-sm font-semibold">{identityName}</p>
             <p className="truncate text-xs capitalize text-muted-foreground">
@@ -205,8 +220,8 @@ export function AppShell({
             {/* roleLink intentionally NOT duplicated in the header — the
                 sidebar (≥768px) is the single source for dashboard links, so
                 desktop never shows the same Dashboard link twice. */}
-            {hasAccount ? (
-              <Link to="/dashboard/profile">
+            {profileLink ? (
+              <Link to={profileLink} title="Profile settings" aria-label="Profile settings">
                 <Avatar name={identityName} image={identityImage} className="size-9" />
               </Link>
             ) : (

@@ -2,7 +2,7 @@ import { internal } from "./_generated/api";
 import { mutation, query, MutationCtx } from "./_generated/server";
 import { Doc, Id } from "./_generated/dataModel";
 import { v } from "convex/values";
-import { displayName, guardOwnerAccount, hydrateCourse, hydrateCourses, notify, publicUser, requireAdminSession, slugify } from "./lib";
+import { displayName, guardOwnerAccount, hydrateCourse, hydrateCourses, isDesignatedOwnerEmail, isOwnerAccount, notify, OWNER_ACCOUNT_EMAIL, publicUser, requireAdminSession, slugify } from "./lib";
 import { difficultyValidator, ROLES, roleValidator, questionValidator, assignmentQuestionValidator, resourceValidator } from "./schema";
 import { messagePreview } from "./messages";
 import { recordDeletedCatalogSlug } from "./aiCourseSeed";
@@ -384,9 +384,23 @@ export const promoteToOwner = mutation({
     }
     const target = await ctx.db.get(userId);
     if (!target) throw new Error("User not found.");
-    if (target.role === ROLES.OWNER) return true; // already Owner — no-op
+    if (isOwnerAccount(target)) return true; // already Owner — no-op
     if (target.isSeed) {
       throw new Error("Seeded demo accounts cannot become the Owner.");
+    }
+    // The permanent Owner account is fixed to OWNER_ACCOUNT_EMAIL. While that
+    // account exists the Owner role cannot be transferred elsewhere, so Owner
+    // privileges can never be moved off the designated account.
+    if (!isDesignatedOwnerEmail(target.email)) {
+      const designated = await ctx.db
+        .query("users")
+        .withIndex("email", (q) => q.eq("email", OWNER_ACCOUNT_EMAIL))
+        .first();
+      if (designated && !designated.isSeed) {
+        throw new Error(
+          `The Owner account is permanently set to ${OWNER_ACCOUNT_EMAIL} — Owner privileges cannot be transferred.`,
+        );
+      }
     }
 
     // Demote any existing Owner (there can be only one) to plain admin.
@@ -433,7 +447,7 @@ export const forceSignOutUser = mutation({
     const target = await ctx.db.get(userId);
     if (!target) throw new Error("User not found.");
     // Server-side Owner protection — mirrors guardOwnerAccount for sign-outs.
-    if (target.role === ROLES.OWNER) {
+    if (isOwnerAccount(target) || isDesignatedOwnerEmail(target.email)) {
       throw new Error("The Owner account cannot be signed out remotely.");
     }
     const sessions = await ctx.db

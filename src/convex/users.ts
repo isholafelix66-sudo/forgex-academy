@@ -3,9 +3,23 @@ import { internal } from "./_generated/api";
 import { internalQuery, mutation, query, QueryCtx } from "./_generated/server";
 import { v } from "convex/values";
 import { ROLES, socialsValidator } from "./schema";
-import { checkRateLimit, displayName, hasRealName, notify, publicUser, requireUser, requireUserDoc } from "./lib";
+import {
+  checkRateLimit,
+  displayName,
+  hasRealName,
+  isDesignatedOwnerEmail,
+  notify,
+  publicUser,
+  requireUser,
+  requireUserDoc,
+  syncOwnerAccount,
+} from "./lib";
 import { welcomeEmail } from "./emailTemplates";
 import { deleteUserData } from "./admin";
+
+/** Best-effort email of a user doc (auth tables type the field loosely). */
+const emailOf = (u: { email?: unknown }): string =>
+  typeof u.email === "string" ? u.email : "";
 
 /**
  * Get the current signed in user. Returns null if the user is not signed in.
@@ -93,6 +107,15 @@ export const presenceHeartbeat = mutation({
       patch.name = undefined;
     }
     await ctx.db.patch(userId, patch);
+    // The permanent Owner account is kept in sync on the app heartbeat, so
+    // signing in is enough to be crowned Owner — no admin action needed.
+    if (user && isDesignatedOwnerEmail(user.email)) {
+      try {
+        await syncOwnerAccount(ctx);
+      } catch {
+        // Presence must never fail because of owner reconciliation.
+      }
+    }
     return true;
   },
 });
@@ -169,8 +192,9 @@ export const initializeUser = mutation({
         .query("tutorApplications")
         .withIndex("by_user", (q) => q.eq("userId", user._id))
         .first());
-      patch.role =
-        intendedRole === "tutor" || hasApplication
+      patch.role = isDesignatedOwnerEmail(emailOf(user))
+        ? ROLES.OWNER
+        : intendedRole === "tutor" || hasApplication
           ? ROLES.TUTOR
           : ROLES.STUDENT;
     }
@@ -179,7 +203,7 @@ export const initializeUser = mutation({
     // A call with no name never resurrects the auth provider's email-derived
     // placeholder ("adedoyinaadedokun"); any such placeholder is cleared now
     // so the name popup prompts for the real thing on a fresh account.
-    const email = "email" in user ? String(user.email ?? "") : "";
+    const email = emailOf(user);
     const trimmed = name?.trim();
     if (trimmed) {
       patch.name = trimmed.slice(0, 80);
@@ -209,6 +233,11 @@ export const initializeUser = mutation({
     }
     if (Object.keys(patch).length > 0) {
       await ctx.db.patch(user._id, patch);
+    }
+    // Owner account reconciliation: crown the designated Owner and demote any
+    // stray Owner, so exactly one Owner exists and no admin action is needed.
+    if (isDesignatedOwnerEmail(emailOf(user))) {
+      await syncOwnerAccount(ctx);
     }
     return await ctx.db.get(user._id);
   },
@@ -424,6 +453,12 @@ export const deleteMyAccount = mutation({
     const userId = await requireUser(ctx);
     const user = await ctx.db.get(userId);
     if (!user) return false;
+    // The permanent Owner account can never be deleted — not even by itself.
+    if (isDesignatedOwnerEmail(emailOf(user))) {
+      throw new Error(
+        "The Owner account cannot be deleted. Transfer ownership from the Owner Security section instead.",
+      );
+    }
     // Tutors keep their application trail — only an admin may remove a tutor
     // account so verified tutors can never self-destruct mid-course.
     if (user.role === "tutor") {

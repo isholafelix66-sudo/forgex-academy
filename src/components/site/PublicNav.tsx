@@ -141,10 +141,15 @@ export function PublicNav() {
   const dashboardTo =
     user?.role === "tutor"
       ? "/tutor"
-      : user?.role === "admin"
+      : user?.role === "admin" || user?.role === "owner"
         ? "/admin"
         : "/dashboard";
-  const profileTo = user?.role === "tutor" ? "/tutor" : "/dashboard/profile";
+  const profileTo =
+    user?.role === "tutor"
+      ? "/tutor"
+      : user?.role === "admin" || user?.role === "owner"
+        ? "/admin/profile"
+        : "/dashboard/profile";
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 12);

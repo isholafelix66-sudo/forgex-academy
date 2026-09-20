@@ -120,7 +120,7 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
   const landingDest = useMemo(() => {
     if (authLoading || !isAuthenticated || !user) return null;
 
-    if (user?.role === "admin") return "/admin";
+    if (user?.role === "admin" || user?.role === "owner") return "/admin";
     return "/";
   }, [authLoading, isAuthenticated, user]);
 

@@ -11,6 +11,28 @@ import { ROLES, type Role } from "./schema";
 export const ADMIN_ACCESS_PASSWORD =
   process.env.ADMIN_ACCESS_PASSWORD ?? "Discovery";
 
+/**
+ * The permanent platform Owner account.
+ *
+ * This email IS the Owner: its user account is always synchronised to the
+ * `owner` role server-side, it can never be deleted, suspended, downgraded or
+ * signed out remotely from user management, and no other account can hold the
+ * Owner role while it exists. Override per-deployment with OWNER_ACCOUNT_EMAIL
+ * (e.g. in the Keys/API keys tab) without touching code.
+ */
+export const OWNER_ACCOUNT_EMAIL = (
+  process.env.OWNER_ACCOUNT_EMAIL ?? "isholafelix77@gmail.com"
+)
+  .trim()
+  .toLowerCase();
+
+/** True when an email belongs to the permanent Owner account. */
+export function isDesignatedOwnerEmail(
+  email: string | null | undefined,
+): boolean {
+  return !!email && email.trim().toLowerCase() === OWNER_ACCOUNT_EMAIL;
+}
+
 /** Throw if not signed in, otherwise return the user id. */
 export async function requireUser(
   ctx: QueryCtx | MutationCtx,
@@ -95,6 +117,52 @@ export function isOwnerAccount(
 }
 
 /**
+ * Server-side reconciliation of the permanent Owner account.
+ *
+ * Enforces two invariants with indexed lookups only (never a table scan):
+ *   1. every non-seed account with OWNER_ACCOUNT_EMAIL has role "owner"
+ *   2. no other account holds the "owner" role
+ *
+ * Called from mutations a signed-in user already triggers (first sign-in,
+ * app presence heartbeat), but only for the designated Owner themselves, so
+ * the Owner role is applied automatically with no admin action required.
+ * Returns true when anything changed.
+ */
+export async function syncOwnerAccount(ctx: MutationCtx): Promise<boolean> {
+  const designated = await ctx.db
+    .query("users")
+    .withIndex("email", (q) => q.eq("email", OWNER_ACCOUNT_EMAIL))
+    .collect();
+  const owners = await ctx.db
+    .query("users")
+    .withIndex("by_role", (q) => q.eq("role", ROLES.OWNER))
+    .collect();
+
+  const keep = new Set<string>();
+  for (const u of designated) {
+    if (!u.isSeed) keep.add(u._id);
+  }
+
+  let changed = false;
+  // Demote any stray Owner so exactly one Owner can ever exist.
+  for (const u of owners) {
+    if (!keep.has(u._id)) {
+      await ctx.db.patch(u._id, { role: ROLES.ADMIN });
+      changed = true;
+    }
+  }
+  // Crown the permanent Owner account.
+  for (const u of designated) {
+    if (u.isSeed) continue;
+    if (u.role !== ROLES.OWNER) {
+      await ctx.db.patch(u._id, { role: ROLES.OWNER });
+      changed = true;
+    }
+  }
+  return changed;
+}
+
+/**
  * Server-side guard for mutations that touch another account's role or
  * existence. The protected Owner account can never be:
  *  - deleted,
@@ -111,9 +179,10 @@ export async function guardOwnerAccount(
   const user = await ctx.db.get(userId);
   if (!user) throw new Error("User not found.");
 
-  // 1) The protected Owner account can never be deleted or have its role
-  //    changed by anyone other than the Owner's own session.
-  if (user.role === ROLES.OWNER) {
+  // 1) The protected Owner account — either the stored `owner` role or the
+  //    permanent OWNER_ACCOUNT_EMAIL — can never be deleted, suspended or have
+  //    its role changed by anyone other than the Owner's own session.
+  if (isOwnerAccount(user) || isDesignatedOwnerEmail(user.email)) {
     throw new Error(
       "The Owner account is protected. Owner-level security actions must be performed from the Owner's Security section.",
     );
@@ -124,7 +193,7 @@ export async function guardOwnerAccount(
   //    password), never by a plain role change.
   if (nextRole === ROLES.OWNER) {
     throw new Error(
-      "The Owner role cannot be assigned here. Use the Owner promotion flow (requires the current admin password).",
+      "The Owner role is permanent and belongs to the designated Owner account. It cannot be assigned here.",
     );
   }
   return user;

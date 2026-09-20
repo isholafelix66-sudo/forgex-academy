@@ -40,8 +40,8 @@ export function RequireTeamAuth({ children }: { children: ReactNode }) {
     );
   }
 
-  // Admins can access any team
-  if (user?.role === "admin") return <>{children}</>;
+  // Admins (and the Owner) can access any team
+  if (user?.role === "admin" || user?.role === "owner") return <>{children}</>;
 
   const teamRole = teamData?.teamRole;
 

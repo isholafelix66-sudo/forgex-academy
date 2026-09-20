@@ -180,7 +180,10 @@ const schema = defineSchema(
       teamRoleAssignedAt: v.optional(v.number()),
     })
       .index("email", ["email"])
-      .index("by_slug", ["slug"]),
+      .index("by_slug", ["slug"])
+      // Lets Owner-account reconciliation find the (at most one) Owner row
+      // with an indexed lookup instead of scanning the whole table.
+      .index("by_role", ["role"]),
 
     // -----------------------------------------------------------------------
     // Catalog

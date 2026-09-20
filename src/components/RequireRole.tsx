@@ -50,7 +50,9 @@ export function resolveTutorAccess(input: TutorAccessInput): TutorAccessState {
   // An authenticated verified tutor or admin user renders regardless of any
   // stale admin token they may be carrying.
   const isTutor = input.role === "tutor" && !!input.verified;
-  const isAdminUser = input.role === "admin";
+  // The Owner role is a superset of Admin — an Owner account behaves like an
+  // admin everywhere the frontend gates on the role.
+  const isAdminUser = input.role === "admin" || input.role === "owner";
   // Team members with academic or content roles can access the course builder
   const isTeamContentCreator = input.teamRole === "academic" || input.teamRole === "content";
   if (input.isAuthenticated && (isTutor || isAdminUser || isTeamContentCreator)) {
@@ -219,7 +221,7 @@ export function RequireAdmin({ children }: { children: ReactNode }) {
     );
   }
 
-  if (user?.role === "admin") return children;
+  if (user?.role === "admin" || user?.role === "owner") return children;
 
   return (
     <GateScreen
