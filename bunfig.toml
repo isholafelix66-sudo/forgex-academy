@@ -19,7 +19,24 @@
 #   2. Keeping the cache inside the workspace meant `node_modules` churn was
 #      carried through the synced tree.
 #
-# This file keeps bun's download cache OUT of the workspace. It is
-# content-addressed, so a cold container simply repopulates it.
+# Deploy hardening (2026-09): the deploy image runs a bare `bun install`
+# (1.3.14) that ignores the packageManager pin and the vercel installCommand —
+# its cache→node_modules hardlink materialization failed for ~520 packages on
+# the shared filesystem. bunfig.toml IS read by that bare install, so:
+#
+#   - `backend = "copyfile"` materializes node_modules with plain copies
+#     (the path that has never failed on this filesystem), and
+#   - `[install.cache] disable = true` removes the download cache from the
+#     equation entirely — with no cache there is no "copy from cache" step
+#     that can fail. Installs re-download from the registry, which is slower
+#     but immune to the concurrency bug.
+#
+# Local repair tooling (scripts/install-deps.mjs) is unaffected: its flags take
+# precedence and its own private cache lives outside bunfig.
+
+[install]
+backend = "copyfile"
+
 [install.cache]
+disable = true
 dir = "/tmp/forgex-bun-cache"
