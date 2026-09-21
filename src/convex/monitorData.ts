@@ -12,10 +12,11 @@
 import { v } from "convex/values";
 import { internalMutation, internalQuery, query, mutation, MutationCtx } from "./_generated/server";
 import { internal } from "./_generated/api";
-import { requireAdminSession } from "./lib";
+import { requireAdminSession, checkRateLimit } from "./lib";
 import {
   classifySeverity,
   fingerprintOf,
+  newRequestId,
   incidentIsFresh,
   ruleFor,
   securityKind,
@@ -674,6 +675,71 @@ export const recordAlert = internalMutation({
   },
 });
 
+/**
+ * Client (browser) error intake — public, rate-limited.
+ *
+ * The browser reports render errors / window errors / rejected promises here
+ * so frontend failures show up in the SAME error groups, incidents and health
+ * sweep as backend failures. Privacy rules match the backend: messages are
+ * truncated previews (stacks are stored as a bounded sample, never a full
+ * dump), and metadata is redacted. Anonymous pages are allowed — browser
+ * errors carry no identity unless the reporter supplies a userId.
+ */
+export const clientReportError = mutation({
+  args: {
+    message: v.string(),
+    module: v.optional(v.string()),
+    componentStack: v.optional(v.string()),
+    route: v.optional(v.string()),
+    userAgent: v.optional(v.string()),
+    userId: v.optional(v.id("users")),
+    fingerprintHint: v.optional(v.string()),
+    at: v.number(),
+  },
+  handler: async (ctx, args) => {
+    // Abuse guard: a broken client loop must not flood the log. 30 reports
+    // per browser session key per 5 minutes is far above any honest rate.
+    try {
+      await checkRateLimit(ctx, `client-error:${args.fingerprintHint ?? args.message.slice(0, 60)}`, 30, 5 * 60_000);
+    } catch {
+      return null;
+    }
+
+    const message = preview(args.message, 300);
+    const meta: Record<string, unknown> = {
+      client: true,
+      route: preview(args.route, 120),
+      userAgent: preview(args.userAgent, 160),
+      // First 6 frames of the component stack only — enough to locate the
+      // component, never the full user context.
+      componentStack: args.componentStack
+        ? args.componentStack.split("\n").slice(0, 6).join(" | ").slice(0, 300)
+        : undefined,
+    };
+
+    await ctx.runMutation(internal.monitorData.recordErrorWithDetection, {
+      kind: "error",
+      // "web" is a registered service in monitorCore.SERVICE_REGISTRY so
+      // client errors roll up into the Web application health row.
+      module: args.module ? args.module.slice(0, 40) : "web",
+      action: "client.render",
+      // fingerprintHint lets the client keep ONE group per error identity.
+      fingerprintOverride: args.fingerprintHint
+        ? fingerprintOf({ module: args.module ?? "web", action: "client.render", message: "", kind: "error" }) + "|" + args.fingerprintHint.slice(0, 80)
+        : undefined,
+      message,
+      severity: "low",
+      route: preview(args.route, 120),
+      userId: args.userId,
+      requestId: newRequestId(),
+      env: !!process.env.CONVEX_DEPLOYMENT ? "production" : "development",
+      meta,
+      at: args.at,
+    });
+    return true;
+  },
+});
+
 /** Record an activity row (from monitorActivity helper). */
 export const recordActivityRow = internalMutation({
   args: {
@@ -1321,5 +1387,44 @@ export const sweepServiceHealthInternal = internalMutation({
     }
     void rank;
     return evaluations.length;
+  },
+});
+
+// ---------------------------------------------------------------------------
+// Admin System nav badge + manual health re-check
+// ---------------------------------------------------------------------------
+
+/**
+ * Unresolved open/investigating incident count for the "System" nav badge.
+ * Deliberately cheap: two indexed takes, no scans.
+ */
+export const adminIncidentBadge = query({
+  args: SESSION_ARGS,
+  handler: async (ctx, { token }) => {
+    await requireAdminSession(ctx, token);
+    const open = await ctx.db
+      .query("monitorIncidents")
+      .withIndex("by_status_detected", (q) => q.eq("status", "open"))
+      .order("desc")
+      .take(50);
+    const investigating = await ctx.db
+      .query("monitorIncidents")
+      .withIndex("by_status_detected", (q) => q.eq("status", "investigating"))
+      .order("desc")
+      .take(50);
+    return open.length + investigating.length;
+  },
+});
+
+/**
+ * Admin-triggered health re-evaluation (the “Refresh status” button).
+ * Runs the same real-counter sweep the cron uses — no fake data.
+ */
+export const adminRunHealthSweep = mutation({
+  args: SESSION_ARGS,
+  handler: async (ctx, { token }) => {
+    await requireAdminSession(ctx, token);
+    await ctx.runMutation(internal.monitorData.sweepServiceHealthInternal, {});
+    return true;
   },
 });

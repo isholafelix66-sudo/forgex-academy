@@ -17,8 +17,13 @@ import {
   LayoutDashboard,
   ListChecks,
   Loader2,
+  Activity,
+  BellRing,
+  Bug,
+  History,
   Mail,
   Megaphone,
+  Siren,
   MessageCircle,
   MessageSquare,
   PenSquare,
@@ -133,6 +138,13 @@ export default function AdminShell() {
     api.admin.isAdminUnlocked,
     token ? { token } : "skip",
   );
+  // IMPORTANT: hooks must run unconditionally — the incident badge lives here
+  // (before the password gate early-returns) so lock/unlock transitions never
+  // change the hook order.
+  const incidentBadge = useQuery(
+    api.monitorData.adminIncidentBadge,
+    token && unlocked === true ? { token } : "skip",
+  );
 
   // IMPORTANT: gate every privileged subscription behind a *verified* session.
   // requireAdminSession THROWS for stale/expired tokens — if these queries ran
@@ -203,6 +215,13 @@ export default function AdminShell() {
 
   if (!unlocked) return <AdminGate onUnlocked={handleUnlocked} />;
 
+  const incidentCount =
+    typeof incidentBadge === "number" && incidentBadge > 0
+      ? incidentBadge > 99
+        ? "99+"
+        : String(incidentBadge)
+      : undefined;
+
   const pendingCount =
     (pendingApps?.filter((a) => a.status === "submitted" || a.status === "under-review").length ?? 0) +
     (pendingCourses?.length ?? 0);
@@ -232,6 +251,25 @@ export default function AdminShell() {
         { to: "/admin/ai-support", label: "AI Support", icon: <Bot className="size-4" /> },
         { to: "/admin/email-center", label: "Email Center", icon: <Mail className="size-4" /> },
         { to: "/tutor", label: "Tutor dashboard (preview)", icon: <GraduationCap className="size-4" /> },
+      ],
+    },
+    {
+      label: "System",
+      items: [
+        { to: "/admin/system", label: "System health", icon: <Activity className="size-4" /> },
+        { to: "/admin/system/errors", label: "Error tracking", icon: <Bug className="size-4" /> },
+        {
+          to: "/admin/system/incidents",
+          label: "Incidents",
+          icon: <Siren className="size-4" />,
+          badge: incidentCount ? (
+            <span className="rounded-full bg-rose-500 px-1.5 py-0.5 text-[10px] font-bold text-white">
+              {incidentCount}
+            </span>
+          ) : undefined,
+        },
+        { to: "/admin/system/activity", label: "Activity log", icon: <History className="size-4" /> },
+        { to: "/admin/system/alerts", label: "Alerts", icon: <BellRing className="size-4" /> },
       ],
     },
     {
@@ -292,6 +330,8 @@ export default function AdminShell() {
         { to: "/admin/teams", label: "Team Access", icon: <Users className="size-4" /> },
         { to: "/admin/ai-support", label: "AI Support", icon: <Bot className="size-4" /> },
         { to: "/admin/email-center", label: "Email Center", icon: <Mail className="size-4" /> },
+        { to: "/admin/system", label: "System health", icon: <Activity className="size-4" /> },
+        { to: "/admin/system/incidents", label: "Incidents", icon: <Siren className="size-4" /> },
       ],
     },
     {

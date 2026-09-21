@@ -26,6 +26,7 @@ import {
   isNetworkRelatedError,
   subscribeToRecoverySignals,
 } from "@/lib/network/recovery";
+import { reportClientError } from "@/lib/monitor-client";
 import { cn } from "@/lib/utils";
 
 
@@ -268,6 +269,11 @@ const AdminCoursePreview = L(() => import("./pages/admin/AdminCoursePreview.tsx"
 const AdminTeamManagement = L(() => import("./pages/admin/AdminTeamManagement.tsx"));
 const AdminAiSupport = L(() => import("./pages/admin/AdminAiSupport.tsx"));
 const AdminEmailCenter = L(() => import("./pages/admin/AdminEmailCenter.tsx"));
+const AdminSystemHealth = L(() => import("./pages/admin/AdminSystemHealth.tsx"));
+const AdminErrors = L(() => import("./pages/admin/AdminErrors.tsx"));
+const AdminIncidents = L(() => import("./pages/admin/AdminIncidents.tsx"));
+const AdminActivity = L(() => import("./pages/admin/AdminActivity.tsx"));
+const AdminAlertsPage = L(() => import("./pages/admin/AdminAlerts.tsx"));
 
 // Communication & Community module (admin moderation)
 const AdminCommunication = L(() => import("./pages/admin/AdminCommunication.tsx"));
@@ -376,6 +382,13 @@ class RootErrorBoundary extends React.Component<
       captureException(err, { componentStack: info?.componentStack });
     } catch (reportErr) {
       console.warn("[ForgeX] Could not report error to Sentry:", reportErr);
+    }
+    // Mirror into the ForgeX monitoring backend (same groups/incidents as
+    // backend errors) — fire-and-forget, never affects recovery.
+    try {
+      reportClientError({ error: err, module: "web", componentStack: info?.componentStack ?? undefined });
+    } catch {
+      /* monitoring must never throw */
     }
     this.setState({ network: isNetworkRelatedError(err) });
     // A stale-chunk error can never be fixed by re-rendering — only by
@@ -551,6 +564,11 @@ class RouteErrorBoundary extends React.Component<
     } catch (reportErr) {
       console.warn("[ForgeX] Could not report route error:", reportErr);
     }
+    try {
+      reportClientError({ error: err, module: "web", componentStack: info?.componentStack ?? undefined });
+    } catch {
+      /* monitoring must never throw */
+    }
     this.setState({ network: isNetworkRelatedError(err) });
     this.startAutoRecovery();
   }
@@ -722,6 +740,39 @@ function ensureBootFallback() {
 }
 window.addEventListener("error", ensureBootFallback);
 window.addEventListener("unhandledrejection", ensureBootFallback);
+
+// Monitoring: mirror uncaught window errors / promise rejections into the
+// ForgeX monitoring backend. Excludes chunk-load noise (handled by the deploy
+// safety nets above) and anything an error boundary already reported — the
+// server-side rate limit + client dedupe keep this bounded.
+window.addEventListener("error", (event) => {
+  const target = event?.target as HTMLImageElement | HTMLScriptElement | null;
+  // Resource-load failures (img/script) have a target — report those lightly;
+  // JS errors are reported through the boundaries, skip them here.
+  if (target && ("src" in target || "href" in target)) return;
+  const msg =
+    event?.error instanceof Error
+      ? event.error.message
+      : String(event?.message ?? "");
+  if (
+    /failed to fetch dynamically imported module|importing a module script|error loading dynamically imported module/i.test(
+      msg,
+    )
+  )
+    return;
+  reportClientError({ error: event?.error, message: event?.message, module: "web" });
+});
+window.addEventListener("unhandledrejection", (event) => {
+  const reason: unknown = event?.reason;
+  const msg = reason instanceof Error ? reason.message : String(reason ?? "");
+  if (
+    /failed to fetch dynamically imported module|importing a module script|error loading dynamically imported module/i.test(
+      msg,
+    )
+  )
+    return;
+  reportClientError({ error: reason, message: msg, module: "web" });
+});
 
 /**
  * Deploy-safety net #2: any *unhandled* stale-chunk failure (from code paths
@@ -1060,6 +1111,13 @@ createRoot(document.getElementById("root")!).render(
                 <Route path="teams" element={<AdminTeamManagement />} />
                 <Route path="ai-support" element={<AdminAiSupport />} />
                 <Route path="email-center" element={<AdminEmailCenter />} />
+
+                {/* System Health & monitoring */}
+                <Route path="system" element={<AdminSystemHealth />} />
+                <Route path="system/errors" element={<AdminErrors />} />
+                <Route path="system/incidents" element={<AdminIncidents />} />
+                <Route path="system/activity" element={<AdminActivity />} />
+                <Route path="system/alerts" element={<AdminAlertsPage />} />
               </Route>
             </Routes>
             </RouteBoundary>

@@ -20,6 +20,7 @@ import {
   guardedExternalCall,
   enforceUserLimit,
 } from "./resilienceGateway";
+import { monitorEvent as monitorEventA } from "./monitor";
 
 // ---------------------------------------------------------------------------
 // Provider config — mirrors aiSupport.ts / quizgen.ts priority order
@@ -119,7 +120,7 @@ export const transcribeVoice = action({
     // Speech validation happens here: short clips (even a single word) are
     // accepted — only audio where Whisper detects no actual speech is rejected.
     if (!text) {
-      void monitorEventM(ctx, {
+      void monitorEventA(ctx, {
         userId,
         module: "ai-voice",
         action: "transcribe",
@@ -133,7 +134,7 @@ export const transcribeVoice = action({
     }
     // Monitoring: successful transcription (latency only, NEVER the audio or
     // transcript content — privacy rule).
-    void monitorEventM(ctx, {
+    void monitorEventA(ctx, {
       userId,
       module: "ai-voice",
       action: "transcribe",
@@ -145,7 +146,7 @@ export const transcribeVoice = action({
     } catch (err) {
       // Real provider failures reach the user as a friendly message; record
       // the true failure first so incidents can fire.
-      void monitorEventM(ctx, {
+      void monitorEventA(ctx, {
         userId,
         module: "ai-voice",
         action: "transcribe",
