@@ -16,6 +16,7 @@ import {
 } from "./lib";
 import { welcomeEmail } from "./emailTemplates";
 import { deleteUserData } from "./admin";
+import { monitorActivityM, monitorErrorM } from "./monitorMutation";
 
 /** Best-effort email of a user doc (auth tables type the field loosely). */
 const emailOf = (u: { email?: unknown }): string =>
@@ -182,7 +183,8 @@ export const initializeUser = mutation({
     ),
   },
   handler: async (ctx, { name, intendedRole }) => {
-    const user = await requireUserDoc(ctx);
+    try {
+      const user = await requireUserDoc(ctx);
     await checkRateLimit(ctx, `profile:${user._id}`, 60, 60 * 60 * 1000);
     const patch: Record<string, unknown> = {};
     if (!user.role) {
@@ -233,13 +235,49 @@ export const initializeUser = mutation({
     }
     if (Object.keys(patch).length > 0) {
       await ctx.db.patch(user._id, patch);
+      // Monitoring: profile updates (metadata only — never field values).
+      void monitorActivityM(ctx, {
+        userId: user._id,
+        action: "profile.updated",
+        module: "profile",
+        resourceType: "user",
+        resourceId: user._id,
+        detail: `fields: ${Object.keys(patch).join(", ").slice(0, 120)}`,
+        route: "users:initializeUser",
+      });
     }
     // Owner account reconciliation: crown the designated Owner and demote any
     // stray Owner, so exactly one Owner exists and no admin action is needed.
     if (isDesignatedOwnerEmail(emailOf(user))) {
       await syncOwnerAccount(ctx);
     }
+    // Monitoring: first onboarding = registration activity.
+    if (!user.onboarded) {
+      void monitorActivityM(ctx, {
+        userId: user._id,
+        action: "user.registered",
+        module: "registration",
+        resourceType: "user",
+        resourceId: user._id,
+        route: "users:initializeUser",
+      });
+    }
+    void monitorActivityM(ctx, {
+      userId: user._id,
+      action: "user.session-initialized",
+      module: "auth",
+      route: "users:initializeUser",
+    });
     return await ctx.db.get(user._id);
+    } catch (err) {
+      void monitorErrorM(ctx, {
+        module: "registration",
+        action: "initialize",
+        error: err,
+        route: "users:initializeUser",
+      });
+      throw err;
+    }
   },
 });
 

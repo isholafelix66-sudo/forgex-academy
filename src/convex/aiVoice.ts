@@ -66,7 +66,9 @@ export const transcribeVoice = action({
     mimeType: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
+    const started = Date.now();
     const userId = await requireUser(ctx);
+    try {
 
     const base64 = args.audioBase64.includes(",")
       ? args.audioBase64.slice(args.audioBase64.indexOf(",") + 1)
@@ -117,11 +119,42 @@ export const transcribeVoice = action({
     // Speech validation happens here: short clips (even a single word) are
     // accepted — only audio where Whisper detects no actual speech is rejected.
     if (!text) {
+      void monitorEventM(ctx, {
+        userId,
+        module: "ai-voice",
+        action: "transcribe",
+        status: "failure",
+        message: "No speech detected in recording",
+        route: "aiVoice:transcribeVoice",
+      });
       throw new Error(
         "No speech was detected in that recording. Please try speaking a bit closer to the microphone, or type your message instead.",
       );
     }
+    // Monitoring: successful transcription (latency only, NEVER the audio or
+    // transcript content — privacy rule).
+    void monitorEventM(ctx, {
+      userId,
+      module: "ai-voice",
+      action: "transcribe",
+      status: "success",
+      latencyMs: Date.now() - started,
+      route: "aiVoice:transcribeVoice",
+    });
     return { text };
+    } catch (err) {
+      // Real provider failures reach the user as a friendly message; record
+      // the true failure first so incidents can fire.
+      void monitorEventM(ctx, {
+        userId,
+        module: "ai-voice",
+        action: "transcribe",
+        status: "failure",
+        error: err,
+        route: "aiVoice:transcribeVoice",
+      });
+      throw err;
+    }
   },
 });
 

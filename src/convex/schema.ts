@@ -1962,6 +1962,199 @@ const schema = defineSchema(
       maxRetries: v.number(), // default 3
       updatedAt: v.number(),
     }).index("by_key", ["key"]),
+
+    // -------------------------------------------------------------------
+    // Monitoring / observability (admin System Health center)
+    // Real data only: rows are created by actual application activity.
+    // Privacy: no passwords, tokens, message bodies or AI conversations --
+    // enforced by redaction in monitorCore.ts before any write here.
+    // -------------------------------------------------------------------
+
+    /** One row per distinct error fingerprint (an "error group"). */
+    monitorErrors: defineTable({
+      fingerprint: v.string(),
+      module: v.string(),
+      action: v.optional(v.string()),
+      kind: v.union(v.literal("error"), v.literal("security")),
+      severity: v.union(
+        v.literal("critical"),
+        v.literal("high"),
+        v.literal("medium"),
+        v.literal("low"),
+      ),
+      title: v.string(),
+      lastMessage: v.optional(v.string()),
+      sampleMeta: v.optional(v.any()),
+      occurrences: v.number(),
+      affectedUsers: v.optional(v.number()),
+      firstSeenAt: v.number(),
+      lastSeenAt: v.number(),
+      route: v.optional(v.string()),
+      requestId: v.optional(v.string()),
+      env: v.optional(v.string()),
+      resolvedAt: v.optional(v.number()),
+    })
+      .index("by_fingerprint", ["fingerprint"])
+      .index("by_lastSeen", ["lastSeenAt"])
+      .index("by_module_lastSeen", ["module", "lastSeenAt"])
+      .index("by_severity_lastSeen", ["severity", "lastSeenAt"]),
+
+    /** Individual occurrences (short-lived; pruned by retention cron). */
+    monitorOccurrences: defineTable({
+      fingerprint: v.string(),
+      module: v.string(),
+      severity: v.union(
+        v.literal("critical"),
+        v.literal("high"),
+        v.literal("medium"),
+        v.literal("low"),
+      ),
+      kind: v.union(v.literal("error"), v.literal("security")),
+      message: v.optional(v.string()),
+      meta: v.optional(v.any()),
+      userId: v.optional(v.id("users")),
+      route: v.optional(v.string()),
+      requestId: v.optional(v.string()),
+      env: v.optional(v.string()),
+      at: v.number(),
+    })
+      .index("by_fingerprint_at", ["fingerprint", "at"])
+      .index("by_at", ["at"])
+      .index("by_module_at", ["module", "at"]),
+
+    /** Auto-detected incidents (grouped, threshold-triggered). */
+    monitorIncidents: defineTable({
+      number: v.number(),
+      title: v.string(),
+      fingerprint: v.string(),
+      module: v.string(),
+      action: v.optional(v.string()),
+      severity: v.union(
+        v.literal("critical"),
+        v.literal("high"),
+        v.literal("medium"),
+        v.literal("low"),
+      ),
+      status: v.union(
+        v.literal("open"),
+        v.literal("investigating"),
+        v.literal("acknowledged"),
+        v.literal("resolved"),
+        v.literal("ignored"),
+      ),
+      ruleKey: v.string(),
+      occurrences: v.number(),
+      affectedUsers: v.optional(v.number()),
+      sampleMessage: v.optional(v.string()),
+      route: v.optional(v.string()),
+      firstSeenAt: v.number(),
+      lastSeenAt: v.number(),
+      detectedAt: v.number(),
+      resolvedAt: v.optional(v.number()),
+      updatedBy: v.optional(v.string()),
+      updatedAt: v.optional(v.number()),
+      resolvedBy: v.optional(v.string()),
+    })
+      .index("by_status_detected", ["status", "detectedAt"])
+      .index("by_fingerprint_status", ["fingerprint", "status"])
+      .index("by_detected", ["detectedAt"]),
+
+    /** Incident status timeline (who changed what, when). */
+    monitorIncidentEvents: defineTable({
+      incidentId: v.id("monitorIncidents"),
+      type: v.union(
+        v.literal("detected"),
+        v.literal("status"),
+        v.literal("note"),
+      ),
+      fromStatus: v.optional(v.string()),
+      toStatus: v.optional(v.string()),
+      by: v.optional(v.string()),
+      note: v.optional(v.string()),
+      at: v.number(),
+    }).index("by_incident_at", ["incidentId", "at"]),
+
+    /** Alert rules (admin-configurable) -- missing row = default behavior. */
+    monitorAlertRules: defineTable({
+      key: v.string(),
+      enabled: v.boolean(),
+      minSeverity: v.optional(
+        v.union(
+          v.literal("critical"),
+          v.literal("high"),
+          v.literal("medium"),
+          v.literal("low"),
+        ),
+      ),
+      cooldownMinutes: v.optional(v.number()),
+      updatedAt: v.optional(v.number()),
+    }).index("by_key", ["key"]),
+
+    /** One row per alert actually sent (dedupe + history). */
+    monitorAlerts: defineTable({
+      ruleKey: v.string(),
+      fingerprint: v.optional(v.string()),
+      incidentId: v.optional(v.id("monitorIncidents")),
+      severity: v.union(
+        v.literal("critical"),
+        v.literal("high"),
+        v.literal("medium"),
+        v.literal("low"),
+      ),
+      title: v.string(),
+      summary: v.optional(v.string()),
+      channel: v.union(v.literal("email"), v.literal("inapp")),
+      deliveredAt: v.number(),
+    }).index("by_delivered", ["deliveredAt"]),
+
+    /** Alert dedupe/cooldown state. */
+    monitorAlertState: defineTable({
+      key: v.string(),
+      lastSentAt: v.number(),
+    }).index("by_key", ["key"]),
+
+    /** Service health rollup -- written by the sweeper from REAL counters. */
+    monitorServiceHealth: defineTable({
+      serviceId: v.string(),
+      status: v.union(
+        v.literal("operational"),
+        v.literal("degraded"),
+        v.literal("down"),
+        v.literal("unknown"),
+      ),
+      ok: v.number(),
+      fail: v.number(),
+      latencyMs: v.optional(v.number()),
+      lastActivityAt: v.optional(v.number()),
+      recentFailures: v.number(),
+      evaluatedAt: v.number(),
+    }).index("by_service", ["serviceId"]),
+
+    /** Activity trail of IMPORTANT platform actions (user + admin). */
+    monitorActivity: defineTable({
+      userId: v.optional(v.id("users")),
+      actorLabel: v.optional(v.string()),
+      action: v.string(),
+      module: v.string(),
+      result: v.union(v.literal("success"), v.literal("failure")),
+      resourceType: v.optional(v.string()),
+      resourceId: v.optional(v.string()),
+      requestId: v.optional(v.string()),
+      route: v.optional(v.string()),
+      detail: v.optional(v.string()),
+      at: v.number(),
+    })
+      .index("by_at", ["at"])
+      .index("by_module_at", ["module", "at"])
+      .index("by_user_at", ["userId", "at"])
+      .index("by_action_at", ["action", "at"]),
+
+    /** Health check heartbeat (proves DB + writes are alive). */
+    monitorHeartbeats: defineTable({
+      source: v.string(),
+      latencyMs: v.optional(v.number()),
+      at: v.number(),
+    }).index("by_at", ["at"]),
   },
   {
     schemaValidation: false,

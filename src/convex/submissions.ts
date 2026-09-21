@@ -5,6 +5,7 @@ import type { Doc } from "./_generated/dataModel";
 import { checkRateLimit, notify, requireUser, requireUserDoc } from "./lib";
 import { resourceValidator } from "./schema";
 import { tryCompleteCourseInternal } from "./learn";
+import { monitorEventM, monitorActivityM, monitorErrorM } from "./monitorMutation";
 
 export const assignmentsByCourse = query({
   args: { courseId: v.id("courses") },
@@ -125,6 +126,8 @@ export const submitAssignment = mutation({
     ),
   },
   handler: async (ctx, { assignmentId, text, links, files, answers }) => {
+    const started = Date.now();
+    try {
     const user = await requireUserDoc(ctx);
     // Spam guard: max 20 assignment submissions per user per hour.
     await checkRateLimit(
@@ -167,6 +170,23 @@ export const submitAssignment = mutation({
         type: "submission",
         link: "/tutor",
       });
+      void monitorEventM(ctx, {
+        userId: user._id,
+        module: "assignments",
+        action: "submission",
+        status: "success",
+        latencyMs: Date.now() - started,
+        route: "submissions:submitAssignment",
+        meta: { assignmentId, resubmission: true },
+      });
+      void monitorActivityM(ctx, {
+        userId: user._id,
+        action: "assignment.resubmitted",
+        module: "assignments",
+        resourceType: "assignment",
+        resourceId: assignmentId,
+        route: "submissions:submitAssignment",
+      });
       return existing._id;
     }
     const id = await ctx.db.insert("submissions", {
@@ -194,7 +214,38 @@ export const submitAssignment = mutation({
     // Backend-authoritative completion: submitting a required assignment may
     // complete the course right here.
     await tryCompleteCourseInternal(ctx, user, assignment.courseId);
+    // Monitoring: successful submission.
+    void monitorEventM(ctx, {
+      userId: user._id,
+      module: "assignments",
+      action: "submission",
+      status: "success",
+      latencyMs: Date.now() - started,
+      route: "submissions:submitAssignment",
+      meta: { assignmentId },
+    });
+    void monitorActivityM(ctx, {
+      userId: user._id,
+      action: "assignment.submitted",
+      module: "assignments",
+      resourceType: "assignment",
+      resourceId: assignmentId,
+      detail: files.length ? `${files.length} file(s) attached` : undefined,
+      route: "submissions:submitAssignment",
+    });
     return id;
+    } catch (err) {
+      // Monitoring: failed submission — recorded, then the real error rethrown.
+      void monitorEventM(ctx, {
+        module: "assignments",
+        action: "submission",
+        status: "failure",
+        error: err,
+        route: "submissions:submitAssignment",
+        meta: { assignmentId },
+      });
+      throw err;
+    }
   },
 });
 
@@ -230,6 +281,14 @@ export const saveSubmittedFiles = mutation({
       })),
     );
     if (resolved.some((f) => !f.url)) {
+      void monitorErrorM(ctx, {
+        userId: user._id,
+        module: "uploads",
+        action: "resolve-submitted-file",
+        error: "The file couldn't be stored — please upload it again.",
+        route: "submissions:saveSubmittedFiles",
+        meta: { fileCount: files.length },
+      });
       throw new Error(
         "The file couldn't be stored — please upload it again.",
       );

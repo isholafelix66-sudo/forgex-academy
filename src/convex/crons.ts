@@ -15,6 +15,18 @@ crons.interval("resilience-process-jobs", { minutes: 5 }, internal.jobs.runDueJo
 crons.interval("resilience-cleanup", { minutes: 30 }, internal.jobs.cleanupResilience, {});
 
 // ---------------------------------------------------------------------------
+// Monitoring / System Health center: evaluate real service counters, retain
+// occurrence history, and prove the database+write path with a heartbeat.
+// Every job is a cheap no-op when there is nothing to do.
+// ---------------------------------------------------------------------------
+/** Re-evaluate per-service health from real counters (Errors, email, breakers). */
+crons.interval("monitor-health-sweep", { minutes: 5 }, internal.monitorData.sweepServiceHealthInternal, {});
+/** Heartbeat row — “database” service shows operational only when this lands. */
+crons.interval("monitor-heartbeat", { minutes: 5 }, internal.monitorData.heartbeatInternal, {});
+/** Prune old occurrences + heartbeats (real-data retention, 14 days). */
+crons.interval("monitor-retention", { hours: 6 }, internal.monitor.pruneOldOccurrences, {});
+
+// ---------------------------------------------------------------------------
 // Email queue + automations (extend the existing email system; every job is
 // a cheap no-op when there is nothing to do, and failures never crash the
 // platform — each trigger catches its own errors).

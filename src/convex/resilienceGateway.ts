@@ -20,6 +20,9 @@
 
 import { internal } from "./_generated/api";
 import { vly } from "../lib/vly-integrations";
+// Monitoring: AI operations feed the platform monitoring module so the admin
+// System Health dashboard can show real chat/quizgen/voice status + latency.
+import { monitorEvent } from "./monitor";
 // DB persistence lives in the V8 runtime (Convex only allows actions in node
 // files) — breaker state, monitoring logs and rate limiting all flow through
 // internal.resilienceData.*.
@@ -553,6 +556,51 @@ export async function gatewayChat(
     temperature?: number;
     maxTokens?: number;
     /** Operation label for monitoring, e.g. "support-chat". */
+    operation?: string;
+  },
+): Promise<GatewayChatResult> {
+  const startedAt = Date.now();
+  try {
+    const result = await gatewayChatInner(ctx, opts);
+    // Monitoring: success counters per AI module (real latency, no content).
+    void monitorEvent(ctx, {
+      module: monitorModuleFor(opts.operation ?? "chat"),
+      action: opts.operation ?? "chat",
+      status: "success",
+      latencyMs: Date.now() - startedAt,
+      route: `gateway:${result.provider}`,
+      meta: { provider: result.provider, fallbackUsed: result.fallbackUsed },
+    });
+    return result;
+  } catch (err) {
+    void monitorEvent(ctx, {
+      module: monitorModuleFor(opts.operation ?? "chat"),
+      action: opts.operation ?? "chat",
+      status: "failure",
+      error: err,
+      latencyMs: Date.now() - startedAt,
+      route: "gateway",
+      meta: { operation: opts.operation ?? "chat" },
+    });
+    throw err;
+  }
+}
+
+/** Map a gateway operation to its monitoring module. */
+function monitorModuleFor(operation: string): string {
+  if (operation.startsWith("support-chat")) return "ai-chat";
+  if (operation.includes("quiz")) return "ai-quizgen";
+  if (operation.includes("voice") || operation.includes("stt") || operation.includes("tts")) return "ai-voice";
+  return "ai-chat";
+}
+
+/** Inner implementation — the original failover chain. */
+async function gatewayChatInner(
+  ctx: Ctx,
+  opts: {
+    messages: ChatMessage[];
+    temperature?: number;
+    maxTokens?: number;
     operation?: string;
   },
 ): Promise<GatewayChatResult> {

@@ -3,6 +3,7 @@ import { mutation, query, MutationCtx, QueryCtx } from "./_generated/server";
 import { v } from "convex/values";
 import { Doc, Id } from "./_generated/dataModel";
 import { internal } from "./_generated/api";
+import { monitorEventM, monitorActivityM } from "./monitorMutation";
 import { checkRateLimit, requireUser, requireUserDoc, hydrateCourses, hydrateCourse, notify, yyyymmdd, makeCertificateId } from "./lib";
 import { addMembership, ensureCommunityForCourse } from "./community";
 import { enrollmentEmail, certificateEmail } from "./emailTemplates";
@@ -489,6 +490,8 @@ export const enrollmentStatus = query({
 export const enroll = mutation({
   args: { courseId: v.id("courses") },
   handler: async (ctx, { courseId }) => {
+    const started = Date.now();
+    try {
     const user = await requireUserDoc(ctx);
     // Abuse guard: max 60 learn actions (enroll / complete) per user per hour.
     await checkRateLimit(ctx, `learn:${user._id}`, 60, 60 * 60 * 1000);
@@ -548,7 +551,38 @@ export const enroll = mutation({
         emailType: "enrollment",
       });
     }
+    // Monitoring: successful enrollment (course title only — metadata).
+    void monitorEventM(ctx, {
+      userId: user._id,
+      module: "enrollment",
+      action: "enroll",
+      status: "success",
+      latencyMs: Date.now() - started,
+      route: "learn:enroll",
+      meta: { courseId },
+    });
+    void monitorActivityM(ctx, {
+      userId: user._id,
+      action: "course.enrolled",
+      module: "enrollment",
+      resourceType: "course",
+      resourceId: courseId,
+      detail: course.title.slice(0, 120),
+      route: "learn:enroll",
+    });
     return id;
+    } catch (err) {
+      // Monitoring: enrollment failure path (kept real: rethrow after record).
+      void monitorEventM(ctx, {
+        module: "enrollment",
+        action: "enroll",
+        status: "failure",
+        error: err,
+        route: "learn:enroll",
+        meta: { courseId },
+      });
+      throw err;
+    }
   },
 });
 
