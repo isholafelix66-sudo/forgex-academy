@@ -192,8 +192,31 @@ export function looksAccountSpecific(text: string): boolean {
   );
 }
 
+/**
+ * Deterministic, knowledge-base-grounded answer. Used only when every AI
+ * provider (including the platform fallback) is unavailable, so a guest still
+ * receives REAL help from the approved help centre instead of "try again".
+ * Returns null when nothing relevant was retrieved.
+ */
+function buildLocalKbReply(scored: Array<{ entry: KbEntry }>): string | null {
+  const top = scored[0]?.entry;
+  if (!top) return null;
+  const body = top.content.replace(/\s+/g, " ").trim().slice(0, 700);
+  return `${top.title}\n\n${body}\n\n(Automated answer from our help centre while live AI is briefly busy. For anything else, the Contact page reaches the support team.)`;
+}
+
 export const sendGuestAiMessage = action({
-  args: { text: v.string() },
+  args: {
+    text: v.string(),
+    /** Recent guest turns, oldest first — lets the assistant keep context
+     *  without an account. Length-capped server-side. */
+    history: v.optional(
+      v.array(v.object({ role: v.union(v.literal("user"), v.literal("ai")), body: v.string() })),
+    ),
+    /** Opaque per-browser id so the guest rate limit is per-visitor instead of
+     *  one shared quota for every guest on the platform. */
+    clientId: v.optional(v.string()),
+  },
   handler: async (ctx, args) => {
     // Guests are explicitly allowed here — no auth check by design.
     const cleanText = args.text.trim().slice(0, 2000);
@@ -210,8 +233,20 @@ export const sendGuestAiMessage = action({
       ? scored.map((s, i) => `[${i + 1}] (${s.entry.category}) ${s.entry.title}\n${s.entry.content}`).join("\n\n")
       : "(No directly matching knowledge base articles. Be honest about this and suggest the Contact page for human support if unsure.)";
 
-    // Stricter abuse protection than signed-in users (no identity to lean on).
-    await enforceUserLimit(ctx, "guest", "support-chat-guest", 6, 60_000);
+    // Keep prior guest turns as light context so follow-ups make sense.
+    const history: ChatMsg[] = (args.history ?? [])
+      .slice(-6)
+      .filter((m) => m.body?.trim())
+      .map((m) => ({
+        role: m.role === "user" ? ("user" as const) : ("assistant" as const),
+        content: m.body.slice(0, 600),
+      }));
+
+    // Stricter abuse protection than signed-in users (no identity to lean on):
+    // a per-visitor window plus a generous platform-wide safety net.
+    const visitor = (args.clientId ?? "").trim().slice(0, 64) || "anonymous";
+    await enforceUserLimit(ctx, visitor, "support-chat-guest", 8, 60_000);
+    await enforceUserLimit(ctx, "all-guests", "support-chat-guest-global", 180, 60_000);
 
     try {
       const result = await gatewayChat(ctx, {
@@ -219,6 +254,7 @@ export const sendGuestAiMessage = action({
         maxTokens: 1200,
         messages: [
           { role: "system", content: `${GUEST_SYSTEM_PROMPT}\n\nAPPROVED KNOWLEDGE BASE:\n${kbContext}` },
+          ...history,
           { role: "user", content: cleanText },
         ],
       });
@@ -227,15 +263,18 @@ export const sendGuestAiMessage = action({
         accountSpecific: looksAccountSpecific(cleanText),
       };
     } catch (err) {
-      // Gateway exhausted every provider — never surface technical errors.
-      // Guests have no ticket system (that needs an account), so point them
-      // at the Contact page escalation path.
+      // Gateway exhausted every provider AND the platform fallback — never
+      // surface technical errors. Guests have no ticket system (that needs an
+      // account), so answer from the knowledge base when possible and point
+      // them at the Contact page escalation path otherwise.
       const code = err instanceof GatewayUnavailableError ? err.code : "unknown_failure";
       console.warn(`[ForgeX] Guest support gateway unavailable (${code})`);
+      const local = buildLocalKbReply(scored);
       return {
         reply:
+          local ??
           "I'm having trouble reaching my knowledge base right now. The human support team can still help — please use the Contact page and they'll get back to you quickly. Or try again in a minute.",
-        accountSpecific: false,
+        accountSpecific: looksAccountSpecific(cleanText),
         gatewayDown: true,
       };
     }

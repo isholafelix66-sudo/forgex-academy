@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState } from "react";
-import { useLocation, useNavigate } from "react-router";
+import { Link, useLocation, useNavigate } from "react-router";
 import { useAction, useMutation, useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import { Bot, Loader2, Send, Sparkles, UserPlus, X } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { friendlyError } from "@/lib/errors";
 import { DraggableFab } from "./DraggableFab";
 import { useAuth } from "@/hooks/use-auth";
 
@@ -34,6 +35,23 @@ export function openAiAssistant() {
 type AiMessage = { role: "user" | "ai"; body: string };
 type GuestMessage = { role: "user" | "ai"; body: string };
 
+/** Stable per-browser id so the guest rate limit is per-visitor. */
+function guestClientId(): string {
+  if (typeof window === "undefined") return "anonymous";
+  try {
+    const existing = sessionStorage.getItem("forgex-ai-guest-id");
+    if (existing) return existing;
+    const id =
+      typeof crypto !== "undefined" && "randomUUID" in crypto
+        ? crypto.randomUUID()
+        : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    sessionStorage.setItem("forgex-ai-guest-id", id);
+    return id;
+  } catch {
+    return "anonymous";
+  }
+}
+
 export function AiSupportAssistant() {
   const [open, setOpen] = useState(false);
   const { pathname } = useLocation();
@@ -57,6 +75,11 @@ export function AiSupportAssistant() {
 
   // Guest-side transcript — in-memory only (no account to persist it to).
   const [guestMessages, setGuestMessages] = useState<GuestMessage[]>([]);
+  // Only shown when the AI said the question needs an account — guests are
+  // never nagged to sign in while asking general questions.
+  const [showSignInCta, setShowSignInCta] = useState(false);
+  // Created once per browser session (lazy initializer → no effect on render).
+  const [guestId] = useState(guestClientId);
 
   useEffect(() => {
     const existing = sessionStorage.getItem("forgex-ai-guest-messages");
@@ -118,37 +141,34 @@ export function AiSupportAssistant() {
 
   const startNewChat = () => {
     setGuestMessages([]);
+    setShowSignInCta(false);
     sessionStorage.removeItem("forgex-ai-guest-messages");
     setInput("");
     setSending(false);
-    void startSession().then((session) => {
-      void session;
-      setGuestMessages([
-        {
-          role: "ai",
-          body: "Welcome to the ForgeX AI Support Assistant. Ask me about courses, tutoring, certificates, scholarships, placements or anything related to the Academy. I can also help you find the right page.",
-        },
-      ]);
-      persistGuestMessages();
-    });
+    const greeting: GuestMessage = {
+      role: "ai",
+      body: "Welcome to the ForgeX AI Support Assistant. Ask me about courses, tutoring, certificates, scholarships, placements or anything related to the Academy. I can also help you find the right page.",
+    };
+    setGuestMessages([greeting]);
+    persistGuestMessages([greeting]);
+    if (isAuthenticated) void startSession();
   };
 
   const handleSend = async () => {
     const text = input.trim();
     if (!text || sending) return;
+    const prior = guestMessages;
     const userLine: GuestMessage = { role: "user", body: text };
-    setGuestMessages((prev) => {
-      const next = [...prev, userLine];
-      persistGuestMessages(next);
-      return next;
-    });
+    const next = [...prior, userLine];
+    setGuestMessages(next);
+    persistGuestMessages(next);
     setInput("");
     setSending(true);
 
     if (!isAuthenticated) {
-      void handleGuestSend(userLine);
+      await handleGuestSend(userLine, prior);
     } else {
-      void handleAiSend(userLine);
+      await handleAiSend(userLine);
     }
   };
 
@@ -161,24 +181,51 @@ export function AiSupportAssistant() {
     } catch {}
   };
 
-  const handleGuestSend = (userLine: GuestMessage) => {
-    setGuestMessages((prev) => {
-      const next = [
-        ...prev,
-        {
-          role: "ai",
-          body: "Sign in to get responses tied to your account and your learning progress.",
-        } as GuestMessage,
-        {
-          role: "ai",
-          body:
-            "You can always ask general questions as a guest, but signing in unlocks account-aware help, course progress context, and the ability to escalate to a human via the Contact page.",
-        } as GuestMessage,
-      ];
-      persistGuestMessages(next);
-      return next;
-    });
-    setSending(false);
+  /**
+   * Guest chat — actually answers from the assistant, no account required.
+   * Prior turns are sent along so follow-up questions keep their context.
+   * The Sign In CTA only appears when the AI flags the question as
+   * account-specific; general questions are answered fully either way.
+   */
+  const handleGuestSend = async (userLine: GuestMessage, prior: GuestMessage[]) => {
+    const append = (msg: GuestMessage) => {
+      setGuestMessages((prev) => {
+        const merged = [...prev, msg];
+        persistGuestMessages(merged);
+        return merged;
+      });
+    };
+    try {
+      const history = prior
+        .filter((m) => m.body?.trim())
+        .slice(-6)
+        .map((m) => ({ role: m.role, body: m.body.slice(0, 600) }));
+      const res = (await sendGuestAi({ text: userLine.body, history, clientId: guestId })) as {
+        reply?: string;
+        accountSpecific?: boolean;
+      };
+      const reply = res?.reply?.trim();
+      append({
+        role: "ai",
+        body:
+          reply ||
+          "I couldn't put together an answer for that. Please try rephrasing, or use the Contact page to reach the human support team.",
+      });
+      setShowSignInCta(!!res?.accountSpecific);
+    } catch (err) {
+      console.error("[AiSupport] sendGuestAi failed", err);
+      // friendlyError keeps the app's own messages (e.g. the per-visitor rate
+      // limit) while hiding backend internals.
+      append({
+        role: "ai",
+        body: friendlyError(
+          err,
+          "I’m having trouble reaching the assistant right now. Please try again in a moment, or use the Contact page for human help.",
+        ),
+      });
+    } finally {
+      setSending(false);
+    }
   };
 
   const handleAiSend = async (userLine: AiMessage) => {
@@ -203,13 +250,17 @@ export function AiSupportAssistant() {
       });
       const replyBody: string = (reply as any).reply ?? "";
       setGuestMessages((prev) => [...prev, { role: "ai", body: replyBody } as GuestMessage]);
+      setShowSignInCta(false);
     } catch (err) {
       console.error("[AiSupport] sendAi failed", err);
       setGuestMessages((prev) => [
         ...prev,
         {
           role: "ai",
-          body: "I’m having trouble reaching the assistant right now. Please try again in a moment, or use the Contact page for human help.",
+          body: friendlyError(
+            err,
+            "I’m having trouble reaching the assistant right now. Please try again in a moment, or use the Contact page for human help.",
+          ),
         } as GuestMessage,
       ]);
     }
@@ -369,20 +420,34 @@ export function AiSupportAssistant() {
             </button>
           </div>
 
-          {/* Guest note */}
-          {!isAuthenticated && (
-            <div className="border-t border-white/10 px-3 py-2 text-[11px] text-muted-foreground">
-              You’re chatting as a guest. Sign in for account-aware help, or{" "}
+          {/* Sign In CTA — ONLY when the AI flagged the question as
+              account-specific. General guest questions are answered without
+              ever asking anyone to sign in. */}
+          {!isAuthenticated && showSignInCta && (
+            <div className="flex items-center justify-between gap-2 border-t border-lime-400/20 bg-lime-400/[0.06] px-3 py-2">
+              <span className="text-[11px] text-lime-200/90">
+                That part needs an account.
+              </span>
               <button
                 onClick={() => {
                   close();
                   navigate("/auth?mode=signin");
                 }}
-                className="underline hover:text-foreground"
+                className="flex items-center gap-1 rounded-lg border border-lime-400/40 bg-lime-400/10 px-2.5 py-1 text-[11px] font-semibold text-lime-200 transition-colors hover:bg-lime-400/20"
               >
-                sign in
-              </button>{" "}
-              to continue.
+                <UserPlus className="size-3.5" /> Sign in
+              </button>
+            </div>
+          )}
+
+          {/* Guest footer — informational only, never a gate. */}
+          {!isAuthenticated && (
+            <div className="border-t border-white/10 px-3 py-2 text-[11px] text-muted-foreground">
+              You’re chatting as a guest. General questions are answered here —{" "}
+              <Link to="/contact" className="underline hover:text-foreground">
+                Contact us
+              </Link>{" "}
+              to reach the human team.
             </div>
           )}
         </div>

@@ -19,6 +19,7 @@
  */
 
 import { internal } from "./_generated/api";
+import { vly } from "../lib/vly-integrations";
 // DB persistence lives in the V8 runtime (Convex only allows actions in node
 // files) — breaker state, monitoring logs and rate limiting all flow through
 // internal.resilienceData.*.
@@ -392,7 +393,139 @@ export function textProviders(): ProviderDef[] {
       model: process.env.OPENAI_MODEL ?? "meta-llama/llama-3.1-8b-instruct",
     });
   }
+  // Additional OpenAI-compatible providers. Any of these can be added later
+  // from the Keys panel and immediately widens the failover chain; none are
+  // required, because the platform integration below always answers.
+  const openrouter = process.env.OPENROUTER_API_KEY;
+  if (openrouter) {
+    chain.push({
+      name: "openrouter",
+      base: process.env.OPENROUTER_BASE_URL ?? "https://openrouter.ai/api/v1",
+      key: openrouter,
+      model: process.env.OPENROUTER_MODEL ?? "meta-llama/llama-3.3-70b-instruct:free",
+    });
+  }
+  const cerebras = process.env.CEREBRAS_API_KEY;
+  if (cerebras) {
+    chain.push({
+      name: "cerebras",
+      base: "https://api.cerebras.ai/v1",
+      key: cerebras,
+      model: process.env.CEREBRAS_MODEL ?? "llama3.1-8b",
+    });
+  }
+  const together = process.env.TOGETHER_API_KEY;
+  if (together) {
+    chain.push({
+      name: "together",
+      base: "https://api.together.xyz/v1",
+      key: together,
+      model: process.env.TOGETHER_MODEL ?? "meta-llama/Llama-3.3-70B-Instruct-Turbo-Free",
+    });
+  }
+  const deepseek = process.env.DEEPSEEK_API_KEY;
+  if (deepseek) {
+    chain.push({
+      name: "deepseek",
+      base: "https://api.deepseek.com/v1",
+      key: deepseek,
+      model: process.env.DEEPSEEK_MODEL ?? "deepseek-chat",
+    });
+  }
+  const mistral = process.env.MISTRAL_API_KEY;
+  if (mistral) {
+    chain.push({
+      name: "mistral",
+      base: "https://api.mistral.ai/v1",
+      key: mistral,
+      model: process.env.MISTRAL_MODEL ?? "mistral-small-latest",
+    });
+  }
+  const sambanova = process.env.SAMBANOVA_API_KEY;
+  if (sambanova) {
+    chain.push({
+      name: "sambanova",
+      base: "https://api.sambanova.ai/v1",
+      key: sambanova,
+      model: process.env.SAMBANOVA_MODEL ?? "Meta-Llama-3.3-70B-Instruct",
+    });
+  }
   return chain;
+}
+
+// ---------------------------------------------------------------------------
+// Platform AI fallback — the GUARANTEED last resort.
+//
+// Freebuff's integration gateway (VLY_INTEGRATION_KEY, provisioned
+// automatically for every project) serves chat completions with no provider
+// API key at all. When every configured provider is missing, circuit-open or
+// failing, this keeps AI features answering instead of erroring out — so "the
+// AI never fails" holds even in a project with zero AI keys set.
+// ---------------------------------------------------------------------------
+
+async function platformChatFallback(
+  ctx: Ctx,
+  opts: {
+    messages: ChatMessage[];
+    temperature?: number;
+    maxTokens?: number;
+    operation?: string;
+  },
+): Promise<GatewayChatResult | null> {
+  const started = Date.now();
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    const res = await Promise.race([
+      vly.ai.completion({
+        messages: opts.messages,
+        temperature: opts.temperature ?? 0.3,
+        maxTokens: opts.maxTokens ?? 1200,
+      }),
+      new Promise<never>((_, reject) => {
+        timer = setTimeout(
+          () => reject(new GatewayAbortError()),
+          RESILIENCE.fallbackTimeoutMs,
+        );
+      }),
+    ]);
+    const content = res?.data?.choices?.[0]?.message?.content?.trim() ?? "";
+    if (!res?.success || !content) {
+      throw new Error(res?.error || "platform fallback returned no content");
+    }
+    const result: GatewayChatResult = {
+      content,
+      provider: "platform",
+      latencyMs: Date.now() - started,
+      fallbackUsed: true,
+    };
+    await logExternalCall(ctx, {
+      provider: "platform",
+      operation: opts.operation ?? "chat",
+      ok: true,
+      latencyMs: result.latencyMs,
+      attempts: 1,
+      fallbackUsed: true,
+    });
+    return result;
+  } catch (err) {
+    // Server logs only — the caller still gets a user-safe error.
+    console.error(
+      "[gateway] platform fallback failed:",
+      err instanceof Error ? err.message.slice(0, 200) : err,
+    );
+    await logExternalCall(ctx, {
+      provider: "platform",
+      operation: opts.operation ?? "chat",
+      ok: false,
+      latencyMs: Date.now() - started,
+      attempts: 1,
+      fallbackUsed: true,
+      errorCode: err instanceof GatewayAbortError ? "timeout" : "send_failed",
+    });
+    return null;
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
 }
 
 export interface ChatMessage {
@@ -425,13 +558,27 @@ export async function gatewayChat(
 ): Promise<GatewayChatResult> {
   const providers = textProviders();
   if (providers.length === 0) {
-    throw new GatewayUnavailableError("The AI service isn't configured yet.", "not_configured");
+    // No provider keys at all → the platform integration is the whole chain.
+    await globalSem.acquire();
+    try {
+      const platform = await platformChatFallback(ctx, opts);
+      if (platform) return platform;
+    } finally {
+      globalSem.release();
+    }
+    throw new GatewayUnavailableError(
+      "The AI service is temporarily unavailable. Please try again shortly.",
+      "not_configured",
+    );
   }
 
   await globalSem.acquire();
   const startedAll = Date.now();
   let lastFailure: SafeFailure | null = null;
   let attempts = 0;
+  // Set when the platform integration answered, so the "nobody could serve
+  // this request" monitoring row below is not written for a successful reply.
+  let platformServed = false;
   try {
     for (let i = 0; i < providers.length; i++) {
       const p = providers[i];
@@ -530,7 +677,13 @@ export async function gatewayChat(
       }
     }
 
-    // Every provider failed (or was circuit-open).
+    // Every provider failed (or was circuit-open) → guaranteed last resort.
+    const platform = await platformChatFallback(ctx, opts);
+    if (platform) {
+      platformServed = true;
+      return platform;
+    }
+
     console.error(`[gateway] all providers failed after ${attempts} attempts`);
     throw new GatewayUnavailableError(
       lastFailure?.message ??
@@ -539,7 +692,7 @@ export async function gatewayChat(
     );
   } finally {
     globalSem.release();
-    if (attempts === 0) {
+    if (attempts === 0 && !platformServed) {
       await logExternalCall(ctx, {
         provider: "any",
         operation: opts.operation ?? "chat",

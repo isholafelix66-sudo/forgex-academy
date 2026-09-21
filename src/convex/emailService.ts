@@ -23,6 +23,7 @@ import { internal } from "./_generated/api";
 import { DataModel } from "./_generated/dataModel";
 import axios from "axios";
 import nodemailer from "nodemailer";
+import { vly } from "../lib/vly-integrations";
 import {
   otpEmail,
   passwordResetEmail,
@@ -74,6 +75,34 @@ function classifyError(err: unknown): string {
   return "send_failed";
 }
 
+/**
+ * Deliver one message through the platform email integration. This needs no
+ * SMTP credentials — VLY_INTEGRATION_KEY is provisioned for every project — so
+ * transactional email keeps working on a deployment where SMTP_* keys were
+ * never added. Previously that case marked EVERY queued email as failed.
+ */
+async function sendViaPlatformEmail(msg: {
+  to: string;
+  subject: string;
+  html: string;
+}): Promise<{ ok: boolean; errorCode?: string }> {
+  try {
+    const res = await vly.email.send({
+      to: msg.to,
+      subject: msg.subject,
+      html: msg.html,
+      text: msg.html.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim(),
+    });
+    if (!res) return { ok: false, errorCode: "send_failed" };
+    if (res.success && res.data?.status !== "failed") return { ok: true };
+    console.warn("[email] platform sender reported failure");
+    return { ok: false, errorCode: "platform_failed" };
+  } catch (err) {
+    console.error("[email] platform sender failed:", err);
+    return { ok: false, errorCode: "send_failed" };
+  }
+}
+
 /** Send one message. Returns ok + safe error code (never raw details). */
 async function sendOne(
   mailer: ReturnType<typeof transport>,
@@ -105,30 +134,50 @@ export const processPendingBatch = internalAction({
       const batch = await ctx.runMutation(internal.emailData.internalClaimBatch, {});
       if (batch.length === 0) return;
 
-      if (!smtpConfigured()) {
-        console.warn("[smtp] credentials missing — emails stay pending until keys are added");
-        for (const item of batch) {
-          await ctx.runMutation(internal.emailData.internalMarkResult, {
-            id: item.id as never,
-            ok: false,
-            errorCode: "not_configured",
-          });
+      // SMTP is preferred when configured; the platform integration below is
+      // the guaranteed fallback, so a missing/expired SMTP key can never stop
+      // the queue from delivering.
+      if (smtpConfigured()) {
+        try {
+          mailer = transport();
+        } catch (err) {
+          console.warn("[smtp] transport unavailable — falling back to the platform sender:", err);
+          mailer = null;
         }
-        return;
+      } else {
+        console.warn("[smtp] credentials missing — using the platform email sender");
       }
 
-      mailer = transport();
       let failures = 0;
       for (const item of batch) {
-        const res = await sendOne(mailer, item);
+        let res: { ok: boolean; errorCode?: string } = mailer
+          ? await sendOne(mailer, item)
+          : { ok: false, errorCode: "not_configured" };
+        if (!res.ok) {
+          // SMTP missing, misconfigured or rejected the message → deliver via
+          // the platform integration instead of dropping the email.
+          const platform = await sendViaPlatformEmail(item);
+          res = platform.ok ? { ok: true } : { ok: false, errorCode: platform.errorCode };
+        }
         await ctx.runMutation(internal.emailData.internalMarkResult, {
           id: item.id as never,
           ok: res.ok,
           errorCode: res.errorCode,
           bumpRetry: !res.ok,
         });
-        if (!res.ok && res.errorCode === "auth_failed") break; // don't hammer bad creds
-        if (!res.ok) failures++;
+        if (!res.ok) {
+          failures++;
+          if (res.errorCode === "auth_failed") {
+            // Don't hammer bad SMTP credentials — drop the pooled connection
+            // and let the platform sender carry the rest of this batch.
+            try {
+              mailer?.close();
+            } catch {
+              // ignore
+            }
+            mailer = null;
+          }
+        }
       }
 
       // More waiting? Schedule the next drain (self-healing queue).
@@ -170,10 +219,20 @@ export const sendAuthCodeEmail = internalAction({
         : passwordResetEmail({ code: args.code, expiryMinutes });
 
     if (!smtpConfigured()) {
-      // No SMTP keys → platform sender, exactly like sign-in OTPs. Without
-      // this, security codes silently vanished when SMTP wasn't configured.
-      const sent = await sendViaPlatformSender(ctx, args);
-      return { sent, fallback: true };
+      // No SMTP keys → branded send through the platform email integration,
+      // then the platform OTP sender. Without this, security codes silently
+      // vanished when SMTP wasn't configured.
+      const sent = await sendViaPlatformEmail({ to: args.to, subject: tpl.subject, html: tpl.html });
+      if (sent.ok) return { sent: true, fallback: true };
+      if (await sendViaPlatformSender(ctx, args)) return { sent: true, fallback: true };
+      await ctx.runMutation(internal.emailData.logAuthEmailMeta, {
+        to: args.to,
+        subject: "[redacted] verification code",
+        emailType: args.kind,
+        ok: false,
+        errorCode: sent.errorCode ?? "not_configured",
+      });
+      return { sent: false, fallback: true };
     }
 
     const mailer = transport();
@@ -184,7 +243,14 @@ export const sendAuthCodeEmail = internalAction({
         html: tpl.html,
       });
       if (!res.ok) {
-        // SMTP send failed → platform sender so the code still goes out.
+        // SMTP send failed → platform email integration, then the platform
+        // OTP sender, so the code still goes out.
+        const platform = await sendViaPlatformEmail({
+          to: args.to,
+          subject: tpl.subject,
+          html: tpl.html,
+        });
+        if (platform.ok) return { sent: true, fallback: true };
         const sent = await sendViaPlatformSender(ctx, args);
         if (sent) return { sent: true, fallback: true };
       }
