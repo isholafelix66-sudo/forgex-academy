@@ -38,6 +38,7 @@ import { cn } from "@/lib/utils";
 import { Textarea } from "@/components/ui/textarea";
 import { useAuth } from "@/hooks/use-auth";
 import { openChatWith } from "@/lib/chat-open";
+import { resilientMutation } from "@/lib/resilience";
 import {
   formatCourseDuration,
   formatLessonDuration,
@@ -124,7 +125,17 @@ export default function CourseDetail() {
       navigate("/tutor");
       return;
     }
-    await enroll({ courseId: course._id });
+    // Essential write with outage protection: if Convex is unreachable the
+    // enrollment is queued (and mirrored to the fallback store) and replayed
+    // automatically, so the student still lands in the course player.
+    const result = await resilientMutation({
+      kind: "enroll",
+      payload: { courseId: course._id },
+      live: () => enroll({ courseId: course._id }),
+    });
+    if (result.status === "queued") {
+      toast.info("Sync temporarily unavailable — your enrollment is safely queued.");
+    }
     navigate(`/learn/${course.slug}`);
   };
 

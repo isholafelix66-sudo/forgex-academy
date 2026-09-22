@@ -1,5 +1,6 @@
 import { useMutation, useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
+import type { Id } from "@/convex/_generated/dataModel";
 import {
   AlertTriangle,
   CheckCircle2,
@@ -52,7 +53,7 @@ export default function AdminSync() {
     { applied: 0, failed: 0 },
   );
 
-  const retry = async (failureId: string) => {
+  const retry = async (failureId: Id<"syncFailures">) => {
     try {
       const res = await retryFailure({ token: token!, failureId });
       if (res.ok) toast.success("Op re-applied.");
@@ -62,7 +63,7 @@ export default function AdminSync() {
     }
   };
 
-  const dismiss = async (failureId: string) => {
+  const dismiss = async (failureId: Id<"syncFailures">) => {
     try {
       await dismissFailure({ token: token!, failureId });
       toast.success("Failure record cleared.");
