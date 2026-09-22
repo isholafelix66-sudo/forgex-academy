@@ -205,6 +205,7 @@ export { default as XCircle } from "lucide-react/dist/esm/icons/x-circle.js";
 export { default as XIcon } from "lucide-react/dist/esm/icons/x.js";
 export { default as Zap } from "lucide-react/dist/esm/icons/zap.js";
 export { default as Headphones } from "lucide-react/dist/esm/icons/headphones.js";
+export { default as Lightbulb } from "lucide-react/dist/esm/icons/lightbulb.js";
 export { default as FileCheck } from "lucide-react/dist/esm/icons/file-check.js";
 export { default as Edit2 } from "lucide-react/dist/esm/icons/edit-2.js";
 export { default as FolderKanban } from "lucide-react/dist/esm/icons/folder-kanban.js";
