@@ -1,42 +1,45 @@
 # Bun package-manager configuration.
 #
-# Two failure modes hit the deploy build's install step here:
+# Failure mode (deploy builds)
+# -----------------------------
+# The deploy image runs a bare `bun install` with bun 1.3.14, whose cache →
+# node_modules materialization intermittently dies with
 #
-#   1. bun 1.3.x could read a download-cache entry while another bun process was
-#      rewriting it, which surfaced as a random handful of
+#   FileNotFound: failed copying files from cache to destination for package X
+#   Failed to install N packages            (bun exits 1 → the build aborts)
 #
-#        FileNotFound: failed copying files from cache to destination for package X
-#        Failed to install N packages            (bun exits 1 -> the build aborts)
+# (oven-sh/bun#37830, fixed upstream in bun 1.4.0). The project's own install
+# step (scripts/install-deps.mjs, used by vercel.json) already avoids this by
+# using a private cache + --backend=copyfile, but the platform's bare install
+# runs WITHOUT those flags, so this file is its only configuration.
 #
-#      (oven-sh/bun#37830 — fixed in bun 1.4.0). package.json therefore pins
-#      `packageManager: "bun@1.4.2"`, and scripts/install-deps.mjs (run by
-#      vercel.json's installCommand) additionally gives its own install a
-#      private cache and installs with `--backend=copyfile` so it never shares
-#      a cache and never materializes by hardlink. `--backend` has no bunfig
-#      equivalent — every bunfig spelling still hardlinks — so it must be
-#      passed on the command line.
+# What bun 1.3.14 actually honors here (verified empirically on this image):
 #
-#   2. Keeping the cache inside the workspace meant `node_modules` churn was
-#      carried through the synced tree.
+#   [install.cache] dir = "/tmp/forgex-bun-cache"   ✅ honored
+#     → downloads land OUTSIDE the synced workspace. This matters because a
+#       workspace-local cache (node_modules/.cache) used to grow to ~520 MB of
+#       hardlink sources; any torn entry in it poisoned every later install
+#       ("failed copying files from cache to destination"). /tmp is fresh per
+#       build container, so a damaged cache can never persist between builds.
 #
-# Deploy hardening (2026-09): the deploy image runs a bare `bun install`
-# (1.3.14) that ignores the packageManager pin and the vercel installCommand —
-# its cache→node_modules hardlink materialization failed for ~520 packages on
-# the shared filesystem. bunfig.toml IS read by that bare install, so:
+#   [install.cache] disable = true                  ❌ NOT honored
+#     → bun 1.3.14 ignores `disable` AND, when it is set, also ignores `dir`
+#       (cache regressed to node_modules/.cache). Do not re-add it.
 #
-#   - `backend = "copyfile"` materializes node_modules with plain copies
-#     (the path that has never failed on this filesystem), and
-#   - `[install.cache] disable = true` removes the download cache from the
-#     equation entirely — with no cache there is no "copy from cache" step
-#     that can fail. Installs re-download from the registry, which is slower
-#     but immune to the concurrency bug.
+#   [install] backend = "copyfile"                  ❌ NOT honored (no-op)
+#     → 1.3.14 always materializes via hardlink from the cache. The key is
+#       kept anyway: it is harmless there, and it makes bun ≥ 1.4 installs
+#       (install-deps.mjs, local dev) take the copyfile path, which has never
+#       failed on this filesystem. If a bare 1.3.14 install still fails after
+#       the /tmp cache move, the residual risk is the hardlink backend itself;
+#       the postinstall hook (scripts/install-tsc-wrapper.mjs) then heals the
+#       damaged packages in the same install run.
 #
-# Local repair tooling (scripts/install-deps.mjs) is unaffected: its flags take
-# precedence and its own private cache lives outside bunfig.
+# scripts/install-deps.mjs keeps its own CLI flags and private cache; its
+# flags take precedence over this file and its behavior is unchanged.
 
 [install]
 backend = "copyfile"
 
 [install.cache]
-disable = true
 dir = "/tmp/forgex-bun-cache"
