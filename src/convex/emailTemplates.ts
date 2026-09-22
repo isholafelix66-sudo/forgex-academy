@@ -122,6 +122,60 @@ export function welcomeEmail(opts: { name: string }): { subject: string; html: s
   };
 }
 
+// ---------------------------------------------------------------------------
+// ForgeX Projects templates
+// ---------------------------------------------------------------------------
+
+/** Welcome email sent once when a Projects account creates its portfolio. */
+export function projectsWelcomeEmail(opts: {
+  name: string;
+  portfolioPath: string;
+}): { subject: string; html: string; text: string } {
+  return {
+    subject: "Welcome to Projects — your portfolio awaits 🚀",
+    html: layout({
+      heading: `Welcome to Projects, ${escapeHtml(opts.name || "friend")}!`,
+      bodyHtml: `
+        <p>Your <strong>Projects</strong> account is ready. Projects is the place to build one professional portfolio and turn it into your own personal website.</p>
+        <ul style="padding-left:18px;margin:12px 0;">
+          <li style="margin:6px 0;">🧑‍🎨 Add your about, skills, experience, education and services</li>
+          <li style="margin:6px 0;">🛠️ Showcase the work you're proud of</li>
+          <li style="margin:6px 0;">🔗 Publish it and share one link anywhere</li>
+        </ul>
+        <p>Your portfolio link will be <strong style="color:${BRAND.lime};">${escapeHtml(opts.portfolioPath)}</strong> — you can change your URL any time in settings.</p>`,
+      footerNote: `You are receiving this because you created a ${BRAND.name} account.`,
+    }),
+    text: `Welcome to Projects, ${opts.name}! Your portfolio lives at ${opts.portfolioPath}. Add your work, publish it, and share one link anywhere.`,
+  };
+}
+
+/** Sent the first time a portfolio goes live (published or discoverable). */
+export function portfolioPublishedEmail(opts: {
+  name: string;
+  portfolioUrl: string;
+  discoverable: boolean;
+}): { subject: string; html: string; text: string } {
+  return {
+    subject: "Your portfolio is live 🎉",
+    html: layout({
+      heading: "Your portfolio is live",
+      bodyHtml: `
+        <p>Nice work, ${escapeHtml(opts.name || "friend")} — your portfolio is published.</p>
+        <p style="margin:16px 0;">
+          <a href="${escapeHtml(opts.portfolioUrl)}" style="display:inline-block;background:${BRAND.lime};color:#0b0d08;font-weight:700;text-decoration:none;border-radius:12px;padding:12px 22px;">View my portfolio</a>
+        </p>
+        <p style="font-size:13px;color:${BRAND.muted};">Share this link anywhere — it's your personal website:</p>
+        <p style="font-size:13px;word-break:break-all;color:${BRAND.lime};">${escapeHtml(opts.portfolioUrl)}</p>
+        ${
+          opts.discoverable
+            ? `<p>Your portfolio is also <strong>discoverable</strong> — it can appear in the Projects Explore section.</p>`
+            : `<p style="font-size:13px;color:${BRAND.muted};">Only people with your link can view it. Make it discoverable to appear in Explore.</p>`
+        }`,
+    }),
+    text: `Your portfolio is live: ${opts.portfolioUrl}`,
+  };
+}
+
 export function passwordResetEmail(opts: { code: string; expiryMinutes: number }): {
   subject: string;
   html: string;

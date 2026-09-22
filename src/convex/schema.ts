@@ -184,6 +184,12 @@ const siteStatsCacheTable = defineTable({
   students: v.optional(v.number()),
   tutors: v.optional(v.number()),
   certificates: v.optional(v.number()),
+  // Projects platform rollup (key: "projects").
+  portfolios: v.optional(v.number()),
+  projects: v.optional(v.number()),
+  creators: v.optional(v.number()),
+  discoverable: v.optional(v.number()),
+  views: v.optional(v.number()),
   updatedAt: v.number(),
 }).index("by_key", ["key"]);
 
@@ -199,6 +205,173 @@ const syncUsageBudgetTable = defineTable({
   note: v.optional(v.string()),
 }).index("by_key", ["key"]);
 
+// ---------------------------------------------------------------------------
+// ForgeX Projects — portfolio platform
+// ---------------------------------------------------------------------------
+// Academy + Opportunity Hub remain in the codebase and database, but they are
+// LOCKED future products: `featureFlags` is the single source of truth for
+// which product is live, so launching a product is a flag change, not a
+// rebuild. Projects is the active product.
+// ---------------------------------------------------------------------------
+
+export const PRODUCT_KEYS = ["projects", "academy", "opportunity-hub"] as const;
+export type ProductKey = (typeof PRODUCT_KEYS)[number];
+
+export const featureStateValidator = v.union(
+  v.literal("active"),
+  v.literal("locked"),
+  v.literal("hidden"),
+);
+export type FeatureState = Infer<typeof featureStateValidator>;
+
+const featureFlagsTable = defineTable({
+  key: v.string(), // ProductKey
+  label: v.string(),
+  tagline: v.optional(v.string()),
+  state: featureStateValidator,
+  comingSoonCopy: v.optional(v.string()),
+  order: v.optional(v.number()),
+  updatedAt: v.number(),
+}).index("by_key", ["key"]);
+
+/** Three deliberate visibility levels for a portfolio (see docs in UI). */
+export const portfolioVisibilityValidator = v.union(
+  v.literal("draft"), // only the owner
+  v.literal("published"), // anyone with the link
+  v.literal("discoverable"), // link + the public Explore section
+);
+export type PortfolioVisibility = Infer<
+  typeof portfolioVisibilityValidator
+>;
+
+export const portfolioTemplateValidator = v.union(
+  v.literal("carbon"),
+  v.literal("aurora"),
+  v.literal("paper"),
+);
+export type PortfolioTemplate = Infer<typeof portfolioTemplateValidator>;
+
+export const portfolioSkillValidator = v.object({
+  name: v.string(),
+  level: v.optional(v.number()), // 1–5, optional
+});
+
+export const portfolioExperienceValidator = v.object({
+  role: v.string(),
+  org: v.string(),
+  location: v.optional(v.string()),
+  start: v.optional(v.string()),
+  end: v.optional(v.string()),
+  current: v.optional(v.boolean()),
+  description: v.optional(v.string()),
+});
+
+export const portfolioEducationValidator = v.object({
+  school: v.string(),
+  qualification: v.optional(v.string()),
+  field: v.optional(v.string()),
+  start: v.optional(v.string()),
+  end: v.optional(v.string()),
+  description: v.optional(v.string()),
+});
+
+export const portfolioServiceValidator = v.object({
+  title: v.string(),
+  description: v.optional(v.string()),
+  price: v.optional(v.string()),
+});
+
+export const portfolioLinkValidator = v.object({
+  label: v.string(),
+  url: v.string(),
+});
+
+const portfoliosTable = defineTable({
+  userId: v.id("users"),
+  slug: v.string(),
+  displayName: v.string(),
+  headline: v.optional(v.string()),
+  bio: v.optional(v.string()),
+  about: v.optional(v.string()),
+  location: v.optional(v.string()),
+  email: v.optional(v.string()),
+  phone: v.optional(v.string()),
+  avatarUrl: v.optional(v.string()),
+  coverUrl: v.optional(v.string()),
+  template: portfolioTemplateValidator,
+  accent: v.optional(v.string()), // accent colour key
+  visibility: portfolioVisibilityValidator,
+  skills: v.array(portfolioSkillValidator),
+  experience: v.array(portfolioExperienceValidator),
+  education: v.array(portfolioEducationValidator),
+  services: v.array(portfolioServiceValidator),
+  links: v.array(portfolioLinkValidator),
+  seoTitle: v.optional(v.string()),
+  seoDescription: v.optional(v.string()),
+  // Owner-controlled ordering of the public sections.
+  sectionOrder: v.optional(v.array(v.string())),
+  // Admin moderation
+  featured: v.boolean(),
+  suspended: v.boolean(),
+  views: v.number(),
+  publishedAt: v.optional(v.number()),
+  createdAt: v.number(),
+  updatedAt: v.number(),
+})
+  .index("by_user", ["userId"])
+  .index("by_slug", ["slug"])
+  .index("by_visibility", ["visibility"])
+  .index("by_featured", ["featured"]);
+
+const portfolioProjectsTable = defineTable({
+  portfolioId: v.id("portfolios"),
+  userId: v.id("users"),
+  title: v.string(),
+  summary: v.string(),
+  description: v.optional(v.string()),
+  imageUrl: v.optional(v.string()),
+  tags: v.array(v.string()),
+  liveUrl: v.optional(v.string()),
+  repoUrl: v.optional(v.string()),
+  year: v.optional(v.string()),
+  order: v.number(),
+  featured: v.boolean(),
+  removed: v.optional(v.boolean()), // moderator-removed
+  removedReason: v.optional(v.string()),
+  createdAt: v.number(),
+  updatedAt: v.number(),
+})
+  .index("by_portfolio", ["portfolioId", "order"])
+  .index("by_user", ["userId"])
+  .index("by_featured", ["featured"])
+  .index("by_createdAt", ["createdAt"]);
+
+/** "Notify me" sign-ups from the locked product pages. */
+const productWaitlistTable = defineTable({
+  product: v.string(), // ProductKey
+  email: v.string(),
+  userId: v.optional(v.id("users")),
+  createdAt: v.number(),
+  notified: v.optional(v.boolean()),
+})
+  .index("by_product", ["product", "createdAt"])
+  .index("by_email", ["email"]);
+
+/** Reports raised against a public portfolio. */
+const portfolioReportsTable = defineTable({
+  portfolioId: v.id("portfolios"),
+  slug: v.string(),
+  reason: v.string(),
+  details: v.optional(v.string()),
+  reportedBy: v.optional(v.id("users")),
+  createdAt: v.number(),
+  resolved: v.optional(v.boolean()),
+  resolvedAt: v.optional(v.number()),
+})
+  .index("by_createdAt", ["createdAt"])
+  .index("by_resolved", ["resolved"])
+  .index("by_portfolio", ["portfolioId"]);
+
 const schema = defineSchema(
   {
     // -----------------------------------------------------------------------
@@ -212,6 +385,13 @@ const schema = defineSchema(
     syncFailures: syncFailuresTable,
     siteStatsCache: siteStatsCacheTable,
     syncUsageBudget: syncUsageBudgetTable,
+
+    // ForgeX Projects — portfolio platform + product feature flags.
+    featureFlags: featureFlagsTable,
+    portfolios: portfoliosTable,
+    portfolioProjects: portfolioProjectsTable,
+    productWaitlist: productWaitlistTable,
+    portfolioReports: portfolioReportsTable,
 
     users: defineTable({
       name: v.optional(v.string()),

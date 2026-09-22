@@ -121,7 +121,10 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
     if (authLoading || !isAuthenticated || !user) return null;
 
     if (user?.role === "admin" || user?.role === "owner") return "/admin";
-    return "/";
+    // Signed-in users land in their Projects workspace (the portfolio
+    // dashboard). `/` is the public marketing site and must never be the
+    // post-auth destination for a signed-in account.
+    return "/portfolio";
   }, [authLoading, isAuthenticated, user]);
 
   useEffect(() => {
@@ -249,7 +252,7 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
           <div className="mb-6 text-center">
             <img
               src={logo}
-              alt="ForgeX Academy"
+              alt="ForgeX Projects"
               className="mx-auto size-14 rounded-2xl shadow-lg"
             />
             <h1 className="font-display mt-4 text-2xl font-bold tracking-tight">
@@ -261,10 +264,10 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
             </h1>
             <p className="mt-1.5 text-sm text-muted-foreground">
               {mode === "signup"
-                ? "Start learning, building and earning certificates."
+                ? "Build your portfolio once and share one link."
                 : mode === "reset"
                   ? "We'll email you a code to regain access."
-                  : "Sign in to continue your learning path."}
+                  : "Sign in to continue building your portfolio."}
             </p>
           </div>
 

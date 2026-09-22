@@ -4,188 +4,272 @@ import { api } from "@/convex/_generated/api";
 import {
   ArrowRight,
   Compass,
-  Eye,
-  ExternalLink,
+  Globe,
   HeartHandshake,
+  Lightbulb,
+  Lock,
+  Rocket,
+  ShieldCheck,
+  Sparkles,
   Target,
+  Users,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { PageShell } from "@/components/site/PageShell";
 import { Reveal } from "@/components/site/Reveal";
 import { SectionHeading } from "@/components/site/SectionHeading";
-import { toExternalHref } from "@/lib/url";
+import { cn } from "@/lib/utils";
+
+const VALUES = [
+  {
+    icon: ShieldCheck,
+    title: "You own your identity",
+    body: "Your portfolio belongs to you. You decide whether it's private, link-only, or discoverable in Explore — and you can change that any time.",
+  },
+  {
+    icon: Sparkles,
+    title: "Show, don't tell",
+    body: "Lists of skills are easy to fake. Work isn't. Projects puts your actual work in front of people, with the context to understand it.",
+  },
+  {
+    icon: Globe,
+    title: "One link changes things",
+    body: "A professional link you can put in a bio, a CV, a DM or an application is the simplest upgrade a career can get.",
+  },
+  {
+    icon: Users,
+    title: "Built for everyone starting out",
+    body: "Students, self-taught builders, career switchers and freelancers. You don't need a design agency or a developer to look credible.",
+  },
+];
+
+const PRODUCTS = [
+  {
+    key: "projects",
+    label: "Projects",
+    state: "live",
+    icon: Rocket,
+    body: "Where you create, manage and share your professional portfolio as your own website.",
+  },
+  {
+    key: "academy",
+    label: "Academy",
+    state: "locked",
+    icon: Lock,
+    body: "Structured learning paths, practical projects, assessments and verifiable certificates.",
+  },
+  {
+    key: "opportunity-hub",
+    label: "Opportunity Hub",
+    state: "locked",
+    icon: HeartHandshake,
+    body: "Internships, jobs, scholarships and entrepreneurship — the bridge from skills to opportunity.",
+  },
+];
 
 export default function About() {
-  const content = useQuery(api.public.siteContentAll);
-  const about = content?.about as
-    | {
-        story?: string;
-        impact?: Array<{ value: string; label: string }>;
-        values?: Array<{ title: string; description: string }>;
-      }
-    | undefined;
-  const mission = content?.mission as string | undefined;
-  const vision = content?.vision as string | undefined;
-
-  // Admin socials: array of {platform, url, enabled?, order?}. Defensive
-  // normalization so a malformed/legacy value can never crash the page.
-  const socialLinks = (
-    (Array.isArray(content?.socials) ? content.socials : []) as Array<{
-      platform: string;
-      url: string;
-      enabled?: boolean;
-      order?: number;
-    }>
-  )
-    .filter((s) => s && s.url && s.enabled !== false)
-    .sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+  const stats = useQuery(api.projects.projectsStats);
 
   return (
-    <PageShell>
-      <section className="mx-auto max-w-7xl px-4 pb-24 pt-16 sm:px-6">
-        <Reveal className="mx-auto max-w-3xl text-center">
+    <div className="relative">
+      <div
+        aria-hidden
+        className="pointer-events-none absolute inset-x-0 -top-32 mx-auto h-[340px] max-w-3xl rounded-full bg-lime-400/8 blur-[120px]"
+      />
+
+      {/* Hero */}
+      <section className="relative mx-auto max-w-7xl px-4 pb-14 pt-16 sm:px-6 sm:pt-24">
+        <div className="max-w-3xl">
           <span className="inline-flex items-center gap-2 rounded-full border border-lime-400/25 bg-lime-400/10 px-4 py-1.5 text-xs font-semibold uppercase tracking-widest text-lime-300">
-            About us
+            <Lightbulb className="size-3.5" /> About Projects
           </span>
-          <h1 className="font-display mt-6 text-5xl font-bold tracking-tight sm:text-6xl">
-            We build the bridge between{" "}
-            <span className="text-gradient">learning and opportunity</span>
+          <h1 className="font-display mt-6 text-4xl font-bold leading-[1.06] tracking-tight sm:text-6xl">
+            The fastest way to be taken seriously online
           </h1>
           <p className="mt-6 text-lg leading-relaxed text-muted-foreground">
-            ForgeX Academy is the learning platform of ForgeX Network — a
-            community built to prepare people for internships, jobs,
-            scholarships and entrepreneurship.
+            Projects is a portfolio platform. You create your portfolio once —
+            your work, your skills, your experience — and turn it into your own
+            professional website. Then you share one link: your CV, your bio,
+            your applications, anywhere.
           </p>
-        </Reveal>
+          <div className="mt-8 flex flex-wrap gap-3">
+            <Link to="/auth?mode=signup">
+              <Button size="lg" className="gap-2 bg-lime-400 font-semibold text-black hover:bg-lime-300">
+                Create your portfolio <ArrowRight className="size-4" />
+              </Button>
+            </Link>
+            <Link to="/explore">
+              <Button
+                size="lg"
+                variant="outline"
+                className="gap-2 border-white/15 hover:border-lime-400/40 hover:text-lime-300"
+              >
+                <Compass className="size-4" /> Explore portfolios
+              </Button>
+            </Link>
+          </div>
+        </div>
 
-        {/* Mission & Vision */}
-        <div className="mt-16 grid gap-6 md:grid-cols-2">
+        {stats && (
+          <div className="mt-14 grid gap-6 rounded-3xl border border-white/10 bg-card p-8 sm:grid-cols-3">
+            {[
+              { label: "Portfolios published", value: stats.portfolios },
+              { label: "Projects showcased", value: stats.projects },
+              { label: "Creators on Projects", value: stats.creators },
+            ].map((s) => (
+              <div key={s.label} className="text-center">
+                <div className="font-display text-4xl font-bold text-gradient">
+                  {s.value}
+                </div>
+                <div className="mt-1.5 text-sm text-muted-foreground">{s.label}</div>
+              </div>
+            ))}
+          </div>
+        )}
+      </section>
+
+      {/* Mission / vision */}
+      <section className="mx-auto max-w-7xl px-4 pb-20 sm:px-6">
+        <div className="grid gap-6 lg:grid-cols-2">
           <Reveal>
-            <div className="relative h-full overflow-hidden rounded-3xl border border-white/10 bg-card p-8">
+            <div className="h-full rounded-3xl border border-white/10 bg-card p-8">
               <span className="flex size-12 items-center justify-center rounded-2xl bg-lime-400/15 text-lime-300">
                 <Target className="size-6" />
               </span>
-              <h2 className="font-display mt-5 text-2xl font-bold">Our mission</h2>
+              <h2 className="font-display mt-5 text-2xl font-bold">What we do</h2>
               <p className="mt-3 text-base leading-relaxed text-muted-foreground">
-                {mission ??
-                  "To empower individuals through accessible, practical, and industry-relevant learning that prepares them for real-world opportunities."}
+                We give people the tools to present their work properly: editable
+                portfolio sections, project showcases, templates, a clean public
+                URL, and a deliberate visibility setting so you control who sees
+                what.
               </p>
             </div>
           </Reveal>
           <Reveal delay={0.08}>
-            <div className="relative h-full overflow-hidden rounded-3xl border border-white/10 bg-card p-8">
+            <div className="h-full rounded-3xl border border-white/10 bg-card p-8">
               <span className="flex size-12 items-center justify-center rounded-2xl bg-lime-400/15 text-lime-300">
-                <Eye className="size-6" />
+                <Lightbulb className="size-6" />
               </span>
-              <h2 className="font-display mt-5 text-2xl font-bold">Our vision</h2>
+              <h2 className="font-display mt-5 text-2xl font-bold">Why we exist</h2>
               <p className="mt-3 text-base leading-relaxed text-muted-foreground">
-                {vision ??
-                  "To become a trusted learning platform where people develop valuable skills, earn credible certifications, and unlock meaningful opportunities."}
+                Too much talent is invisible. Brilliant work disappears into
+                camera rolls, group chats and unfinished folders because there's
+                nowhere good to put it. Projects exists to fix that in minutes,
+                not months.
               </p>
             </div>
           </Reveal>
         </div>
+      </section>
 
-        {/* Story */}
-        <Reveal className="mt-20">
-          <SectionHeading align="left" eyebrow="Why we exist" title="Our story" />
-          <p className="mt-6 max-w-3xl text-lg leading-relaxed text-muted-foreground">
-            {about?.story ??
-              "ForgeX Academy was born inside ForgeX Network — a community built to prepare young people for internships, jobs, scholarships and entrepreneurship. We saw too many learners stuck between tutorials and opportunity, so we built the missing bridge: structured paths, real tutors, hands-on projects, and certificates that verify."}
-          </p>
-        </Reveal>
-
-        {/* Impact */}
-        {about?.impact && (
-          <Reveal className="mt-16">
-            <div className="grid gap-6 rounded-3xl border border-white/10 bg-card p-10 sm:grid-cols-2 lg:grid-cols-4">
-              {about.impact.map((s) => (
-                <div key={s.label} className="text-center">
-                  <div className="font-display text-4xl font-bold text-gradient">
-                    {s.value}
-                  </div>
-                  <div className="mt-1.5 text-sm text-muted-foreground">{s.label}</div>
+      {/* Values */}
+      <section className="mx-auto max-w-7xl px-4 pb-20 sm:px-6">
+        <SectionHeading
+          align="left"
+          eyebrow="What we believe"
+          title="Our principles"
+        />
+        <div className="mt-10 grid gap-5 sm:grid-cols-2">
+          {VALUES.map((v, i) => (
+            <Reveal key={v.title} delay={(i % 2) * 0.07} className="h-full">
+              <div className="flex h-full gap-4 rounded-2xl border border-white/10 bg-card p-6 transition-colors hover:border-lime-400/30">
+                <span className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-lime-400/12 text-lime-300">
+                  <v.icon className="size-5" />
+                </span>
+                <div>
+                  <h3 className="font-display text-base font-semibold">{v.title}</h3>
+                  <p className="mt-1.5 text-sm leading-relaxed text-muted-foreground">
+                    {v.body}
+                  </p>
                 </div>
-              ))}
-            </div>
-          </Reveal>
-        )}
+              </div>
+            </Reveal>
+          ))}
+        </div>
+      </section>
 
-        {/* Values */}
-        {about?.values && (
-          <div className="mt-20">
-            <SectionHeading eyebrow="What we believe" title="Our values" />
-            <div className="mt-12 grid gap-6 sm:grid-cols-2">
-              {about.values.map((v, i) => (
-                <Reveal key={v.title} delay={(i % 2) * 0.07}>
-                  <div className="flex h-full gap-4 rounded-2xl border border-white/10 bg-card p-6 transition-colors hover:border-lime-400/30">
-                    <span className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-lime-400/12 text-lime-300">
-                      <HeartHandshake className="size-5" />
+      {/* Ecosystem */}
+      <section className="mx-auto max-w-7xl px-4 pb-24 sm:px-6">
+        <SectionHeading
+          eyebrow="The bigger picture"
+          title="Part of the ForgeX Network"
+          description="Projects is the first product of the ForgeX Network. Two more are on the way — and they'll plug straight into the portfolio you build here."
+        />
+        <div className="mt-12 grid gap-5 md:grid-cols-3">
+          {PRODUCTS.map((p) => {
+            const live = p.state === "live";
+            return (
+              <Reveal key={p.key} className="h-full">
+                <div
+                  className={cn(
+                    "flex h-full flex-col rounded-3xl border p-6",
+                    live
+                      ? "border-lime-400/35 bg-gradient-to-br from-lime-400/12 to-card"
+                      : "border-white/10 bg-card",
+                  )}
+                >
+                  <div className="flex items-center justify-between">
+                    <span
+                      className={cn(
+                        "flex size-11 items-center justify-center rounded-2xl",
+                        live ? "bg-lime-400/15 text-lime-300" : "bg-white/5 text-muted-foreground",
+                      )}
+                    >
+                      <p.icon className="size-5" />
                     </span>
-                    <div>
-                      <h3 className="font-display text-base font-semibold">{v.title}</h3>
-                      <p className="mt-1.5 text-sm leading-relaxed text-muted-foreground">
-                        {v.description}
-                      </p>
-                    </div>
+                    <span
+                      className={cn(
+                        "rounded-full border px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider",
+                        live
+                          ? "border-lime-400/40 bg-lime-400/10 text-lime-300"
+                          : "border-white/10 text-muted-foreground",
+                      )}
+                    >
+                      {live ? "Live" : "Coming soon"}
+                    </span>
                   </div>
-                </Reveal>
-              ))}
-            </div>
-          </div>
-        )}
+                  <h3 className="font-display mt-5 text-xl font-bold">{p.label}</h3>
+                  <p className="mt-2 flex-1 text-sm leading-relaxed text-muted-foreground">
+                    {p.body}
+                  </p>
+                  <Link
+                    to={live ? "/auth?mode=signup" : p.key === "academy" ? "/academy" : "/opportunity-hub"}
+                    className="mt-5"
+                  >
+                    <Button
+                      variant={live ? "default" : "outline"}
+                      className={cn(
+                        "w-full gap-2",
+                        live
+                          ? "bg-lime-400 font-semibold text-black hover:bg-lime-300"
+                          : "border-white/15 text-muted-foreground hover:border-lime-400/40 hover:text-lime-300",
+                      )}
+                    >
+                      {live ? "Start now" : "Notify me"} <ArrowRight className="size-4" />
+                    </Button>
+                  </Link>
+                </div>
+              </Reveal>
+            );
+          })}
+        </div>
 
-        {/* Social links */}
-        <Reveal className="mt-20">
-          <SectionHeading
-            eyebrow="Follow us"
-            title="Connect with ForgeX"
-          />
-          <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
-            {/* Admin socials are stored as an array of
-                {platform, url, enabled, order} — the same shape Footer uses.
-                Reading it as a map crashed on toExternalHref(url) (url was an
-                object), which surfaced as the page "refreshing" in a loop. */}
-            {socialLinks.map(({ platform, url }) => (
-              <a
-                key={platform}
-                href={toExternalHref(url)}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-5 py-2.5 text-sm font-medium text-muted-foreground transition-colors hover:border-lime-400/40 hover:text-lime-300"
-              >
-                {platform.charAt(0).toUpperCase() + platform.slice(1)}
-                <ExternalLink className="size-3.5" />
-              </a>
-            ))}
-          </div>
-        </Reveal>
-
-        {/* CTA */}
-        <Reveal className="mt-20 text-center">
-          <div className="mx-auto max-w-3xl rounded-3xl border border-lime-400/25 bg-gradient-to-br from-lime-400/12 to-card p-10">
-            <Compass className="mx-auto size-10 text-lime-300" />
-            <h2 className="font-display mt-4 text-3xl font-bold">
-              Ready to start your path?
+        <Reveal className="mt-16">
+          <div className="rounded-3xl border border-lime-400/20 bg-gradient-to-br from-lime-400/10 via-card to-transparent p-10 text-center">
+            <h2 className="font-display text-2xl font-bold sm:text-3xl">
+              Ready to build yours?
             </h2>
-            <p className="mt-3 text-muted-foreground">
-              Join thousands of students building skills that lead somewhere.
+            <p className="mx-auto mt-3 max-w-xl text-sm leading-relaxed text-muted-foreground sm:text-base">
+              It takes minutes to create your portfolio, and you can publish,
+              keep it private, or make it discoverable whenever you're ready.
             </p>
-            <div className="mt-6 flex justify-center gap-3">
-              <Link to="/courses">
-                <Button className="gap-2 bg-lime-400 font-semibold text-black hover:bg-lime-300">
-                  Explore courses <ArrowRight className="size-4" />
-                </Button>
-              </Link>
-              <Link to="/roadmap">
-                <Button variant="outline" className="border-white/15 hover:border-lime-400/40 hover:text-lime-300">
-                  View roadmaps
-                </Button>
-              </Link>
-            </div>
+            <Link to="/auth?mode=signup" className="mt-7 inline-block">
+              <Button size="lg" className="gap-2 bg-lime-400 font-semibold text-black hover:bg-lime-300 glow-lime-soft">
+                Create my portfolio <ArrowRight className="size-4" />
+              </Button>
+            </Link>
           </div>
         </Reveal>
       </section>
-    </PageShell>
+    </div>
   );
 }

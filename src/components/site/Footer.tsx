@@ -29,18 +29,17 @@ const DEFAULT_SOCIALS = [
 ];
 
 const UPCOMING = [
-  "Opportunity Hub",
+  "Academy 🔒",
+  "Opportunity Hub 🔒",
+  "Learning paths",
+  "Certificates",
   "Internships",
   "Scholarships",
-  "Recruitment",
-  "Mentorship",
-  "AI Career Coach",
 ];
 
 const DESCRIPTION =
-  "The learning platform of ForgeX Network. Discover skills, express " +
-  "yourself, and build the career you want — with structured paths, " +
-  "verified tutors and certificates that unlock real opportunities.";
+  "The portfolio platform of ForgeX Network. Create your portfolio once, " +
+  "turn it into your own professional website, and share one link anywhere.";
 
 export function Footer() {
   const content = useQuery(api.public.siteContentAll);
@@ -72,16 +71,16 @@ export function Footer() {
              minimal: brand, short description, tagline, utility row. */}
         <div className="md:hidden">
           <div className="flex items-center gap-2.5">
-            <img src={brandLogo} alt="ForgeX Academy" className="size-8 rounded-lg" />
+            <img src={brandLogo} alt="ForgeX Projects" className="size-8 rounded-lg" />
             <span className="font-display text-base font-bold">
-              ForgeX<span className="text-lime-400"> Academy</span>
+              ForgeX<span className="text-lime-400"> Projects</span>
             </span>
           </div>
           <p className="mt-3 max-w-sm text-xs leading-relaxed text-muted-foreground">
             {DESCRIPTION}
           </p>
           <p className="mt-3 text-[10px] font-semibold uppercase tracking-widest text-lime-400/80">
-            Discover. Express. Build.
+            Build once. Share one link.
           </p>
 
           <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-white/10 pt-4">
@@ -119,16 +118,16 @@ export function Footer() {
         <div className="hidden gap-10 md:grid md:grid-cols-4">
           <div className="md:col-span-2">
             <div className="flex items-center gap-2.5">
-              <img src={brandLogo} alt="ForgeX Academy" className="size-9 rounded-xl" />
+              <img src={brandLogo} alt="ForgeX Projects" className="size-9 rounded-xl" />
               <span className="font-display text-lg font-bold">
-                ForgeX<span className="text-lime-400"> Academy</span>
+                ForgeX<span className="text-lime-400"> Projects</span>
               </span>
             </div>
             <p className="mt-4 max-w-sm text-sm leading-relaxed text-muted-foreground">
               {DESCRIPTION}
             </p>
             <p className="mt-4 text-xs font-semibold uppercase tracking-widest text-lime-400/80">
-              Discover. Express. Build.
+              Build once. Share one link.
             </p>
           </div>
 
@@ -137,14 +136,19 @@ export function Footer() {
             <h4 className="text-sm font-semibold text-foreground">Quick links</h4>
             <ul className="mt-4 space-y-2.5 text-sm text-muted-foreground">
               <li><Link to="/" className="transition-colors hover:text-lime-300">Home</Link></li>
+              <li><Link to="/explore" className="transition-colors hover:text-lime-300">Explore portfolios</Link></li>
               <li><Link to="/about" className="transition-colors hover:text-lime-300">About</Link></li>
-              <li><Link to="/courses" className="transition-colors hover:text-lime-300">Courses</Link></li>
-              <li><Link to="/tutors" className="transition-colors hover:text-lime-300">Tutors</Link></li>
-              <li><Link to="/roadmap" className="transition-colors hover:text-lime-300">Roadmap</Link></li>
-              <li><Link to="/ai-hub" className="transition-colors hover:text-lime-300">AI Hub</Link></li>
-              <li><Link to="/prompts" className="transition-colors hover:text-lime-300">Prompt Library</Link></li>
-              <li><Link to="/stories" className="transition-colors hover:text-lime-300">Stories</Link></li>
               <li><Link to="/contact" className="transition-colors hover:text-lime-300">Contact</Link></li>
+              <li>
+                <Link to="/academy" className="transition-colors hover:text-lime-300">
+                  Academy <span className="text-lime-400/80">🔒</span>
+                </Link>
+              </li>
+              <li>
+                <Link to="/opportunity-hub" className="transition-colors hover:text-lime-300">
+                  Opportunity Hub <span className="text-lime-400/80">🔒</span>
+                </Link>
+              </li>
             </ul>
           </div>
 

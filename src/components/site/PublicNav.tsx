@@ -3,25 +3,20 @@ import { Link, NavLink, useLocation, useNavigate } from "react-router";
 import { useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import {
-  LogOut,
-  LayoutDashboard,
-  User,
-  Home,
-  BookOpen,
-  GraduationCap,
-  Map,
-  Sparkles,
-  FileText,
   Bell,
-  Bookmark,
-  Mail,
-  InfoIcon,
-  Award,
   ChevronDown,
-  Search,
+  Compass,
+  Home,
+  InfoIcon,
+  LayoutDashboard,
+  Lock,
+  LogOut,
+  Mail,
+  PenSquare,
+  Sparkles,
+  User,
 } from "lucide-react";
 import { MobileBottomNav } from "./MobileBottomNav";
-import { SiteSearch } from "./SiteSearch";
 import { SiteNotifications } from "./SiteNotifications";
 import { cn } from "@/lib/utils";
 import { scrollToTopInstant } from "@/lib/scroll";
@@ -30,38 +25,31 @@ import { useAuth } from "@/hooks/use-auth";
 import logo from "@/assets/logo.svg";
 import { Avatar } from "./Avatar";
 import type { MobileNavItem, MobileNavSection } from "./MobileBottomNav";
+import { PRODUCT_META, type ProductKey } from "@/lib/features";
 
 /* ═══════════════════════════════════════════════════════════════════════
-   NAV DATA
+   NAV DATA — the public site is about Projects. Academy and Opportunity
+   Hub remain visible as LOCKED future products (they open a Coming Soon
+   page, never the product itself).
    ═══════════════════════════════════════════════════════════════════════ */
 
-type NavItemDef = {
-  to: string;
-  label: string;
-  icon: typeof Home;
-  end?: boolean;
-};
+type NavItemDef = { to: string; label: string; icon: typeof Home; end?: boolean };
 
 const PRIMARY_NAV: NavItemDef[] = [
   { to: "/", label: "Home", icon: Home, end: true },
-  { to: "/courses", label: "Courses", icon: BookOpen },
-  { to: "/tutors", label: "Tutors", icon: GraduationCap },
-  { to: "/roadmap", label: "Roadmap", icon: Map },
+  { to: "/explore", label: "Explore", icon: Compass },
 ];
 
-const EXPLORE_ITEMS: NavItemDef[] = [
-  { to: "/ai-hub", label: "AI Hub", icon: Sparkles },
-  { to: "/prompts", label: "Prompt Library", icon: FileText },
-  { to: "/updates", label: "Updates", icon: Bell },
-  { to: "/stories", label: "Stories", icon: Bookmark },
+const PRODUCT_NAV: { to: string; product: ProductKey }[] = [
+  { to: "/academy", product: "academy" },
+  { to: "/opportunity-hub", product: "opportunity-hub" },
 ];
 
 const MORE_ITEMS: NavItemDef[] = [
-  { to: "/contact", label: "Contact", icon: Mail },
   { to: "/about", label: "About", icon: InfoIcon },
+  { to: "/contact", label: "Contact", icon: Mail },
 ];
 
-/** Reset scroll on every in-app navigation click (header links, CTAs…). */
 const scrollTop = scrollToTopInstant;
 
 /* ═══════════════════════════════════════════════════════════════════════
@@ -86,7 +74,6 @@ function HoverDropdown({
     if (timeoutRef.current) clearTimeout(timeoutRef.current);
     setOpen(true);
   };
-
   const closeMenu = () => {
     timeoutRef.current = setTimeout(() => setOpen(false), 120);
   };
@@ -102,11 +89,9 @@ function HoverDropdown({
       <button className={triggerClassName}>{trigger}</button>
       <div
         className={cn(
-          "absolute top-full z-50 mt-1.5 min-w-[200px] overflow-hidden rounded-xl border border-white/10 bg-[#111311]/95 shadow-xl shadow-black/30 backdrop-blur-xl transition-all duration-150",
+          "absolute top-full z-50 mt-1.5 min-w-[220px] overflow-hidden rounded-xl border border-white/10 bg-[#111311]/95 shadow-xl shadow-black/30 backdrop-blur-xl transition-all duration-150",
           align === "right" ? "right-0" : "left-0",
-          open
-            ? "opacity-100 translate-y-0"
-            : "opacity-0 -translate-y-1 pointer-events-none",
+          open ? "opacity-100 translate-y-0" : "opacity-0 -translate-y-1 pointer-events-none",
         )}
         onMouseEnter={openMenu}
         onMouseLeave={closeMenu}
@@ -123,33 +108,27 @@ function HoverDropdown({
 
 export function PublicNav() {
   const { isAuthenticated, user, signOut } = useAuth();
-  const content = useQuery(api.public.siteContentAll);
+  const flags = useQuery(api.projects.featureFlags);
   const navigate = useNavigate();
   const location = useLocation();
   const [scrolled, setScrolled] = useState(false);
-  const [searchOpen, setSearchOpen] = useState(false);
   const [notifOpen, setNotifOpen] = useState(false);
 
-  /* Live unread badge for the bell — the guest-safe header query returns
-     null for signed-out visitors; same notifications table as the dashboard. */
   const headerNotifications = useQuery(api.notifications.myNotificationsForHeader);
-  const unreadCount =
-    headerNotifications?.filter((n) => !n.read).length ?? 0;
+  const unreadCount = headerNotifications?.filter((n) => !n.read).length ?? 0;
 
-  const brandLogo = (content?.logo as string | undefined) || logo;
+  // Products render in the nav as locked until their flag says otherwise.
+  const lockedProducts = PRODUCT_NAV.filter((p) => {
+    const flag = flags?.find((f) => f.key === p.product);
+    return (flag?.state ?? "locked") !== "active";
+  });
 
   const dashboardTo =
-    user?.role === "tutor"
-      ? "/tutor"
-      : user?.role === "admin" || user?.role === "owner"
-        ? "/admin"
-        : "/dashboard";
+    user?.role === "admin" || user?.role === "owner" ? "/admin" : "/portfolio";
   const profileTo =
-    user?.role === "tutor"
-      ? "/tutor"
-      : user?.role === "admin" || user?.role === "owner"
-        ? "/admin/profile"
-        : "/dashboard/profile";
+    user?.role === "admin" || user?.role === "owner"
+      ? "/admin/profile"
+      : "/portfolio/account";
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 12);
@@ -163,17 +142,6 @@ export function PublicNav() {
     navigate("/");
   };
 
-  const exploreHasActive = EXPLORE_ITEMS.some(
-    (i) =>
-      location.pathname === i.to ||
-      (!i.end && location.pathname.startsWith(i.to + "/")),
-  );
-  const moreHasActive = MORE_ITEMS.some(
-    (i) =>
-      location.pathname === i.to ||
-      (!i.end && location.pathname.startsWith(i.to + "/")),
-  );
-
   const desktopLinkClass = ({ isActive }: { isActive: boolean }) =>
     cn(
       "rounded-full px-3 py-2 text-[13px] font-medium transition-colors whitespace-nowrap",
@@ -182,23 +150,24 @@ export function PublicNav() {
         : "text-muted-foreground hover:bg-white/5 hover:text-foreground",
     );
 
-  /* ── Mobile bottom nav data ──────────────────────────────────────
-     Exactly: Home | Courses | Certificates | Profile/Inbox | More.
-     Roadmap lives in the More menu. Guests get bounced to auth from
-     protected destinations (handled by RequireAuth). */
-  const profileLabel = isAuthenticated ? "Profile" : "Inbox";
+  const productsHasActive = lockedProducts.some((p) => location.pathname === p.to);
 
   const mobilePrimary: MobileNavItem[] = [
     { to: "/", label: "Home", icon: <Home className="size-5" />, end: true },
-    { to: "/courses", label: "Courses", icon: <BookOpen className="size-5" /> },
+    { to: "/explore", label: "Explore", icon: <Compass className="size-5" /> },
     {
-      to: "/dashboard/certificates",
-      label: "Certificates",
-      icon: <Award className="size-5" />,
+      to: isAuthenticated ? "/portfolio" : "/auth?mode=signup",
+      label: isAuthenticated ? "Dashboard" : "Create",
+      icon: isAuthenticated ? (
+        <LayoutDashboard className="size-5" />
+      ) : (
+        <PenSquare className="size-5" />
+      ),
+      end: true,
     },
     {
       to: isAuthenticated ? profileTo : "/contact",
-      label: profileLabel,
+      label: isAuthenticated ? "Account" : "Contact",
       icon: <User className="size-5" />,
       end: true,
     },
@@ -206,50 +175,38 @@ export function PublicNav() {
 
   const mobileMore: MobileNavSection[] = [
     {
-      label: "Explore",
+      label: "Coming soon",
       items: [
-        { to: "/roadmap", label: "Roadmap", icon: <Map className="size-4" /> },
-        { to: "/ai-hub", label: "AI Hub", icon: <Sparkles className="size-4" /> },
-        { to: "/prompts", label: "Prompt Library", icon: <FileText className="size-4" /> },
-        { to: "/updates", label: "Updates", icon: <Bell className="size-4" /> },
-        { to: "/stories", label: "Stories", icon: <Bookmark className="size-4" /> },
+        {
+          to: "/academy",
+          label: PRODUCT_META.academy.label,
+          icon: <Lock className="size-4" />,
+        },
+        {
+          to: "/opportunity-hub",
+          label: PRODUCT_META["opportunity-hub"].label,
+          icon: <Lock className="size-4" />,
+        },
       ],
     },
     {
-      label: "About",
+      label: "Projects",
       items: [
-        { to: "/contact", label: "Contact", icon: <Mail className="size-4" /> },
         { to: "/about", label: "About", icon: <InfoIcon className="size-4" /> },
+        { to: "/contact", label: "Contact", icon: <Mail className="size-4" /> },
+        ...(isAuthenticated
+          ? [
+              {
+                to: "/portfolio/edit",
+                label: "Edit portfolio",
+                icon: <PenSquare className="size-4" />,
+              },
+            ]
+          : []),
       ],
     },
-    ...(isAuthenticated
-      ? [
-          {
-            label: "Account" as const,
-            items: [
-              {
-                to: dashboardTo,
-                label: "Dashboard",
-                icon: <LayoutDashboard className="size-4" />,
-              },
-            ],
-          },
-        ]
-      : [
-          {
-            label: "Account" as const,
-            items: [
-              {
-                to: "/auth?mode=signin",
-                label: "Login",
-                icon: <User className="size-4" />,
-              },
-            ],
-          },
-        ]),
   ];
 
-  /* Round icon buttons for search + notifications (premium, consistent). */
   const iconButtonClass =
     "relative flex size-9 items-center justify-center rounded-full border border-white/10 bg-white/5 text-muted-foreground transition-colors hover:border-lime-400/40 hover:text-lime-300";
 
@@ -264,26 +221,24 @@ export function PublicNav() {
         )}
       >
         <div className="mx-auto flex h-16 max-w-7xl items-center justify-between gap-3 px-4 sm:px-6 lg:h-[4.5rem]">
-          {/* ── Brand: logo · ForgeX Academy · Discover • Express • Build ── */}
+          {/* Brand */}
           <Link to="/" className="group flex min-w-0 shrink-0 items-center gap-2.5" onClick={scrollTop}>
             <img
-              src={brandLogo}
-              alt="ForgeX Academy"
+              src={logo}
+              alt="ForgeX Projects"
               className="size-9 rounded-lg lg:size-10 lg:rounded-xl"
             />
             <span className="min-w-0 leading-tight">
               <span className="font-display block text-[15px] font-bold tracking-tight lg:text-lg">
-                ForgeX<span className="text-lime-400"> Academy</span>
+                ForgeX<span className="text-lime-400"> Projects</span>
               </span>
               <span className="hidden text-[11px] font-medium tracking-wide text-muted-foreground sm:block">
-                Discover • Express • Build
+                Build once • Share one link
               </span>
             </span>
           </Link>
 
-          {/* ═══════════════════════════════════════════════════════════
-              DESKTOP NAV (≥ md)
-              ═══════════════════════════════════════════════════════════ */}
+          {/* Desktop nav */}
           <nav className="hidden items-center gap-0.5 md:flex">
             {PRIMARY_NAV.map((l) => (
               <NavLink
@@ -297,45 +252,52 @@ export function PublicNav() {
               </NavLink>
             ))}
 
-            {/* Explore dropdown */}
-            <HoverDropdown
-              trigger={
-                <>
-                  Explore
-                  <ChevronDown className="ml-1 size-3.5" />
-                </>
-              }
-              triggerClassName={cn(
-                "flex items-center rounded-full px-3 py-2 text-[13px] font-medium transition-colors whitespace-nowrap",
-                exploreHasActive
-                  ? "bg-lime-400/10 text-lime-300"
-                  : "text-muted-foreground hover:bg-white/5 hover:text-foreground",
-              )}
-            >
-              <div className="py-1.5">
-                {EXPLORE_ITEMS.map((item) => (
-                  <NavLink
-                    key={item.to}
-                    to={item.to}
-                    end={item.end}
-                    onClick={scrollTop}
-                    className={({ isActive }) =>
-                      cn(
-                        "flex items-center gap-2.5 px-3.5 py-2 text-sm transition-colors",
-                        isActive
-                          ? "bg-lime-400/10 text-lime-300"
-                          : "text-muted-foreground hover:bg-white/5 hover:text-foreground",
-                      )
-                    }
-                  >
-                    <item.icon className="size-4 shrink-0" />
-                    {item.label}
-                  </NavLink>
-                ))}
-              </div>
-            </HoverDropdown>
+            {lockedProducts.length > 0 && (
+              <HoverDropdown
+                trigger={
+                  <>
+                    Coming soon
+                    <ChevronDown className="ml-1 size-3.5" />
+                  </>
+                }
+                triggerClassName={cn(
+                  "flex items-center rounded-full px-3 py-2 text-[13px] font-medium transition-colors whitespace-nowrap",
+                  productsHasActive
+                    ? "bg-lime-400/10 text-lime-300"
+                    : "text-muted-foreground hover:bg-white/5 hover:text-foreground",
+                )}
+              >
+                <div className="py-1.5">
+                  {lockedProducts.map((p) => {
+                    const meta = PRODUCT_META[p.product];
+                    return (
+                      <NavLink
+                        key={p.to}
+                        to={p.to}
+                        onClick={scrollTop}
+                        className={({ isActive }) =>
+                          cn(
+                            "flex items-start gap-2.5 px-3.5 py-2.5 transition-colors",
+                            isActive
+                              ? "bg-lime-400/10 text-lime-300"
+                              : "text-muted-foreground hover:bg-white/5 hover:text-foreground",
+                          )
+                        }
+                      >
+                        <Lock className="mt-0.5 size-4 shrink-0" />
+                        <span className="min-w-0">
+                          <span className="block text-sm font-medium">{meta.label}</span>
+                          <span className="block text-[11px] text-muted-foreground">
+                            Coming soon
+                          </span>
+                        </span>
+                      </NavLink>
+                    );
+                  })}
+                </div>
+              </HoverDropdown>
+            )}
 
-            {/* More dropdown */}
             <HoverDropdown
               trigger={
                 <>
@@ -343,19 +305,13 @@ export function PublicNav() {
                   <ChevronDown className="ml-1 size-3.5" />
                 </>
               }
-              triggerClassName={cn(
-                "flex items-center rounded-full px-3 py-2 text-[13px] font-medium transition-colors whitespace-nowrap",
-                moreHasActive
-                  ? "bg-lime-400/10 text-lime-300"
-                  : "text-muted-foreground hover:bg-white/5 hover:text-foreground",
-              )}
+              triggerClassName="flex items-center rounded-full px-3 py-2 text-[13px] font-medium text-muted-foreground transition-colors hover:bg-white/5 hover:text-foreground whitespace-nowrap"
             >
               <div className="py-1.5">
                 {MORE_ITEMS.map((item) => (
                   <NavLink
                     key={item.to}
                     to={item.to}
-                    end={item.end}
                     onClick={scrollTop}
                     className={({ isActive }) =>
                       cn(
@@ -374,20 +330,8 @@ export function PublicNav() {
             </HoverDropdown>
           </nav>
 
-          {/* ═══════════════════════════════════════════════════════════
-              RIGHT SIDE — Search · Notifications · Profile/CTA
-              ═══════════════════════════════════════════════════════════ */}
+          {/* Right side */}
           <div className="flex shrink-0 items-center gap-2">
-            {/* Search — functional, opens the site-wide search dialog */}
-            <button
-              aria-label="Search ForgeX Academy"
-              className={iconButtonClass}
-              onClick={() => setSearchOpen(true)}
-            >
-              <Search className="size-4" />
-            </button>
-
-            {/* Notifications — real bell with live unread badge */}
             <button
               aria-label={
                 unreadCount > 0
@@ -407,7 +351,6 @@ export function PublicNav() {
 
             {isAuthenticated ? (
               <>
-                {/* Desktop: exactly one Dashboard link */}
                 <Button
                   variant="ghost"
                   size="sm"
@@ -422,13 +365,12 @@ export function PublicNav() {
                   Dashboard
                 </Button>
 
-                {/* Desktop: account dropdown (avatar) */}
                 <div className="hidden md:block">
                   <HoverDropdown
                     align="right"
                     trigger={
                       <Avatar
-                        name={user?.name ?? "Student"}
+                        name={user?.name ?? "Creator"}
                         image={user?.image}
                         className="size-9 cursor-pointer"
                       />
@@ -437,7 +379,7 @@ export function PublicNav() {
                   >
                     <div className="px-3 py-2.5">
                       <p className="truncate text-sm font-semibold">
-                        {user?.name ?? "Student"}
+                        {user?.name ?? "Creator"}
                       </p>
                       <p className="truncate text-xs text-muted-foreground">
                         {user?.email ?? ""}
@@ -453,39 +395,31 @@ export function PublicNav() {
                         }}
                         className="flex w-full items-center gap-2.5 px-3.5 py-2 text-sm text-muted-foreground transition-colors hover:bg-white/5 hover:text-foreground"
                       >
-                        <User className="size-4" />
-                        Profile
+                        <User className="size-4" /> Account
                       </button>
                       <button
-                        onClick={handleSignOut}
+                        onClick={() => void handleSignOut()}
                         className="flex w-full items-center gap-2.5 px-3.5 py-2 text-sm text-rose-400 transition-colors hover:bg-rose-400/8 hover:text-rose-300"
                       >
-                        <LogOut className="size-4" />
-                        Logout
+                        <LogOut className="size-4" /> Logout
                       </button>
                     </div>
                   </HoverDropdown>
                 </div>
 
-                {/* Mobile: only the profile avatar links to Profile */}
                 <button
                   className="md:hidden"
-                  aria-label="Profile"
+                  aria-label="Account"
                   onClick={() => {
                     navigate(profileTo);
                     scrollTop();
                   }}
                 >
-                  <Avatar
-                    name={user?.name ?? "Student"}
-                    image={user?.image}
-                    className="size-9"
-                  />
+                  <Avatar name={user?.name ?? "Creator"} image={user?.image} className="size-9" />
                 </button>
               </>
             ) : (
               <>
-                {/* Desktop: Login + Sign up */}
                 <div className="hidden items-center gap-2 md:flex">
                   <Button
                     variant="ghost"
@@ -494,19 +428,19 @@ export function PublicNav() {
                     data-prefetch="/auth"
                     onClick={() => navigate("/auth?mode=signin")}
                   >
-                    Login
+                    Sign In
                   </Button>
                   <Button
                     size="sm"
-                    className="h-8 bg-lime-400 text-xs font-semibold text-black hover:bg-lime-300 glow-lime-soft"
+                    className="h-8 gap-1.5 bg-lime-400 text-xs font-semibold text-black hover:bg-lime-300 glow-lime-soft"
                     data-prefetch="/auth"
                     onClick={() => navigate("/auth?mode=signup")}
                   >
-                    Sign up
+                    <Sparkles className="size-3.5" />
+                    Create Account
                   </Button>
                 </div>
 
-                {/* Mobile: one Get Started CTA */}
                 <Button
                   size="sm"
                   className="h-8 bg-lime-400 text-xs font-semibold text-black hover:bg-lime-300 md:hidden"
@@ -521,8 +455,6 @@ export function PublicNav() {
         </div>
       </header>
 
-      {/* Functional header overlays */}
-      <SiteSearch open={searchOpen} onOpenChange={setSearchOpen} />
       <SiteNotifications open={notifOpen} onOpenChange={setNotifOpen} />
 
       <MobileBottomNav primaryItems={mobilePrimary} moreSections={mobileMore} />

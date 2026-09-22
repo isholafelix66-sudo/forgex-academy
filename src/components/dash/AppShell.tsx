@@ -30,6 +30,10 @@ export function AppShell({
   footer,
   title,
   banner,
+  brand,
+  brandAlt,
+  profilePath,
+  showRoleLink,
   mobilePrimaryItems,
   mobileMoreSections,
 }: {
@@ -38,6 +42,14 @@ export function AppShell({
   title: string;
   /** Optional full-width strip rendered above the header (e.g. admin preview). */
   banner?: ReactNode;
+  /** Sidebar wordmark — defaults to the ForgeX Academy branding. */
+  brand?: ReactNode;
+  /** Alt text for the sidebar logo. */
+  brandAlt?: string;
+  /** Where the sidebar/header avatar links for a signed-in user. */
+  profilePath?: string;
+  /** Hide the role shortcut (used by shells whose product is locked). */
+  showRoleLink?: boolean;
   mobilePrimaryItems?: MobileNavItem[];
   mobileMoreSections?: MobileNavSection[];
 }) {
@@ -65,7 +77,7 @@ export function AppShell({
   const profileLink = isAdmin
     ? "/admin/profile"
     : hasAccount
-      ? "/dashboard/profile"
+      ? (profilePath ?? "/dashboard/profile")
       : null;
 
   const handleSignOut = async () => {
@@ -75,9 +87,10 @@ export function AppShell({
 
   // The admin dashboard is password-gated and reachable ONLY by visiting
   // /admin directly — it must never appear as a button to students, tutors
-  // or even signed-in admins. Verified tutors get a link to their dashboard.
+  // or even signed-in admins. Verified tutors get a link to their dashboard
+  // (hidden on shells for products that are currently locked).
   const roleLink =
-    user?.role === "tutor" && user.verified
+    showRoleLink !== false && user?.role === "tutor" && user.verified
       ? { to: "/tutor", label: "Tutor dashboard" }
       : null;
 
@@ -85,9 +98,13 @@ export function AppShell({
     <div className="flex h-full flex-col">
       <div className="flex h-16 items-center gap-2.5 border-b border-white/8 px-5">
         <Link to="/" className="flex items-center gap-2.5">
-          <img src={logo} alt="ForgeX Academy" className="size-8 rounded-lg" />
+          <img src={logo} alt={brandAlt ?? "ForgeX"} className="size-8 rounded-lg" />
           <span className="font-display text-base font-bold">
-            ForgeX<span className="text-lime-400"> Academy</span>
+            {brand ?? (
+              <>
+                ForgeX<span className="text-lime-400"> Academy</span>
+              </>
+            )}
           </span>
         </Link>
       </div>

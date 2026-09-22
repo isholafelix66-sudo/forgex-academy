@@ -96,8 +96,8 @@ export default function Contact() {
             We'd love to <span className="text-gradient">hear from you</span>
           </h1>
           <p className="mt-6 text-lg leading-relaxed text-muted-foreground">
-            Questions about courses, tutor applications, certificates or the
-            ForgeX Network? Reach out — the Academy team responds quickly.
+            Questions about your portfolio, publishing, visibility or the ForgeX
+            Network? Reach out — the Projects team responds quickly.
           </p>
         </Reveal>
 

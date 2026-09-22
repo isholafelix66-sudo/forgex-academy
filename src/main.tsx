@@ -19,6 +19,8 @@ import { attachRoutePrefetch } from "@/lib/prefetch";
 import { registerServiceWorker } from "@/lib/sw";
 import { scrollToTopInstant } from "@/lib/scroll";
 import { PublicLayout } from "@/components/site/PublicLayout";
+import { FeatureGate } from "@/components/site/FeatureGate";
+import { ProductEntry } from "@/pages/ComingSoon";
 import { ConnectionBanner } from "@/components/network/ConnectionBanner";
 import { NameSetupDialog } from "@/components/NameSetupDialog";
 import { AiSupportAssistant } from "@/components/site/AiSupportAssistant";
@@ -190,6 +192,18 @@ const AuthPage = L(() => import("./pages/Auth.tsx"));
 const NotFound = L(() => import("./pages/NotFound.tsx"));
 
 // ---------------------------------------------------------------------------
+// Projects — the live product
+// ---------------------------------------------------------------------------
+const Explore = L(() => import("./pages/Explore.tsx"));
+const PublicPortfolio = L(() => import("./pages/PublicPortfolio.tsx"));
+const PortfolioShell = L(() => import("./pages/dashboard/PortfolioShell.tsx"));
+const PortfolioOverview = L(() => import("./pages/dashboard/PortfolioOverview.tsx"));
+const PortfolioEditor = L(() => import("./pages/dashboard/PortfolioEditor.tsx"));
+const PortfolioProjects = L(() => import("./pages/dashboard/PortfolioProjects.tsx"));
+const PortfolioSettings = L(() => import("./pages/dashboard/PortfolioSettings.tsx"));
+const PortfolioAccount = L(() => import("./pages/dashboard/PortfolioAccount.tsx"));
+
+// ---------------------------------------------------------------------------
 // Learning + student dashboard
 // ---------------------------------------------------------------------------
 const Learn = L(() => import("./pages/Learn.tsx"));
@@ -277,6 +291,11 @@ const AdminErrors = L(() => import("./pages/admin/AdminErrors.tsx"));
 const AdminIncidents = L(() => import("./pages/admin/AdminIncidents.tsx"));
 const AdminActivity = L(() => import("./pages/admin/AdminActivity.tsx"));
 const AdminAlertsPage = L(() => import("./pages/admin/AdminAlerts.tsx"));
+
+// Projects platform management
+const AdminPortfolios = L(() => import("./pages/admin/AdminPortfolios.tsx"));
+const AdminProjectsAdmin = L(() => import("./pages/admin/AdminProjectsAdmin.tsx"));
+const AdminWaitlist = L(() => import("./pages/admin/AdminWaitlist.tsx"));
 
 // Communication & Community module (admin moderation)
 const AdminCommunication = L(() => import("./pages/admin/AdminCommunication.tsx"));
@@ -995,47 +1014,183 @@ createRoot(document.getElementById("root")!).render(
                   never unmounts/repaints (the old white flash on every
                   desktop navigation). ── */}
               <Route element={<PublicLayout />}>
+                {/* ── Projects — the live product ── */}
                 <Route path="/" element={<Landing />} />
+                <Route path="/explore" element={<Explore />} />
                 <Route path="/about" element={<About />} />
-                <Route path="/courses" element={<Courses />} />
-                <Route path="/courses/:slug" element={<CourseDetail />} />
-                <Route path="/tutors" element={<Tutors />} />
-                <Route path="/tutors/:id" element={<TutorDetail />} />
-                <Route path="/roadmap" element={<RoadmapPage />} />
-                <Route path="/updates" element={<Updates />} />
-                <Route path="/stories" element={<Stories />} />
-                <Route path="/ai-hub" element={<AIHub />} />
-                <Route path="/prompts" element={<PromptLibrary />} />
-                <Route path="/prompts/:slug" element={<PromptDetail />} />
                 <Route path="/contact" element={<Contact />} />
-                <Route path="/become-tutor" element={<BecomeTutor />} />
-                <Route path="/verify/:certificateId" element={<VerifyCertificate />} />
-                <Route path="/tutor/:slug" element={<TutorPage />} />
+
+                {/* ── Locked future products. Their own URLs open a Coming
+                    Soon page while locked, and forward to the real product
+                    home if an admin flips the flag to active. ── */}
+                <Route
+                  path="/academy"
+                  element={<ProductEntry product="academy" to="/courses" />}
+                />
+                <Route
+                  path="/opportunity-hub"
+                  element={<ProductEntry product="opportunity-hub" to="/" />}
+                />
+
+                {/* ── Academy stays wired end-to-end behind its flag, so
+                    launching it later is a flag change, not a rebuild. ── */}
+                <Route
+                  path="/courses"
+                  element={
+                    <FeatureGate product="academy">
+                      <Courses />
+                    </FeatureGate>
+                  }
+                />
+                <Route
+                  path="/courses/:slug"
+                  element={
+                    <FeatureGate product="academy">
+                      <CourseDetail />
+                    </FeatureGate>
+                  }
+                />
+                <Route
+                  path="/tutors"
+                  element={
+                    <FeatureGate product="academy">
+                      <Tutors />
+                    </FeatureGate>
+                  }
+                />
+                <Route
+                  path="/tutors/:id"
+                  element={
+                    <FeatureGate product="academy">
+                      <TutorDetail />
+                    </FeatureGate>
+                  }
+                />
+                <Route
+                  path="/roadmap"
+                  element={
+                    <FeatureGate product="academy">
+                      <RoadmapPage />
+                    </FeatureGate>
+                  }
+                />
+                <Route
+                  path="/updates"
+                  element={
+                    <FeatureGate product="academy">
+                      <Updates />
+                    </FeatureGate>
+                  }
+                />
+                <Route
+                  path="/stories"
+                  element={
+                    <FeatureGate product="academy">
+                      <Stories />
+                    </FeatureGate>
+                  }
+                />
+                <Route
+                  path="/ai-hub"
+                  element={
+                    <FeatureGate product="academy">
+                      <AIHub />
+                    </FeatureGate>
+                  }
+                />
+                <Route
+                  path="/prompts"
+                  element={
+                    <FeatureGate product="academy">
+                      <PromptLibrary />
+                    </FeatureGate>
+                  }
+                />
+                <Route
+                  path="/prompts/:slug"
+                  element={
+                    <FeatureGate product="academy">
+                      <PromptDetail />
+                    </FeatureGate>
+                  }
+                />
+                <Route
+                  path="/become-tutor"
+                  element={
+                    <FeatureGate product="academy">
+                      <BecomeTutor />
+                    </FeatureGate>
+                  }
+                />
+                <Route
+                  path="/verify/:certificateId"
+                  element={
+                    <FeatureGate product="academy">
+                      <VerifyCertificate />
+                    </FeatureGate>
+                  }
+                />
+                <Route
+                  path="/tutor/:slug"
+                  element={
+                    <FeatureGate product="academy">
+                      <TutorPage />
+                    </FeatureGate>
+                  }
+                />
+
                 {/* Catch-all 404 also renders inside the public shell. */}
                 <Route path="*" element={<NotFound />} />
               </Route>
+
+              {/* Public portfolio website — a standalone personal site
+                  (/p/<slug>) with its own minimal chrome, deliberately
+                  outside the marketing shell. */}
+              <Route path="/p/:slug" element={<PublicPortfolio />} />
+
               <Route
                 path="/auth"
-                element={<AuthPage redirectAfterAuth="/dashboard" />}
+                element={<AuthPage redirectAfterAuth="/portfolio" />}
               />
 
-              {/* Course player (signed in) */}
+              {/* ── Projects dashboard — the portfolio-only workspace ── */}
+              <Route
+                path="/portfolio"
+                element={
+                  <RequireAuth>
+                    <PortfolioShell />
+                  </RequireAuth>
+                }
+              >
+                <Route index element={<PortfolioOverview />} />
+                <Route path="edit" element={<PortfolioEditor />} />
+                <Route path="edit/:section" element={<PortfolioEditor />} />
+                <Route path="projects" element={<PortfolioProjects />} />
+                <Route path="settings" element={<PortfolioSettings />} />
+                <Route path="account" element={<PortfolioAccount />} />
+              </Route>
+
+              {/* Course player (signed in) — Academy, locked by default. */}
               <Route
                 path="/learn/:slug"
                 element={
-                  <RequireAuth>
-                    <Learn />
-                  </RequireAuth>
+                  <FeatureGate product="academy" redirectAuthenticatedTo="/portfolio">
+                    <RequireAuth>
+                      <Learn />
+                    </RequireAuth>
+                  </FeatureGate>
                 }
               />
 
-              {/* Student dashboard */}
+              {/* Student dashboard — Academy, locked by default. */}
               <Route
                 path="/dashboard"
                 element={
-                  <RequireAuth>
-                    <DashboardShell />
-                  </RequireAuth>
+                  <FeatureGate product="academy" redirectAuthenticatedTo="/portfolio">
+                    <RequireAuth>
+                      <DashboardShell />
+                    </RequireAuth>
+                  </FeatureGate>
                 }
               >
                 <Route index element={<DashboardHome />} />
@@ -1059,13 +1214,16 @@ createRoot(document.getElementById("root")!).render(
               </Route>
 
               {/* Tutor dashboard — verified tutors only, or the admin session
-                  (password gate, no account) can preview it read-only. */}
+                  (password gate, no account) can preview it read-only.
+                  Academy product, so it is gated like the rest of it. */}
               <Route
                 path="/tutor"
                 element={
-                  <RequireTutor>
-                    <TutorShell />
-                  </RequireTutor>
+                  <FeatureGate product="academy" redirectAuthenticatedTo="/portfolio">
+                    <RequireTutor>
+                      <TutorShell />
+                    </RequireTutor>
+                  </FeatureGate>
                 }
               >
                 <Route index element={<TutorOverview />} />
@@ -1127,6 +1285,11 @@ createRoot(document.getElementById("root")!).render(
                 <Route path="teams" element={<AdminTeamManagement />} />
                 <Route path="ai-support" element={<AdminAiSupport />} />
                 <Route path="email-center" element={<AdminEmailCenter />} />
+
+                {/* ForgeX Projects management */}
+                <Route path="portfolios" element={<AdminPortfolios />} />
+                <Route path="projects" element={<AdminProjectsAdmin />} />
+                <Route path="waitlist" element={<AdminWaitlist />} />
 
                 {/* System Health & monitoring */}
                 <Route path="system" element={<AdminSystemHealth />} />

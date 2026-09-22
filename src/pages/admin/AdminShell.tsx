@@ -9,7 +9,10 @@ import {
   Braces,
   ClipboardList,
   Flag,
+  FolderKanban,
+  Globe,
   GraduationCap,
+  Rocket,
   Heart,
   ImageIcon,
   Inbox,
@@ -228,6 +231,26 @@ export default function AdminShell() {
 
   const sections = [
     {
+      label: "Projects",
+      items: [
+        {
+          to: "/admin/portfolios",
+          label: "Portfolios",
+          icon: <Globe className="size-4" />,
+        },
+        {
+          to: "/admin/projects",
+          label: "Project moderation",
+          icon: <FolderKanban className="size-4" />,
+        },
+        {
+          to: "/admin/waitlist",
+          label: "Products & waitlist",
+          icon: <Rocket className="size-4" />,
+        },
+      ],
+    },
+    {
       label: "Platform",
       items: [
         { to: "/admin", label: "Overview", icon: <LayoutDashboard className="size-4" />, end: true },
@@ -330,6 +353,9 @@ export default function AdminShell() {
         { to: "/admin/teams", label: "Team Access", icon: <Users className="size-4" /> },
         { to: "/admin/ai-support", label: "AI Support", icon: <Bot className="size-4" /> },
         { to: "/admin/email-center", label: "Email Center", icon: <Mail className="size-4" /> },
+        { to: "/admin/portfolios", label: "Portfolios", icon: <Globe className="size-4" /> },
+        { to: "/admin/projects", label: "Project moderation", icon: <FolderKanban className="size-4" /> },
+        { to: "/admin/waitlist", label: "Products & waitlist", icon: <Rocket className="size-4" /> },
         { to: "/admin/system", label: "System health", icon: <Activity className="size-4" /> },
         { to: "/admin/system/incidents", label: "Incidents", icon: <Siren className="size-4" /> },
       ],

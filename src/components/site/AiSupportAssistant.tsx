@@ -147,7 +147,7 @@ export function AiSupportAssistant() {
     setSending(false);
     const greeting: GuestMessage = {
       role: "ai",
-      body: "Welcome to the ForgeX AI Support Assistant. Ask me about courses, tutoring, certificates, scholarships, placements or anything related to the Academy. I can also help you find the right page.",
+      body: "Welcome to the ForgeX Support Assistant. Ask me about your portfolio, publishing, visibility, your account, or anything else on Projects. I can also help you find the right page.",
     };
     setGuestMessages([greeting]);
     persistGuestMessages([greeting]);
@@ -352,7 +352,7 @@ export function AiSupportAssistant() {
           >
             {visibleMessages.length === 0 ? (
               <p className="text-[13px] text-muted-foreground">
-                Ask about courses, tutoring, certificates, scholarships, placements or anything else about the Academy.
+                Ask about your portfolio, projects, skills, publishing, visibility or your account.
               </p>
             ) : (
               visibleMessages.map((msg, i) => (

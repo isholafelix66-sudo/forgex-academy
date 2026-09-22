@@ -1,653 +1,409 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router";
 import { useQuery } from "convex/react";
-import { motion, useReducedMotion } from "framer-motion";
+import { api } from "@/convex/_generated/api";
+import { motion } from "framer-motion";
 import {
   ArrowRight,
+  Briefcase,
   Check,
+  Compass,
+  Eye,
+  FolderKanban,
+  Globe,
   GraduationCap,
-  Map,
-  Play,
-  ShieldCheck,
+  HeartHandshake,
+  Link2,
+  Lock,
+  Palette,
+  Rocket,
+  Share2,
   Sparkles,
+  Star,
+  Target,
+  User,
+  Wrench,
 } from "lucide-react";
-import { api } from "@/convex/_generated/api";
-import { PageShell } from "@/components/site/PageShell";
+import { Button } from "@/components/ui/button";
+import { Avatar } from "@/components/site/Avatar";
 import { Reveal } from "@/components/site/Reveal";
 import { SectionHeading } from "@/components/site/SectionHeading";
-import { CourseCard, type CourseCardData } from "@/components/site/CourseCard";
-import { MotionCarousel } from "@/components/site/MotionCarousel";
-import { CourseSlideshow } from "@/components/site/CourseSlideshow";
-import { ForgeXMotionVideo } from "@/components/site/ForgeXMotionVideo";
-import { CategoryIcon } from "@/components/site/CategoryIcon";
-import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { courseCoverFor } from "@/lib/course-covers";
-import {
-  normalizeHeroSlides,
-  type HeroSlide,
-} from "@/lib/hero-slides";
 
-/* ═══════════════════════════════════════════════════════════════════════
-   HERO SLIDESHOW — mobile-first, human visuals, no robot imagery.
-   Auto-advances every 5s, pauses on touch/pointer interaction and resumes
-   3s after the last interaction. Dots sit BELOW the card, never over it.
-   ═══════════════════════════════════════════════════════════════════════ */
-
-const HERO_INTERVAL_MS = 5000;
-const HERO_RESUME_MS = 3000;
-
-/**
- * A hero photo that never leaves a slide blank: if the primary URL fails to
- * load (flaky network, regional CDN hiccup), it silently swaps to a verified
- * fallback image, and only gives up (showing the branded gradient) if both
- * fail. All slides render eagerly so the next image is always ready before
- * the slideshow advances.
- */
-function HeroImage({
-  src,
-  fallbackSrc,
-  alt,
-}: {
-  src: string;
-  fallbackSrc?: string;
-  alt: string;
-}) {
-  const [current, setCurrent] = useState(src);
-  const [failed, setFailed] = useState(false);
-
-  useEffect(() => {
-    setCurrent(src);
-    setFailed(false);
-  }, [src, fallbackSrc]);
-
-  if (failed) return null;
-
-  return (
-    <img
-      src={current}
-      alt={alt}
-      width={1920}
-      height={1080}
-      loading="eager"
-      decoding="async"
-      onError={() => {
-        if (fallbackSrc && current !== fallbackSrc) setCurrent(fallbackSrc);
-        else setFailed(true);
-      }}
-      className="relative h-full w-full object-cover"
-    />
-  );
-}
-
-function HeroSlideshow() {
-  // Admin-managed slides (Admin → Website & branding → Hero slideshow).
-  // While loading or when nothing is stored, `normalizeHeroSlides` renders
-  // the built-in defaults — the hero is never blank.
-  const stored = useQuery(api.public.siteContent, { key: "heroSlides" });
-  const reduce = useReducedMotion();
-  const [active, setActive] = useState(0);
-  const wrapRef = useRef<HTMLDivElement>(null);
-  const pausedRef = useRef(false);
-  const resumeTimer = useRef<number | null>(null);
-
-  const slides = useMemo(() => normalizeHeroSlides(stored), [stored]);
-
-  // Warm the browser image cache for every slide (and its fallback) as soon
-  // as the hero mounts, so each slide's photo is always ready the moment it
-  // becomes active — no blank/gradient placeholder on the first rotation.
-  useEffect(() => {
-    for (const s of slides) {
-      const img = new Image();
-      img.src = s.src;
-      if (s.fallbackSrc) {
-        const fb = new Image();
-        fb.src = s.fallbackSrc;
-      }
-    }
-  }, [slides]);
-
-  const pause = useCallback(() => {
-    pausedRef.current = true;
-    if (resumeTimer.current) window.clearTimeout(resumeTimer.current);
-  }, []);
-
-  const scheduleResume = useCallback(() => {
-    if (resumeTimer.current) window.clearTimeout(resumeTimer.current);
-    resumeTimer.current = window.setTimeout(() => {
-      pausedRef.current = false;
-    }, HERO_RESUME_MS);
-  }, []);
-
-  useEffect(() => {
-    const el = wrapRef.current;
-    if (!el) return;
-    const opts = { passive: true } as const;
-    const onStart = () => pause();
-    const onEnd = () => scheduleResume();
-    el.addEventListener("pointerdown", onStart, opts);
-    el.addEventListener("pointerup", onEnd, opts);
-    el.addEventListener("touchstart", onStart, opts);
-    el.addEventListener("touchend", onEnd, opts);
-    el.addEventListener("wheel", () => {
-      pause();
-      scheduleResume();
-    }, opts);
-    el.addEventListener("focusin", onStart);
-    el.addEventListener("focusout", onEnd);
-    return () => {
-      el.removeEventListener("pointerdown", onStart);
-      el.removeEventListener("pointerup", onEnd);
-      el.removeEventListener("touchstart", onStart);
-      el.removeEventListener("touchend", onEnd);
-      el.removeEventListener("focusin", onStart);
-      el.removeEventListener("focusout", onEnd);
-    };
-  }, [pause, scheduleResume]);
-
-  useEffect(() => {
-    if (reduce || slides.length <= 1) return;
-    const id = window.setInterval(() => {
-      if (document.hidden || pausedRef.current) return;
-      setActive((prev) => (prev + 1) % slides.length);
-    }, HERO_INTERVAL_MS);
-    return () => window.clearInterval(id);
-  }, [reduce, slides.length]);
-
-  useEffect(
-    () => () => {
-      if (resumeTimer.current) window.clearTimeout(resumeTimer.current);
-    },
-    [],
-  );
-
-  return (
-    <div ref={wrapRef} className="group relative lg:h-screen lg:overflow-hidden lg:rounded-2xl">
-      {/* Brand tagline — above card on mobile, overlaid top on desktop */}
-      <h1 className="font-display text-center text-3xl font-bold tracking-tight text-foreground sm:text-4xl lg:absolute lg:inset-x-0 lg:top-10 lg:z-20 lg:text-5xl lg:text-white">
-        Discover. Express.{" "}
-        <span className="text-gradient">Build.</span>
-      </h1>
-
-      {/* Slide card — auto-height on mobile, fills viewport on desktop.
-          Mobile/tablet: the card spans the page's own gutter (16px on
-          phones, 24px from sm) instead of adding a second inset on top of
-          it, so it reads noticeably larger while still never touching the
-          screen edge. The 5/4 portrait-ish frame gives the photo a little
-          more height than the old 4/3, and max-h keeps it inside short
-          (landscape) viewports. Desktop is untouched. */}
-      <div className="relative mt-5 overflow-hidden rounded-2xl ring-1 ring-white/10 sm:mt-6 lg:absolute lg:inset-0 lg:mt-0 lg:w-full lg:rounded-2xl lg:ring-1 lg:ring-white/10">
-        <div className="relative aspect-[5/4] max-h-[68vh] w-full bg-[#05070a] sm:aspect-[16/9] sm:max-h-[70vh] lg:h-full lg:max-h-none lg:aspect-auto">
-          {slides.map((s, i) => (
-            <motion.div
-              key={`${s.tag}-${i}`}
-              initial={false}
-              animate={{ opacity: i === active ? 1 : 0 }}
-              transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
-              className={cn(
-                "absolute inset-0",
-                i === active ? "pointer-events-auto" : "pointer-events-none",
-              )}
-              aria-hidden={i !== active}
-              inert={i !== active ? true : undefined}
-            >
-              {/* Branded placeholder while the photo streams in — never a blank box */}
-              <div
-                aria-hidden
-                className="absolute inset-0 bg-gradient-to-br from-[#10150e] via-[#0a0d0a] to-[#1a2410]"
-              />
-              <HeroImage src={s.src} fallbackSrc={s.fallbackSrc} alt={s.alt} />
-              <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/90 via-black/30 to-transparent" />
-              {/* Slide text + CTAs — inside each slide (original mobile layout) */}
-              <div className="absolute inset-x-0 bottom-0 z-10 flex flex-col p-5 sm:p-7 lg:items-center lg:pb-20 lg:text-center">
-                <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-lime-300">
-                  {s.tag}
-                </p>
-                <h2 className="font-display mt-2 max-w-md text-2xl font-bold leading-tight text-white sm:text-4xl lg:max-w-2xl">
-                  {s.headline}
-                </h2>
-                <p className="mt-2 max-w-sm text-[13px] leading-relaxed text-white/80 sm:text-sm lg:max-w-xl">
-                  {s.support}
-                </p>
-                {/* CTAs — desktop only */}
-                <div className="mt-5 hidden items-center gap-4 lg:flex">
-                  <Button
-                    asChild
-                    className="h-12 bg-lime-400 text-sm font-semibold text-black hover:bg-lime-300 glow-lime-soft"
-                  >
-                    <Link to={s.ctaTo} onClick={pause}>
-                      {s.ctaLabel}
-                      <ArrowRight className="ml-1.5 size-4 shrink-0" />
-                    </Link>
-                  </Button>
-                  <Button
-                    asChild
-                    variant="outline"
-                    className="h-12 border-white/15 text-sm font-medium hover:border-lime-400/40 hover:text-lime-300"
-                  >
-                    <Link to="/roadmap" onClick={pause}>
-                      Explore Roadmaps
-                    </Link>
-                  </Button>
-                </div>
-              </div>
-            </motion.div>
-          ))}
-        </div>
-      </div>
-
-      {/* Pagination dots — below card on mobile, overlaid bottom on desktop */}
-      <div className="mt-4 flex items-center justify-center gap-2 lg:absolute lg:bottom-6 lg:inset-x-0 lg:z-20 lg:mt-0">
-        {slides.map((s, i) => (
-          <button
-            key={`dot-${s.tag}-${i}`}
-            type="button"
-            aria-label={`Go to slide ${i + 1}`}
-            aria-current={i === active}
-            onClick={() => {
-              pause();
-              setActive(i);
-              scheduleResume();
-            }}
-            className="p-1"
-          >
-            <span
-              className={cn(
-                "block h-1.5 rounded-full transition-all duration-500",
-                i === active
-                  ? "w-6 bg-lime-400 shadow-[0_0_10px_rgba(166,255,0,0.6)]"
-                  : "w-1.5 bg-white/25 hover:bg-white/45",
-              )}
-              style={{ transitionTimingFunction: "cubic-bezier(0.22,1,0.36,1)" }}
-            />
-          </button>
-        ))}
-      </div>
-
-      {/* Benefits — compact row beneath the hero */}
-      <ul className="mx-auto mt-5 flex max-w-md flex-wrap items-center justify-center gap-x-5 gap-y-2 sm:max-w-2xl">
-        {[
-          "Free to start",
-          "Verifiable certificates",
-          "Learn at your pace",
-        ].map((b) => (
-          <li key={b} className="flex items-center gap-1.5">
-            <span className="flex size-4.5 items-center justify-center rounded-full bg-lime-400/15 text-lime-300">
-              <Check className="size-3" strokeWidth={3} />
-            </span>
-            <span className="text-[13px] text-muted-foreground">{b}</span>
-          </li>
-        ))}
-      </ul>
-    </div>
-  );
-}
-
-/* ═══════════════════════════════════════════════════════════════════════
-   CATEGORY MARQUEE — infinite auto-scrolling pill track.
-   The row is duplicated exactly once and the track translates by -50%, so
-   the loop point is invisible. Hover (desktop) or touch (mobile) pauses the
-   drift; reduced-motion users get a plain horizontal scroll instead.
-   ═══════════════════════════════════════════════════════════════════════ */
-
-type MarqueeCategory = {
-  _id: string;
-  slug: string;
-  name: string;
-  icon?: string | null;
-  color?: string | null;
-};
-
-function CategoryMarquee({ categories }: { categories: MarqueeCategory[] }) {
-  const [paused, setPaused] = useState(false);
-  // ~2.4s per category keeps the drift calm but alive; clamp so tiny lists
-  // don't crawl across the screen.
-  const duration = Math.max(18, categories.length * 2.4);
-  const track = [...categories, ...categories];
-
-  return (
-    <div
-      className="mt-5 overflow-hidden"
-      style={{
-        maskImage:
-          "linear-gradient(to right, transparent, black 16px, black calc(100% - 16px), transparent)",
-        WebkitMaskImage:
-          "linear-gradient(to right, transparent, black 16px, black calc(100% - 16px), transparent)",
-      }}
-      onMouseEnter={() => setPaused(true)}
-      onMouseLeave={() => setPaused(false)}
-      onTouchStart={() => setPaused(true)}
-      onTouchEnd={() => setPaused(false)}
-    >
-      <div
-        className="animate-marquee flex w-max flex-nowrap whitespace-nowrap"
-        style={{
-          animationDuration: `${duration}s`,
-          animationPlayState: paused ? "paused" : "running",
-        }}
-      >
-        {track.map((c, i) => (
-          <Link
-            key={`${c._id}-${i}`}
-            to={`/courses?category=${c.slug}`}
-            className="group mr-2 inline-flex shrink-0 items-center gap-2 whitespace-nowrap rounded-full border border-white/10 bg-card px-4 py-2 text-sm font-medium text-muted-foreground transition-all duration-300 hover:-translate-y-0.5 hover:border-lime-400/40 hover:text-lime-300"
-          >
-            <CategoryIcon
-              name={c.icon}
-              color={c.color}
-              className="size-4 shrink-0 transition-transform duration-300 group-hover:rotate-12 group-hover:scale-110"
-            />
-            {c.name}
-          </Link>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-/* ═══════════════════════════════════════════════════════════════════════
-   PAGE
-   ═══════════════════════════════════════════════════════════════════════ */
-
-const VALUE_PROPS = [
-  { icon: Map, title: "Structured", sub: "learning paths" },
-  { icon: GraduationCap, title: "Expert", sub: "tutors" },
-  { icon: ShieldCheck, title: "Verified", sub: "certificates" },
+const STEPS = [
+  {
+    icon: User,
+    title: "Build your portfolio",
+    body: "Add your about, skills, experience, education, services and the projects you're proud of. Guided sections, no blank page.",
+  },
+  {
+    icon: Palette,
+    title: "Make it yours",
+    body: "Pick a template and an accent colour. Your portfolio becomes a real website — not a profile buried in an app.",
+  },
+  {
+    icon: Share2,
+    title: "Share one link",
+    body: "Publish it and share a single URL anywhere — your CV, your bio, your applications, your DMs.",
+  },
 ];
 
-/** Cover for the "Continue learning" card that never shows a broken image:
- *  if the stored course photo fails to load it swaps to the curated cover,
- *  and finally to the course's emoji icon. */
-function ContinueCover({
-  image,
-  slug,
-  icon,
-}: {
-  image?: string | null;
-  slug: string;
-  icon?: string | null;
-}) {
-  const [failed, setFailed] = useState(false);
-  const effective = failed ? (courseCoverFor(slug) ?? null) : (image ?? null);
-  return effective ? (
-    <img
-      src={effective}
-      alt=""
-      onError={() => setFailed(true)}
-      className="h-full w-full object-cover"
-    />
-  ) : (
-    <span className="flex h-full w-full items-center justify-center text-2xl">
-      {icon ?? "📘"}
-    </span>
-  );
+const SECTIONS = [
+  { icon: User, label: "About Me", body: "Tell your story in your own voice." },
+  { icon: FolderKanban, label: "Projects", body: "Show the work, with images and live links." },
+  { icon: Sparkles, label: "Skills", body: "What you're good at, at a glance." },
+  { icon: Briefcase, label: "Experience", body: "Roles, internships and freelance work." },
+  { icon: GraduationCap, label: "Education", body: "Schools, courses and qualifications." },
+  { icon: Wrench, label: "Services", body: "What you offer — and what it costs." },
+  { icon: Link2, label: "Social Links", body: "GitHub, LinkedIn, Behance, X, your site." },
+  { icon: Globe, label: "Your own URL", body: "/p/your-name — memorable and yours." },
+];
+
+const TEMPLATES = [
+  { key: "carbon", label: "Carbon", accent: "#a3e635", bg: "#070906" },
+  { key: "aurora", label: "Aurora", accent: "#a78bfa", bg: "#080a14" },
+  { key: "paper", label: "Paper", accent: "#65a30d", bg: "#f7f6f2" },
+];
+
+function formatCount(n: number) {
+  if (n >= 1000) return `${(n / 1000).toFixed(n >= 10000 ? 0 : 1)}k`;
+  return String(n);
 }
 
 export default function Landing() {
-  const reduce = useReducedMotion();
-  // Admin-curated slideshows with SEPARATE desktop and mobile selections.
-  const featured = useQuery(api.public.featuredCourseSlideshows);
-  const desktopList = featured?.desktop ?? [];
-  const mobileList = featured?.mobile ?? [];
-  const categories = useQuery(api.public.categoriesList);
-  // Cached rollup (hourly cron) — avoids three whole-collection scans per
-  // visitor view on the hottest public page.
-  const stats = useQuery(api.syncData.publicStatsCached);
-  const continueLearning = useQuery(api.public.myContinueLearning);
-  const prompts = useQuery(api.prompts.listFeatured);
-  const current = continueLearning?.[0];
-  const promptTeasers = prompts?.slice(0, 3);
+  const stats = useQuery(api.projects.projectsStats);
+  const featured = useQuery(api.projects.featuredPortfolios, { limit: 3 });
+  const flags = useQuery(api.projects.featureFlags);
+
+  const products = flags ?? [
+    { key: "projects", label: "Projects", state: "active", tagline: "" },
+    { key: "academy", label: "Academy", state: "locked", tagline: "" },
+    { key: "opportunity-hub", label: "Opportunity Hub", state: "locked", tagline: "" },
+  ];
 
   return (
-    <PageShell>
-      {/* ── HERO ─────────────────────────────────────────────────────── */}
-      <section className="relative mx-auto max-w-7xl px-4 pb-10 pt-8 sm:px-6 sm:pt-14">
-        <HeroSlideshow />
-      </section>
-
-      {/* ── CONTINUE LEARNING — only when the signed-in student has real progress ── */}
-      {current && (
-        <section className="mx-auto max-w-7xl px-4 pb-12 sm:px-6">
-          <Reveal>
-            <div className="flex items-center justify-between gap-3">
-              <h2 className="font-display text-lg font-bold sm:text-xl">
-                Continue learning
-              </h2>
-              <Link
-                to="/dashboard/my-courses"
-                className="inline-flex items-center gap-1 text-sm font-medium text-lime-300 hover:underline"
+    <div className="relative">
+      {/* ── Hero ─────────────────────────────────────────────────────────── */}
+      <section className="relative overflow-hidden">
+        <div
+          aria-hidden
+          className="pointer-events-none absolute -top-24 left-1/2 h-[420px] w-[90%] max-w-4xl -translate-x-1/2 rounded-full bg-lime-400/10 blur-[130px]"
+        />
+        <div className="relative mx-auto max-w-7xl px-4 pb-16 pt-16 sm:px-6 sm:pb-20 sm:pt-24">
+          <div className="grid items-center gap-12 lg:grid-cols-[1.05fr_1fr]">
+            <div>
+              <motion.span
+                initial={{ opacity: 0, y: 12 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.5 }}
+                className="inline-flex items-center gap-2 rounded-full border border-lime-400/25 bg-lime-400/10 px-4 py-1.5 text-xs font-semibold uppercase tracking-widest text-lime-300"
               >
-                My courses <ArrowRight className="size-3.5" />
-              </Link>
-            </div>
-            <Link
-              to={`/courses/${current.course.slug}`}
-              className="card-lift mt-4 flex items-center gap-4 rounded-2xl border border-white/10 bg-card p-4"
-            >
-              <div className="relative hidden h-16 w-24 shrink-0 overflow-hidden rounded-xl bg-gradient-to-br from-lime-400/25 to-emerald-500/10 sm:block">
-                <ContinueCover
-                  image={current.course.image}
-                  slug={current.course.slug}
-                  icon={current.course.icon}
-                />
-              </div>
-              <div className="min-w-0 flex-1">
-                <p className="truncate font-display text-base font-semibold">
-                  {current.course.title}
-                </p>
-                <p className="mt-0.5 text-xs text-muted-foreground">
-                  {current.completedLessons}/{current.totalLessons} lessons ·{" "}
-                  {current.progress}% complete
-                </p>
-                <div className="mt-2 h-1.5 w-full max-w-xs overflow-hidden rounded-full bg-white/10">
-                  <div
-                    className="h-full rounded-full bg-lime-400"
-                    style={{ width: `${current.progress}%` }}
-                  />
-                </div>
-              </div>
-              <span className="shrink-0 rounded-full bg-lime-400 px-4 py-2 text-xs font-bold text-black">
-                Continue
-              </span>
-            </Link>
-          </Reveal>
-        </section>
-      )}
+                <Rocket className="size-3.5" /> ForgeX Projects
+              </motion.span>
 
-      {/* ── VALUE PROPS — compact, three-up ──────────────────────────── */}
-      <section className="mx-auto max-w-7xl px-4 pb-12 sm:px-6">
-        <Reveal>
-          <div className="grid grid-cols-3 gap-3">
-            {VALUE_PROPS.map((v) => (
-              <div
-                key={v.title}
-                className="flex flex-col items-center gap-2 rounded-2xl border border-white/10 bg-card px-3 py-5 text-center"
+              <motion.h1
+                initial={{ opacity: 0, y: 18 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.6, delay: 0.05 }}
+                className="font-display mt-6 text-4xl font-bold leading-[1.05] tracking-tight sm:text-6xl"
               >
-                <span className="flex size-9 items-center justify-center rounded-xl bg-lime-400/12 text-lime-300">
-                  <v.icon className="size-4.5" />
-                </span>
-                <p className="text-[13px] font-semibold leading-tight">
-                  {v.title}
-                  <span className="block font-normal text-muted-foreground">
-                    {v.sub}
-                  </span>
-                </p>
-              </div>
-            ))}
-          </div>
-        </Reveal>
-      </section>
+                Your work deserves its own{" "}
+                <span className="text-gradient">website</span>
+              </motion.h1>
 
-      {/* ── EXPLORE COURSES — real data, motion carousel on mobile ───── */}
-      <section className="mx-auto max-w-7xl px-4 pb-12 sm:px-6">
-        <div className="flex items-end justify-between gap-4">
-          <SectionHeading
-            align="left"
-            eyebrow="Course catalog"
-            title="Explore courses"
-            description="Build skills in the areas that matter."
-            className="flex-1"
-          />
-          <Link
-            to="/courses"
-            className="mb-1 hidden shrink-0 items-center gap-1 text-sm font-medium text-lime-300 hover:underline sm:inline-flex"
-          >
-            View all <ArrowRight className="size-3.5" />
-          </Link>
-        </div>
+              <motion.p
+                initial={{ opacity: 0, y: 18 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.6, delay: 0.12 }}
+                className="mt-5 max-w-xl text-lg leading-relaxed text-muted-foreground"
+              >
+                Create your portfolio once. Turn it into your own professional
+                website. Share one link — anywhere.
+              </motion.p>
 
-        <div className="mt-6">
-          {featured === undefined ? (
-            <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
-              {Array.from({ length: 4 }).map((_, i) => (
-                <div
-                  key={i}
-                  className="h-72 animate-pulse rounded-2xl border border-white/8 bg-card"
-                />
-              ))}
-            </div>
-          ) : desktopList.length === 0 && mobileList.length === 0 ? (
-            <div className="rounded-2xl border border-white/10 bg-card p-8 text-center">
-              <p className="text-sm text-muted-foreground">
-                New courses are being prepared — check back soon.
+              <motion.div
+                initial={{ opacity: 0, y: 18 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.6, delay: 0.18 }}
+                className="mt-8 flex flex-wrap items-center gap-3"
+              >
+                <Link to="/auth?mode=signup">
+                  <Button
+                    size="lg"
+                    className="gap-2 bg-lime-400 font-semibold text-black hover:bg-lime-300 glow-lime-soft"
+                  >
+                    Create your portfolio free <ArrowRight className="size-4" />
+                  </Button>
+                </Link>
+                <Link to="/explore">
+                  <Button
+                    size="lg"
+                    variant="outline"
+                    className="gap-2 border-white/15 hover:border-lime-400/40 hover:text-lime-300"
+                  >
+                    <Compass className="size-4" /> Explore portfolios
+                  </Button>
+                </Link>
+              </motion.div>
+
+              <p className="mt-4 text-xs text-muted-foreground">
+                Free to start · No credit card · Publish in minutes
               </p>
             </div>
-          ) : (
-            <>
-              {/* MOBILE/TABLET — native swipe carousel fed by the admin's
-                  MOBILE selection (mirrors the desktop selection when no
-                  separate mobile list was saved). */}
-              <div className="md:hidden">
-                {mobileList.length > 0 && (
-                  <>
-                    <MotionCarousel
-                      items={mobileList}
-                      getKey={(c) => c._id}
-                      ariaLabel="Featured courses"
-                      itemClassName="w-[78vw] max-w-[300px] sm:w-[320px]"
-                      renderItem={(c) => <CourseCard course={c} className="h-full" />}
-                    />
-                    <Link
-                      to="/courses"
-                      className="mt-4 inline-flex items-center gap-1 text-sm font-medium text-lime-300 hover:underline"
-                    >
-                      View all courses <ArrowRight className="size-3.5" />
-                    </Link>
-                  </>
-                )}
-              </div>
 
-              {/* DESKTOP (md+) — premium admin-curated slideshow fed by the
-                  admin's DESKTOP selection: pages of course cards with
-                  prev/next, autoplay and active dots. Separate renderer so
-                  the mobile carousel is untouched. */}
-              <div className="hidden md:block">
-                {desktopList.length > 0 && (
-                  <CourseSlideshow courses={desktopList} />
-                )}
+            {/* Browser mock */}
+            <motion.div
+              initial={{ opacity: 0, y: 26 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.7, delay: 0.15 }}
+              className="relative"
+            >
+              <div className="rounded-3xl border border-white/10 bg-card/80 p-3 shadow-2xl shadow-black/40 backdrop-blur">
+                <div className="flex items-center gap-2 px-2 pb-3 pt-1">
+                  <span className="size-2.5 rounded-full bg-rose-400/70" />
+                  <span className="size-2.5 rounded-full bg-amber-400/70" />
+                  <span className="size-2.5 rounded-full bg-lime-400/70" />
+                  <div className="ml-2 flex min-w-0 flex-1 items-center gap-2 rounded-lg border border-white/10 bg-black/30 px-3 py-1.5">
+                    <Globe className="size-3.5 shrink-0 text-lime-400" />
+                    <span className="truncate font-mono text-[11px] text-muted-foreground">
+                      projects.com/p/felix-ayomide
+                    </span>
+                  </div>
+                </div>
+                <div className="rounded-2xl border border-white/10 bg-[#070906] p-5">
+                  <div className="flex items-center gap-3">
+                    <span className="flex size-12 items-center justify-center rounded-full bg-gradient-to-br from-lime-400/80 to-emerald-500/80 text-sm font-bold text-black">
+                      FA
+                    </span>
+                    <div className="min-w-0">
+                      <p className="font-display truncate text-lg font-bold">
+                        Felix Ishola Ayomide
+                      </p>
+                      <p className="truncate text-xs text-lime-300">
+                        Nutrition &amp; Dietetics Student · Designer · Media Strategist
+                      </p>
+                    </div>
+                  </div>
+                  <div className="mt-4 flex flex-wrap gap-1.5">
+                    {["About", "Projects", "Skills", "Experience", "Education", "Services", "Contact"].map(
+                      (t, i) => (
+                        <span
+                          key={t}
+                          className={cn(
+                            "rounded-full border px-2.5 py-1 text-[11px] font-medium",
+                            i === 0
+                              ? "border-lime-400/40 bg-lime-400/10 text-lime-300"
+                              : "border-white/10 text-muted-foreground",
+                          )}
+                        >
+                          {t}
+                        </span>
+                      ),
+                    )}
+                  </div>
+                  <div className="mt-4 grid grid-cols-2 gap-2.5">
+                    {[0, 1].map((i) => (
+                      <div
+                        key={i}
+                        className="rounded-xl border border-white/10 bg-white/[0.03] p-3"
+                      >
+                        <div className="h-14 rounded-lg bg-gradient-to-br from-lime-400/20 to-transparent" />
+                        <div className="mt-2 h-2 w-3/4 rounded-full bg-white/15" />
+                        <div className="mt-1.5 h-2 w-1/2 rounded-full bg-white/8" />
+                      </div>
+                    ))}
+                  </div>
+                </div>
               </div>
-            </>
-          )}
+              <div className="absolute -bottom-4 -right-2 hidden rounded-2xl border border-lime-400/30 bg-black/85 px-4 py-2.5 text-xs font-semibold text-lime-300 backdrop-blur sm:block">
+                One link. Everywhere.
+              </div>
+            </motion.div>
+          </div>
         </div>
       </section>
 
-      {/* ── CATEGORIES — infinite auto-scrolling marquee, pauses on hover/touch ── */}
-      {categories && categories.length > 0 && (
-        <section className="mx-auto max-w-7xl px-4 pb-12 sm:px-6">
-          <SectionHeading align="left" eyebrow="Browse" title="Categories" />
-          {reduce ? (
-            <div className="no-scrollbar mt-5 flex gap-2 overflow-x-auto pb-1">
-              {categories.map((c) => (
-                <Link
-                  key={c._id}
-                  to={`/courses?category=${c.slug}`}
-                  className="inline-flex shrink-0 items-center gap-2 whitespace-nowrap rounded-full border border-white/10 bg-card px-4 py-2 text-sm font-medium text-muted-foreground transition-colors hover:border-lime-400/40 hover:text-lime-300"
-                >
-                  <CategoryIcon name={c.icon} color={c.color} className="size-4 shrink-0" />
-                  {c.name}
-                </Link>
-              ))}
+      {/* ── Stats ────────────────────────────────────────────────────────── */}
+      <section className="border-y border-white/8 bg-black/20">
+        <div className="mx-auto grid max-w-7xl grid-cols-2 gap-6 px-4 py-8 sm:px-6 lg:grid-cols-4">
+          {[
+            { label: "Portfolios published", value: stats?.portfolios },
+            { label: "Projects showcased", value: stats?.projects },
+            { label: "Creators on Projects", value: stats?.creators },
+            { label: "Portfolio views", value: stats?.views },
+          ].map((s) => (
+            <div key={s.label} className="text-center">
+              <p className="font-display text-3xl font-bold text-lime-300">
+                {s.value === undefined || s.value === 0
+                  ? s.value === undefined
+                    ? "—"
+                    : "0"
+                  : formatCount(s.value)}
+              </p>
+              <p className="mt-1 text-xs text-muted-foreground">{s.label}</p>
             </div>
-          ) : (
-            <CategoryMarquee categories={categories} />
-          )}
-        </section>
-      )}
-
-      {/* ── STATS — compact, real numbers ────────────────────────────── */}
-      {stats && (
-        <section className="mx-auto max-w-7xl px-4 pb-12 sm:px-6">
-          <Reveal>
-            <div className="grid grid-cols-3 gap-3 rounded-2xl border border-white/10 bg-card p-6 text-center sm:p-8">
-              {[
-                { value: `${stats.courses}+`, label: "Courses" },
-                { value: `${stats.tutors}`, label: "Expert tutors" },
-                { value: `${stats.certificates}`, label: "Certificates" },
-              ].map((s) => (
-                <div key={s.label}>
-                  <p className="font-display text-2xl font-bold text-gradient sm:text-3xl">
-                    {s.value}
-                  </p>
-                  <p className="mt-1 text-[11px] text-muted-foreground sm:text-xs">
-                    {s.label}
-                  </p>
-                </div>
-              ))}
-            </div>
-          </Reveal>
-        </section>
-      )}
-
-      {/* ── WATCH THE TOUR — existing real motion film ───────────────── */}
-      <section className="mx-auto max-w-7xl px-4 pb-12 sm:px-6">
-        <SectionHeading
-          align="left"
-          eyebrow="Watch the tour"
-          title="ForgeX in two minutes"
-        />
-        <Reveal delay={0.05} className="mt-6">
-          <div className="mx-auto aspect-[4/5] w-full max-w-sm overflow-hidden rounded-2xl border border-white/10 sm:aspect-[16/11] sm:max-w-3xl">
-            <ForgeXMotionVideo />
-          </div>
-        </Reveal>
+          ))}
+        </div>
       </section>
 
-      {/* ── PROMPT LIBRARY + AI HUB — real content teasers ───────────── */}
-      {promptTeasers && promptTeasers.length > 0 && (
-        <section className="mx-auto max-w-7xl px-4 pb-12 sm:px-6">
-          <div className="flex items-end justify-between gap-4">
-            <SectionHeading
-              align="left"
-              eyebrow="ForgeX Prompt Library"
-              title="Prompts that work"
-              className="flex-1"
-            />
-            <Link
-              to="/prompts"
-              className="mb-1 hidden shrink-0 items-center gap-1 text-sm font-medium text-lime-300 hover:underline sm:inline-flex"
-            >
-              Explore useful prompts <ArrowRight className="size-3.5" />
-            </Link>
-          </div>
-          <div className="mt-6 grid gap-4 sm:grid-cols-3">
-            {promptTeasers.map((p) => (
-              <Reveal key={p._id}>
-                <Link
-                  to={`/prompts/${p.slug}`}
-                  className="card-lift flex h-full flex-col rounded-2xl border border-white/10 bg-card p-4 transition-colors hover:border-lime-400/35"
+      {/* ── How it works ─────────────────────────────────────────────────── */}
+      <section className="mx-auto max-w-7xl px-4 py-20 sm:px-6">
+        <SectionHeading
+          eyebrow="How it works"
+          title="Three steps to your own website"
+          description="No code, no design skills, no hosting to figure out. Just your work, presented properly."
+        />
+        <div className="mt-12 grid gap-5 md:grid-cols-3">
+          {STEPS.map((s, i) => (
+            <Reveal key={s.title} delay={i * 0.08} className="h-full">
+              <div className="h-full rounded-3xl border border-white/10 bg-card p-6 transition-colors hover:border-lime-400/30">
+                <div className="flex items-center justify-between">
+                  <span className="flex size-11 items-center justify-center rounded-2xl bg-lime-400/12 text-lime-300">
+                    <s.icon className="size-5" />
+                  </span>
+                  <span className="font-display text-3xl font-bold text-white/8">
+                    0{i + 1}
+                  </span>
+                </div>
+                <h3 className="font-display mt-5 text-lg font-bold">{s.title}</h3>
+                <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
+                  {s.body}
+                </p>
+              </div>
+            </Reveal>
+          ))}
+        </div>
+      </section>
+
+      {/* ── What your portfolio holds ────────────────────────────────────── */}
+      <section className="mx-auto max-w-7xl px-4 pb-20 sm:px-6">
+        <SectionHeading
+          align="left"
+          eyebrow="Everything included"
+          title="A complete professional profile"
+          description="Every section is editable from your dashboard, in any order you like."
+        />
+        <div className="mt-10 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          {SECTIONS.map((s, i) => (
+            <Reveal key={s.label} delay={(i % 4) * 0.05} className="h-full">
+              <div className="h-full rounded-2xl border border-white/10 bg-card p-5 transition-colors hover:border-lime-400/30">
+                <span className="flex size-9 items-center justify-center rounded-xl bg-white/5 text-lime-300">
+                  <s.icon className="size-4" />
+                </span>
+                <h3 className="font-display mt-3.5 text-sm font-semibold">{s.label}</h3>
+                <p className="mt-1.5 text-xs leading-relaxed text-muted-foreground">
+                  {s.body}
+                </p>
+              </div>
+            </Reveal>
+          ))}
+        </div>
+      </section>
+
+      {/* ── Templates ────────────────────────────────────────────────────── */}
+      <section className="mx-auto max-w-7xl px-4 pb-20 sm:px-6">
+        <SectionHeading
+          eyebrow="Templates"
+          title="Looks like a website, not a template"
+          description="Start with a template, then set your accent colour. Switch any time — your content stays exactly where it is."
+        />
+        <div className="mt-12 grid gap-5 sm:grid-cols-3">
+          {TEMPLATES.map((t, i) => (
+            <Reveal key={t.key} delay={i * 0.07}>
+              <div className="overflow-hidden rounded-3xl border border-white/10 bg-card p-3 transition-colors hover:border-lime-400/35">
+                <div
+                  className="rounded-2xl border border-white/10 p-4"
+                  style={{ background: t.bg }}
                 >
-                  <span className="w-fit rounded-full border border-white/10 bg-black/20 px-2.5 py-0.5 text-[11px] font-medium text-muted-foreground">
-                    {p.categoryName}
-                  </span>
-                  <h3 className="font-display mt-3 line-clamp-2 text-sm font-semibold leading-snug">
-                    {p.title}
-                  </h3>
-                  <p className="mt-1.5 line-clamp-2 text-xs leading-relaxed text-muted-foreground">
-                    {p.description}
-                  </p>
-                  <span className="mt-auto inline-flex items-center gap-1 pt-3 text-xs font-medium text-lime-300">
-                    View prompt <ArrowRight className="size-3" />
-                  </span>
+                  <div className="flex items-center gap-2">
+                    <span
+                      className="size-8 rounded-full"
+                      style={{ background: `${t.accent}33` }}
+                    />
+                    <div className="flex-1">
+                      <div
+                        className="h-2 w-2/3 rounded-full"
+                        style={{ background: t.accent }}
+                      />
+                      <div className="mt-1.5 h-2 w-1/2 rounded-full bg-white/15" />
+                    </div>
+                  </div>
+                  <div className="mt-3 flex flex-wrap gap-1.5">
+                    {["About", "Projects", "Skills"].map((x) => (
+                      <span
+                        key={x}
+                        className="rounded-full px-2 py-0.5 text-[10px] font-medium"
+                        style={{ background: `${t.accent}22`, color: t.accent }}
+                      >
+                        {x}
+                      </span>
+                    ))}
+                  </div>
+                  <div className="mt-3 grid grid-cols-2 gap-2">
+                    {[0, 1].map((n) => (
+                      <div
+                        key={n}
+                        className="h-12 rounded-lg border border-white/10"
+                        style={{ background: `${t.accent}14` }}
+                      />
+                    ))}
+                  </div>
+                </div>
+                <p className="mt-3 px-1 pb-1 text-sm font-semibold">{t.label}</p>
+              </div>
+            </Reveal>
+          ))}
+        </div>
+      </section>
+
+      {/* ── Featured portfolios ──────────────────────────────────────────── */}
+      {featured && featured.length > 0 && (
+        <section className="mx-auto max-w-7xl px-4 pb-20 sm:px-6">
+          <SectionHeading
+            align="left"
+            eyebrow="From the community"
+            title="Portfolios people are sharing"
+          />
+          <div className="mt-10 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
+            {featured.map((p, i) => (
+              <Reveal key={p._id} delay={i * 0.06} className="h-full">
+                <Link
+                  to={`/p/${p.slug}`}
+                  className="group flex h-full flex-col rounded-3xl border border-white/10 bg-card p-5 transition-colors hover:border-lime-400/35"
+                >
+                  <div className="flex items-start gap-3">
+                    <Avatar name={p.displayName} image={p.avatarUrl} className="size-12" />
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-1.5">
+                        <p className="font-display truncate text-base font-semibold">
+                          {p.displayName}
+                        </p>
+                        <Star className="size-3.5 shrink-0 fill-lime-400 text-lime-400" />
+                      </div>
+                      <p className="mt-0.5 line-clamp-2 text-xs text-muted-foreground">
+                        {p.headline || "Portfolio"}
+                      </p>
+                    </div>
+                  </div>
+                  {p.skills.length > 0 && (
+                    <div className="mt-4 flex flex-wrap gap-1.5">
+                      {p.skills.map((s) => (
+                        <span
+                          key={s.name}
+                          className="rounded-full border border-white/10 bg-black/20 px-2.5 py-0.5 text-[11px] text-muted-foreground"
+                        >
+                          {s.name}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                  <div className="mt-auto flex items-center justify-between pt-5 text-xs">
+                    <span className="inline-flex items-center gap-1.5 text-muted-foreground">
+                      <Eye className="size-3.5" /> {p.views}
+                    </span>
+                    <span className="inline-flex items-center gap-1.5 font-semibold text-lime-300">
+                      View portfolio <ArrowRight className="size-3.5" />
+                    </span>
+                  </div>
                 </Link>
               </Reveal>
             ))}
@@ -655,29 +411,126 @@ export default function Landing() {
         </section>
       )}
 
-      {/* ── AI HUB LINK ──────────────────────────────────────────────── */}
-      <section className="mx-auto max-w-7xl px-4 pb-16 sm:px-6">
+      {/* ── Ecosystem ────────────────────────────────────────────────────── */}
+      <section className="mx-auto max-w-7xl px-4 pb-20 sm:px-6">
+        <SectionHeading
+          eyebrow="The ForgeX Network"
+          title="One ecosystem, three products"
+          description="Projects is live today. Academy and Opportunity Hub are being built — and will slot straight in when they're ready."
+        />
+        <div className="mt-12 grid gap-5 md:grid-cols-3">
+          {products.map((p) => {
+            const active = p.state === "active";
+            return (
+              <Reveal key={p.key} className="h-full">
+                <div
+                  className={cn(
+                    "flex h-full flex-col rounded-3xl border p-6",
+                    active
+                      ? "border-lime-400/35 bg-gradient-to-br from-lime-400/12 to-card"
+                      : "border-white/10 bg-card",
+                  )}
+                >
+                  <div className="flex items-center justify-between">
+                    <span
+                      className={cn(
+                        "flex size-11 items-center justify-center rounded-2xl",
+                        active ? "bg-lime-400/15 text-lime-300" : "bg-white/5 text-muted-foreground",
+                      )}
+                    >
+                      {active ? <Rocket className="size-5" /> : <Lock className="size-5" />}
+                    </span>
+                    <span
+                      className={cn(
+                        "rounded-full border px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider",
+                        active
+                          ? "border-lime-400/40 bg-lime-400/10 text-lime-300"
+                          : "border-white/10 text-muted-foreground",
+                      )}
+                    >
+                      {active ? "Live" : "Coming soon"}
+                    </span>
+                  </div>
+                  <h3 className="font-display mt-5 text-xl font-bold">{p.label}</h3>
+                  <p className="mt-2 flex-1 text-sm leading-relaxed text-muted-foreground">
+                    {p.tagline ||
+                      (active
+                        ? "Create your portfolio once and share one link."
+                        : "A locked future product — coming soon.")}
+                  </p>
+                  {active ? (
+                    <Link to="/auth?mode=signup" className="mt-5">
+                      <Button className="w-full gap-2 bg-lime-400 font-semibold text-black hover:bg-lime-300">
+                        Start now <ArrowRight className="size-4" />
+                      </Button>
+                    </Link>
+                  ) : (
+                    <Link
+                      to={p.key === "academy" ? "/academy" : "/opportunity-hub"}
+                      className="mt-5"
+                    >
+                      <Button
+                        variant="outline"
+                        className="w-full gap-2 border-white/15 text-muted-foreground hover:border-lime-400/40 hover:text-lime-300"
+                      >
+                        <HeartHandshake className="size-4" /> Notify me
+                      </Button>
+                    </Link>
+                  )}
+                </div>
+              </Reveal>
+            );
+          })}
+        </div>
+      </section>
+
+      {/* ── Final CTA ────────────────────────────────────────────────────── */}
+      <section className="mx-auto max-w-7xl px-4 pb-24 sm:px-6">
         <Reveal>
-          <Link
-            to="/ai-hub"
-            className="group flex items-center gap-4 rounded-2xl border border-white/10 bg-card p-5 transition-colors hover:border-lime-400/35"
-          >
-            <span className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-lime-400/12 text-lime-300">
-              <Sparkles className="size-5" />
-            </span>
-            <span className="min-w-0 flex-1">
-              <span className="font-display block text-sm font-semibold group-hover:text-lime-300 sm:text-base">
-                Visit the AI Hub
-              </span>
-              <span className="text-xs text-muted-foreground sm:text-sm">
-                Curated AI tools, tutorials and setup guides.
-              </span>
-            </span>
-            <ArrowRight className="size-4 shrink-0 text-muted-foreground transition-transform group-hover:translate-x-0.5 group-hover:text-lime-300" />
-          </Link>
+          <div className="relative overflow-hidden rounded-3xl border border-lime-400/25 bg-gradient-to-br from-lime-400/12 via-card to-transparent p-10 text-center sm:p-16">
+            <div
+              aria-hidden
+              className="pointer-events-none absolute -top-20 left-1/2 h-64 w-1/2 -translate-x-1/2 rounded-full bg-lime-400/15 blur-[100px]"
+            />
+            <div className="relative">
+              <Target className="mx-auto size-9 text-lime-300" />
+              <h2 className="font-display mx-auto mt-5 max-w-2xl text-3xl font-bold tracking-tight sm:text-4xl">
+                Build it once. Share one link. Get seen.
+              </h2>
+              <p className="mx-auto mt-4 max-w-xl text-base leading-relaxed text-muted-foreground">
+                Your portfolio is the fastest way to be taken seriously. Start
+                free and publish in minutes.
+              </p>
+              <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
+                <Link to="/auth?mode=signup">
+                  <Button
+                    size="lg"
+                    className="gap-2 bg-lime-400 font-semibold text-black hover:bg-lime-300 glow-lime-soft"
+                  >
+                    Create my portfolio <ArrowRight className="size-4" />
+                  </Button>
+                </Link>
+                <Link to="/explore">
+                  <Button
+                    size="lg"
+                    variant="outline"
+                    className="gap-2 border-white/15 hover:border-lime-400/40 hover:text-lime-300"
+                  >
+                    <Compass className="size-4" /> See examples
+                  </Button>
+                </Link>
+              </div>
+              <ul className="mt-7 flex flex-wrap items-center justify-center gap-x-6 gap-y-2 text-xs text-muted-foreground">
+                {["Free to start", "Your own URL", "Publish or keep private"].map((t) => (
+                  <li key={t} className="inline-flex items-center gap-1.5">
+                    <Check className="size-3.5 text-lime-400" /> {t}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          </div>
         </Reveal>
       </section>
-    </PageShell>
+    </div>
   );
 }
-
