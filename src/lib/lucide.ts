@@ -32,6 +32,7 @@ export { default as BadgeCheck } from "lucide-react/dist/esm/icons/badge-check.j
 export { default as Ban } from "lucide-react/dist/esm/icons/ban.js";
 export { default as BarChart3 } from "lucide-react/dist/esm/icons/bar-chart-3.js";
 export { default as Bell } from "lucide-react/dist/esm/icons/bell.js";
+export { default as BellOff } from "lucide-react/dist/esm/icons/bell-off.js";
 export { default as BellRing } from "lucide-react/dist/esm/icons/bell-ring.js";
 export { default as BookOpen } from "lucide-react/dist/esm/icons/book-open.js";
 export { default as Bookmark } from "lucide-react/dist/esm/icons/bookmark.js";
@@ -63,6 +64,7 @@ export { default as ClipboardCheck } from "lucide-react/dist/esm/icons/clipboard
 export { default as ClipboardList } from "lucide-react/dist/esm/icons/clipboard-list.js";
 export { default as Clock } from "lucide-react/dist/esm/icons/clock.js";
 export { default as Clock3 } from "lucide-react/dist/esm/icons/clock-3.js";
+export { default as CloudOff } from "lucide-react/dist/esm/icons/cloud-off.js";
 export { default as CloudUpload } from "lucide-react/dist/esm/icons/cloud-upload.js";
 export { default as Code2 } from "lucide-react/dist/esm/icons/code-2.js";
 export { default as Compass } from "lucide-react/dist/esm/icons/compass.js";
@@ -77,6 +79,7 @@ export { default as EyeOff } from "lucide-react/dist/esm/icons/eye-off.js";
 export { default as Flag } from "lucide-react/dist/esm/icons/flag.js";
 export { default as FileText } from "lucide-react/dist/esm/icons/file-text.js";
 export { default as Film } from "lucide-react/dist/esm/icons/film.js";
+export { default as Filter } from "lucide-react/dist/esm/icons/filter.js";
 export { default as Flame } from "lucide-react/dist/esm/icons/flame.js";
 export { default as FlaskConical } from "lucide-react/dist/esm/icons/flask-conical.js";
 export { default as FolderOpen } from "lucide-react/dist/esm/icons/folder-open.js";
@@ -87,6 +90,7 @@ export { default as GripVerticalIcon } from "lucide-react/dist/esm/icons/grip-ve
 export { default as Heart } from "lucide-react/dist/esm/icons/heart.js";
 export { default as HeartHandshake } from "lucide-react/dist/esm/icons/heart-handshake.js";
 export { default as HelpCircle } from "lucide-react/dist/esm/icons/help-circle.js";
+export { default as History } from "lucide-react/dist/esm/icons/history.js";
 export { default as Home } from "lucide-react/dist/esm/icons/home.js";
 export { default as HomeIcon } from "lucide-react/dist/esm/icons/home.js";
 export { default as ImageDown } from "lucide-react/dist/esm/icons/image-down.js";
@@ -154,11 +158,13 @@ export { default as ScrollText } from "lucide-react/dist/esm/icons/scroll-text.j
 export { default as Search } from "lucide-react/dist/esm/icons/search.js";
 export { default as SearchIcon } from "lucide-react/dist/esm/icons/search.js";
 export { default as Send } from "lucide-react/dist/esm/icons/send.js";
+export { default as Server } from "lucide-react/dist/esm/icons/server.js";
 export { default as Settings } from "lucide-react/dist/esm/icons/settings.js";
 export { default as Settings2 } from "lucide-react/dist/esm/icons/settings-2.js";
 export { default as Shield } from "lucide-react/dist/esm/icons/shield.js";
 export { default as ShieldAlert } from "lucide-react/dist/esm/icons/shield-alert.js";
 export { default as ShieldCheck } from "lucide-react/dist/esm/icons/shield-check.js";
+export { default as Siren } from "lucide-react/dist/esm/icons/siren.js";
 export { default as SlidersHorizontal } from "lucide-react/dist/esm/icons/sliders-horizontal.js";
 export { default as SmilePlus } from "lucide-react/dist/esm/icons/smile-plus.js";
 export { default as Sparkles } from "lucide-react/dist/esm/icons/sparkles.js";
@@ -177,6 +183,7 @@ export { default as TriangleAlert } from "lucide-react/dist/esm/icons/triangle-a
 export { default as TriangleAlertIcon } from "lucide-react/dist/esm/icons/triangle-alert.js";
 export { default as Trophy } from "lucide-react/dist/esm/icons/trophy.js";
 export { default as Unlock } from "lucide-react/dist/esm/icons/unlock.js";
+export { default as Upload } from "lucide-react/dist/esm/icons/upload.js";
 export { default as UploadCloud } from "lucide-react/dist/esm/icons/upload-cloud.js";
 export { default as User } from "lucide-react/dist/esm/icons/user.js";
 export { default as UserCog } from "lucide-react/dist/esm/icons/user-cog.js";
