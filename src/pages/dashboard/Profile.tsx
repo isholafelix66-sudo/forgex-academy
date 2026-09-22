@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useMutation, useQuery } from "convex/react";
+import { toast } from "sonner";
 import { api } from "@/convex/_generated/api";
 import {
   Award,
@@ -17,6 +18,7 @@ import { Avatar } from "@/components/site/Avatar";
 import { AccountManagement } from "@/components/dash/AccountManagement";
 import { useAuth } from "@/hooks/use-auth";
 import { ImageUploader } from "@/components/media/ImageUploader";
+import { resilientMutation } from "@/lib/resilience";
 
 export default function Profile() {
   const { user } = useAuth();
@@ -47,9 +49,8 @@ export default function Profile() {
   const handleSave = async () => {
     setSaving(true);
     setSaved(false);
-    await updateProfile({
+    const payload = {
       name: name || undefined,
-      image: image || undefined,
       headline: headline || undefined,
       bio: bio || undefined,
       skills,
@@ -59,7 +60,22 @@ export default function Profile() {
         linkedin: linkedin || undefined,
         twitter: twitter || undefined,
       },
+    };
+    // Essential write with outage protection: if Convex is unreachable the
+    // profile change is queued (and mirrored to the fallback store) and
+    // replayed automatically — the user just sees "Saved!" as normal.
+    const result = await resilientMutation({
+      kind: "profile-update",
+      payload,
+      live: () =>
+        updateProfile({
+          ...payload,
+          image: image || undefined, // image uploads still require Convex storage
+        }),
     });
+    if (result.status === "queued") {
+      toast.info("Sync temporarily unavailable — your changes are safely queued.");
+    }
     setSaving(false);
     setSaved(true);
     setTimeout(() => setSaved(false), 2500);

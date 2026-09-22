@@ -128,12 +128,90 @@ export const socialsValidator = v.object({
 });
 export type Socials = Infer<typeof socialsValidator>;
 
+// --- Database fallback & sync -------------------------------------------
+// Convex stays the primary. The secondary store is only ever a dumb,
+// temporary transport for essential writes during a Convex outage. Every op
+// carries a stable client-side id, so retries/replays are idempotent and can
+// never create duplicates. Authorization happens at apply time on Convex —
+// never in the fallback store.
+// ---------------------------------------------------------------------------
+
+/** Idempotency ledger: one row per op id ever applied on Convex. */
+const syncAppliedOpsTable = defineTable({
+  opId: v.string(),
+  kind: v.string(),
+  userId: v.optional(v.id("users")),
+  appliedAt: v.number(),
+  serverAt: v.optional(v.number()),
+  result: v.optional(v.string()),
+  error: v.optional(v.string()),
+})
+  .index("by_op", ["opId"])
+  .index("by_appliedAt", ["appliedAt"])
+  .index("by_user_at", ["userId", "appliedAt"]);
+
+/** Compact counters for the admin Sync dashboard (one row per kind). */
+const syncCountersTable = defineTable({
+  kind: v.string(),
+  applied: v.number(),
+  failed: v.number(),
+  lastAppliedAt: v.optional(v.number()),
+  lastError: v.optional(v.string()),
+  lastErrorAt: v.optional(v.number()),
+}).index("by_kind", ["kind"]);
+
+/** Recently failed sync ops (bounded, for admin visibility + retry). */
+const syncFailuresTable = defineTable({
+  opId: v.string(),
+  kind: v.string(),
+  userId: v.optional(v.id("users")),
+  error: v.string(),
+  firstFailedAt: v.number(),
+  lastFailedAt: v.number(),
+  attempts: v.number(),
+  lastPayload: v.optional(v.any()),
+})
+  .index("by_op", ["opId"])
+  .index("by_lastFailedAt", ["lastFailedAt"]);
+
+/**
+ * Cached rollup for the public landing page stats, recomputed hourly by a
+ * cron (replaces three whole-collection scans on every visitor view).
+ */
+const siteStatsCacheTable = defineTable({
+  key: v.string(),
+  courses: v.optional(v.number()),
+  students: v.optional(v.number()),
+  tutors: v.optional(v.number()),
+  certificates: v.optional(v.number()),
+  updatedAt: v.number(),
+}).index("by_key", ["key"]);
+
+/**
+ * Fallback-mode tracking — written only when a real failure happens, so
+ * tracking itself costs nothing during normal operation.
+ */
+const syncUsageBudgetTable = defineTable({
+  key: v.string(),
+  degradedSince: v.optional(v.number()),
+  lastProbeOk: v.optional(v.number()),
+  totalFallbackOps: v.number(),
+  note: v.optional(v.string()),
+}).index("by_key", ["key"]);
+
 const schema = defineSchema(
   {
     // -----------------------------------------------------------------------
     // Auth (do not remove)
     // -----------------------------------------------------------------------
     ...authTables,
+
+    // Database fallback & sync tables (defined above the schema for clarity).
+    syncAppliedOps: syncAppliedOpsTable,
+    syncCounters: syncCountersTable,
+    syncFailures: syncFailuresTable,
+    siteStatsCache: siteStatsCacheTable,
+    syncUsageBudget: syncUsageBudgetTable,
 
     users: defineTable({
       name: v.optional(v.string()),

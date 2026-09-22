@@ -31,6 +31,7 @@ import { Progress } from "@/components/ui/progress";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { VideoPlayer, youtubeId } from "@/components/learn/VideoPlayer";
 import { resolveLessonVideo } from "@/lib/lesson-videos";
+import { resilientMutation } from "@/lib/resilience";
 import { QuizRunner, type QuizData, type QuizSubmitResult } from "@/components/learn/QuizRunner";
 import { ExamRunner, type ExamData } from "@/components/learn/ExamRunner";
 import { DifficultyBadge } from "@/components/site/DifficultyBadge";
@@ -99,6 +100,14 @@ export default function Learn() {
   const submitFinalExam = useMutation(api.exams.submitFinalExam);
 
   const [activeLessonId, setActiveLessonId] = useState<string | null>(null);
+  /**
+   * Convex-usage guard: every heartbeat batch is server-acknowledged via the
+   * last heartbeat's returned position — if the server already has the
+   * position we just sent (or more), skip the next send (saves ~3 of every
+   * 4 heartbeat writes when the player's clock and position barely move,
+   * e.g. paused-in-background tabs).
+   */
+  const lastSentPosRef = useRef<{ lessonId: string; positionSeconds: number } | null>(null);
   const [quizOpen, setQuizOpen] = useState<LessonQuizPayload | null>(null);
   const [examOpen, setExamOpen] = useState(false);
   const [examPay, setExamPay] = useState<ExamData | null>(null);
@@ -306,13 +315,29 @@ export default function Learn() {
       const now = Date.now();
       if (now - lastHbTimeRef.current >= 5_000 && activeLesson && duration > 0) {
         lastHbTimeRef.current = now;
-        void watchHeartbeat({
-          lessonId: activeLesson._id as never,
-          positionSeconds: currentTime,
-          durationSeconds: duration,
-          playing: true,
-          videoSource,
-        });
+        // Outage protection: during a Convex outage the heartbeat is queued
+        // (coalesced per lesson) and replayed when service returns.
+        const last = lastSentPosRef.current;
+        if (!last || last.lessonId !== activeLesson._id || currentTime > last.positionSeconds) {
+          lastSentPosRef.current = { lessonId: activeLesson._id, positionSeconds: currentTime };
+          void resilientMutation({
+            kind: "watch-position",
+            payload: {
+              lessonId: activeLesson._id,
+              positionSeconds: Math.round(currentTime),
+              durationSeconds: Math.round(duration),
+            },
+            mergeKey: "lessonId",
+            live: () =>
+              watchHeartbeat({
+                lessonId: activeLesson._id as never,
+                positionSeconds: currentTime,
+                durationSeconds: duration,
+                playing: true,
+                videoSource,
+              }),
+          }).catch(() => {});
+        }
       }
     },
     [activeLesson, watchHeartbeat, videoSource],
@@ -325,13 +350,24 @@ export default function Learn() {
       playingRef.current = playing;
       if (duration > 0) durationRef.current = duration;
       lastHbTimeRef.current = Date.now();
-      void watchHeartbeat({
-        lessonId: activeLesson._id as never,
-        positionSeconds: currentTime,
-        durationSeconds: duration,
-        playing,
-        videoSource,
-      });
+      // Pause/seek heartbeats also survive outages via the queue.
+      void resilientMutation({
+        kind: "watch-position",
+        payload: {
+          lessonId: activeLesson._id,
+          positionSeconds: Math.round(currentTime),
+          durationSeconds: Math.round(duration),
+        },
+        mergeKey: "lessonId",
+        live: () =>
+          watchHeartbeat({
+            lessonId: activeLesson._id as never,
+            positionSeconds: currentTime,
+            durationSeconds: duration,
+            playing,
+            videoSource,
+          }),
+      }).catch(() => {});
     },
     [activeLesson, watchHeartbeat, videoSource],
   );
@@ -465,7 +501,17 @@ export default function Learn() {
       // Fire one last heartbeat before completing so server has latest progress
       lastHbTimeRef.current = 0;
       fireHeartbeat({ force: true });
-      await completeLesson({ lessonId: activeLesson._id as never });
+      // Essential write with outage protection: when Convex is unreachable
+      // the completion is queued + mirrored and replayed automatically, so
+      // the student's progress is never lost to a temporary outage.
+      const result = await resilientMutation({
+        kind: "lesson-complete",
+        payload: { lessonId: activeLesson._id },
+        live: () => completeLesson({ lessonId: activeLesson._id as never }),
+      });
+      if (result.status === "queued") {
+        toast.info("Sync temporarily unavailable — your progress is safely queued.");
+      }
       advanceAfterComplete(activeLesson._id);
     } catch (err) {
       toast.error(friendlyError(err, "Could not complete the lesson."));

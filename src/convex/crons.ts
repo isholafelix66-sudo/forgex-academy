@@ -48,4 +48,10 @@ crons.interval("email-admin-summary", { hours: 24 }, internal.emailTriggers.send
 // ---------------------------------------------------------------------------
 crons.interval("catalog-self-heal", { hours: 12 }, internal.seed.ensureSeedDataInternal, {});
 
+// ---------------------------------------------------------------------------
+// Database fallback & sync maintenance: refresh the cached landing-stats
+// rollup hourly (replaces three whole-collection scans per visitor view).
+// ---------------------------------------------------------------------------
+crons.interval("sync-stats-refresh", { hours: 1 }, internal.syncData.refreshSiteStatsInternal, {});
+
 export default crons;

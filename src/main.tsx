@@ -27,6 +27,8 @@ import {
   subscribeToRecoverySignals,
 } from "@/lib/network/recovery";
 import { reportClientError } from "@/lib/monitor-client";
+import { initResilience } from "@/lib/resilience";
+import { SyncStatusBanner } from "@/components/system/SyncStatusBanner";
 import { cn } from "@/lib/utils";
 
 
@@ -270,6 +272,7 @@ const AdminTeamManagement = L(() => import("./pages/admin/AdminTeamManagement.ts
 const AdminAiSupport = L(() => import("./pages/admin/AdminAiSupport.tsx"));
 const AdminEmailCenter = L(() => import("./pages/admin/AdminEmailCenter.tsx"));
 const AdminSystemHealth = L(() => import("./pages/admin/AdminSystemHealth.tsx"));
+const AdminSync = L(() => import("./pages/admin/AdminSync.tsx"));
 const AdminErrors = L(() => import("./pages/admin/AdminErrors.tsx"));
 const AdminIncidents = L(() => import("./pages/admin/AdminIncidents.tsx"));
 const AdminActivity = L(() => import("./pages/admin/AdminActivity.tsx"));
@@ -877,6 +880,17 @@ function RouteSyncer() {
   return null;
 }
 
+/**
+ * Database-resilience bootstrap: resumes any essential writes queued during
+ * a previous session and mounts the global sync-status pill. Renders null.
+ */
+function SyncBootstrap() {
+  useEffect(() => {
+    initResilience();
+  }, []);
+  return <SyncStatusBanner />;
+}
+
 // ---------------------------------------------------------------------------
 // Offline indicator + boot-time hooks
 // ---------------------------------------------------------------------------
@@ -961,6 +975,7 @@ createRoot(document.getElementById("root")!).render(
             or initial bundle for visitors. Rendered inside the router so it
             can hide itself on screens that have their own composer. */}
         <OfflineBadge />
+        <SyncBootstrap />
         <CatalogSelfHeal />
         <BrowserRouter>
           <RouteSyncer />
@@ -1093,6 +1108,7 @@ createRoot(document.getElementById("root")!).render(
                 <Route path="ai-hub" element={<AdminAIHub />} />
                 <Route path="prompts" element={<AdminPrompts />} />
                 <Route path="certificates" element={<AdminCertificates />} />
+                <Route path="sync" element={<AdminSync />} />
                 <Route path="content" element={<AdminContent />} />
                 <Route path="media" element={<AdminMedia />} />
                 <Route path="form-builder" element={<AdminFormBuilder />} />

@@ -390,7 +390,9 @@ export default function Landing() {
   const desktopList = featured?.desktop ?? [];
   const mobileList = featured?.mobile ?? [];
   const categories = useQuery(api.public.categoriesList);
-  const stats = useQuery(api.public.stats);
+  // Cached rollup (hourly cron) — avoids three whole-collection scans per
+  // visitor view on the hottest public page.
+  const stats = useQuery(api.syncData.publicStatsCached);
   const continueLearning = useQuery(api.public.myContinueLearning);
   const prompts = useQuery(api.prompts.listFeatured);
   const current = continueLearning?.[0];

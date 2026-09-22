@@ -64,6 +64,7 @@ import type * as seed from "../seed.js";
 import type * as storage from "../storage.js";
 import type * as stories from "../stories.js";
 import type * as submissions from "../submissions.js";
+import type * as syncData from "../syncData.js";
 import type * as team from "../team.js";
 import type * as teamAccess from "../teamAccess.js";
 import type * as teamWorkspace from "../teamWorkspace.js";
@@ -134,6 +135,7 @@ declare const fullApi: ApiFromModules<{
   storage: typeof storage;
   stories: typeof stories;
   submissions: typeof submissions;
+  syncData: typeof syncData;
   team: typeof team;
   teamAccess: typeof teamAccess;
   teamWorkspace: typeof teamWorkspace;
