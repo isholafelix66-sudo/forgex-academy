@@ -49,6 +49,8 @@ import type * as monitorData from "../monitorData.js";
 import type * as monitorMutation from "../monitorMutation.js";
 import type * as mux from "../mux.js";
 import type * as notifications from "../notifications.js";
+import type * as portfolioAdmin from "../portfolioAdmin.js";
+import type * as portfolioEmail from "../portfolioEmail.js";
 import type * as projects from "../projects.js";
 import type * as promptSeedData from "../promptSeedData.js";
 import type * as prompts from "../prompts.js";
@@ -121,6 +123,8 @@ declare const fullApi: ApiFromModules<{
   monitorMutation: typeof monitorMutation;
   mux: typeof mux;
   notifications: typeof notifications;
+  portfolioAdmin: typeof portfolioAdmin;
+  portfolioEmail: typeof portfolioEmail;
   projects: typeof projects;
   promptSeedData: typeof promptSeedData;
   prompts: typeof prompts;

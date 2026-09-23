@@ -1,5 +1,5 @@
 import { useMemo, useRef, useState } from "react";
-import { Link } from "react-router";
+import { Link, useSearchParams } from "react-router";
 import { useQuery } from "convex/react";
 import type { FunctionReturnType } from "convex/server";
 import { api } from "@/convex/_generated/api";
@@ -34,8 +34,12 @@ import { useBranding } from "@/lib/branding";
  */
 export default function Explore() {
   const branding = useBranding();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [query, setQuery] = useState("");
-  const [category, setCategory] = useState<string | null>(null);
+  // Category can arrive from the Home page chips (?category=Web).
+  const [category, setCategory] = useState<string | null>(
+    searchParams.get("category"),
+  );
   const recentAnchor = useRef<HTMLDivElement | null>(null);
 
   const categories = useQuery(api.projects.exploreCategories);
@@ -60,9 +64,15 @@ export default function Explore() {
     };
   }, [results]);
 
+  const selectCategory = (next: string | null) => {
+    setCategory(next);
+    // Keep the URL shareable/back-button friendly without losing the search.
+    setSearchParams(next ? { category: next } : {}, { replace: true });
+  };
+
   const clear = () => {
     setQuery("");
-    setCategory(null);
+    selectCategory(null);
   };
 
   const jumpToRecent = () =>
@@ -117,14 +127,16 @@ export default function Explore() {
 
         {/* Category chips */}
         <div className="no-scrollbar -mx-4 mt-4 flex gap-2 overflow-x-auto px-4 pb-1 sm:mx-0 sm:flex-wrap sm:justify-center sm:px-0">
-          <Chip active={!category} onClick={() => setCategory(null)}>
+          <Chip active={!category} onClick={() => selectCategory(null)}>
             All
           </Chip>
           {(categories ?? []).map((c) => (
             <Chip
               key={c.name}
               active={category === c.name}
-              onClick={() => setCategory(category === c.name ? null : c.name)}
+              onClick={() =>
+                selectCategory(category === c.name ? null : c.name)
+              }
             >
               {c.name}
             </Chip>
@@ -231,13 +243,12 @@ export default function Explore() {
               Build it once, publish it, and share one link — your own
               professional website in minutes.
             </p>
-            <Link to="/auth?mode=signup" className="mt-7 inline-block">
+            <Link to="/portfolio/signin" className="mt-7 inline-block">
               <Button
                 size="lg"
                 className="glow-lime-soft gap-2 bg-lime-400 font-semibold text-black hover:bg-lime-300"
               >
-                Create my {branding.productLabel.toLowerCase()}{" "}
-                <ArrowRight className="size-4" />
+                {branding.productLabel} sign in <ArrowRight className="size-4" />
               </Button>
             </Link>
           </div>
@@ -429,9 +440,9 @@ function EmptyState({
             <X className="size-4" /> Clear filters
           </Button>
         )}
-        <Link to="/auth?mode=signup">
+        <Link to="/portfolio/signin">
           <Button className="gap-2 bg-lime-400 font-semibold text-black hover:bg-lime-300">
-            Create your portfolio <ArrowRight className="size-4" />
+            Sign In <ArrowRight className="size-4" />
           </Button>
         </Link>
       </div>

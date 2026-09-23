@@ -4,10 +4,11 @@ import { api } from "@/convex/_generated/api";
 /**
  * Brand identity — every string the product uses to name itself.
  *
- * Stored in Convex `siteContent` under the key `branding`, so an admin can
- * rename ForgeX Network (or any label around it) from the admin panel without
- * a code change. `DEFAULT_BRANDING` is the fallback whenever content is
- * missing, still loading, or a field was left blank.
+ * Stored in the Portfolio's OWN content table under the key `branding`, so the
+ * Portfolio admin portal (/adminbrand) can rename ForgeX Network without a
+ * code change — and without touching any Academy setting.
+ * `DEFAULT_BRANDING` is the fallback whenever content is missing, still
+ * loading, or a field was left blank.
  */
 export type Branding = {
   /** Full company name — "ForgeX Network". Used in titles and copy. */
@@ -58,7 +59,7 @@ export function normalizeBranding(raw: unknown): Branding {
 
 /** Brand identity for the current render (reactive; falls back to defaults). */
 export function useBranding(): Branding {
-  const raw = useQuery(api.public.siteContent, {
+  const raw = useQuery(api.portfolioAdmin.publicContent, {
     key: BRANDING_CONTENT_KEY,
   });
   return normalizeBranding(raw ?? undefined);

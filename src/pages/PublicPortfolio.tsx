@@ -169,9 +169,9 @@ export default function PublicPortfolio() {
                 Explore portfolios
               </Button>
             </Link>
-            <Link to="/auth?mode=signup">
+            <Link to="/portfolio/signin">
               <Button className="bg-lime-400 font-semibold text-black hover:bg-lime-300">
-                Create your own
+                Sign In
               </Button>
             </Link>
           </div>
@@ -596,10 +596,10 @@ export default function PublicPortfolio() {
 
       {/* Floating "create yours" pill */}
       <Link
-        to="/auth?mode=signup"
+        to="/portfolio/signin"
         className="fixed bottom-5 right-5 z-40 inline-flex items-center gap-2 rounded-full border border-white/10 bg-black/85 px-4 py-2.5 text-xs font-semibold text-lime-300 shadow-xl shadow-black/40 backdrop-blur transition-colors hover:bg-black"
       >
-        <Sparkles className="size-3.5" /> Create your portfolio
+        <Sparkles className="size-3.5" /> Portfolio sign in
       </Link>
 
       {reportOpen && (

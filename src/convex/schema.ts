@@ -350,6 +350,77 @@ const portfolioProjectsTable = defineTable({
   .index("by_featured", ["featured"])
   .index("by_createdAt", ["createdAt"]);
 
+/**
+ * ForgeX Network Portfolio — its OWN settings document.
+ *
+ * This is deliberately a separate table from every Academy/admin setting so
+ * the two products can never overwrite each other's configuration:
+ *   - Portfolio admin credential (scrypt hash + per-install salt; the
+ *     plaintext password never exists in this repo or the client bundle)
+ *   - Portfolio-only SMTP credentials (never the Academy mail config)
+ *   - Portfolio-only auth policy, SEO/share defaults
+ *
+ * Singleton row keyed "portfolio".
+ */
+const portfolioSettingsTable = defineTable({
+  key: v.string(),
+  /** PBKDF2-SHA256 `salt:hash` — the plaintext password is never stored. */
+  adminPasswordHash: v.string(),
+  adminPasswordUpdatedAt: v.number(),
+  /** Sign-in throttling: consecutive failures + when the last one happened. */
+  failedAttempts: v.optional(v.number()),
+  lastFailedAt: v.optional(v.number()),
+  smtp: v.optional(
+    v.object({
+      host: v.string(),
+      port: v.number(),
+      username: v.string(),
+      password: v.string(),
+      fromEmail: v.string(),
+      fromName: v.string(),
+      secure: v.boolean(),
+    }),
+  ),
+  auth: v.optional(
+    v.object({
+      allowSignups: v.boolean(),
+      requireEmailVerification: v.boolean(),
+      resetLinkTtlMinutes: v.number(),
+    }),
+  ),
+  seo: v.optional(
+    v.object({
+      titleTemplate: v.string(),
+      defaultDescription: v.string(),
+      defaultImage: v.string(),
+    }),
+  ),
+  updatedAt: v.number(),
+}).index("by_key", ["key"]);
+
+/**
+ * Portfolio-owned public content (branding, home slides, contact, socials,
+ * SEO…). Kept in this table rather than the Academy `siteContent` so editing
+ * the Portfolio can never overwrite an Academy setting, and vice versa.
+ */
+const portfolioContentTable = defineTable({
+  key: v.string(),
+  value: v.any(),
+  updatedAt: v.number(),
+}).index("by_key", ["key"]);
+
+/**
+ * Portfolio admin sessions — fully independent of Academy authentication.
+ * Only the SHA-256 hash of a session token is stored; the raw token lives in
+ * the browser under its own storage key.
+ */
+const portfolioAdminSessionsTable = defineTable({
+  tokenHash: v.string(),
+  createdAt: v.number(),
+  lastUsedAt: v.number(),
+  expiresAt: v.number(),
+}).index("by_token", ["tokenHash"]);
+
 /** "Notify me" sign-ups from the locked product pages. */
 const productWaitlistTable = defineTable({
   product: v.string(), // ProductKey
@@ -396,6 +467,9 @@ const schema = defineSchema(
     portfolioProjects: portfolioProjectsTable,
     productWaitlist: productWaitlistTable,
     portfolioReports: portfolioReportsTable,
+    portfolioSettings: portfolioSettingsTable,
+    portfolioAdminSessions: portfolioAdminSessionsTable,
+    portfolioContent: portfolioContentTable,
 
     users: defineTable({
       name: v.optional(v.string()),

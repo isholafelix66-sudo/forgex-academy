@@ -263,6 +263,8 @@ const TeamSettings = L(() => import("./pages/team/TeamSettings.tsx"));
 // ---------------------------------------------------------------------------
 // Admin dashboard
 // ---------------------------------------------------------------------------
+const AdminBrand = L(() => import("./pages/adminbrand/AdminBrand.tsx"));
+const PortfolioSignIn = L(() => import("./pages/PortfolioSignIn.tsx"));
 const AdminShell = L(() => import("./pages/admin/AdminShell.tsx"));
 const AdminOverview = L(() => import("./pages/admin/AdminOverview.tsx"));
 const AdminUsers = L(() => import("./pages/admin/AdminUsers.tsx"));
@@ -1253,7 +1255,15 @@ createRoot(document.getElementById("root")!).render(
               </Route>
 
 
-{/* Admin dashboard — password-gated only, no user account needed */}
+{/* ── ForgeX Network Portfolio — its OWN portal and sign-in.
+                    Completely separate from the Academy admin dashboard
+                    above: /adminbrand has its own credential, session,
+                    content store and SMTP configuration. An Academy admin
+                    session grants no access here, and vice versa. ── */}
+              <Route path="/adminbrand" element={<AdminBrand />} />
+              <Route path="/portfolio/signin" element={<PortfolioSignIn />} />
+
+              {/* Admin dashboard — password-gated only, no user account needed */}
               <Route path="/admin" element={<AdminShell />}>
                 <Route index element={<AdminOverview />} />
                 <Route path="users" element={<AdminUsers />} />

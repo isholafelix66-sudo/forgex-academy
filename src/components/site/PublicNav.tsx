@@ -159,7 +159,7 @@ export function PublicNav() {
     { to: "/", label: "Home", icon: <Home className="size-5" />, end: true },
     { to: "/explore", label: "Explore", icon: <Compass className="size-5" /> },
     {
-      to: isAuthenticated ? "/portfolio" : "/auth?mode=signup",
+      to: isAuthenticated ? "/portfolio" : "/portfolio/signin",
       label: "Portfolio",
       icon: isAuthenticated ? (
         <LayoutDashboard className="size-5" />
@@ -169,16 +169,18 @@ export function PublicNav() {
       end: true,
     },
     {
-      to: isAuthenticated ? profileTo : "/contact",
+      to: isAuthenticated ? profileTo : "/portfolio/signin",
       label: "Profile",
       icon: <User className="size-5" />,
       end: true,
     },
   ];
 
+  // The centre action never opens account creation — Portfolio access is
+  // issued, not self-served, so signed-out visitors are sent to sign in.
   const mobileFab = {
-    to: isAuthenticated ? "/portfolio/projects" : "/auth?mode=signup",
-    label: isAuthenticated ? "Add a project" : "Create your portfolio",
+    to: isAuthenticated ? "/portfolio/projects" : "/portfolio/signin",
+    label: isAuthenticated ? "Add a project" : "Portfolio sign in",
   };
 
   const iconButtonClass =
@@ -387,34 +389,19 @@ export function PublicNav() {
               </>
             ) : (
               <>
-                <div className="hidden items-center gap-2 md:flex">
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="h-8 text-xs font-medium"
-                    data-prefetch="/auth"
-                    onClick={() => navigate("/auth?mode=signin")}
-                  >
-                    Sign In
-                  </Button>
-                  <Button
-                    size="sm"
-                    className="h-8 gap-1.5 bg-lime-400 text-xs font-semibold text-black hover:bg-lime-300 glow-lime-soft"
-                    data-prefetch="/auth"
-                    onClick={() => navigate("/auth?mode=signup")}
-                  >
-                    <Sparkles className="size-3.5" />
-                    Create Account
-                  </Button>
-                </div>
-
+                {/* The public site offers exactly two actions: share your
+                    portfolio link (the lime pill above) and Portfolio sign
+                    in. There is deliberately no account creation here. */}
                 <Button
                   size="sm"
-                  className="h-8 bg-lime-400 text-xs font-semibold text-black hover:bg-lime-300 md:hidden"
-                  data-prefetch="/auth"
-                  onClick={() => navigate("/auth?mode=signup")}
+                  data-prefetch="/portfolio/signin"
+                  className="h-8 bg-lime-400 text-xs font-semibold text-black hover:bg-lime-300"
+                  onClick={() => {
+                    navigate("/portfolio/signin");
+                    scrollTop();
+                  }}
                 >
-                  Get started
+                  Sign In
                 </Button>
               </>
             )}
