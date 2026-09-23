@@ -177,12 +177,12 @@ export function ComingSoon({ product }: { product: ProductKey }) {
               {label}.
             </p>
             <div className="mt-7 flex flex-wrap items-center gap-3">
-              <Link to="/auth?mode=signup">
+              <Link to="/portfolio/signin">
                 <Button
                   size="lg"
                   className="gap-2 bg-lime-400 font-semibold text-black hover:bg-lime-300 glow-lime-soft"
                 >
-                  Create your portfolio <ArrowRight className="size-4" />
+                  Sign in to the Portfolio <ArrowRight className="size-4" />
                 </Button>
               </Link>
               <Link to="/explore">

@@ -41,12 +41,35 @@ export function SharePortfolioButton({
     );
   }
 
+  // No portfolio yet (or signed out): the pill still shares — it copies the
+  // public website link. It never opens account creation.
   if (!slug) {
+    const siteUrl = typeof window !== "undefined" ? window.location.origin : "/";
+    const copySite = async () => {
+      try {
+        await navigator.clipboard.writeText(siteUrl);
+        setCopied(true);
+        toast.success("Website link copied.");
+        setTimeout(() => setCopied(false), 2200);
+      } catch {
+        toast.error("Couldn't copy automatically — copy it from the address bar.");
+      }
+    };
     return (
-      <Link to="/auth?mode=signup" className={cn(pill, className)}>
-        <Link2 className="size-3.5 shrink-0" />
-        {showLabel && <span className="whitespace-nowrap">{label}</span>}
-      </Link>
+      <button
+        type="button"
+        onClick={() => void copySite()}
+        className={cn(pill, className)}
+      >
+        {copied ? (
+          <Check className="size-3.5 shrink-0" />
+        ) : (
+          <Link2 className="size-3.5 shrink-0" />
+        )}
+        {showLabel && (
+          <span className="whitespace-nowrap">{copied ? "Link copied" : label}</span>
+        )}
+      </button>
     );
   }
 

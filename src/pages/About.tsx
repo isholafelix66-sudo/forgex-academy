@@ -93,10 +93,12 @@ export default function About() {
             professional website. Then you share one link: your CV, your bio,
             your applications, anywhere.
           </p>
-          <div className="mt-8 flex flex-wrap gap-3">
-            <Link to="/auth?mode=signup">
-              <Button size="lg" className="gap-2 bg-lime-400 font-semibold text-black hover:bg-lime-300">
-                Create your portfolio <ArrowRight className="size-4" />
+          <div className="mt-8 flex flex-wrap gap-3">            <Link to="/portfolio/signin">
+              <Button
+                size="lg"
+                className="gap-2 bg-lime-400 font-semibold text-black hover:bg-lime-300"
+              >
+                Sign In <ArrowRight className="size-4" />
               </Button>
             </Link>
             <Link to="/explore">
@@ -234,7 +236,13 @@ export default function About() {
                     {p.body}
                   </p>
                   <Link
-                    to={live ? "/auth?mode=signup" : p.key === "academy" ? "/academy" : "/opportunity-hub"}
+                    to={
+                      live
+                        ? "/explore"
+                        : p.key === "academy"
+                          ? "/academy"
+                          : "/opportunity-hub"
+                    }
                     className="mt-5"
                   >
                     <Button
@@ -246,7 +254,7 @@ export default function About() {
                           : "border-white/15 text-muted-foreground hover:border-lime-400/40 hover:text-lime-300",
                       )}
                     >
-                      {live ? "Start now" : "Notify me"} <ArrowRight className="size-4" />
+                      {live ? "Explore now" : "Notify me"} <ArrowRight className="size-4" />
                     </Button>
                   </Link>
                 </div>
@@ -264,7 +272,7 @@ export default function About() {
               It takes minutes to create your portfolio, and you can publish,
               keep it private, or make it discoverable whenever you're ready.
             </p>
-            <Link to="/auth?mode=signup" className="mt-7 inline-block">
+            <Link to="/portfolio/signin" className="mt-7 inline-block">
               <Button size="lg" className="gap-2 bg-lime-400 font-semibold text-black hover:bg-lime-300 glow-lime-soft">
                 Create my portfolio <ArrowRight className="size-4" />
               </Button>
