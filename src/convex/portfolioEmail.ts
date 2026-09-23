@@ -1,20 +1,16 @@
 "use node";
 
 /**
- * ForgeX Network PORTFOLIO — email transport.
+ * ForgeX Network PORTFOLIO — SMTP transport (Node action).
  *
+ * The ONLY place nodemailer is used for the Portfolio. Sends queued log
+ * messages on behalf of `portfolioEmailLog` and the admin SMTP test button.
  * Uses ONLY the Portfolio SMTP credentials stored in `portfolioSettings`
- * (managed at /adminbrand → Email / SMTP). It never reads the Academy mail
- * environment variables, so the two products' email configuration and
- * deliverability can never conflict.
- *
- * Every Portfolio email is sent through `sendPortfolioMail`, so the
- * authentication emails (verification, password reset) and notification
- * emails all share this one Portfolio-owned transport.
+ * (managed at /adminbrand → Email) — never the Academy mail configuration.
  */
 
 import { v } from "convex/values";
-import { action } from "./_generated/server";
+import { action, internalAction } from "./_generated/server";
 import { internal } from "./_generated/api";
 import nodemailer from "nodemailer";
 
@@ -47,40 +43,66 @@ export function fromHeader(cfg: SmtpConfig): string {
 }
 
 /**
- * Send one Portfolio email. Called by the SMTP test button and by any future
- * Portfolio auth/notification flow.
+ * Send one queued message from `portfolioEmailLogs` and record the outcome.
+ * Called by the scheduler after `portfolioEmailLog.attemptSend` checks the
+ * queue row and SMTP config.
  */
-export async function deliverPortfolioMail(
-  cfg: SmtpConfig,
-  message: { to: string; subject: string; html: string; text?: string },
-): Promise<void> {
-  const transport = buildTransport(cfg);
-  try {
-    await transport.sendMail({
-      from: fromHeader(cfg),
-      to: message.to,
-      subject: message.subject,
-      text: message.text,
-      html: message.html,
-    });
-  } finally {
-    transport.close();
-  }
-}
+export const sendQueued = internalAction({
+  args: {
+    logId: v.id("portfolioEmailLogs"),
+    smtp: v.object({
+      host: v.string(),
+      port: v.number(),
+      username: v.string(),
+      password: v.string(),
+      fromEmail: v.string(),
+      fromName: v.string(),
+      secure: v.boolean(),
+    }),
+    to: v.string(),
+    subject: v.string(),
+    html: v.string(),
+  },
+  handler: async (ctx, { logId, smtp, to, subject, html }) => {
+    const transport = buildTransport(smtp);
+    try {
+      await transport.sendMail({
+        from: fromHeader(smtp),
+        to,
+        subject,
+        html,
+      });
+      await ctx.runMutation(internal.portfolioEmailLog.recordOutcome, {
+        logId,
+        ok: true,
+      });
+    } catch (err) {
+      await ctx.runMutation(internal.portfolioEmailLog.recordOutcome, {
+        logId,
+        ok: false,
+        error: err instanceof Error ? err.message : "Send failed.",
+      });
+    } finally {
+      transport.close();
+    }
+    return { ok: true };
+  },
+});
 
 /** Admin-portal "Send test email" — verifies the Portfolio SMTP settings. */
 export const sendTestEmail = action({
   args: { token: v.string(), to: v.string() },
   handler: async (ctx, { token, to }) => {
     const address = to.trim();
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(address)) {
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(address)) {
       throw new Error("Enter a valid email address to send the test to.");
     }
 
-    const smtp: SmtpConfig | null = await ctx.runQuery(
-      internal.portfolioAdmin.smtpForToken,
+    const settings = await ctx.runQuery(
+      internal.portfolioAdmin.settingsByToken,
       { token },
     );
+    const smtp = settings?.smtp ?? null;
     if (!smtp) {
       throw new Error(
         "Sign in to the Portfolio admin portal and save your SMTP settings first.",
@@ -92,26 +114,31 @@ export const sendTestEmail = action({
       );
     }
 
-    await deliverPortfolioMail(smtp, {
-      to: address,
-      subject: "ForgeX Network Portfolio — SMTP test",
-      text:
-        "Your ForgeX Network Portfolio email settings are working.\n\n" +
-        "This message was sent with the Portfolio's own SMTP configuration, " +
-        "which is separate from Academy email.",
-      html: `
+    const transport = buildTransport(smtp);
+    try {
+      await transport.sendMail({
+        from: fromHeader(smtp),
+        to: address,
+        subject: "ForgeX Network Portfolio — SMTP test",
+        text:
+          "Your ForgeX Network Portfolio email settings are working.\n\n" +
+          "This message was sent with the Portfolio's own SMTP configuration.",
+        html: `
         <div style="font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;background:#0b0d08;color:#f2f6ec;padding:32px;border-radius:16px">
           <h2 style="margin:0 0 12px;font-size:20px">Your Portfolio email is working ✅</h2>
           <p style="margin:0 0 12px;line-height:1.6;color:#c9d1c2">
             This test proves the <strong>Portfolio</strong> SMTP configuration is
-            correct. Portfolio authentication emails, password resets and
-            notifications will be delivered through this account.
+            correct. Portfolio OTP codes, creator notifications and admin
+            messages will be delivered through this account.
           </p>
           <p style="margin:0;font-size:13px;color:#8b977f">
-            Sent via ${smtp.host}:${smtp.port} — separate from Academy email.
+            Sent via ${smtp.host}:${smtp.port} — the Portfolio's own email account.
           </p>
         </div>`,
-    });
+      });
+    } finally {
+      transport.close();
+    }
 
     return { ok: true, to: address };
   },

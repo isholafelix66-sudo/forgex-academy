@@ -23,7 +23,8 @@ import {
 } from "./_generated/server";
 import { internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
-import { checkRateLimit, nameFromEmail, requireAdminSession, slugify } from "./lib";
+import { checkRateLimit, requireAdminSession, slugify } from "./lib";
+import { requirePortfolioUser } from "./portfolioUsers";
 import {
   portfolioEducationValidator,
   portfolioExperienceValidator,
@@ -131,11 +132,9 @@ export const isProductActive = query({
 // Helpers
 // ---------------------------------------------------------------------------
 
-function ownerName(user: Doc<"users">) {
-  const stored = user.name?.trim();
-  if (stored) return stored;
-  const derived = nameFromEmail(user.email);
-  return derived || "New creator";
+/** Display name for a legacy Academy-linked owner (best effort). */
+function userDisplayName(user: Doc<"users">): string {
+  return user.name?.trim() || user.email?.split("@")[0] || "Creator";
 }
 
 /** A slug that is unique across portfolios, appending -2, -3 … as needed. */
@@ -248,16 +247,38 @@ export const projectsStats = query({
 // Owner-side portfolio
 // ---------------------------------------------------------------------------
 
-/** The signed-in user's portfolio + projects, or null when they have none. */
+/**
+ * Owner resolution — the Portfolio's own auth boundary.
+ *
+ * Every owner-side mutation takes a `token` (the Portfolio creator session
+ * token) and resolves the owning `portfolioUsers` account server-side. An
+ * Academy session (`getAuthUserId`) is never accepted here, and a Portfolio
+ * creator session can never be used on an Academy route.
+ */
+async function requireCreator(
+  ctx: QueryCtx | MutationCtx,
+  token: string,
+) {
+  return requirePortfolioUser(ctx, token);
+}
+
+/** The creator's portfolio, or null when they haven't created one yet. */
+async function portfolioOfCreator(
+  ctx: QueryCtx | MutationCtx,
+  creatorId: Id<"portfolioUsers">,
+) {
+  return ctx.db
+    .query("portfolios")
+    .withIndex("by_creator", (q) => q.eq("creatorId", creatorId))
+    .first();
+}
+
+/** The signed-in creator's portfolio + projects, or null when they have none. */
 export const myPortfolio = query({
-  args: {},
-  handler: async (ctx) => {
-    const userId = await getAuthUserId(ctx);
-    if (!userId) return null;
-    const portfolio = await ctx.db
-      .query("portfolios")
-      .withIndex("by_user", (q) => q.eq("userId", userId))
-      .first();
+  args: { token: v.string() },
+  handler: async (ctx, { token }) => {
+    const user = await requireCreator(ctx, token);
+    const portfolio = await portfolioOfCreator(ctx, user._id);
     if (!portfolio) return null;
     const projects = await ctx.db
       .query("portfolioProjects")
@@ -275,30 +296,27 @@ export const myPortfolio = query({
 
 /** Create the owner's portfolio on first dashboard visit (idempotent). */
 export const ensureMyPortfolio = mutation({
-  args: {},
-  handler: async (ctx) => {
-    const userId = await getAuthUserId(ctx);
-    if (!userId) throw new Error("Sign in to build your portfolio.");
-    const user = await ctx.db.get(userId);
-    if (!user) throw new Error("Account not found.");
-    if (user.suspended) throw new Error("Your account has been suspended.");
+  args: { token: v.string() },
+  handler: async (ctx, { token }) => {
+    const user = await requireCreator(ctx, token);
+    if (user.status === "suspended") {
+      throw new Error("Your account has been suspended.");
+    }
 
-    const existing = await ctx.db
-      .query("portfolios")
-      .withIndex("by_user", (q) => q.eq("userId", userId))
-      .first();
+    const existing = await portfolioOfCreator(ctx, user._id);
     if (existing) return existing._id;
 
-    const display = ownerName(user);
-    const slug = await uniqueSlug(ctx, display || user.email || "portfolio");
+    const display = user.name?.trim() || user.email.split("@")[0];
+    const slug = await uniqueSlug(ctx, display || "portfolio");
     const now = Date.now();
     const id = await ctx.db.insert("portfolios", {
-      userId,
+      creatorId: user._id,
       slug,
       displayName: display,
-      headline: "",
-      bio: "",
+      headline: user.title ?? "",
+      bio: user.bio ?? "",
       about: "",
+      avatarUrl: user.avatarUrl,
       template: "carbon",
       visibility: "draft",
       skills: [],
@@ -313,20 +331,17 @@ export const ensureMyPortfolio = mutation({
       updatedAt: now,
     });
 
-    if (user.email) {
-      const tpl = projectsWelcomeEmail({
-        name: display,
-        portfolioPath: `/p/${slug}`,
-      });
-      await queueEmail(ctx, {
-        to: user.email,
-        subject: tpl.subject,
-        html: tpl.html,
-        emailType: "projects_welcome",
-        dedupeKey: `projects-welcome-${userId}`,
-        automationKey: "projects_welcome",
-      });
-    }
+    const tpl = projectsWelcomeEmail({
+      name: display,
+      portfolioPath: `/p/${slug}`,
+    });
+    await ctx.scheduler.runAfter(0, internal.portfolioEmailLog.deliver, {
+      to: user.email,
+      subject: tpl.subject,
+      html: tpl.html,
+      template: "welcome",
+      kind: "notification",
+    });
     await recomputeStats(ctx);
     return id;
   },
@@ -338,6 +353,7 @@ export const ensureMyPortfolio = mutation({
  */
 export const updatePortfolio = mutation({
   args: {
+    token: v.string(),
     displayName: v.optional(v.string()),
     headline: v.optional(v.string()),
     bio: v.optional(v.string()),
@@ -359,13 +375,9 @@ export const updatePortfolio = mutation({
     links: v.optional(v.array(portfolioLinkValidator)),
     sectionOrder: v.optional(v.array(v.string())),
   },
-  handler: async (ctx, args) => {
-    const userId = await getAuthUserId(ctx);
-    if (!userId) throw new Error("Sign in to edit your portfolio.");
-    const portfolio = await ctx.db
-      .query("portfolios")
-      .withIndex("by_user", (q) => q.eq("userId", userId))
-      .first();
+  handler: async (ctx, { token, ...args }) => {
+    const user = await requireCreator(ctx, token);
+    const portfolio = await portfolioOfCreator(ctx, user._id);
     if (!portfolio) throw new Error("Create your portfolio first.");
 
     // Trim long free-text fields so nothing balloons into the database.
@@ -409,14 +421,10 @@ export const updatePortfolio = mutation({
  *   discoverable → link + the public Explore section
  */
 export const setVisibility = mutation({
-  args: { visibility: portfolioVisibilityValidator },
-  handler: async (ctx, { visibility }) => {
-    const userId = await getAuthUserId(ctx);
-    if (!userId) throw new Error("Sign in to publish your portfolio.");
-    const portfolio = await ctx.db
-      .query("portfolios")
-      .withIndex("by_user", (q) => q.eq("userId", userId))
-      .first();
+  args: { token: v.string(), visibility: portfolioVisibilityValidator },
+  handler: async (ctx, { token, visibility }) => {
+    const user = await requireCreator(ctx, token);
+    const portfolio = await portfolioOfCreator(ctx, user._id);
     if (!portfolio) throw new Error("Create your portfolio first.");
 
     const firstPublish = portfolio.visibility === "draft" && visibility !== "draft";
@@ -427,52 +435,30 @@ export const setVisibility = mutation({
     });
 
     if (firstPublish) {
-      const user = await ctx.db.get(userId);
-      if (user?.email) {
-        const tpl = portfolioPublishedEmail({
-          name: portfolio.displayName,
-          portfolioUrl: portfolioUrl(portfolio.slug),
-          discoverable: visibility === "discoverable",
-        });
-        await queueEmail(ctx, {
-          to: user.email,
-          subject: tpl.subject,
-          html: tpl.html,
-          emailType: "portfolio_published",
-          dedupeKey: `portfolio-published-${portfolio._id}`,
-          automationKey: "portfolio_published",
-        });
-      }
-      if (!portfolio.publishedAt) {
-        await ensureRelatedPortfolioSlug(ctx, portfolio.userId);
-      }
+      const tpl = portfolioPublishedEmail({
+        name: portfolio.displayName,
+        portfolioUrl: portfolioUrl(portfolio.slug),
+        discoverable: visibility === "discoverable",
+      });
+      await ctx.scheduler.runAfter(0, internal.portfolioEmailLog.deliver, {
+        to: user.email,
+        subject: tpl.subject,
+        html: tpl.html,
+        template: "published",
+        kind: "notification",
+      });
     }
     await recomputeStats(ctx);
     return { visibility };
   },
 });
 
-/** Keep the shareable /tutor/<slug>-style user slug mirrored for the owner. */
-async function ensureRelatedPortfolioSlug(
-  ctx: MutationCtx,
-  userId: Id<"users">,
-) {
-  const user = await ctx.db.get(userId);
-  if (!user || user.slug) return;
-  const slug = await uniqueSlug(ctx, ownerName(user));
-  await ctx.db.patch(userId, { slug });
-}
-
 /** Change the public URL (/p/<slug>) with a uniqueness guard. */
 export const setSlug = mutation({
-  args: { slug: v.string() },
-  handler: async (ctx, { slug }) => {
-    const userId = await getAuthUserId(ctx);
-    if (!userId) throw new Error("Sign in to change your link.");
-    const portfolio = await ctx.db
-      .query("portfolios")
-      .withIndex("by_user", (q) => q.eq("userId", userId))
-      .first();
+  args: { token: v.string(), slug: v.string() },
+  handler: async (ctx, { token, slug }) => {
+    const user = await requireCreator(ctx, token);
+    const portfolio = await portfolioOfCreator(ctx, user._id);
     if (!portfolio) throw new Error("Create your portfolio first.");
 
     const wanted = slugify(slug).slice(0, 40);
@@ -496,16 +482,25 @@ export const setSlug = mutation({
 
 /** Record a public view (owner views and drafts are not counted). */
 export const recordView = mutation({
-  args: { slug: v.string() },
-  handler: async (ctx, { slug }) => {
+  args: { slug: v.string(), viewerToken: v.optional(v.string()) },
+  handler: async (ctx, { slug, viewerToken }) => {
     const portfolio = await ctx.db
       .query("portfolios")
       .withIndex("by_slug", (q) => q.eq("slug", slug))
       .first();
     if (!portfolio || portfolio.suspended) return false;
     if (portfolio.visibility === "draft") return false;
-    const viewer = await getAuthUserId(ctx);
-    if (viewer === portfolio.userId) return false;
+    // Owner views (either identity system) are never counted.
+    if (viewerToken) {
+      const viewer = await requireCreator(ctx, viewerToken);
+      if (viewer && portfolio.creatorId && viewer._id === portfolio.creatorId) {
+        return false;
+      }
+    }
+    const academyViewer = await getAuthUserId(ctx);
+    if (academyViewer && portfolio.userId && academyViewer === portfolio.userId) {
+      return false;
+    }
     await ctx.db.patch(portfolio._id, { views: portfolio.views + 1 });
     return true;
   },
@@ -522,16 +517,23 @@ export type PublicPortfolioResult =
   | { status: "not-found" };
 
 export const publicPortfolio = query({
-  args: { slug: v.string() },
-  handler: async (ctx, { slug }): Promise<PublicPortfolioResult> => {
+  args: { slug: v.string(), viewerToken: v.optional(v.string()) },
+  handler: async (ctx, { slug, viewerToken }): Promise<PublicPortfolioResult> => {
     const portfolio = await ctx.db
       .query("portfolios")
       .withIndex("by_slug", (q) => q.eq("slug", slugify(slug)))
       .first();
     if (!portfolio) return { status: "not-found" };
 
-    const viewer = await getAuthUserId(ctx);
-    const isOwner = !!viewer && viewer === portfolio.userId;
+    // Either identity system can recognise its own portfolio, but neither
+    // can read a draft belonging to the other system's owner.
+    const academyViewer = await getAuthUserId(ctx);
+    let isOwner =
+      !!academyViewer && !!portfolio.userId && academyViewer === portfolio.userId;
+    if (!isOwner && viewerToken) {
+      const creatorViewer = await requireCreator(ctx, viewerToken).catch(() => null);
+      isOwner = !!creatorViewer && !!portfolio.creatorId && creatorViewer._id === portfolio.creatorId;
+    }
 
     if (portfolio.suspended && !isOwner) return { status: "removed" };
     if (portfolio.visibility === "draft" && !isOwner) {
@@ -869,6 +871,7 @@ const PROJECT_LIMIT = 40;
 
 export const createProject = mutation({
   args: {
+    token: v.string(),
     title: v.string(),
     summary: v.string(),
     description: v.optional(v.string()),
@@ -879,15 +882,11 @@ export const createProject = mutation({
     repoUrl: v.optional(v.string()),
     year: v.optional(v.string()),
   },
-  handler: async (ctx, args) => {
-    const userId = await getAuthUserId(ctx);
-    if (!userId) throw new Error("Sign in to add a project.");
-    const portfolio = await ctx.db
-      .query("portfolios")
-      .withIndex("by_user", (q) => q.eq("userId", userId))
-      .first();
+  handler: async (ctx, { token, ...args }) => {
+    const user = await requireCreator(ctx, token);
+    const portfolio = await portfolioOfCreator(ctx, user._id);
     if (!portfolio) throw new Error("Create your portfolio first.");
-    await checkRateLimit(ctx, `project-create:${userId}`, 60, 10 * 60 * 1000);
+    await checkRateLimit(ctx, `project-create:${user._id}`, 60, 10 * 60 * 1000);
 
     const existing = await ctx.db
       .query("portfolioProjects")
@@ -904,7 +903,7 @@ export const createProject = mutation({
     const now = Date.now();
     const id = await ctx.db.insert("portfolioProjects", {
       portfolioId: portfolio._id,
-      userId,
+      creatorId: user._id,
       title,
       summary: args.summary.trim().slice(0, 300),
       description: args.description?.slice(0, 4000),
@@ -927,6 +926,7 @@ export const createProject = mutation({
 
 export const updateProject = mutation({
   args: {
+    token: v.string(),
     projectId: v.id("portfolioProjects"),
     title: v.optional(v.string()),
     summary: v.optional(v.string()),
@@ -939,11 +939,10 @@ export const updateProject = mutation({
     year: v.optional(v.string()),
     featured: v.optional(v.boolean()),
   },
-  handler: async (ctx, { projectId, ...rest }) => {
-    const userId = await getAuthUserId(ctx);
-    if (!userId) throw new Error("Sign in to edit your projects.");
+  handler: async (ctx, { token, projectId, ...rest }) => {
+    const user = await requireCreator(ctx, token);
     const project = await ctx.db.get(projectId);
-    if (!project || project.userId !== userId) {
+    if (!project || project.creatorId !== user._id) {
       throw new Error("That project isn't yours.");
     }
     const patch: Partial<Doc<"portfolioProjects">> = { updatedAt: Date.now() };
@@ -968,12 +967,11 @@ export const updateProject = mutation({
 });
 
 export const deleteProject = mutation({
-  args: { projectId: v.id("portfolioProjects") },
-  handler: async (ctx, { projectId }) => {
-    const userId = await getAuthUserId(ctx);
-    if (!userId) throw new Error("Sign in to remove a project.");
+  args: { token: v.string(), projectId: v.id("portfolioProjects") },
+  handler: async (ctx, { token, projectId }) => {
+    const user = await requireCreator(ctx, token);
     const project = await ctx.db.get(projectId);
-    if (!project || project.userId !== userId) {
+    if (!project || project.creatorId !== user._id) {
       throw new Error("That project isn't yours.");
     }
     await ctx.db.delete(projectId);
@@ -984,12 +982,11 @@ export const deleteProject = mutation({
 
 /** Reorder the showcase (direction: -1 up, 1 down). */
 export const moveProject = mutation({
-  args: { projectId: v.id("portfolioProjects"), direction: v.union(v.literal(-1), v.literal(1)) },
-  handler: async (ctx, { projectId, direction }) => {
-    const userId = await getAuthUserId(ctx);
-    if (!userId) throw new Error("Sign in to reorder your projects.");
+  args: { token: v.string(), projectId: v.id("portfolioProjects"), direction: v.union(v.literal(-1), v.literal(1)) },
+  handler: async (ctx, { token, projectId, direction }) => {
+    const user = await requireCreator(ctx, token);
     const project = await ctx.db.get(projectId);
-    if (!project || project.userId !== userId) {
+    if (!project || project.creatorId !== user._id) {
       throw new Error("That project isn't yours.");
     }
     const siblings = (
@@ -1124,13 +1121,37 @@ export const adminListPortfolios = query({
 
     return Promise.all(
       filtered.slice(0, 200).map(async (p) => {
-        const [user, projects] = await Promise.all([
-          ctx.db.get(p.userId),
-          ctx.db
-            .query("portfolioProjects")
-            .withIndex("by_portfolio", (i) => i.eq("portfolioId", p._id))
-            .collect(),
-        ]);
+        const projects = await ctx.db
+          .query("portfolioProjects")
+          .withIndex("by_portfolio", (i) => i.eq("portfolioId", p._id))
+          .collect();
+        // Owner identity: new creator accounts take precedence, with legacy
+        // Academy-linked portfolios still shown correctly.
+        let owner: {
+          _id: string;
+          name: string;
+          email: string;
+          suspended: boolean;
+        } | null = null;
+        if (p.creatorId) {
+          const c = await ctx.db.get(p.creatorId);
+          if (c)
+            owner = {
+              _id: c._id,
+              name: c.name ?? c.email.split("@")[0],
+              email: c.email,
+              suspended: c.status === "suspended",
+            };
+        } else if (p.userId) {
+          const u = await ctx.db.get(p.userId);
+          if (u)
+            owner = {
+              _id: u._id,
+              name: userDisplayName(u),
+              email: u.email ?? "",
+              suspended: !!u.suspended,
+            };
+        }
         return {
           _id: p._id,
           slug: p.slug,
@@ -1144,14 +1165,7 @@ export const adminListPortfolios = query({
           projects: projects.filter((x) => !x.removed).length,
           createdAt: p.createdAt,
           updatedAt: p.updatedAt,
-          owner: user
-            ? {
-                _id: user._id,
-                name: user.name ?? ownerName(user),
-                email: user.email ?? "",
-                suspended: !!user.suspended,
-              }
-            : null,
+          owner,
         };
       }),
     );
@@ -1171,10 +1185,15 @@ export const adminListProjects = query({
       : rows;
     return Promise.all(
       filtered.slice(0, 200).map(async (p) => {
-        const [portfolio, owner] = await Promise.all([
-          ctx.db.get(p.portfolioId),
-          ctx.db.get(p.userId),
-        ]);
+        const portfolio = await ctx.db.get(p.portfolioId);
+        let ownerName2: string | null = null;
+        if (p.creatorId) {
+          const c = await ctx.db.get(p.creatorId);
+          ownerName2 = c?.name ?? c?.email.split("@")[0] ?? null;
+        } else if (p.userId) {
+          const u = await ctx.db.get(p.userId);
+          ownerName2 = u ? userDisplayName(u) : null;
+        }
         return {
           _id: p._id,
           title: p.title,
@@ -1188,7 +1207,7 @@ export const adminListProjects = query({
           createdAt: p.createdAt,
           portfolioSlug: portfolio?.slug ?? null,
           portfolioName: portfolio?.displayName ?? null,
-          ownerName: owner?.name ?? (owner ? ownerName(owner) : null),
+          ownerName: ownerName2,
         };
       }),
     );

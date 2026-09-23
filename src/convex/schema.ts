@@ -287,7 +287,11 @@ export const portfolioLinkValidator = v.object({
 });
 
 const portfoliosTable = defineTable({
-  userId: v.id("users"),
+  /** Legacy owner (pre-separation accounts created via Academy auth). */
+  userId: v.optional(v.id("users")),
+  /** Owner Portfolio creator account — the primary owner since the
+   *  Portfolio got its own authentication system. */
+  creatorId: v.optional(v.id("portfolioUsers")),
   slug: v.string(),
   displayName: v.string(),
   headline: v.optional(v.string()),
@@ -321,13 +325,16 @@ const portfoliosTable = defineTable({
   updatedAt: v.number(),
 })
   .index("by_user", ["userId"])
+  .index("by_creator", ["creatorId"])
   .index("by_slug", ["slug"])
   .index("by_visibility", ["visibility"])
   .index("by_featured", ["featured"]);
 
 const portfolioProjectsTable = defineTable({
   portfolioId: v.id("portfolios"),
-  userId: v.id("users"),
+  userId: v.optional(v.id("users")),
+  /** Creator account that owns this project (creator auth system). */
+  creatorId: v.optional(v.id("portfolioUsers")),
   title: v.string(),
   summary: v.string(),
   description: v.optional(v.string()),
@@ -347,6 +354,7 @@ const portfolioProjectsTable = defineTable({
 })
   .index("by_portfolio", ["portfolioId", "order"])
   .index("by_user", ["userId"])
+  .index("by_creator", ["creatorId"])
   .index("by_featured", ["featured"])
   .index("by_createdAt", ["createdAt"]);
 
@@ -432,6 +440,91 @@ const productWaitlistTable = defineTable({
   .index("by_product", ["product", "createdAt"])
   .index("by_email", ["email"]);
 
+/* ═════════════════════════════════════════════════════════════════════════
+   PORTFOLIO CREATOR ACCOUNTS — a completely separate identity system.
+
+   These accounts are NOT Academy accounts (the Academy `users` table above is
+   untouched by every mutation here) and NOT Portfolio admin credentials
+   (`portfolioSettings` / `portfolioAdminSessions`). A Portfolio creator signs
+   in with Email → OTP and can only ever manage their own portfolio.
+   ═════════════════════════════════════════════════════════════════════════ */
+
+export const PORTFOLIO_USER_ROLE = "portfolio_user" as const;
+
+const portfolioUsersTable = defineTable({
+  email: v.string(), // lowercased, unique per account
+  name: v.optional(v.string()),
+  /** Professional title, e.g. "UI/UX Designer". */
+  title: v.optional(v.string()),
+  bio: v.optional(v.string()),
+  avatarUrl: v.optional(v.string()),
+  role: v.literal(PORTFOLIO_USER_ROLE), // always portfolio_user — never admin
+  status: v.union(v.literal("active"), v.literal("suspended")),
+  /** False until the post-OTP profile step (name/title/bio/photo) is done. */
+  onboarded: v.boolean(),
+  invitedByAdmin: v.optional(v.boolean()),
+  lastLoginAt: v.optional(v.number()),
+  createdAt: v.number(),
+})
+  .index("by_email", ["email"])
+  .index("by_status", ["status"])
+  .index("by_createdAt", ["createdAt"]);
+
+/** Portfolio creator sessions — token stored hashed, separate storage key on
+ *  the client, separate table here. An Academy session can never satisfy this
+ *  check and vice versa. */
+const portfolioUserSessionsTable = defineTable({
+  tokenHash: v.string(),
+  userId: v.id("portfolioUsers"),
+  createdAt: v.number(),
+  lastUsedAt: v.number(),
+  expiresAt: v.number(),
+})
+  .index("by_token", ["tokenHash"])
+  .index("by_user", ["userId"]);
+
+/** One-time email codes for Portfolio sign-in / sign-up. Only the hash of the
+ *  6-digit code is stored; codes expire quickly and expire after attempts. */
+const portfolioAuthCodesTable = defineTable({
+  email: v.string(),
+  codeHash: v.string(),
+  purpose: v.union(v.literal("signin"), v.literal("signup")),
+  expiresAt: v.number(),
+  attempts: v.number(),
+  consumed: v.boolean(),
+  createdAt: v.number(),
+})
+  .index("by_email", ["email", "createdAt"])
+  .index("by_createdAt", ["createdAt"]);
+
+/**
+ * Portfolio email log — EVERY email the Portfolio system sends is recorded
+ * here (OTP, notifications, admin composes) with its status and failure
+ * reason, powering the Email management screens in /adminbrand.
+ */
+const portfolioEmailLogsTable = defineTable({
+  to: v.string(),
+  subject: v.string(),
+  html: v.string(),
+  template: v.string(), // otp | welcome | published | update | admin_notification | custom
+  kind: v.union(
+    v.literal("auth"),
+    v.literal("notification"),
+    v.literal("custom"),
+  ),
+  status: v.union(
+    v.literal("pending"),
+    v.literal("sent"),
+    v.literal("failed"),
+  ),
+  error: v.optional(v.string()),
+  attempts: v.number(),
+  sentAt: v.optional(v.number()),
+  createdAt: v.number(),
+})
+  .index("by_createdAt", ["createdAt"])
+  .index("by_status", ["status"]);
+
 /** Reports raised against a public portfolio. */
 const portfolioReportsTable = defineTable({
   portfolioId: v.id("portfolios"),
@@ -470,6 +563,10 @@ const schema = defineSchema(
     portfolioSettings: portfolioSettingsTable,
     portfolioAdminSessions: portfolioAdminSessionsTable,
     portfolioContent: portfolioContentTable,
+    portfolioUsers: portfolioUsersTable,
+    portfolioUserSessions: portfolioUserSessionsTable,
+    portfolioAuthCodes: portfolioAuthCodesTable,
+    portfolioEmailLogs: portfolioEmailLogsTable,
 
     users: defineTable({
       name: v.optional(v.string()),

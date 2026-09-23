@@ -1,8 +1,11 @@
 import { v } from "convex/values";
-import { internalQuery, mutation, query } from "./_generated/server";
+import { internalQuery, mutation, query, type QueryCtx } from "./_generated/server";
 import type { MutationCtx } from "./_generated/server";
 import type { Doc } from "./_generated/dataModel";
 import { hashPassword, randomHex, verifyPassword } from "./adminCrypto";
+
+/** Cryptographically-random session token (re-exported for sibling modules). */
+export { randomHex };
 
 /* ═══════════════════════════════════════════════════════════════════════════
    ForgeX Network PORTFOLIO — admin settings, credential and sessions.
@@ -156,6 +159,29 @@ export const settings = query({
 });
 
 /**
+ * Full settings for a live Portfolio session — read by the Portfolio email
+ * action (test send) so Portfolio mail can never fall back to Academy mail
+ * settings.
+ */
+export const settingsByToken = internalQuery({
+  args: { token: v.string() },
+  handler: async (ctx, { token }) => {
+    if (!token) return null;
+    const tokenHash = await sha256Hex(token);
+    const session = await ctx.db
+      .query("portfolioAdminSessions")
+      .withIndex("by_token", (q) => q.eq("tokenHash", tokenHash))
+      .first();
+    if (!session || session.expiresAt < Date.now()) return null;
+    const doc = await ctx.db
+      .query("portfolioSettings")
+      .withIndex("by_key", (q) => q.eq("key", SETTINGS_KEY))
+      .first();
+    return doc ? { smtp: doc.smtp ?? null } : null;
+  },
+});
+
+/**
  * SMTP config for a live Portfolio session — read by the Portfolio email
  * actions so Portfolio mail can never fall back to Academy mail settings.
  */
@@ -191,6 +217,29 @@ export const sessionValid = query({
     return !!session && session.expiresAt > Date.now();
   },
 });
+
+/**
+ * Require a live Portfolio ADMIN session for module-to-module calls (e.g.
+ * the email log sender or the creators management bridge). This is the
+ * only guard shared across Portfolio modules, and it ONLY accepts sessions
+ * minted by `portfolioAdmin.signIn` — a creator session from
+ * `portfolioUsers.verifyOtp` can never satisfy it, and vice versa.
+ */
+export async function requirePortfolioAdminSession(
+  ctx: QueryCtx | MutationCtx,
+  token: string,
+): Promise<Doc<"portfolioAdminSessions">> {
+  if (!token) throw new Error("Portfolio admin session required.");
+  const tokenHash = await sha256Hex(token);
+  const session = await ctx.db
+    .query("portfolioAdminSessions")
+    .withIndex("by_token", (q) => q.eq("tokenHash", tokenHash))
+    .first();
+  if (!session || session.expiresAt < Date.now()) {
+    throw new Error("Your Portfolio admin session has expired. Sign in again.");
+  }
+  return session;
+}
 
 /* ── Portfolio-owned public content ────────────────────────────────────── */
 
