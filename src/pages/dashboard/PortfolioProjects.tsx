@@ -22,6 +22,7 @@ import { Field, ImageField, TextInput } from "@/components/portfolio/PortfolioFi
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { friendlyError } from "@/lib/errors";
+import { getPortfolioUserToken } from "@/lib/portfolio-user-session";
 
 type ProjectForm = {
   title: string;
@@ -61,7 +62,11 @@ const CATEGORY_SUGGESTIONS = [
 ];
 
 export default function PortfolioProjects() {
-  const data = useQuery(api.projects.myPortfolio);
+  const userToken = getPortfolioUserToken();
+  const data = useQuery(
+    api.projects.myPortfolio,
+    userToken ? { token: userToken } : "skip",
+  );
   const createProject = useMutation(api.projects.createProject);
   const updateProject = useMutation(api.projects.updateProject);
   const deleteProject = useMutation(api.projects.deleteProject);
@@ -109,6 +114,7 @@ export default function PortfolioProjects() {
     try {
       if (editing?.id) {
         await updateProject({
+          token: userToken ?? "",
           projectId: editing.id,
           title: form.title,
           summary: form.summary,
@@ -124,6 +130,7 @@ export default function PortfolioProjects() {
         toast.success("Project updated.");
       } else {
         await createProject({
+          token: userToken ?? "",
           title: form.title,
           summary: form.summary,
           description: form.description,
@@ -146,7 +153,7 @@ export default function PortfolioProjects() {
 
   const remove = async (id: Id<"portfolioProjects">) => {
     try {
-      await deleteProject({ projectId: id });
+      await deleteProject({ token: userToken ?? "", projectId: id });
       toast.success("Project removed.");
     } catch (err) {
       toast.error(friendlyError(err, "Could not remove the project."));
@@ -155,7 +162,7 @@ export default function PortfolioProjects() {
 
   const move = async (id: Id<"portfolioProjects">, direction: -1 | 1) => {
     try {
-      await moveProject({ projectId: id, direction });
+      await moveProject({ token: userToken ?? "", projectId: id, direction });
     } catch (err) {
       toast.error(friendlyError(err, "Could not reorder."));
     }

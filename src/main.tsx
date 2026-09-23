@@ -8,7 +8,7 @@ import { RequireTutor } from "@/components/RequireRole";
 import { RequireTeamAuth } from "@/components/RequireTeamAuth";
 import { VlyToolbar } from "../vly-toolbar-readonly.tsx";
 import { ConvexAuthProvider } from "@convex-dev/auth/react";
-import { ConvexReactClient, useMutation } from "convex/react";
+import { ConvexReactClient, useMutation, useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import React, { StrictMode, useEffect, lazy, Suspense, useState, LazyExoticComponent, ComponentType } from "react";
 import { RefreshCw } from "lucide-react";
@@ -23,7 +23,22 @@ import { FeatureGate } from "@/components/site/FeatureGate";
 import { ProductEntry } from "@/pages/ComingSoon";
 import { ConnectionBanner } from "@/components/network/ConnectionBanner";
 import { NameSetupDialog } from "@/components/NameSetupDialog";
-import { AiSupportAssistant } from "@/components/site/AiSupportAssistant";
+/**
+ * The AI support assistant belongs to the ACADEMY product only. The public
+ * Portfolio website must have no AI branding, so this mount checks the
+ * Academy feature flag and renders nothing while Academy is locked.
+ */
+function AcademyOnlyAssistantMount() {
+  const flags = useQuery(api.projects.featureFlags);
+  const academyActive =
+    flags?.find((f) => f.key === "academy")?.state === "active";
+  if (!academyActive) return null;
+  return (
+    <Suspense fallback={null}>
+      <AiSupportAssistant />
+    </Suspense>
+  );
+}
 import {
   isNetworkRelatedError,
   subscribeToRecoverySignals,
@@ -265,6 +280,13 @@ const TeamSettings = L(() => import("./pages/team/TeamSettings.tsx"));
 // ---------------------------------------------------------------------------
 const AdminBrand = L(() => import("./pages/adminbrand/AdminBrand.tsx"));
 const PortfolioSignIn = L(() => import("./pages/PortfolioSignIn.tsx"));
+const PortfolioAuth = L(() => import("./pages/PortfolioAuth.tsx"));
+const PortfolioRedirect = L(
+  () => import("./pages/PortfolioRedirect.tsx").then((m) => ({ default: m.PortfolioRedirect })),
+);
+const CreatorProfile = L(
+  () => import("./pages/dashboard/CreatorProfile.tsx"),
+);
 const AdminShell = L(() => import("./pages/admin/AdminShell.tsx"));
 const AdminOverview = L(() => import("./pages/admin/AdminOverview.tsx"));
 const AdminUsers = L(() => import("./pages/admin/AdminUsers.tsx"));
@@ -294,10 +316,10 @@ const AdminIncidents = L(() => import("./pages/admin/AdminIncidents.tsx"));
 const AdminActivity = L(() => import("./pages/admin/AdminActivity.tsx"));
 const AdminAlertsPage = L(() => import("./pages/admin/AdminAlerts.tsx"));
 
-// Projects platform management
-const AdminPortfolios = L(() => import("./pages/admin/AdminPortfolios.tsx"));
-const AdminProjectsAdmin = L(() => import("./pages/admin/AdminProjectsAdmin.tsx"));
-const AdminWaitlist = L(() => import("./pages/admin/AdminWaitlist.tsx"));
+// Projects platform management — now inside the dedicated /adminbrand portal.
+const AdminPortalRedirect = L(
+  () => import("./pages/PortfolioRedirect.tsx").then((m) => ({ default: m.AdminPortalRedirect })),
+);
 
 // Communication & Community module (admin moderation)
 const AdminCommunication = L(() => import("./pages/admin/AdminCommunication.tsx"));
@@ -1002,10 +1024,9 @@ createRoot(document.getElementById("root")!).render(
           <RouteSyncer />
           <ScrollToTop />
           <Suspense fallback={null}>
-            <LazyFloatingChatWrapper />
-          </Suspense>
-          <Suspense fallback={null}>
-            <AiSupportAssistant />
+            {/* The AI support assistant is an ACADEMY surface — it is not
+                rendered on the public Portfolio website. */}
+            <AcademyOnlyAssistantMount />
           </Suspense>
           <Suspense fallback={<RouteLoading />}>
             <RouteBoundary>
@@ -1155,22 +1176,26 @@ createRoot(document.getElementById("root")!).render(
                 element={<AuthPage redirectAfterAuth="/portfolio" />}
               />
 
-              {/* ── Projects dashboard — the portfolio-only workspace ── */}
-              <Route
-                path="/portfolio"
-                element={
-                  <RequireAuth>
-                    <PortfolioShell />
-                  </RequireAuth>
-                }
-              >
+              {/* ── PORTFOLIO CREATOR system — its own auth, dashboard and
+                  routes. Signing in here NEVER reaches an Academy dashboard
+                  or the /adminbrand admin portal. ── */}
+              <Route path="/portfolio/auth" element={<PortfolioAuth />} />
+
+              {/* Legacy password screen redirects to the creator auth flow. */}
+              <Route path="/portfolio/signin" element={<PortfolioSignIn />} />
+
+              <Route path="/portfolio/dashboard" element={<PortfolioShell />}>
                 <Route index element={<PortfolioOverview />} />
                 <Route path="edit" element={<PortfolioEditor />} />
                 <Route path="edit/:section" element={<PortfolioEditor />} />
                 <Route path="projects" element={<PortfolioProjects />} />
+                <Route path="profile" element={<CreatorProfile />} />
                 <Route path="settings" element={<PortfolioSettings />} />
-                <Route path="account" element={<PortfolioAccount />} />
               </Route>
+
+              {/* Back-compat: the old workspace path redirects into the
+                  creator dashboard. */}
+              <Route path="/portfolio" element={<PortfolioRedirect />} />
 
               {/* Course player (signed in) — Academy, locked by default. */}
               <Route
@@ -1297,9 +1322,12 @@ createRoot(document.getElementById("root")!).render(
                 <Route path="email-center" element={<AdminEmailCenter />} />
 
                 {/* ForgeX Projects management */}
-                <Route path="portfolios" element={<AdminPortfolios />} />
-                <Route path="projects" element={<AdminProjectsAdmin />} />
-                <Route path="waitlist" element={<AdminWaitlist />} />
+                {/* Portfolio management moved to /adminbrand (separate portal).
+                    These Academy-admin routes redirect there so no stale link
+                    can bypass the Portfolio's own credential gate. */}
+                <Route path="portfolios" element={<AdminPortalRedirect />} />
+                <Route path="projects" element={<AdminPortalRedirect />} />
+                <Route path="waitlist" element={<AdminPortalRedirect />} />
 
                 {/* System Health & monitoring */}
                 <Route path="system" element={<AdminSystemHealth />} />

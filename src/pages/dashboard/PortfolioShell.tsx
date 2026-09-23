@@ -2,41 +2,60 @@ import { useEffect, useState } from "react";
 import { useMutation, useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import {
-  Briefcase,
   FolderKanban,
-  GraduationCap,
   LayoutDashboard,
-  Link2,
   Loader2,
   PenSquare,
   Settings,
-  Sparkles,
   User,
-  UserCog,
-  Wrench,
 } from "lucide-react";
 import { AppShell } from "@/components/dash/AppShell";
 import type { MobileNavItem, MobileNavSection } from "@/components/site/MobileBottomNav";
 import { useBranding } from "@/lib/branding";
+import {
+  getPortfolioUserToken,
+  clearPortfolioUserToken,
+  PORTFOLIO_AUTH_PATH,
+} from "@/lib/portfolio-user-session";
 
 /**
- * Portfolio dashboard shell.
+ * Portfolio CREATOR dashboard shell — /portfolio/dashboard.
  *
- * The sidebar is about ONE thing: the owner's portfolio. There are no Academy
- * courses, assignments, certificates, student community or AI career coach
- * here — Academy is a locked product and lives behind its own flag.
+ * This is the creator's own workspace: five sections (Overview, My Portfolio,
+ * Projects, Profile, Settings) that only ever manage THEIR portfolio. There
+ * are no platform-wide admin tools here — the Portfolio admin lives at
+ * /adminbrand behind its own credential, and a creator session can never
+ * reach it.
  */
 export default function PortfolioShell() {
   const branding = useBranding();
-  const portfolio = useQuery(api.projects.myPortfolio);
+  const userToken = getPortfolioUserToken();
+
+  // Signed out? The shell itself sends the visitor to the Portfolio auth
+  // screen — it never falls back to Academy authentication.
+  useEffect(() => {
+    if (!userToken) {
+      window.location.replace(PORTFOLIO_AUTH_PATH);
+    }
+  }, [userToken]);
+
+  const session = useQuery(
+    api.portfolioUsers.validateSession,
+    userToken ? { token: userToken } : "skip",
+  );
+  const portfolio = useQuery(
+    api.projects.myPortfolio,
+    userToken ? { token: userToken } : "skip",
+  );
   const ensurePortfolio = useMutation(api.projects.ensureMyPortfolio);
   const [error, setError] = useState<string | null>(null);
 
   // Create the portfolio on first visit so every section has something to
   // edit. The mutation is idempotent and cannot double-create.
   useEffect(() => {
-    if (portfolio === null) {
-      void ensurePortfolio({}).catch((err) => {
+    if (!userToken) return;
+    if (session && portfolio === null) {
+      void ensurePortfolio({ token: userToken }).catch((err) => {
         setError(
           err instanceof Error
             ? err.message
@@ -44,64 +63,41 @@ export default function PortfolioShell() {
         );
       });
     }
-  }, [portfolio, ensurePortfolio]);
+  }, [userToken, session, portfolio, ensurePortfolio]);
 
-  const loading = portfolio === undefined || portfolio === null;
+  // Session genuinely invalid/expired → clear the stale token and re-auth.
+  useEffect(() => {
+    if (userToken && session === null && !error) {
+      clearPortfolioUserToken();
+      window.location.replace(PORTFOLIO_AUTH_PATH);
+    }
+  }, [userToken, session, error]);
+
+  const loading =
+    !userToken ||
+    session === undefined ||
+    portfolio === undefined ||
+    portfolio === null;
 
   const sections = [
     {
       label: "Portfolio",
       items: [
         {
-          to: "/portfolio",
+          to: "/portfolio/dashboard",
           label: "Overview",
           icon: <LayoutDashboard className="size-4" />,
           end: true,
         },
         {
-          to: "/portfolio/edit",
+          to: "/portfolio/dashboard/edit",
           label: "My Portfolio",
           icon: <PenSquare className="size-4" />,
         },
         {
-          to: "/portfolio/projects",
+          to: "/portfolio/dashboard/projects",
           label: "Projects",
           icon: <FolderKanban className="size-4" />,
-        },
-      ],
-    },
-    {
-      label: "Profile",
-      items: [
-        {
-          to: "/portfolio/edit/about",
-          label: "About Me",
-          icon: <User className="size-4" />,
-        },
-        {
-          to: "/portfolio/edit/skills",
-          label: "Skills",
-          icon: <Sparkles className="size-4" />,
-        },
-        {
-          to: "/portfolio/edit/experience",
-          label: "Experience",
-          icon: <Briefcase className="size-4" />,
-        },
-        {
-          to: "/portfolio/edit/education",
-          label: "Education",
-          icon: <GraduationCap className="size-4" />,
-        },
-        {
-          to: "/portfolio/edit/services",
-          label: "Services",
-          icon: <Wrench className="size-4" />,
-        },
-        {
-          to: "/portfolio/edit/links",
-          label: "Social Links",
-          icon: <Link2 className="size-4" />,
         },
       ],
     },
@@ -109,14 +105,14 @@ export default function PortfolioShell() {
       label: "Account",
       items: [
         {
-          to: "/portfolio/settings",
-          label: "Portfolio Settings",
-          icon: <Settings className="size-4" />,
+          to: "/portfolio/dashboard/profile",
+          label: "Profile",
+          icon: <User className="size-4" />,
         },
         {
-          to: "/portfolio/account",
-          label: "Account",
-          icon: <UserCog className="size-4" />,
+          to: "/portfolio/dashboard/settings",
+          label: "Settings",
+          icon: <Settings className="size-4" />,
         },
       ],
     },
@@ -124,76 +120,36 @@ export default function PortfolioShell() {
 
   const mobilePrimary: MobileNavItem[] = [
     {
-      to: "/portfolio",
+      to: "/portfolio/dashboard",
       label: "Overview",
       icon: <LayoutDashboard className="size-5" />,
       end: true,
     },
     {
-      to: "/portfolio/edit",
+      to: "/portfolio/dashboard/edit",
       label: "Edit",
       icon: <PenSquare className="size-5" />,
     },
     {
-      to: "/portfolio/projects",
+      to: "/portfolio/dashboard/projects",
       label: "Projects",
       icon: <FolderKanban className="size-5" />,
     },
     {
-      to: "/portfolio/account",
-      label: "Account",
+      to: "/portfolio/dashboard/profile",
+      label: "Profile",
       icon: <User className="size-5" />,
     },
   ];
 
   const mobileMore: MobileNavSection[] = [
     {
-      label: "Profile",
+      label: "Account",
       items: [
         {
-          to: "/portfolio/edit/about",
-          label: "About Me",
-          icon: <User className="size-4" />,
-        },
-        {
-          to: "/portfolio/edit/skills",
-          label: "Skills",
-          icon: <Sparkles className="size-4" />,
-        },
-        {
-          to: "/portfolio/edit/experience",
-          label: "Experience",
-          icon: <Briefcase className="size-4" />,
-        },
-        {
-          to: "/portfolio/edit/education",
-          label: "Education",
-          icon: <GraduationCap className="size-4" />,
-        },
-        {
-          to: "/portfolio/edit/services",
-          label: "Services",
-          icon: <Wrench className="size-4" />,
-        },
-        {
-          to: "/portfolio/edit/links",
-          label: "Social Links",
-          icon: <Link2 className="size-4" />,
-        },
-      ],
-    },
-    {
-      label: "Settings",
-      items: [
-        {
-          to: "/portfolio/settings",
-          label: "Portfolio Settings",
+          to: "/portfolio/dashboard/settings",
+          label: "Settings",
           icon: <Settings className="size-4" />,
-        },
-        {
-          to: "/portfolio/account",
-          label: "Account",
-          icon: <UserCog className="size-4" />,
         },
       ],
     },
@@ -236,7 +192,7 @@ export default function PortfolioShell() {
         </>
       }
       brandAlt={branding.name}
-      profilePath="/portfolio/account"
+      profilePath="/portfolio/dashboard/profile"
       showRoleLink={false}
       sections={sections}
       mobilePrimaryItems={mobilePrimary}

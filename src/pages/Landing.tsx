@@ -71,11 +71,8 @@ const TEMPLATES = [
 
 export default function Landing() {
   const branding = useBranding();
-  const stats = useQuery(api.projects.projectsStats);
   const featured = useQuery(api.projects.exploreProjects, { limit: 24 });
   const categories = useQuery(api.projects.exploreCategories);
-  const creators = useQuery(api.projects.featuredPortfolios, { limit: 3 });
-  const flags = useQuery(api.projects.featureFlags);
   const storedSlides = useQuery(api.portfolioAdmin.publicContent, {
     key: PORTFOLIO_SLIDES_KEY,
   });
@@ -92,16 +89,6 @@ export default function Landing() {
   const recentWork = work.filter((p) => !topWork.includes(p)).slice(0, 6);
   const chips = (categories ?? []).slice(0, 5);
 
-  // The ecosystem strip mirrors the feature flags — Portfolio is live, the
-  // other two products stay locked until an admin flips them.
-  const products =
-    flags ??
-    ([
-      { key: "projects", label: "Portfolio", state: "active", tagline: "" },
-      { key: "academy", label: "Academy", state: "locked", tagline: "" },
-      { key: "opportunity-hub", label: "Opportunity Hub", state: "locked", tagline: "" },
-    ] as { key: string; label: string; state: string; tagline: string }[]);
-
   return (
     <div className="relative overflow-x-clip">
       {/* ── Hero ─────────────────────────────────────────────────────────── */}
@@ -116,9 +103,9 @@ export default function Landing() {
               initial={{ opacity: 0, y: 18 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.55, ease: [0.22, 1, 0.36, 1] }}
-              className="font-display text-4xl font-extrabold leading-[1.03] tracking-tight sm:text-5xl lg:text-6xl xl:text-[4.25rem]"
+              className="font-display text-[2.75rem] font-extrabold leading-[1.02] tracking-tight sm:text-6xl lg:text-[4.25rem] xl:text-[4.75rem]"
             >
-              Great Work
+              Great Work.
               <br />
               <span className="text-lime-400">Builds Brands.</span>
             </motion.h1>
@@ -129,68 +116,34 @@ export default function Landing() {
               transition={{ duration: 0.55, delay: 0.08 }}
               className="mt-5 max-w-lg text-base leading-relaxed text-muted-foreground sm:text-lg"
             >
-              Discover creative talent, explore amazing projects, and build
-              what&apos;s next — on {branding.name}, where every creator turns
-              their work into a professional website.
+              Discover creative talent, explore real work, and turn great
+              projects into professional portfolios.
             </motion.p>
 
+            {/* One subtle, responsive explore action. The primary actions —
+                Share Portfolio Link and Sign In — live in the header, so the
+                hero never stacks buttons awkwardly on mobile. */}
             <motion.div
-              initial={{ opacity: 0, y: 14 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.55, delay: 0.16 }}
-              className="mt-7 flex flex-wrap items-center gap-3"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ duration: 0.5, delay: 0.16 }}
+              className="mt-7"
             >
-              <Link to="/explore">
-                <Button
-                  size="lg"
-                  variant="outline"
-                  className="h-12 gap-2 rounded-full border-lime-400/50 bg-lime-400/10 px-6 font-bold text-lime-300 hover:border-lime-400 hover:bg-lime-400 hover:text-black"
-                >
-                  Explore Portfolio <ArrowRight className="size-4" />
-                </Button>
-              </Link>
-
-              {/* The only two other public actions: share the portfolio link,
-                  or sign in to the Portfolio's own management area. */}
-              <SharePortfolioButton className="h-12 px-5 text-sm" />
               <Link
-                to="/portfolio/signin"
-                className="inline-flex h-12 items-center gap-2 rounded-full border border-white/15 px-5 text-sm font-semibold text-muted-foreground transition-colors hover:border-white/30 hover:text-foreground"
+                to="/explore"
+                className="group inline-flex items-center gap-2 text-sm font-semibold text-lime-300 transition-colors hover:text-lime-200"
               >
-                Sign In
+                Explore portfolios
+                <ArrowRight className="size-4 transition-transform group-hover:translate-x-0.5" />
               </Link>
             </motion.div>
-
-            {stats && (
-              <motion.dl
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                transition={{ duration: 0.6, delay: 0.24 }}
-                className="mt-9 flex flex-wrap gap-x-8 gap-y-4 sm:gap-x-10"
-              >
-                {[
-                  { label: "Portfolios published", value: stats.portfolios },
-                  { label: "Projects showcased", value: stats.projects },
-                  { label: "Creators", value: stats.creators },
-                ].map((s) => (
-                  <div key={s.label}>
-                    <dt className="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">
-                      {s.label}
-                    </dt>
-                    <dd className="font-display mt-1 text-2xl font-extrabold text-lime-400">
-                      {s.value}
-                    </dd>
-                  </div>
-                ))}
-              </motion.dl>
-            )}
           </div>
 
           <motion.div
             initial={{ opacity: 0, scale: 0.97 }}
             animate={{ opacity: 1, scale: 1 }}
             transition={{ duration: 0.6, delay: 0.1, ease: [0.22, 1, 0.36, 1] }}
-            className="min-w-0 w-full"
+            className="mt-10 min-w-0 w-full lg:mt-0"
           >
             <HeroShowcase slides={slides} ariaLabel="Portfolio showcase" />
           </motion.div>
@@ -378,7 +331,7 @@ export default function Landing() {
       </section>
 
       {/* ── Creators ─────────────────────────────────────────────────────── */}
-      {(creators?.length ?? 0) > 0 && (
+      {(topWork.length > 0) && (
         <section className="mx-auto max-w-7xl px-4 pb-16 sm:px-6 sm:pb-20">
           <SectionHeading
             align="left"
@@ -386,32 +339,20 @@ export default function Landing() {
             title="Real people. Real skills. Real work."
           />
           <div className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {creators!.map((c, i) => (
+            {work.slice(0, 3).map((c, i) => (
               <Reveal key={c._id} delay={i * 0.05} className="h-full">
                 <Link
-                  to={`/p/${c.slug}`}
+                  to={`/p/${c.owner.slug}`}
                   className="group flex h-full items-center gap-3 rounded-3xl border border-white/10 bg-card p-5 transition-colors hover:border-lime-400/35"
                 >
-                  <Avatar name={c.displayName} image={c.avatarUrl} className="size-14" />
+                  <Avatar name={c.owner.displayName} image={c.owner.avatarUrl} className="size-14" />
                   <div className="min-w-0 flex-1">
                     <p className="font-display truncate text-base font-semibold">
-                      {c.displayName}
+                      {c.owner.displayName}
                     </p>
                     <p className="truncate text-xs text-muted-foreground">
-                      {c.headline || branding.productLabel}
+                      {c.owner.headline || branding.productLabel}
                     </p>
-                    {c.skills.length > 0 && (
-                      <div className="mt-2 flex flex-wrap gap-1.5">
-                        {c.skills.slice(0, 2).map((s) => (
-                          <span
-                            key={s.name}
-                            className="rounded-full border border-white/10 bg-black/20 px-2 py-0.5 text-[10px] text-muted-foreground"
-                          >
-                            {s.name}
-                          </span>
-                        ))}
-                      </div>
-                    )}
                   </div>
                   <ArrowRight className="size-4 shrink-0 text-muted-foreground transition-transform group-hover:translate-x-0.5 group-hover:text-lime-300" />
                 </Link>
@@ -425,73 +366,39 @@ export default function Landing() {
       <section className="mx-auto max-w-7xl px-4 pb-16 sm:px-6 sm:pb-20">
         <SectionHeading
           eyebrow={branding.name}
-          title="One ecosystem, three products"
-          description={`${branding.productLabel} is live today. Academy and Opportunity Hub are being built — and will slot straight in when they're ready.`}
+          title="Built for people whose work speaks"
+          description="Designers, developers, writers, agencies, students — anyone who needs a serious home for their work without building a website from scratch."
         />
         <div className="mt-10 grid gap-5 md:grid-cols-3">
-          {products.map((p) => {
-            const live = p.state === "active";
-            const to =
-              p.key === "academy"
-                ? "/academy"
-                : p.key === "opportunity-hub"
-                  ? "/opportunity-hub"
-                  : "/explore";
-            return (
-              <Reveal key={p.key} className="h-full">
-                <div
-                  className={cn(
-                    "flex h-full flex-col rounded-3xl border p-6",
-                    live
-                      ? "border-lime-400/35 bg-gradient-to-br from-lime-400/12 to-card"
-                      : "border-white/10 bg-card",
-                  )}
-                >
-                  <div className="flex items-center justify-between gap-3">
-                    <span
-                      className={cn(
-                        "flex size-11 items-center justify-center rounded-2xl",
-                        live ? "bg-lime-400/15 text-lime-300" : "bg-white/5 text-muted-foreground",
-                      )}
-                    >
-                      {live ? <Compass className="size-5" /> : <Lock className="size-5" />}
-                    </span>
-                    <span
-                      className={cn(
-                        "rounded-full border px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider",
-                        live
-                          ? "border-lime-400/40 bg-lime-400/10 text-lime-300"
-                          : "border-white/10 text-muted-foreground",
-                      )}
-                    >
-                      {live ? "Live" : "Coming soon"}
-                    </span>
-                  </div>
-                  <h3 className="font-display mt-5 text-xl font-bold">{p.label}</h3>
-                  <p className="mt-2 flex-1 text-sm leading-relaxed text-muted-foreground">
-                    {p.tagline ||
-                      (live
-                        ? "Where you create, manage and share your professional portfolio as your own website."
-                        : "Structured learning, opportunities and everything that connects skills to what's next.")}
-                  </p>
-                  <Link to={to} className="mt-5">
-                    <Button
-                      variant={live ? "default" : "outline"}
-                      className={cn(
-                        "w-full gap-2",
-                        live
-                          ? "bg-lime-400 font-semibold text-black hover:bg-lime-300"
-                          : "border-white/15 text-muted-foreground hover:border-lime-400/40 hover:text-lime-300",
-                      )}
-                    >
-                      {live ? "Explore now" : "See what's coming"}
-                      <ArrowRight className="size-4" />
-                    </Button>
-                  </Link>
-                </div>
-              </Reveal>
-            );
-          })}
+          {[
+            {
+              icon: User,
+              title: "A profile that reads like a site",
+              body: "Your name, story, skills and experience presented like a professional website — not a card inside an app.",
+            },
+            {
+              icon: FolderKanban,
+              title: "Work that takes centre stage",
+              body: "Image-led project pages with summaries, tags and live links, featured front and centre.",
+            },
+            {
+              icon: Share2,
+              title: "One link, everywhere",
+              body: "A single memorable URL for your CV, bio and DMs — copy it once, share it anywhere.",
+            },
+          ].map((c) => (
+            <Reveal key={c.title} className="h-full">
+              <div className="flex h-full flex-col rounded-3xl border border-white/10 bg-card p-6">
+                <span className="flex size-11 items-center justify-center rounded-2xl bg-lime-400/15 text-lime-300">
+                  <c.icon className="size-5" />
+                </span>
+                <h3 className="font-display mt-5 text-xl font-bold">{c.title}</h3>
+                <p className="mt-2 flex-1 text-sm leading-relaxed text-muted-foreground">
+                  {c.body}
+                </p>
+              </div>
+            </Reveal>
+          ))}
         </div>
       </section>
 
@@ -503,17 +410,19 @@ export default function Landing() {
               Your portfolio is one link away
             </h2>
             <p className="mx-auto mt-4 max-w-xl text-sm leading-relaxed text-muted-foreground sm:text-base">
-              Sign in to manage your portfolio, or copy your public link and
-              share it anywhere — no account needed for visitors.
+              Create your account, build your portfolio, and share a single
+              professional link anywhere — visitors never need one.
             </p>
             <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
-              <SharePortfolioButton className="h-12 px-6 text-sm" />
-              <Link
-                to="/portfolio/signin"
-                className="inline-flex h-12 items-center rounded-full border border-white/20 px-6 text-sm font-semibold transition-colors hover:border-white/35"
-              >
-                Sign In
+              <Link to="/portfolio/auth">
+                <Button
+                  size="lg"
+                  className="h-12 gap-2 rounded-full bg-lime-400 px-7 font-bold text-black hover:bg-lime-300"
+                >
+                  Start building <ArrowRight className="size-4" />
+                </Button>
               </Link>
+              <SharePortfolioButton className="h-12 px-6 text-sm" />
             </div>
           </div>
         </Reveal>

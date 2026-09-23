@@ -23,8 +23,9 @@ import {
 } from "./_generated/server";
 import { internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
-import { checkRateLimit, requireAdminSession, slugify } from "./lib";
+import { checkRateLimit, slugify } from "./lib";
 import { requirePortfolioUser } from "./portfolioUsers";
+import { requirePortfolioAdminSession } from "./portfolioAdmin";
 import {
   portfolioEducationValidator,
   portfolioExperienceValidator,
@@ -1072,7 +1073,7 @@ export const reportPortfolio = mutation({
 export const adminProjectsOverview = query({
   args: { token: v.string() },
   handler: async (ctx, { token }) => {
-    await requireAdminSession(ctx, token);
+    await requirePortfolioAdminSession(ctx, token);
     const [portfolios, projects, reports, waitlist] = await Promise.all([
       ctx.db.query("portfolios").collect(),
       ctx.db.query("portfolioProjects").collect(),
@@ -1108,7 +1109,7 @@ export const adminProjectsOverview = query({
 export const adminListPortfolios = query({
   args: { token: v.string(), q: v.optional(v.string()) },
   handler: async (ctx, { token, q }) => {
-    await requireAdminSession(ctx, token);
+    await requirePortfolioAdminSession(ctx, token);
     const needle = (q ?? "").trim().toLowerCase();
     const rows = await ctx.db.query("portfolios").order("desc").take(400);
     const filtered = needle
@@ -1175,7 +1176,7 @@ export const adminListPortfolios = query({
 export const adminListProjects = query({
   args: { token: v.string(), q: v.optional(v.string()) },
   handler: async (ctx, { token, q }) => {
-    await requireAdminSession(ctx, token);
+    await requirePortfolioAdminSession(ctx, token);
     const needle = (q ?? "").trim().toLowerCase();
     const rows = await ctx.db.query("portfolioProjects").order("desc").take(400);
     const filtered = needle
@@ -1217,7 +1218,7 @@ export const adminListProjects = query({
 export const adminListReports = query({
   args: { token: v.string() },
   handler: async (ctx, { token }) => {
-    await requireAdminSession(ctx, token);
+    await requirePortfolioAdminSession(ctx, token);
     const rows = await ctx.db.query("portfolioReports").order("desc").take(200);
     return rows;
   },
@@ -1226,7 +1227,7 @@ export const adminListReports = query({
 export const adminListWaitlist = query({
   args: { token: v.string() },
   handler: async (ctx, { token }) => {
-    await requireAdminSession(ctx, token);
+    await requirePortfolioAdminSession(ctx, token);
     return ctx.db.query("productWaitlist").order("desc").take(300);
   },
 });
@@ -1238,7 +1239,7 @@ export const adminSetPortfolioVisibility = mutation({
     visibility: portfolioVisibilityValidator,
   },
   handler: async (ctx, { token, portfolioId, visibility }) => {
-    await requireAdminSession(ctx, token);
+    await requirePortfolioAdminSession(ctx, token);
     await ctx.db.patch(portfolioId, { visibility, updatedAt: Date.now() });
     await recomputeStats(ctx);
     return true;
@@ -1248,7 +1249,7 @@ export const adminSetPortfolioVisibility = mutation({
 export const adminToggleFeatured = mutation({
   args: { token: v.string(), portfolioId: v.id("portfolios") },
   handler: async (ctx, { token, portfolioId }) => {
-    await requireAdminSession(ctx, token);
+    await requirePortfolioAdminSession(ctx, token);
     const p = await ctx.db.get(portfolioId);
     if (!p) throw new Error("Portfolio not found.");
     await ctx.db.patch(portfolioId, { featured: !p.featured, updatedAt: Date.now() });
@@ -1259,7 +1260,7 @@ export const adminToggleFeatured = mutation({
 export const adminToggleSuspended = mutation({
   args: { token: v.string(), portfolioId: v.id("portfolios") },
   handler: async (ctx, { token, portfolioId }) => {
-    await requireAdminSession(ctx, token);
+    await requirePortfolioAdminSession(ctx, token);
     const p = await ctx.db.get(portfolioId);
     if (!p) throw new Error("Portfolio not found.");
     await ctx.db.patch(portfolioId, { suspended: !p.suspended, updatedAt: Date.now() });
@@ -1271,7 +1272,7 @@ export const adminToggleSuspended = mutation({
 export const adminRemoveProject = mutation({
   args: { token: v.string(), projectId: v.id("portfolioProjects"), reason: v.string() },
   handler: async (ctx, { token, projectId, reason }) => {
-    await requireAdminSession(ctx, token);
+    await requirePortfolioAdminSession(ctx, token);
     await ctx.db.patch(projectId, {
       removed: true,
       removedReason: reason.slice(0, 200),
@@ -1285,7 +1286,7 @@ export const adminRemoveProject = mutation({
 export const adminRestoreProject = mutation({
   args: { token: v.string(), projectId: v.id("portfolioProjects") },
   handler: async (ctx, { token, projectId }) => {
-    await requireAdminSession(ctx, token);
+    await requirePortfolioAdminSession(ctx, token);
     await ctx.db.patch(projectId, {
       removed: false,
       removedReason: undefined,
@@ -1299,7 +1300,7 @@ export const adminRestoreProject = mutation({
 export const adminResolveReport = mutation({
   args: { token: v.string(), reportId: v.id("portfolioReports") },
   handler: async (ctx, { token, reportId }) => {
-    await requireAdminSession(ctx, token);
+    await requirePortfolioAdminSession(ctx, token);
     await ctx.db.patch(reportId, { resolved: true, resolvedAt: Date.now() });
     return true;
   },
@@ -1316,7 +1317,7 @@ export const adminSetFeatureFlag = mutation({
     comingSoonCopy: v.optional(v.string()),
   },
   handler: async (ctx, { token, key, state, label, tagline, comingSoonCopy }) => {
-    await requireAdminSession(ctx, token);
+    await requirePortfolioAdminSession(ctx, token);
     const fallback = DEFAULT_FLAGS.find((f) => f.key === key);
     if (!fallback) throw new Error("Unknown product.");
     const existing = await ctx.db
@@ -1343,7 +1344,7 @@ export const adminSetFeatureFlag = mutation({
 export const adminRefreshStats = mutation({
   args: { token: v.string() },
   handler: async (ctx, { token }) => {
-    await requireAdminSession(ctx, token);
+    await requirePortfolioAdminSession(ctx, token);
     await recomputeStats(ctx);
     return true;
   },

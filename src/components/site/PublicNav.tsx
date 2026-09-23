@@ -125,11 +125,11 @@ export function PublicNav() {
   });
 
   const dashboardTo =
-    user?.role === "admin" || user?.role === "owner" ? "/admin" : "/portfolio";
+    user?.role === "admin" || user?.role === "owner" ? "/admin" : "/portfolio/dashboard";
   const profileTo =
     user?.role === "admin" || user?.role === "owner"
       ? "/admin/profile"
-      : "/portfolio/account";
+      : "/portfolio/dashboard/profile";
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 12);
@@ -155,11 +155,12 @@ export function PublicNav() {
 
   // Bottom tab bar — matches the ForgeX Network Portfolio app:
   // Home · Explore · [+] · Portfolio · Profile
+  const authTo = isAuthenticated ? "/portfolio/dashboard" : "/portfolio/auth";
   const mobilePrimary: MobileNavItem[] = [
     { to: "/", label: "Home", icon: <Home className="size-5" />, end: true },
     { to: "/explore", label: "Explore", icon: <Compass className="size-5" /> },
     {
-      to: isAuthenticated ? "/portfolio" : "/portfolio/signin",
+      to: authTo,
       label: "Portfolio",
       icon: isAuthenticated ? (
         <LayoutDashboard className="size-5" />
@@ -169,17 +170,18 @@ export function PublicNav() {
       end: true,
     },
     {
-      to: isAuthenticated ? profileTo : "/portfolio/signin",
+      to: authTo,
       label: "Profile",
       icon: <User className="size-5" />,
       end: true,
     },
   ];
 
-  // The centre action never opens account creation — Portfolio access is
-  // issued, not self-served, so signed-out visitors are sent to sign in.
+  // The centre action opens the creator's project manager when signed in;
+  // signed-out visitors go to the Portfolio auth screen (never account
+  // creation on the public website, never an admin route).
   const mobileFab = {
-    to: isAuthenticated ? "/portfolio/projects" : "/portfolio/signin",
+    to: isAuthenticated ? "/portfolio/dashboard/projects" : "/portfolio/auth",
     label: isAuthenticated ? "Add a project" : "Portfolio sign in",
   };
 
@@ -219,53 +221,16 @@ export function PublicNav() {
               </NavLink>
             ))}
 
-            {lockedProducts.length > 0 && (
-              <HoverDropdown
-                trigger={
-                  <>
-                    Coming soon
-                    <ChevronDown className="ml-1 size-3.5" />
-                  </>
-                }
-                triggerClassName={cn(
-                  "flex items-center rounded-full px-3 py-2 text-[13px] font-medium transition-colors whitespace-nowrap",
-                  productsHasActive
-                    ? "bg-lime-400/10 text-lime-300"
-                    : "text-muted-foreground hover:bg-white/5 hover:text-foreground",
-                )}
-              >
-                <div className="py-1.5">
-                  {lockedProducts.map((p) => {
-                    const meta = PRODUCT_META[p.product];
-                    return (
-                      <NavLink
-                        key={p.to}
-                        to={p.to}
-                        onClick={scrollTop}
-                        className={({ isActive }) =>
-                          cn(
-                            "flex items-start gap-2.5 px-3.5 py-2.5 transition-colors",
-                            isActive
-                              ? "bg-lime-400/10 text-lime-300"
-                              : "text-muted-foreground hover:bg-white/5 hover:text-foreground",
-                          )
-                        }
-                      >
-                        <Lock className="mt-0.5 size-4 shrink-0" />
-                        <span className="min-w-0">
-                          <span className="block text-sm font-medium">{meta.label}</span>
-                          <span className="block text-[11px] text-muted-foreground">
-                            Coming soon
-                          </span>
-                        </span>
-                      </NavLink>
-                    );
-                  })}
-                </div>
-              </HoverDropdown>
-            )}
-
+            {/* The public Portfolio site is PORTFOLIO-ONLY: no Academy
+                product links, no locked-product menu, no ecosystem strip.
+                Locked products simply aren't advertised here. */}
             <HoverDropdown
+              trigger={
+                <>
+                  More
+                  <ChevronDown className="ml-1 size-3.5" />
+                </>
+              }
               trigger={
                 <>
                   More
@@ -391,13 +356,13 @@ export function PublicNav() {
               <>
                 {/* The public site offers exactly two actions: share your
                     portfolio link (the lime pill above) and Portfolio sign
-                    in. There is deliberately no account creation here. */}
+                    in — which never opens an admin portal. */}
                 <Button
                   size="sm"
-                  data-prefetch="/portfolio/signin"
+                  data-prefetch="/portfolio/auth"
                   className="h-8 bg-lime-400 text-xs font-semibold text-black hover:bg-lime-300"
                   onClick={() => {
-                    navigate("/portfolio/signin");
+                    navigate("/portfolio/auth");
                     scrollTop();
                   }}
                 >

@@ -19,6 +19,7 @@ import { Field } from "@/components/portfolio/PortfolioFields";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { friendlyError } from "@/lib/errors";
+import { getPortfolioUserToken } from "@/lib/portfolio-user-session";
 import type { PortfolioVisibility } from "./portfolio-types";
 
 const VISIBILITY: {
@@ -53,7 +54,11 @@ const ALL_SECTIONS = [
 ];
 
 export default function PortfolioSettings() {
-  const data = useQuery(api.projects.myPortfolio);
+  const userToken = getPortfolioUserToken();
+  const data = useQuery(
+    api.projects.myPortfolio,
+    userToken ? { token: userToken } : "skip",
+  );
   const setSlug = useMutation(api.projects.setSlug);
   const setVisibility = useMutation(api.projects.setVisibility);
   const updatePortfolio = useMutation(api.projects.updatePortfolio);
@@ -145,7 +150,7 @@ export default function PortfolioSettings() {
           <Button
             disabled={busy === "slug" || slug.trim() === portfolio.slug}
             onClick={() =>
-              void run("slug", () => setSlug({ slug }), "Your portfolio link is updated.")
+              void run("slug", () => setSlug({ token: userToken ?? "", slug }), "Your portfolio link is updated.")
             }
             className="gap-2 bg-lime-400 font-semibold text-black hover:bg-lime-300"
           >
@@ -176,7 +181,7 @@ export default function PortfolioSettings() {
                 onClick={() =>
                   void run(
                     v.key,
-                    () => setVisibility({ visibility: v.key }),
+                    () => setVisibility({ token: userToken ?? "", visibility: v.key }),
                     v.key === "draft"
                       ? "Your portfolio is private again."
                       : v.key === "published"
@@ -240,7 +245,7 @@ export default function PortfolioSettings() {
             onClick={() =>
               void run(
                 "seo",
-                () => updatePortfolio({ seoTitle, seoDescription }),
+                () => updatePortfolio({ token: userToken ?? "", seoTitle, seoDescription }),
                 "Search settings saved.",
               )
             }
@@ -294,7 +299,7 @@ export default function PortfolioSettings() {
         <Button
           disabled={busy === "order"}
           onClick={() =>
-            void run("order", () => updatePortfolio({ sectionOrder: order }), "Section order saved.")
+            void run("order", () => updatePortfolio({ token: userToken ?? "", sectionOrder: order }), "Section order saved.")
           }
           className="mt-4 gap-2 bg-lime-400 font-semibold text-black hover:bg-lime-300"
         >

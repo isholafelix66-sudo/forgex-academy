@@ -230,26 +230,8 @@ export default function AdminShell() {
     (pendingCourses?.length ?? 0);
 
   const sections = [
-    {
-      label: "Portfolio",
-      items: [
-        {
-          to: "/admin/portfolios",
-          label: "Portfolios",
-          icon: <Globe className="size-4" />,
-        },
-        {
-          to: "/admin/projects",
-          label: "Project moderation",
-          icon: <FolderKanban className="size-4" />,
-        },
-        {
-          to: "/admin/waitlist",
-          label: "Products & waitlist",
-          icon: <Rocket className="size-4" />,
-        },
-      ],
-    },
+    // NOTE: Portfolio management moved OUT of the Academy admin dashboard —
+    // it now lives exclusively in the Portfolio admin portal at /adminbrand.
     {
       label: "Platform",
       items: [
@@ -353,9 +335,6 @@ export default function AdminShell() {
         { to: "/admin/teams", label: "Team Access", icon: <Users className="size-4" /> },
         { to: "/admin/ai-support", label: "AI Support", icon: <Bot className="size-4" /> },
         { to: "/admin/email-center", label: "Email Center", icon: <Mail className="size-4" /> },
-        { to: "/admin/portfolios", label: "Portfolios", icon: <Globe className="size-4" /> },
-        { to: "/admin/projects", label: "Project moderation", icon: <FolderKanban className="size-4" /> },
-        { to: "/admin/waitlist", label: "Products & waitlist", icon: <Rocket className="size-4" /> },
         { to: "/admin/system", label: "System health", icon: <Activity className="size-4" /> },
         { to: "/admin/system/incidents", label: "Incidents", icon: <Siren className="size-4" /> },
       ],

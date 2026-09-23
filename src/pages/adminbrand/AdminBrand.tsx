@@ -4,7 +4,11 @@ import { useAction, useMutation, useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import {
   AlertTriangle,
+  Ban,
   Check,
+  Compass,
+  Eye,
+  FolderKanban,
   Globe,
   ImageIcon,
   KeyRound,
@@ -17,8 +21,11 @@ import {
   Plus,
   RotateCcw,
   Save,
+  Send,
   ShieldCheck,
+  Sparkle,
   Trash2,
+  Users,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -27,6 +34,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { BrandMark } from "@/components/site/BrandMark";
 import { SharePortfolioButton } from "@/components/site/SharePortfolioButton";
 import { cn } from "@/lib/utils";
+import { getPortfolioUserToken } from "@/lib/portfolio-user-session";
 import { toast } from "sonner";
 import { friendlyError } from "@/lib/errors";
 import {
@@ -63,11 +71,14 @@ import {
 
 const TABS = [
   { id: "overview", label: "Overview", icon: Layers },
+  { id: "creators", label: "Creators", icon: Users },
+  { id: "portfolios", label: "Portfolios", icon: Globe },
+  { id: "projects", label: "Projects", icon: FolderKanban },
   { id: "branding", label: "Branding", icon: Palette },
-  { id: "home", label: "Home & slideshow", icon: ImageIcon },
+  { id: "home", label: "Homepage", icon: ImageIcon },
   { id: "contact", label: "Contact & socials", icon: Mail },
-  { id: "email", label: "Email / SMTP", icon: ShieldCheck },
-  { id: "seo", label: "SEO & sharing", icon: Globe },
+  { id: "email", label: "Email", icon: Send },
+  { id: "seo", label: "SEO & sharing", icon: Compass },
   { id: "access", label: "Access", icon: KeyRound },
 ] as const;
 
@@ -282,6 +293,9 @@ function Portal({ token, onSignOut }: { token: string; onSignOut: () => void }) 
 
       <main className="mx-auto max-w-5xl px-4 py-8 sm:px-6 sm:py-10">
         {tab === "overview" && <Overview token={token} />}
+        {tab === "creators" && <CreatorsSection token={token} />}
+        {tab === "portfolios" && <PortfoliosSection token={token} />}
+        {tab === "projects" && <ProjectsSection token={token} />}
         {tab === "branding" && <BrandingSection token={token} />}
         {tab === "home" && <HomeSlidesSection token={token} />}
         {tab === "contact" && <ContactSection token={token} />}
@@ -1044,7 +1058,338 @@ function EmailSection({ token }: { token: string }) {
           </Button>
         </div>
       </Panel>
+
+      <EmailManagement token={token} />
     </div>
+  );
+}
+
+/* ═════════════════════════════════════════════════════════════════════════
+   EMAIL MANAGEMENT — log, compose and retry for all Portfolio email.
+   ═════════════════════════════════════════════════════════════════════════ */
+
+const EMAIL_TEMPLATE_INFO: Record<
+  string,
+  { label: string; description: string }
+> = {
+  otp: {
+    label: "Portfolio OTP",
+    description: "The 6-digit sign-in / sign-up code email.",
+  },
+  welcome: {
+    label: "Portfolio welcome",
+    description: "Sent when a creator's portfolio is first created.",
+  },
+  published: {
+    label: "Portfolio published",
+    description: "Confirmation the first time a portfolio goes live.",
+  },
+  update: {
+    label: "Portfolio update",
+    description: "Platform updates to creators.",
+  },
+  admin_notification: {
+    label: "Admin notification",
+    description: "Internal alerts to the Portfolio team.",
+  },
+  custom: {
+    label: "Custom email",
+    description: "Composed messages from this portal.",
+  },
+  access: {
+    label: "Portfolio access",
+    description: "Access-related notices (invites, revocations).",
+  },
+  approval: {
+    label: "Portfolio approval",
+    description: "Feature/approval notices.",
+  },
+};
+
+type EmailLogRow = {
+  _id: string;
+  to: string;
+  subject: string;
+  template: string;
+  kind: string;
+  status: string;
+  error: string | null;
+  attempts: number;
+  sentAt: number | null;
+  createdAt: number;
+};
+
+function EmailManagement({ token }: { token: string }) {
+  const [statusFilter, setStatusFilter] = useState<string>("all");
+  const [viewing, setViewing] = useState<string | null>(null);
+  const [composeOpen, setComposeOpen] = useState(false);
+  const [busy, setBusy] = useState<string | null>(null);
+  const [composeTo, setComposeTo] = useState("");
+  const [composeSubject, setComposeSubject] = useState("");
+  const [composeBody, setComposeBody] = useState("");
+
+  const stats = useQuery(api.portfolioEmailLog.stats, { token });
+  const logs = useQuery(api.portfolioEmailLog.listLogs, {
+    token,
+    status: statusFilter,
+  });
+  const detail = useQuery(
+    api.portfolioEmailLog.getLog,
+    viewing ? { token, logId: viewing as never } : "skip",
+  );
+  const retry = useMutation(api.portfolioEmailLog.retrySend);
+  const compose = useMutation(api.portfolioEmailLog.compose);
+
+  const doRetry = async (logId: string) => {
+    setBusy(logId);
+    try {
+      await retry({ token, logId: logId as never });
+      toast.success("Retry queued.");
+    } catch (err) {
+      toast.error(friendlyError(err, "Could not queue the retry."));
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const sendCompose = async () => {
+    setBusy("compose");
+    try {
+      await compose({
+        token,
+        to: composeTo,
+        subject: composeSubject,
+        html: `<div style="font-family:system-ui,sans-serif;line-height:1.7;color:#111">${composeBody
+          .split(/\n\n+/)
+          .map((p) => `<p style="margin:0 0 12px">${p.replace(/\n/g, "<br/>")}</p>`)
+          .join("")}</div>`,
+      });
+      toast.success("Email queued for delivery.");
+      setComposeTo("");
+      setComposeSubject("");
+      setComposeBody("");
+      setComposeOpen(false);
+    } catch (err) {
+      toast.error(friendlyError(err, "Could not queue the email."));
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  return (
+    <>
+      <Panel
+        title="Email management"
+        description="Every email the Portfolio sends is logged here — with status, failure reason and retry."
+        icon={Send}
+        actions={
+          <Button
+            size="sm"
+            onClick={() => setComposeOpen((v) => !v)}
+            className="gap-1.5 bg-lime-400 font-semibold text-black hover:bg-lime-300"
+          >
+            <Plus className="size-3.5" /> Compose
+          </Button>
+        }
+      >
+        {stats && (
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
+            {[
+              ["Total", stats.total],
+              ["Sent", stats.sent],
+              ["Failed", stats.failed],
+              ["Pending", stats.pending],
+              ["Last 24h", stats.last24h],
+            ].map(([label, value]) => (
+              <div
+                key={String(label)}
+                className="rounded-xl border border-white/10 bg-black/20 p-3 text-center"
+              >
+                <p className="font-display text-xl font-bold text-lime-300">{value}</p>
+                <p className="mt-0.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                  {label}
+                </p>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {composeOpen && (
+          <div className="mt-4 rounded-xl border border-lime-400/25 bg-lime-400/5 p-4">
+            <p className="text-xs font-semibold uppercase tracking-wider text-lime-300">
+              Compose email
+            </p>
+            <div className="mt-3 grid gap-3 sm:grid-cols-2">
+              <TextField
+                label="To"
+                value={composeTo}
+                placeholder="creator@example.com"
+                onChange={setComposeTo}
+              />
+              <TextField
+                label="Subject"
+                value={composeSubject}
+                placeholder="A quick update"
+                onChange={setComposeSubject}
+              />
+            </div>
+            <div className="mt-3">
+              <Label className="text-xs">Message</Label>
+              <Textarea
+                rows={5}
+                value={composeBody}
+                onChange={(e) => setComposeBody(e.target.value)}
+                placeholder="Write the message…"
+                className="mt-1.5 border-white/10 bg-black/20"
+              />
+            </div>
+            <div className="mt-3 flex items-center gap-2">
+              <Button
+                size="sm"
+                disabled={busy === "compose" || !composeTo.trim() || !composeSubject.trim()}
+                onClick={() => void sendCompose()}
+                className="bg-lime-400 font-semibold text-black hover:bg-lime-300"
+              >
+                {busy === "compose" ? (
+                  <Loader2 className="size-3.5 animate-spin" />
+                ) : (
+                  <Send className="size-3.5" />
+                )}
+                Send
+              </Button>
+              <Button size="sm" variant="ghost" onClick={() => setComposeOpen(false)}>
+                Cancel
+              </Button>
+            </div>
+          </div>
+        )}
+
+        <div className="mt-4 flex flex-wrap items-center gap-1.5">
+          {["all", "sent", "failed", "pending"].map((s) => (
+            <button
+              key={s}
+              onClick={() => setStatusFilter(s)}
+              className={cn(
+                "rounded-full px-3 py-1.5 text-[11px] font-semibold capitalize transition-colors",
+                statusFilter === s
+                  ? "bg-lime-400 text-black"
+                  : "border border-white/10 text-muted-foreground hover:text-foreground",
+              )}
+            >
+              {s}
+            </button>
+          ))}
+        </div>
+
+        {logs === undefined ? (
+          <div className="mt-4 flex justify-center py-8">
+            <Loader2 className="size-5 animate-spin text-muted-foreground" />
+          </div>
+        ) : logs.length === 0 ? (
+          <p className="mt-4 rounded-xl border border-white/10 bg-black/20 p-4 text-center text-sm text-muted-foreground">
+            No email activity yet. OTP emails appear here as soon as creators
+            sign in.
+          </p>
+        ) : (
+          <div className="mt-4 space-y-2">
+            {logs.map((row: EmailLogRow) => (
+              <div
+                key={row._id}
+                className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-white/10 bg-black/20 px-3.5 py-2.5"
+              >
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-sm font-medium">{row.subject}</p>
+                  <p className="truncate text-[11px] text-muted-foreground">
+                    {row.to} · {EMAIL_TEMPLATE_INFO[row.template]?.label ?? row.template} ·{" "}
+                    {new Date(row.createdAt).toLocaleString()}
+                  </p>
+                  {row.error && (
+                    <p className="mt-1 truncate text-[11px] text-rose-300" title={row.error}>
+                      {row.error}
+                    </p>
+                  )}
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <span
+                    className={cn(
+                      "rounded-full border px-2 py-0.5 text-[10px] font-bold uppercase",
+                      row.status === "sent"
+                        ? "border-lime-400/40 bg-lime-400/10 text-lime-300"
+                        : row.status === "failed"
+                          ? "border-rose-400/30 bg-rose-400/10 text-rose-300"
+                          : "border-white/15 text-muted-foreground",
+                    )}
+                  >
+                    {row.status}
+                  </span>
+                  <button
+                    onClick={() => setViewing(viewing === row._id ? null : row._id)}
+                    className="inline-flex size-7 items-center justify-center rounded-lg border border-white/10 text-muted-foreground transition-colors hover:text-foreground"
+                    title="View"
+                  >
+                    <Eye className="size-3.5" />
+                  </button>
+                  {row.status === "failed" && (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="h-7 border-white/15 px-2 text-[11px]"
+                      disabled={busy === row._id}
+                      onClick={() => void doRetry(row._id)}
+                    >
+                      {busy === row._id ? (
+                        <Loader2 className="size-3 animate-spin" />
+                      ) : (
+                        <RotateCcw className="size-3" />
+                      )}
+                      Retry
+                    </Button>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {viewing && detail && (
+          <div className="mt-4 rounded-xl border border-white/10 bg-black/30 p-4">
+            <p className="text-xs font-semibold uppercase tracking-wider text-lime-300">
+              {detail.subject}
+            </p>
+            <p className="mt-1 text-[11px] text-muted-foreground">
+              To {detail.to} · {detail.status}
+            </p>
+            <div
+              className="mt-3 max-h-72 overflow-y-auto rounded-lg bg-white/5 p-3"
+              dangerouslySetInnerHTML={{ __html: detail.html }}
+            />
+          </div>
+        )}
+      </Panel>
+
+      <Panel
+        title="Email templates"
+        description="The standard Portfolio emails. Copy and tone follow your branding settings."
+        icon={Mail}
+      >
+        <div className="grid gap-3 sm:grid-cols-2">
+          {Object.entries(EMAIL_TEMPLATE_INFO).map(([key, info]) => (
+            <div
+              key={key}
+              className="rounded-xl border border-white/10 bg-black/20 p-4"
+            >
+              <p className="text-sm font-semibold">{info.label}</p>
+              <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+                {info.description}
+              </p>
+              <p className="mt-2 text-[10px] font-bold uppercase tracking-wider text-muted-foreground/60">
+                key: {key}
+              </p>
+            </div>
+          ))}
+        </div>
+      </Panel>
+    </>
   );
 }
 
@@ -1063,7 +1408,13 @@ function SeoSection({ token }: { token: string }) {
   const [draft, setDraft] = useState<typeof savedSeo | null>(null);
   const seo = draft ?? savedSeo;
 
-  const portfolio = useQuery(api.projects.myPortfolio);
+  const adminToken = token;
+  const creatorToken = getPortfolioUserToken();
+  const portfolio = useQuery(
+    api.projects.myPortfolio,
+    creatorToken ? { token: creatorToken } : "skip",
+  );
+  void adminToken;
   const slug = portfolio?.portfolio?.slug;
   const publicUrl =
     typeof window !== "undefined" && slug
@@ -1246,6 +1597,560 @@ function AccessSection({ token }: { token: string }) {
             </li>
           ))}
         </ul>
+      </Panel>
+    </div>
+  );
+}
+
+/* ═════════════════════════════════════════════════════════════════════════
+   CREATORS — manage the Portfolio's user accounts (NOT admin credentials).
+   Every call here is guarded by the PORTFOLIO ADMIN session; a creator
+   session can never invoke any of these.
+   ═════════════════════════════════════════════════════════════════════════ */
+
+type CreatorRow = {
+  _id: string;
+  email: string;
+  name: string | null;
+  title: string | null;
+  status: string;
+  onboarded: boolean;
+  invitedByAdmin: boolean;
+  lastLoginAt: number | null;
+  createdAt: number;
+  activeSessions: number;
+};
+
+function CreatorsSection({ token }: { token: string }) {
+  const [q, setQ] = useState("");
+  const [inviteOpen, setInviteOpen] = useState(false);
+  const [inviteEmail, setInviteEmail] = useState("");
+  const [inviteName, setInviteName] = useState("");
+  const [busy, setBusy] = useState<string | null>(null);
+
+  const stats = useQuery(api.portfolioUsers.adminUsersStats, { token });
+  const users = useQuery(api.portfolioUsers.adminListUsers, {
+    token,
+    q: q || undefined,
+  });
+  const createUser = useMutation(api.portfolioUsers.adminCreateUser);
+  const setStatus = useMutation(api.portfolioUsers.adminSetUserStatus);
+  const revoke = useMutation(api.portfolioUsers.adminRevokeSessions);
+  const remove = useMutation(api.portfolioUsers.adminDeleteUser);
+  const emailUser = useMutation(api.portfolioUsers.adminEmailUser);
+
+  const invite = async () => {
+    setBusy("invite");
+    try {
+      await createUser({
+        token,
+        email: inviteEmail,
+        name: inviteName || undefined,
+      });
+      toast.success(`Creator account created for ${inviteEmail}.`);
+      setInviteEmail("");
+      setInviteName("");
+      setInviteOpen(false);
+    } catch (err) {
+      toast.error(friendlyError(err, "Could not create the account."));
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const act = async (key: string, fn: () => Promise<unknown>, ok: string) => {
+    setBusy(key);
+    try {
+      await fn();
+      toast.success(ok);
+    } catch (err) {
+      toast.error(friendlyError(err, "Action failed."));
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  return (
+    <div className="space-y-6">
+      <Panel
+        title="Creators"
+        description="People with a Portfolio account. Creators sign in with email + a one-time code and can only manage their own portfolio."
+        icon={Users}
+        actions={
+          <Button
+            size="sm"
+            onClick={() => setInviteOpen((v) => !v)}
+            className="gap-1.5 bg-lime-400 font-semibold text-black hover:bg-lime-300"
+          >
+            <Plus className="size-3.5" /> Create access
+          </Button>
+        }
+      >
+        {stats && (
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
+            {[
+              ["Total", stats.total],
+              ["Active", stats.active],
+              ["Suspended", stats.suspended],
+              ["Setting up", stats.pendingOnboarding],
+              ["New today", stats.newToday],
+            ].map(([label, value]) => (
+              <div
+                key={String(label)}
+                className="rounded-xl border border-white/10 bg-black/20 p-3 text-center"
+              >
+                <p className="font-display text-xl font-bold text-lime-300">{value}</p>
+                <p className="mt-0.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                  {label}
+                </p>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {inviteOpen && (
+          <div className="mt-4 rounded-xl border border-lime-400/25 bg-lime-400/5 p-4">
+            <p className="text-xs font-semibold uppercase tracking-wider text-lime-300">
+              Create creator access
+            </p>
+            <div className="mt-3 grid gap-3 sm:grid-cols-2">
+              <TextField
+                label="Email"
+                value={inviteEmail}
+                placeholder="creator@example.com"
+                onChange={setInviteEmail}
+              />
+              <TextField
+                label="Name (optional)"
+                value={inviteName}
+                placeholder="Ada Lovelace"
+                onChange={setInviteName}
+              />
+            </div>
+            <div className="mt-3 flex items-center gap-2">
+              <Button
+                size="sm"
+                disabled={busy === "invite" || !inviteEmail.trim()}
+                onClick={() => void invite()}
+                className="bg-lime-400 font-semibold text-black hover:bg-lime-300"
+              >
+                {busy === "invite" ? <Loader2 className="size-3.5 animate-spin" /> : <Plus className="size-3.5" />}
+                Create account
+              </Button>
+              <Button size="sm" variant="ghost" onClick={() => setInviteOpen(false)}>
+                Cancel
+              </Button>
+            </div>
+            <p className="mt-2 text-[11px] text-muted-foreground">
+              The creator signs in with this email + a one-time code — no
+              password is ever stored.
+            </p>
+          </div>
+        )}
+
+        <div className="mt-4">
+          <TextField
+            label="Search"
+            value={q}
+            placeholder="Search by email, name or title…"
+            onChange={setQ}
+          />
+        </div>
+
+        {users === undefined ? (
+          <div className="mt-4 flex justify-center py-8">
+            <Loader2 className="size-5 animate-spin text-muted-foreground" />
+          </div>
+        ) : users.length === 0 ? (
+          <p className="mt-4 rounded-xl border border-white/10 bg-black/20 p-4 text-center text-sm text-muted-foreground">
+            No creator accounts yet.
+          </p>
+        ) : (
+          <div className="mt-4 space-y-3">
+            {users.map((u: CreatorRow) => (
+              <div
+                key={u._id}
+                className="rounded-2xl border border-white/10 bg-black/20 p-4"
+              >
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-semibold">
+                      {u.name || u.email.split("@")[0]}
+                      {u.status === "suspended" && (
+                        <span className="ml-2 rounded-full border border-rose-400/30 bg-rose-400/10 px-2 py-0.5 text-[10px] font-bold uppercase text-rose-300">
+                          Suspended
+                        </span>
+                      )}
+                      {!u.onboarded && (
+                        <span className="ml-2 rounded-full border border-white/15 px-2 py-0.5 text-[10px] font-bold uppercase text-muted-foreground">
+                          Setting up
+                        </span>
+                      )}
+                    </p>
+                    <p className="truncate text-xs text-muted-foreground">
+                      {u.email}
+                      {u.title ? ` · ${u.title}` : ""}
+                    </p>
+                    <p className="mt-1 text-[11px] text-muted-foreground/70">
+                      {u.activeSessions} active session{u.activeSessions === 1 ? "" : "s"}
+                      {u.lastLoginAt
+                        ? ` · last sign-in ${new Date(u.lastLoginAt).toLocaleDateString()}`
+                        : " · never signed in"}
+                    </p>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="h-7 border-white/15 px-2.5 text-[11px]"
+                      disabled={busy === `mail-${u._id}` || !u.email}
+                      onClick={() => {
+                        const subject = window.prompt("Email subject:");
+                        if (!subject) return;
+                        const body = window.prompt("Message:");
+                        if (!body) return;
+                        void act(
+                          `mail-${u._id}`,
+                          () => emailUser({ token, userId: u._id as never, subject, body }),
+                          "Email queued.",
+                        );
+                      }}
+                    >
+                      <Mail className="size-3" /> Email
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="h-7 border-white/15 px-2.5 text-[11px]"
+                      disabled={busy === `revoke-${u._id}` || u.activeSessions === 0}
+                      onClick={() =>
+                        void act(
+                          `revoke-${u._id}`,
+                          () => revoke({ token, userId: u._id as never }),
+                          "Sessions revoked.",
+                        )
+                      }
+                    >
+                      <Lock className="size-3" /> Revoke
+                    </Button>
+                    {u.status === "active" ? (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="h-7 border-rose-400/30 px-2.5 text-[11px] text-rose-300 hover:border-rose-400/60"
+                        disabled={busy === `status-${u._id}`}
+                        onClick={() =>
+                          void act(
+                            `status-${u._id}`,
+                            () => setStatus({ token, userId: u._id as never, status: "suspended" }),
+                            "Account suspended.",
+                          )
+                        }
+                      >
+                        <Ban className="size-3" /> Suspend
+                      </Button>
+                    ) : (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="h-7 border-lime-400/40 px-2.5 text-[11px] text-lime-300"
+                        disabled={busy === `status-${u._id}`}
+                        onClick={() =>
+                          void act(
+                            `status-${u._id}`,
+                            () => setStatus({ token, userId: u._id as never, status: "active" }),
+                            "Account restored.",
+                          )
+                        }
+                      >
+                        <Check className="size-3" /> Restore
+                      </Button>
+                    )}
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="h-7 px-2 text-[11px] text-rose-400 hover:text-rose-300"
+                      disabled={busy === `delete-${u._id}`}
+                      onClick={() => {
+                        if (
+                          !window.confirm(
+                            `Delete ${u.email} and their portfolio? This cannot be undone.`,
+                          )
+                        )
+                          return;
+                        void act(
+                          `delete-${u._id}`,
+                          () => remove({ token, userId: u._id as never }),
+                          "Account deleted.",
+                        );
+                      }}
+                    >
+                      <Trash2 className="size-3" />
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </Panel>
+    </div>
+  );
+}
+
+/* ═════════════════════════════════════════════════════════════════════════
+   PORTFOLIOS + PROJECTS — platform-wide moderation, Portfolio-admin only.
+   ═════════════════════════════════════════════════════════════════════════ */
+
+function PortfoliosSection({ token }: { token: string }) {
+  const [q, setQ] = useState("");
+  const [busy, setBusy] = useState<string | null>(null);
+  const rows = useQuery(api.projects.adminListPortfolios, {
+    token,
+    q: q || undefined,
+  });
+  const setVisibility = useMutation(api.projects.adminSetPortfolioVisibility);
+  const toggleFeatured = useMutation(api.projects.adminToggleFeatured);
+  const toggleSuspended = useMutation(api.projects.adminToggleSuspended);
+
+  const act = async (key: string, fn: () => Promise<unknown>, ok: string) => {
+    setBusy(key);
+    try {
+      await fn();
+      toast.success(ok);
+    } catch (err) {
+      toast.error(friendlyError(err, "Action failed."));
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  return (
+    <div className="space-y-6">
+      <Panel
+        title="All portfolios"
+        description="Publish, feature or take down any portfolio on the platform."
+        icon={Globe}
+      >
+        <TextField label="Search" value={q} placeholder="Name or /p/slug…" onChange={setQ} />
+
+        {rows === undefined ? (
+          <div className="mt-4 flex justify-center py-8">
+            <Loader2 className="size-5 animate-spin text-muted-foreground" />
+          </div>
+        ) : rows.length === 0 ? (
+          <p className="mt-4 rounded-xl border border-white/10 bg-black/20 p-4 text-center text-sm text-muted-foreground">
+            No portfolios yet.
+          </p>
+        ) : (
+          <div className="mt-4 space-y-3">
+            {rows.map((p) => (
+              <div key={p._id} className="rounded-2xl border border-white/10 bg-black/20 p-4">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="flex flex-wrap items-center gap-2 text-sm font-semibold">
+                      {p.displayName}
+                      <span className="rounded-full border border-white/15 px-2 py-0.5 text-[10px] font-bold uppercase text-muted-foreground">
+                        {p.visibility}
+                      </span>
+                      {p.featured && (
+                        <span className="rounded-full border border-lime-400/40 bg-lime-400/10 px-2 py-0.5 text-[10px] font-bold uppercase text-lime-300">
+                          Featured
+                        </span>
+                      )}
+                      {p.suspended && (
+                        <span className="rounded-full border border-rose-400/30 bg-rose-400/10 px-2 py-0.5 text-[10px] font-bold uppercase text-rose-300">
+                          Suspended
+                        </span>
+                      )}
+                    </p>
+                    <p className="truncate text-xs text-muted-foreground">
+                      /p/{p.slug} · {p.projects} project{p.projects === 1 ? "" : "s"} · {p.views} views
+                      {p.owner ? ` · ${p.owner.email}` : ""}
+                    </p>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    <a
+                      href={`/p/${p.slug}`}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="inline-flex h-7 items-center gap-1 rounded-lg border border-white/15 px-2.5 text-[11px] font-medium text-muted-foreground transition-colors hover:border-lime-400/40 hover:text-lime-300"
+                    >
+                      <Eye className="size-3" /> View
+                    </a>
+                    <select
+                      value={p.visibility}
+                      disabled={busy === `vis-${p._id}`}
+                      onChange={(e) =>
+                        void act(
+                          `vis-${p._id}`,
+                          () =>
+                            setVisibility({
+                              token,
+                              portfolioId: p._id as never,
+                              visibility: e.target.value as "draft" | "published" | "discoverable",
+                            }),
+                          "Visibility updated.",
+                        )
+                      }
+                      className="h-7 rounded-lg border border-white/15 bg-black/30 px-2 text-[11px] text-foreground outline-none"
+                    >
+                      <option value="draft">Draft</option>
+                      <option value="published">Published</option>
+                      <option value="discoverable">Discoverable</option>
+                    </select>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="h-7 border-white/15 px-2.5 text-[11px]"
+                      disabled={busy === `feat-${p._id}`}
+                      onClick={() =>
+                        void act(
+                          `feat-${p._id}`,
+                          () => toggleFeatured({ token, portfolioId: p._id as never }),
+                          p.featured ? "Unfeatured." : "Featured.",
+                        )
+                      }
+                    >
+                      <Sparkle className="size-3" /> {p.featured ? "Unfeature" : "Feature"}
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className={cn(
+                        "h-7 px-2.5 text-[11px]",
+                        p.suspended
+                          ? "border-lime-400/40 text-lime-300"
+                          : "border-rose-400/30 text-rose-300 hover:border-rose-400/60",
+                      )}
+                      disabled={busy === `sus-${p._id}`}
+                      onClick={() =>
+                        void act(
+                          `sus-${p._id}`,
+                          () => toggleSuspended({ token, portfolioId: p._id as never }),
+                          p.suspended ? "Restored." : "Suspended.",
+                        )
+                      }
+                    >
+                      {p.suspended ? <Check className="size-3" /> : <Ban className="size-3" />}
+                      {p.suspended ? "Restore" : "Suspend"}
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </Panel>
+    </div>
+  );
+}
+
+function ProjectsSection({ token }: { token: string }) {
+  const [q, setQ] = useState("");
+  const [busy, setBusy] = useState<string | null>(null);
+  const rows = useQuery(api.projects.adminListProjects, {
+    token,
+    q: q || undefined,
+  });
+  const removeProject = useMutation(api.projects.adminRemoveProject);
+  const restoreProject = useMutation(api.projects.adminRestoreProject);
+
+  const act = async (key: string, fn: () => Promise<unknown>, ok: string) => {
+    setBusy(key);
+    try {
+      await fn();
+      toast.success(ok);
+    } catch (err) {
+      toast.error(friendlyError(err, "Action failed."));
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  return (
+    <div className="space-y-6">
+      <Panel
+        title="All projects"
+        description="Moderate showcased work across every portfolio."
+        icon={FolderKanban}
+      >
+        <TextField label="Search" value={q} placeholder="Search titles, summaries, tags…" onChange={setQ} />
+
+        {rows === undefined ? (
+          <div className="mt-4 flex justify-center py-8">
+            <Loader2 className="size-5 animate-spin text-muted-foreground" />
+          </div>
+        ) : rows.length === 0 ? (
+          <p className="mt-4 rounded-xl border border-white/10 bg-black/20 p-4 text-center text-sm text-muted-foreground">
+            No projects yet.
+          </p>
+        ) : (
+          <div className="mt-4 space-y-3">
+            {rows.map((p) => (
+              <div key={p._id} className="rounded-2xl border border-white/10 bg-black/20 p-4">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div className="flex min-w-0 items-start gap-3">
+                    {p.imageUrl ? (
+                      <img
+                        src={p.imageUrl}
+                        alt=""
+                        className="size-12 shrink-0 rounded-lg object-cover"
+                      />
+                    ) : null}
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-semibold">{p.title}</p>
+                      <p className="truncate text-xs text-muted-foreground">
+                        {p.portfolioName ? `${p.portfolioName} · ` : ""}
+                        {p.ownerName ?? "unknown owner"}
+                      </p>
+                      {p.removed && (
+                        <p className="mt-1 text-[11px] text-rose-300">
+                          Removed: {p.removedReason ?? "no reason given"}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                  {p.removed ? (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="h-7 border-lime-400/40 px-2.5 text-[11px] text-lime-300"
+                      disabled={busy === p._id}
+                      onClick={() =>
+                        void act(
+                          p._id,
+                          () => restoreProject({ token, projectId: p._id as never }),
+                          "Project restored.",
+                        )
+                      }
+                    >
+                      <RotateCcw className="size-3" /> Restore
+                    </Button>
+                  ) : (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="h-7 border-rose-400/30 px-2.5 text-[11px] text-rose-300 hover:border-rose-400/60"
+                      disabled={busy === p._id}
+                      onClick={() => {
+                        const reason = window.prompt("Reason for removing this project:");
+                        if (!reason) return;
+                        void act(
+                          p._id,
+                          () => removeProject({ token, projectId: p._id as never, reason }),
+                          "Project removed.",
+                        );
+                      }}
+                    >
+                      <Ban className="size-3" /> Remove
+                    </Button>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
       </Panel>
     </div>
   );

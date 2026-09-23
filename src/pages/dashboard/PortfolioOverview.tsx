@@ -26,6 +26,7 @@ import { cn } from "@/lib/utils";
 import { formatDate } from "@/lib/format";
 import { toast } from "sonner";
 import { friendlyError } from "@/lib/errors";
+import { getPortfolioUserToken } from "@/lib/portfolio-user-session";
 import type { PortfolioVisibility } from "./portfolio-types";
 
 const VISIBILITY = [
@@ -50,7 +51,11 @@ const VISIBILITY = [
 ];
 
 export default function PortfolioOverview() {
-  const data = useQuery(api.projects.myPortfolio);
+  const userToken = getPortfolioUserToken();
+  const data = useQuery(
+    api.projects.myPortfolio,
+    userToken ? { token: userToken } : "skip",
+  );
   const setVisibility = useMutation(api.projects.setVisibility);
   const [busy, setBusy] = useState<PortfolioVisibility | null>(null);
 
@@ -99,7 +104,7 @@ export default function PortfolioOverview() {
   const change = async (visibility: PortfolioVisibility) => {
     setBusy(visibility);
     try {
-      await setVisibility({ visibility });
+      await setVisibility({ token: userToken ?? "", visibility });
       toast.success(
         visibility === "draft"
           ? "Your portfolio is back to draft — nobody else can see it."

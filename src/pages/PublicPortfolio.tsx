@@ -28,6 +28,7 @@ import { SafeImage } from "@/components/site/SafeImage";
 import { cn } from "@/lib/utils";
 import { friendlyError } from "@/lib/errors";
 import { useBranding } from "@/lib/branding";
+import { getPortfolioUserToken } from "@/lib/portfolio-user-session";
 import { toast } from "sonner";
 
 const ACCENTS: Record<string, string> = {
@@ -76,7 +77,11 @@ const SECTION_LABELS: Record<string, string> = {
 export default function PublicPortfolio() {
   const branding = useBranding();
   const { slug = "" } = useParams();
-  const data = useQuery(api.projects.publicPortfolio, { slug });
+  const viewerToken = getPortfolioUserToken();
+  const data = useQuery(
+    api.projects.publicPortfolio,
+    viewerToken ? { slug, viewerToken } : { slug },
+  );
   const recordView = useMutation(api.projects.recordView);
   const report = useMutation(api.projects.reportPortfolio);
 
@@ -95,7 +100,7 @@ export default function PublicPortfolio() {
     } catch {
       /* storage blocked — count it anyway */
     }
-    void recordView({ slug }).catch(() => {});
+    void recordView({ slug, viewerToken: viewerToken ?? undefined }).catch(() => {});
   }, [data, slug, recordView]);
 
   const theme = TEMPLATES[portfolio?.template ?? "carbon"];

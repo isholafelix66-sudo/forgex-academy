@@ -15,6 +15,7 @@ import { PageHeader } from "@/components/dash/PageHeader";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { friendlyError } from "@/lib/errors";
+import { getPortfolioUserToken } from "@/lib/portfolio-user-session";
 import {
   Field,
   ImageField,
@@ -92,7 +93,11 @@ const TEMPLATE_OPTIONS: { key: Template; label: string; blurb: string }[] = [
 
 export default function PortfolioEditor() {
   const { section = "profile" } = useParams();
-  const data = useQuery(api.projects.myPortfolio);
+  const userToken = getPortfolioUserToken();
+  const data = useQuery(
+    api.projects.myPortfolio,
+    userToken ? { token: userToken } : "skip",
+  );
   const savePortfolio = useMutation(api.projects.updatePortfolio);
 
   const [form, setForm] = useState<FormState | null>(null);
@@ -140,6 +145,7 @@ export default function PortfolioEditor() {
     setSaving(true);
     try {
       await savePortfolio({
+        token: userToken ?? "",
         displayName: form.displayName,
         headline: form.headline,
         bio: form.bio,
