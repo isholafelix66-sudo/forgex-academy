@@ -27,6 +27,7 @@ import { Avatar } from "@/components/site/Avatar";
 import { SafeImage } from "@/components/site/SafeImage";
 import { cn } from "@/lib/utils";
 import { friendlyError } from "@/lib/errors";
+import { useBranding } from "@/lib/branding";
 import { toast } from "sonner";
 
 const ACCENTS: Record<string, string> = {
@@ -73,6 +74,7 @@ const SECTION_LABELS: Record<string, string> = {
 };
 
 export default function PublicPortfolio() {
+  const branding = useBranding();
   const { slug = "" } = useParams();
   const data = useQuery(api.projects.publicPortfolio, { slug });
   const recordView = useMutation(api.projects.recordView);
@@ -278,6 +280,15 @@ export default function PublicPortfolio() {
                 {portfolio.location && (
                   <span className="inline-flex items-center gap-1.5">
                     <MapPin className="size-4" /> {portfolio.location}
+                  </span>
+                )}
+                {portfolio.availability && (
+                  <span className="inline-flex items-center gap-1.5">
+                    <span
+                      className="size-2 rounded-full"
+                      style={{ background: accent }}
+                    />
+                    {portfolio.availability}
                   </span>
                 )}
                 {contactEmail && (
@@ -577,7 +588,7 @@ export default function PublicPortfolio() {
               className="inline-flex items-center gap-1.5 font-semibold transition-colors"
               style={{ color: accent }}
             >
-              <Sparkles className="size-3.5" /> Built with Projects
+              <Sparkles className="size-3.5" /> Built with {branding.name}
             </Link>
           </div>
         </footer>

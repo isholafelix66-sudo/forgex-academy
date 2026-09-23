@@ -1,8 +1,8 @@
 /**
  * Shared feature-flag vocabulary.
  *
- * ForgeX is one ecosystem with three products:
- *   Projects         → ACTIVE
+ * ForgeX Network is one ecosystem with three products:
+ *   Portfolio        → ACTIVE
  *   Academy          → LOCKED (coming soon)
  *   Opportunity Hub  → LOCKED (coming soon)
  *
@@ -31,10 +31,10 @@ export const PRODUCT_META: Record<
   { label: string; tagline: string; blurb: string; highlights: string[] }
 > = {
   projects: {
-    label: "Projects",
+    label: "Portfolio",
     tagline: "Create your portfolio once. Share one link.",
     blurb:
-      "Projects is where you build your professional portfolio and turn it into your own website.",
+      "Portfolio is where you build your professional portfolio and turn it into your own website — the live product of ForgeX Network.",
     highlights: [
       "One portfolio, one shareable link",
       "Projects, skills, experience and services",

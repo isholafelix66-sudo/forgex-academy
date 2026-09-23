@@ -4,6 +4,8 @@ import { api } from "@/convex/_generated/api";
 import { Mail, MapPin, MessageSquare, Phone } from "lucide-react";
 import logo from "@/assets/logo.svg";
 import { toExternalHref } from "@/lib/url";
+import { BrandMark } from "./BrandMark";
+import { useBranding } from "@/lib/branding";
 
 const SOCIAL_ICONS: Record<string, string> = {
   facebook: "f",
@@ -37,13 +39,20 @@ const UPCOMING = [
   "Scholarships",
 ];
 
+/** Fallback description — editable in the admin panel's branding section. */
 const DESCRIPTION =
   "The portfolio platform of ForgeX Network. Create your portfolio once, " +
   "turn it into your own professional website, and share one link anywhere.";
 
 export function Footer() {
   const content = useQuery(api.public.siteContentAll);
+  const branding = useBranding();
   const brandLogo = (content?.logo as string | undefined) || logo;
+  const description =
+    typeof content?.footerDescription === "string" &&
+    content.footerDescription.trim()
+      ? content.footerDescription
+      : DESCRIPTION;
   const contact = (content?.contact as
     | { email?: string; phone?: string; address?: string }
     | undefined) || {};
@@ -71,17 +80,34 @@ export function Footer() {
              minimal: brand, short description, tagline, utility row. */}
         <div className="md:hidden">
           <div className="flex items-center gap-2.5">
-            <img src={brandLogo} alt="ForgeX Projects" className="size-8 rounded-lg" />
-            <span className="font-display text-base font-bold">
-              ForgeX<span className="text-lime-400"> Projects</span>
-            </span>
+            <img src={brandLogo} alt={branding.name} className="size-8 rounded-lg" />
+            <BrandMark branding={branding} size="lg" />
           </div>
           <p className="mt-3 max-w-sm text-xs leading-relaxed text-muted-foreground">
-            {DESCRIPTION}
+            {description}
           </p>
           <p className="mt-3 text-[10px] font-semibold uppercase tracking-widest text-lime-400/80">
-            Build once. Share one link.
+            {branding.tagline}
           </p>
+
+          {/* Secondary navigation — the bottom tab bar only carries the four
+              primary destinations, so the rest lives here on mobile. */}
+          <div className="mt-4 flex flex-wrap gap-1.5">
+            {[
+              { to: "/about", label: "About" },
+              { to: "/contact", label: "Contact" },
+              { to: "/academy", label: "Academy 🔒" },
+              { to: "/opportunity-hub", label: "Opportunity Hub 🔒" },
+            ].map((l) => (
+              <Link
+                key={l.to}
+                to={l.to}
+                className="rounded-lg border border-white/10 bg-white/5 px-3 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:border-lime-400/40 hover:text-lime-300"
+              >
+                {l.label}
+              </Link>
+            ))}
+          </div>
 
           <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-white/10 pt-4">
             {/* Sends an in-app message to the ForgeX team inbox (Contact form),
@@ -118,16 +144,14 @@ export function Footer() {
         <div className="hidden gap-10 md:grid md:grid-cols-4">
           <div className="md:col-span-2">
             <div className="flex items-center gap-2.5">
-              <img src={brandLogo} alt="ForgeX Projects" className="size-9 rounded-xl" />
-              <span className="font-display text-lg font-bold">
-                ForgeX<span className="text-lime-400"> Projects</span>
-              </span>
+              <img src={brandLogo} alt={branding.name} className="size-9 rounded-xl" />
+              <BrandMark branding={branding} size="lg" />
             </div>
             <p className="mt-4 max-w-sm text-sm leading-relaxed text-muted-foreground">
-              {DESCRIPTION}
+              {description}
             </p>
             <p className="mt-4 text-xs font-semibold uppercase tracking-widest text-lime-400/80">
-              Build once. Share one link.
+              {branding.tagline}
             </p>
           </div>
 
@@ -204,10 +228,12 @@ export function Footer() {
         </div>
 
         <div className="mt-8 flex flex-col items-center justify-between gap-3 border-t border-white/10 pt-5 text-xs text-muted-foreground sm:flex-row md:mt-12 md:pt-6">
-          <p>© {new Date().getFullYear()} ForgeX Network. All rights reserved.</p>
+          <p>
+            © {new Date().getFullYear()} {branding.name}. All rights reserved.
+          </p>
           <p className="hidden md:block">
             A module of{" "}
-            <span className="font-medium text-lime-400">ForgeX Network</span> —
+            <span className="font-medium text-lime-400">{branding.name}</span> —
             discover, express, build.
           </p>
         </div>

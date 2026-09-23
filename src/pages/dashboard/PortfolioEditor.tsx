@@ -52,6 +52,7 @@ type FormState = {
   location: string;
   email: string;
   phone: string;
+  availability: string;
   avatarUrl: string | null;
   coverUrl: string | null;
   template: Template;
@@ -110,6 +111,7 @@ export default function PortfolioEditor() {
       location: portfolio.location ?? "",
       email: portfolio.email ?? "",
       phone: portfolio.phone ?? "",
+      availability: portfolio.availability ?? "",
       avatarUrl: portfolio.avatarUrl ?? null,
       coverUrl: portfolio.coverUrl ?? null,
       template: portfolio.template,
@@ -145,6 +147,7 @@ export default function PortfolioEditor() {
         location: form.location,
         email: form.email,
         phone: form.phone,
+        availability: form.availability,
         avatarUrl: form.avatarUrl ?? undefined,
         coverUrl: form.coverUrl ?? undefined,
         template: form.template,
@@ -266,6 +269,16 @@ export default function PortfolioEditor() {
                 value={form.phone}
                 onChange={(v) => patch({ phone: v })}
                 placeholder="+234…"
+              />
+            </Field>
+            <Field
+              label="Availability (optional)"
+              hint="Shown on your site — e.g. Open to opportunities."
+            >
+              <TextInput
+                value={form.availability}
+                onChange={(v) => patch({ availability: v })}
+                placeholder="Open to opportunities"
               />
             </Field>
             <div className="lg:col-span-2 grid gap-5 sm:grid-cols-2">

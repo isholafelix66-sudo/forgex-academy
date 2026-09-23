@@ -63,9 +63,9 @@ export const AUTOMATIONS = [
   { key: "course_approved", label: "Tutor — course approved", description: "Tells the tutor their course passed review and went live.", defaultSubject: "✅ Course approved and live", audience: "tutor" },
   { key: "course_rejected", label: "Tutor — course rejected / changes needed", description: "Tells the tutor what to change before resubmitting.", defaultSubject: "Changes needed before your course can go live", audience: "tutor" },
   { key: "tutor_inactivity", label: "Tutor inactivity reminder", description: "Weekly check-in for tutors who haven't signed in recently.", defaultSubject: "We miss you on ForgeX Academy", audience: "tutor" },
-  // ForgeX Projects (the live product)
-  { key: "projects_welcome", label: "Projects — welcome email", description: "Sent once when a new Projects account creates its portfolio.", defaultSubject: "Welcome to Projects — your portfolio awaits 🚀", audience: "user" },
-  { key: "portfolio_published", label: "Projects — portfolio published", description: "Confirmation the first time a portfolio goes live, with the shareable link.", defaultSubject: "Your portfolio is live 🎉", audience: "user" },
+  // ForgeX Network — Portfolio (the live product)
+  { key: "projects_welcome", label: "Portfolio — welcome email", description: "Sent once when a new account creates its portfolio.", defaultSubject: "Welcome to ForgeX Network — your portfolio awaits 🚀", audience: "user" },
+  { key: "portfolio_published", label: "Portfolio — portfolio published", description: "Confirmation the first time a portfolio goes live, with the shareable link.", defaultSubject: "Your portfolio is live 🎉", audience: "user" },
 ] as const;
 
 type EnqueueArgs = {

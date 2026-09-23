@@ -17,15 +17,17 @@ import {
 } from "lucide-react";
 import { AppShell } from "@/components/dash/AppShell";
 import type { MobileNavItem, MobileNavSection } from "@/components/site/MobileBottomNav";
+import { useBranding } from "@/lib/branding";
 
 /**
- * Projects dashboard shell.
+ * Portfolio dashboard shell.
  *
  * The sidebar is about ONE thing: the owner's portfolio. There are no Academy
  * courses, assignments, certificates, student community or AI career coach
  * here — Academy is a locked product and lives behind its own flag.
  */
 export default function PortfolioShell() {
+  const branding = useBranding();
   const portfolio = useQuery(api.projects.myPortfolio);
   const ensurePortfolio = useMutation(api.projects.ensureMyPortfolio);
   const [error, setError] = useState<string | null>(null);
@@ -227,10 +229,13 @@ export default function PortfolioShell() {
       title="Portfolio"
       brand={
         <>
-          ForgeX<span className="text-lime-400"> Projects</span>
+          {branding.wordmark}
+          {branding.wordmarkAccent ? (
+            <span className="text-lime-400"> {branding.wordmarkAccent}</span>
+          ) : null}
         </>
       }
-      brandAlt="ForgeX Projects"
+      brandAlt={branding.name}
       profilePath="/portfolio/account"
       showRoleLink={false}
       sections={sections}

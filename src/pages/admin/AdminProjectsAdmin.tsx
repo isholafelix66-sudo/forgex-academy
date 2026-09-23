@@ -62,7 +62,7 @@ export default function AdminProjectsAdmin() {
     <div className="space-y-6">
       <PageHeader
         title="Project moderation"
-        description="Review and moderate the work published across Projects."
+        description="Review and moderate the work published across ForgeX Network."
       />
 
       {/* Reports */}

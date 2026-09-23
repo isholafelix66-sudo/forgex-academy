@@ -40,6 +40,12 @@ import {
 import { toast } from "sonner";
 import { getAdminToken } from "@/lib/admin-session";
 import { toExternalHref } from "@/lib/url";
+import {
+  BRANDING_CONTENT_KEY,
+  DEFAULT_BRANDING,
+  normalizeBranding,
+  type Branding,
+} from "@/lib/branding";
 
 const TEXT_FIELDS: Array<{ key: string; label: string; hint: string; rows: number }> = [
   { key: "heroTitle", label: "Homepage hero title", hint: "Big headline on the landing page.", rows: 2 },
@@ -110,6 +116,138 @@ function TextEditor({
       </div>
       <Textarea value={value} onChange={(e) => setValue(e.target.value)} rows={field.rows} className="mt-3 border-white/10 bg-black/20" />
     </div>
+  );
+}
+
+/* ── Brand identity — the name every surface of the product uses ────── */
+
+const BRAND_FIELDS: Array<{
+  key: keyof Branding;
+  label: string;
+  hint: string;
+  placeholder: string;
+}> = [
+  {
+    key: "name",
+    label: "Network name",
+    hint: "Full company name, used in titles, copy and the footer.",
+    placeholder: "ForgeX Network",
+  },
+  {
+    key: "wordmark",
+    label: "Wordmark — first part",
+    hint: "Leading part of the logo text (not accented).",
+    placeholder: "ForgeX",
+  },
+  {
+    key: "wordmarkAccent",
+    label: "Wordmark — accent part",
+    hint: "Lime-coloured tail of the logo text.",
+    placeholder: "Network",
+  },
+  {
+    key: "productLabel",
+    label: "Product label",
+    hint: "Shown under the wordmark in the top bar.",
+    placeholder: "Portfolio",
+  },
+  {
+    key: "tagline",
+    label: "Tagline",
+    hint: "Short line under the brand — footer and drawers.",
+    placeholder: "Create • Showcase • Grow",
+  },
+  {
+    key: "shareLabel",
+    label: "Share button label",
+    hint: "The lime pill in the top bar.",
+    placeholder: "Share Portfolio Link",
+  },
+];
+
+function BrandEditor({
+  current,
+  onSave,
+}: {
+  current: Branding;
+  onSave: (value: Branding) => Promise<void>;
+}) {
+  const [draft, setDraft] = useState<Branding>(current);
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
+
+  const save = async () => {
+    setSaving(true);
+    try {
+      await onSave(normalizeBranding(draft));
+      setSaved(true);
+      toast.success("Brand identity updated across the site.");
+      setTimeout(() => setSaved(false), 2000);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <section className="rounded-2xl border border-white/10 bg-card p-5 sm:p-6">
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div className="min-w-0">
+          <h2 className="font-display flex items-center gap-2 text-base font-semibold">
+            <Palette className="size-4 text-lime-300" /> Brand identity
+          </h2>
+          <p className="mt-1 max-w-2xl text-sm leading-relaxed text-muted-foreground">
+            The name and wordmark every page uses — top bar, footer, dashboard,
+            auth screens, portfolio pages and emails. Change it here and it goes
+            live everywhere instantly; no code change needed.
+          </p>
+        </div>
+        <span className="inline-flex items-center gap-1.5 rounded-full border border-lime-400/40 bg-lime-400/10 px-3 py-1 text-xs font-semibold text-lime-300">
+          <span className="font-display font-extrabold uppercase tracking-[0.16em]">
+            {draft.wordmark}
+            <span className="text-lime-400">{draft.wordmarkAccent}</span>
+          </span>
+        </span>
+      </div>
+
+      <div className="mt-5 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        {BRAND_FIELDS.map((f) => (
+          <div key={f.key}>
+            <Label className="text-xs text-muted-foreground">{f.label}</Label>
+            <Input
+              value={draft[f.key]}
+              onChange={(e) => setDraft({ ...draft, [f.key]: e.target.value })}
+              placeholder={f.placeholder}
+              className="mt-1 h-9 border-white/10 bg-black/20"
+            />
+            <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground/80">
+              {f.hint}
+            </p>
+          </div>
+        ))}
+      </div>
+
+      <div className="mt-5 flex flex-wrap items-center gap-3">
+        <Button
+          onClick={() => void save()}
+          disabled={saving}
+          className="gap-2 bg-lime-400 font-semibold text-black hover:bg-lime-300"
+        >
+          {saving ? (
+            <Loader2 className="size-4 animate-spin" />
+          ) : (
+            <Check className="size-4" />
+          )}
+          {saved ? "Saved" : saving ? "Saving…" : "Save brand identity"}
+        </Button>
+        <Button
+          variant="outline"
+          className="gap-2"
+          onClick={() => setDraft(DEFAULT_BRANDING)}
+        >
+          <RotateCcw className="size-4" /> Reset to ForgeX defaults
+        </Button>
+      </div>
+    </section>
   );
 }
 
@@ -522,6 +660,14 @@ export default function AdminContent() {
         </div>
       ) : (
         <div className="space-y-8">
+          {/* Brand identity — the product's name, editable end to end */}
+          <BrandEditor
+            current={normalizeBranding(content.branding)}
+            onSave={async (value) => {
+              await contentSet({ key: BRANDING_CONTENT_KEY, value, token });
+            }}
+          />
+
           {/* ForgeX robot mascot — the homepage hero centerpiece */}
           <section className="rounded-2xl border border-lime-400/30 bg-gradient-to-br from-lime-400/10 via-card to-card p-6">
             <div className="flex flex-wrap items-start justify-between gap-4">

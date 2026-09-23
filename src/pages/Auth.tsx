@@ -252,7 +252,7 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
           <div className="mb-6 text-center">
             <img
               src={logo}
-              alt="ForgeX Projects"
+              alt="ForgeX Network"
               className="mx-auto size-14 rounded-2xl shadow-lg"
             />
             <h1 className="font-display mt-4 text-2xl font-bold tracking-tight">

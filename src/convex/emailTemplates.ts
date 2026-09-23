@@ -123,20 +123,20 @@ export function welcomeEmail(opts: { name: string }): { subject: string; html: s
 }
 
 // ---------------------------------------------------------------------------
-// ForgeX Projects templates
+// ForgeX Network — Portfolio templates
 // ---------------------------------------------------------------------------
 
-/** Welcome email sent once when a Projects account creates its portfolio. */
+/** Welcome email sent once when an account creates its portfolio. */
 export function projectsWelcomeEmail(opts: {
   name: string;
   portfolioPath: string;
 }): { subject: string; html: string; text: string } {
   return {
-    subject: "Welcome to Projects — your portfolio awaits 🚀",
+    subject: "Welcome to ForgeX Network — your portfolio awaits 🚀",
     html: layout({
-      heading: `Welcome to Projects, ${escapeHtml(opts.name || "friend")}!`,
+      heading: `Welcome to ForgeX Network, ${escapeHtml(opts.name || "friend")}!`,
       bodyHtml: `
-        <p>Your <strong>Projects</strong> account is ready. Projects is the place to build one professional portfolio and turn it into your own personal website.</p>
+        <p>Your <strong>ForgeX Network</strong> account is ready. Portfolio is where you build one professional portfolio and turn it into your own personal website.</p>
         <ul style="padding-left:18px;margin:12px 0;">
           <li style="margin:6px 0;">🧑‍🎨 Add your about, skills, experience, education and services</li>
           <li style="margin:6px 0;">🛠️ Showcase the work you're proud of</li>
@@ -145,7 +145,7 @@ export function projectsWelcomeEmail(opts: {
         <p>Your portfolio link will be <strong style="color:${BRAND.lime};">${escapeHtml(opts.portfolioPath)}</strong> — you can change your URL any time in settings.</p>`,
       footerNote: `You are receiving this because you created a ${BRAND.name} account.`,
     }),
-    text: `Welcome to Projects, ${opts.name}! Your portfolio lives at ${opts.portfolioPath}. Add your work, publish it, and share one link anywhere.`,
+    text: `Welcome to ForgeX Network, ${opts.name}! Your portfolio lives at ${opts.portfolioPath}. Add your work, publish it, and share one link anywhere.`,
   };
 }
 
@@ -168,7 +168,7 @@ export function portfolioPublishedEmail(opts: {
         <p style="font-size:13px;word-break:break-all;color:${BRAND.lime};">${escapeHtml(opts.portfolioUrl)}</p>
         ${
           opts.discoverable
-            ? `<p>Your portfolio is also <strong>discoverable</strong> — it can appear in the Projects Explore section.</p>`
+            ? `<p>Your portfolio is also <strong>discoverable</strong> — it can appear in the ForgeX Network Explore section.</p>`
             : `<p style="font-size:13px;color:${BRAND.muted};">Only people with your link can view it. Make it discoverable to appear in Explore.</p>`
         }`,
     }),

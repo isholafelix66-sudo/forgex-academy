@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Link, NavLink, useLocation, useNavigate } from "react-router";
+import { NavLink, useLocation, useNavigate } from "react-router";
 import { useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import {
@@ -18,13 +18,14 @@ import {
 } from "lucide-react";
 import { MobileBottomNav } from "./MobileBottomNav";
 import { SiteNotifications } from "./SiteNotifications";
+import { BrandMark } from "./BrandMark";
+import { SharePortfolioButton } from "./SharePortfolioButton";
 import { cn } from "@/lib/utils";
 import { scrollToTopInstant } from "@/lib/scroll";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/hooks/use-auth";
-import logo from "@/assets/logo.svg";
 import { Avatar } from "./Avatar";
-import type { MobileNavItem, MobileNavSection } from "./MobileBottomNav";
+import type { MobileNavItem } from "./MobileBottomNav";
 import { PRODUCT_META, type ProductKey } from "@/lib/features";
 
 /* ═══════════════════════════════════════════════════════════════════════
@@ -152,12 +153,14 @@ export function PublicNav() {
 
   const productsHasActive = lockedProducts.some((p) => location.pathname === p.to);
 
+  // Bottom tab bar — matches the ForgeX Network Portfolio app:
+  // Home · Explore · [+] · Portfolio · Profile
   const mobilePrimary: MobileNavItem[] = [
     { to: "/", label: "Home", icon: <Home className="size-5" />, end: true },
     { to: "/explore", label: "Explore", icon: <Compass className="size-5" /> },
     {
       to: isAuthenticated ? "/portfolio" : "/auth?mode=signup",
-      label: isAuthenticated ? "Dashboard" : "Create",
+      label: "Portfolio",
       icon: isAuthenticated ? (
         <LayoutDashboard className="size-5" />
       ) : (
@@ -167,45 +170,16 @@ export function PublicNav() {
     },
     {
       to: isAuthenticated ? profileTo : "/contact",
-      label: isAuthenticated ? "Account" : "Contact",
+      label: "Profile",
       icon: <User className="size-5" />,
       end: true,
     },
   ];
 
-  const mobileMore: MobileNavSection[] = [
-    {
-      label: "Coming soon",
-      items: [
-        {
-          to: "/academy",
-          label: PRODUCT_META.academy.label,
-          icon: <Lock className="size-4" />,
-        },
-        {
-          to: "/opportunity-hub",
-          label: PRODUCT_META["opportunity-hub"].label,
-          icon: <Lock className="size-4" />,
-        },
-      ],
-    },
-    {
-      label: "Projects",
-      items: [
-        { to: "/about", label: "About", icon: <InfoIcon className="size-4" /> },
-        { to: "/contact", label: "Contact", icon: <Mail className="size-4" /> },
-        ...(isAuthenticated
-          ? [
-              {
-                to: "/portfolio/edit",
-                label: "Edit portfolio",
-                icon: <PenSquare className="size-4" />,
-              },
-            ]
-          : []),
-      ],
-    },
-  ];
+  const mobileFab = {
+    to: isAuthenticated ? "/portfolio/projects" : "/auth?mode=signup",
+    label: isAuthenticated ? "Add a project" : "Create your portfolio",
+  };
 
   const iconButtonClass =
     "relative flex size-9 items-center justify-center rounded-full border border-white/10 bg-white/5 text-muted-foreground transition-colors hover:border-lime-400/40 hover:text-lime-300";
@@ -222,21 +196,12 @@ export function PublicNav() {
       >
         <div className="mx-auto flex h-16 max-w-7xl items-center justify-between gap-3 px-4 sm:px-6 lg:h-[4.5rem]">
           {/* Brand */}
-          <Link to="/" className="group flex min-w-0 shrink-0 items-center gap-2.5" onClick={scrollTop}>
-            <img
-              src={logo}
-              alt="ForgeX Projects"
-              className="size-9 rounded-lg lg:size-10 lg:rounded-xl"
-            />
-            <span className="min-w-0 leading-tight">
-              <span className="font-display block text-[15px] font-bold tracking-tight lg:text-lg">
-                ForgeX<span className="text-lime-400"> Projects</span>
-              </span>
-              <span className="hidden text-[11px] font-medium tracking-wide text-muted-foreground sm:block">
-                Build once • Share one link
-              </span>
-            </span>
-          </Link>
+          <BrandMark
+            onClick={scrollTop}
+            size="lg"
+            showProduct
+            className="transition-opacity hover:opacity-90"
+          />
 
           {/* Desktop nav */}
           <nav className="hidden items-center gap-0.5 md:flex">
@@ -349,6 +314,8 @@ export function PublicNav() {
               )}
             </button>
 
+            <SharePortfolioButton />
+
             {isAuthenticated ? (
               <>
                 <Button
@@ -457,7 +424,14 @@ export function PublicNav() {
 
       <SiteNotifications open={notifOpen} onOpenChange={setNotifOpen} />
 
-      <MobileBottomNav primaryItems={mobilePrimary} moreSections={mobileMore} />
+      {/* Bottom bar matches the ForgeX Network Portfolio app exactly:
+          Home · Explore · [+] · Portfolio · Profile. The secondary
+          destinations live in the footer's mobile link row. */}
+      <MobileBottomNav
+        primaryItems={mobilePrimary}
+        moreSections={[]}
+        fab={mobileFab}
+      />
     </>
   );
 }

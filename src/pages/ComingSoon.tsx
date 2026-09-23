@@ -18,6 +18,7 @@ import { Reveal } from "@/components/site/Reveal";
 import { PRODUCT_META, type ProductKey } from "@/lib/features";
 import { friendlyError } from "@/lib/errors";
 import { toast } from "sonner";
+import { useBranding } from "@/lib/branding";
 
 /**
  * The page a LOCKED product shows to normal users.
@@ -27,6 +28,7 @@ import { toast } from "sonner";
  * the feature flags, so the wording can change without a deploy.
  */
 export function ComingSoon({ product }: { product: ProductKey }) {
+  const branding = useBranding();
   const meta = PRODUCT_META[product];
   const flags = useQuery(api.projects.featureFlags);
   const notifyMe = useMutation(api.projects.notifyMe);
@@ -160,13 +162,13 @@ export function ComingSoon({ product }: { product: ProductKey }) {
         </div>
       </section>
 
-      {/* Meanwhile — Projects is live */}
+      {/* Meanwhile — the live product */}
       <section className="mx-auto max-w-5xl px-4 pb-24 sm:px-6">
         <Reveal>
           <div className="relative overflow-hidden rounded-3xl border border-lime-400/25 bg-gradient-to-br from-lime-400/12 via-card to-transparent p-8 sm:p-12">
             <Sparkles className="size-8 text-lime-300" />
             <h2 className="font-display mt-4 text-2xl font-bold sm:text-3xl">
-              Projects is live right now
+              {branding.productLabel} is live right now
             </h2>
             <p className="mt-3 max-w-xl text-sm leading-relaxed text-muted-foreground sm:text-base">
               Build your professional portfolio, publish it as your own website,

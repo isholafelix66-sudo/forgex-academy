@@ -18,6 +18,7 @@ import { Button } from "@/components/ui/button";
 import { Reveal } from "@/components/site/Reveal";
 import { SectionHeading } from "@/components/site/SectionHeading";
 import { cn } from "@/lib/utils";
+import { useBranding } from "@/lib/branding";
 
 const VALUES = [
   {
@@ -28,7 +29,7 @@ const VALUES = [
   {
     icon: Sparkles,
     title: "Show, don't tell",
-    body: "Lists of skills are easy to fake. Work isn't. Projects puts your actual work in front of people, with the context to understand it.",
+    body: "Lists of skills are easy to fake. Work isn't. Portfolio puts your actual work in front of people, with the context to understand it.",
   },
   {
     icon: Globe,
@@ -45,7 +46,7 @@ const VALUES = [
 const PRODUCTS = [
   {
     key: "projects",
-    label: "Projects",
+    label: "Portfolio",
     state: "live",
     icon: Rocket,
     body: "Where you create, manage and share your professional portfolio as your own website.",
@@ -67,6 +68,7 @@ const PRODUCTS = [
 ];
 
 export default function About() {
+  const branding = useBranding();
   const stats = useQuery(api.projects.projectsStats);
 
   return (
@@ -80,13 +82,13 @@ export default function About() {
       <section className="relative mx-auto max-w-7xl px-4 pb-14 pt-16 sm:px-6 sm:pt-24">
         <div className="max-w-3xl">
           <span className="inline-flex items-center gap-2 rounded-full border border-lime-400/25 bg-lime-400/10 px-4 py-1.5 text-xs font-semibold uppercase tracking-widest text-lime-300">
-            <Lightbulb className="size-3.5" /> About Projects
+            <Lightbulb className="size-3.5" /> About {branding.name}
           </span>
           <h1 className="font-display mt-6 text-4xl font-bold leading-[1.06] tracking-tight sm:text-6xl">
             The fastest way to be taken seriously online
           </h1>
           <p className="mt-6 text-lg leading-relaxed text-muted-foreground">
-            Projects is a portfolio platform. You create your portfolio once —
+            {branding.name} is a portfolio platform. You create your portfolio once —
             your work, your skills, your experience — and turn it into your own
             professional website. Then you share one link: your CV, your bio,
             your applications, anywhere.
@@ -114,7 +116,7 @@ export default function About() {
             {[
               { label: "Portfolios published", value: stats.portfolios },
               { label: "Projects showcased", value: stats.projects },
-              { label: "Creators on Projects", value: stats.creators },
+              { label: `Creators on ${branding.name}`, value: stats.creators },
             ].map((s) => (
               <div key={s.label} className="text-center">
                 <div className="font-display text-4xl font-bold text-gradient">
@@ -153,7 +155,7 @@ export default function About() {
               <p className="mt-3 text-base leading-relaxed text-muted-foreground">
                 Too much talent is invisible. Brilliant work disappears into
                 camera rolls, group chats and unfinished folders because there's
-                nowhere good to put it. Projects exists to fix that in minutes,
+                nowhere good to put it. {branding.name} exists to fix that in minutes,
                 not months.
               </p>
             </div>
@@ -191,8 +193,8 @@ export default function About() {
       <section className="mx-auto max-w-7xl px-4 pb-24 sm:px-6">
         <SectionHeading
           eyebrow="The bigger picture"
-          title="Part of the ForgeX Network"
-          description="Projects is the first product of the ForgeX Network. Two more are on the way — and they'll plug straight into the portfolio you build here."
+          title={`Part of ${branding.name}`}
+          description={`${branding.productLabel} is the first product of ${branding.name}. Two more are on the way — and they'll plug straight into the portfolio you build here.`}
         />
         <div className="mt-12 grid gap-5 md:grid-cols-3">
           {PRODUCTS.map((p) => {

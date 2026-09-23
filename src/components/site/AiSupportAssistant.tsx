@@ -147,7 +147,7 @@ export function AiSupportAssistant() {
     setSending(false);
     const greeting: GuestMessage = {
       role: "ai",
-      body: "Welcome to the ForgeX Support Assistant. Ask me about your portfolio, publishing, visibility, your account, or anything else on Projects. I can also help you find the right page.",
+      body: "Welcome to the ForgeX Support Assistant. Ask me about your portfolio, publishing, visibility, your account, or anything else on ForgeX Network. I can also help you find the right page.",
     };
     setGuestMessages([greeting]);
     persistGuestMessages([greeting]);

@@ -231,7 +231,7 @@ export default function AdminShell() {
 
   const sections = [
     {
-      label: "Projects",
+      label: "Portfolio",
       items: [
         {
           to: "/admin/portfolios",

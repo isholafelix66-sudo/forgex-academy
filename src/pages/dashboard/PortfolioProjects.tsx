@@ -28,6 +28,7 @@ type ProjectForm = {
   summary: string;
   description: string;
   imageUrl: string | null;
+  category: string;
   tags: string;
   liveUrl: string;
   repoUrl: string;
@@ -40,12 +41,24 @@ const EMPTY: ProjectForm = {
   summary: "",
   description: "",
   imageUrl: null,
+  category: "",
   tags: "",
   liveUrl: "",
   repoUrl: "",
   year: "",
   featured: false,
 };
+
+/** Suggested work categories for the Explore filters — free text is allowed. */
+const CATEGORY_SUGGESTIONS = [
+  "Web",
+  "Design",
+  "Video",
+  "Branding",
+  "Mobile App",
+  "Writing",
+  "Photography",
+];
 
 export default function PortfolioProjects() {
   const data = useQuery(api.projects.myPortfolio);
@@ -73,6 +86,7 @@ export default function PortfolioProjects() {
       summary: p.summary,
       description: p.description ?? "",
       imageUrl: p.imageUrl ?? null,
+      category: p.category ?? "",
       tags: p.tags.join(", "),
       liveUrl: p.liveUrl ?? "",
       repoUrl: p.repoUrl ?? "",
@@ -100,6 +114,7 @@ export default function PortfolioProjects() {
           summary: form.summary,
           description: form.description,
           imageUrl: form.imageUrl ?? undefined,
+          category: form.category,
           tags,
           liveUrl: form.liveUrl,
           repoUrl: form.repoUrl,
@@ -113,6 +128,7 @@ export default function PortfolioProjects() {
           summary: form.summary,
           description: form.description,
           imageUrl: form.imageUrl ?? undefined,
+          category: form.category,
           tags,
           liveUrl: form.liveUrl,
           repoUrl: form.repoUrl,
@@ -306,6 +322,34 @@ export default function PortfolioProjects() {
                   onChange={(v) => setForm({ ...form, year: v })}
                   placeholder="2025"
                 />
+              </Field>
+              <Field
+                label="Category (optional)"
+                className="sm:col-span-2"
+                hint={`Powers the Explore filters — e.g. ${CATEGORY_SUGGESTIONS.slice(0, 4).join(", ")}.`}
+              >
+                <TextInput
+                  value={form.category}
+                  onChange={(v) => setForm({ ...form, category: v })}
+                  placeholder="Web"
+                />
+                <div className="mt-2 flex flex-wrap gap-1.5">
+                  {CATEGORY_SUGGESTIONS.map((c) => (
+                    <button
+                      key={c}
+                      type="button"
+                      onClick={() => setForm({ ...form, category: c })}
+                      className={cn(
+                        "rounded-full border px-2.5 py-1 text-[11px] font-medium transition-colors",
+                        form.category === c
+                          ? "border-lime-400/50 bg-lime-400/12 text-lime-300"
+                          : "border-white/10 text-muted-foreground hover:border-white/20 hover:text-foreground",
+                      )}
+                    >
+                      {c}
+                    </button>
+                  ))}
+                </div>
               </Field>
               <Field label="Summary" className="sm:col-span-2" hint="One or two lines shown on the card.">
                 <Textarea

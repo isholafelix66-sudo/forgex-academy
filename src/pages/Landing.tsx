@@ -28,6 +28,7 @@ import { Avatar } from "@/components/site/Avatar";
 import { Reveal } from "@/components/site/Reveal";
 import { SectionHeading } from "@/components/site/SectionHeading";
 import { cn } from "@/lib/utils";
+import { useBranding } from "@/lib/branding";
 
 const STEPS = [
   {
@@ -70,12 +71,13 @@ function formatCount(n: number) {
 }
 
 export default function Landing() {
+  const branding = useBranding();
   const stats = useQuery(api.projects.projectsStats);
   const featured = useQuery(api.projects.featuredPortfolios, { limit: 3 });
   const flags = useQuery(api.projects.featureFlags);
 
   const products = flags ?? [
-    { key: "projects", label: "Projects", state: "active", tagline: "" },
+    { key: "projects", label: "Portfolio", state: "active", tagline: "" },
     { key: "academy", label: "Academy", state: "locked", tagline: "" },
     { key: "opportunity-hub", label: "Opportunity Hub", state: "locked", tagline: "" },
   ];
@@ -97,7 +99,7 @@ export default function Landing() {
                 transition={{ duration: 0.5 }}
                 className="inline-flex items-center gap-2 rounded-full border border-lime-400/25 bg-lime-400/10 px-4 py-1.5 text-xs font-semibold uppercase tracking-widest text-lime-300"
               >
-                <Rocket className="size-3.5" /> ForgeX Projects
+                <Rocket className="size-3.5" /> {branding.name}
               </motion.span>
 
               <motion.h1
@@ -228,7 +230,7 @@ export default function Landing() {
           {[
             { label: "Portfolios published", value: stats?.portfolios },
             { label: "Projects showcased", value: stats?.projects },
-            { label: "Creators on Projects", value: stats?.creators },
+            { label: `Creators on ${branding.name}`, value: stats?.creators },
             { label: "Portfolio views", value: stats?.views },
           ].map((s) => (
             <div key={s.label} className="text-center">
@@ -414,9 +416,9 @@ export default function Landing() {
       {/* ── Ecosystem ────────────────────────────────────────────────────── */}
       <section className="mx-auto max-w-7xl px-4 pb-20 sm:px-6">
         <SectionHeading
-          eyebrow="The ForgeX Network"
+          eyebrow={branding.name}
           title="One ecosystem, three products"
-          description="Projects is live today. Academy and Opportunity Hub are being built — and will slot straight in when they're ready."
+          description="Portfolio is live today. Academy and Opportunity Hub are being built — and will slot straight in when they're ready."
         />
         <div className="mt-12 grid gap-5 md:grid-cols-3">
           {products.map((p) => {

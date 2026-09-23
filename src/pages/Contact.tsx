@@ -16,6 +16,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { useAuth } from "@/hooks/use-auth";
+import { useBranding } from "@/lib/branding";
 
 const SOCIAL_ICONS: Record<string, string> = {
   facebook: "f",
@@ -29,6 +30,7 @@ const SOCIAL_ICONS: Record<string, string> = {
 };
 
 export default function Contact() {
+  const branding = useBranding();
   const content = useQuery(api.public.siteContentAll);
   const { user } = useAuth();
   const contact = (content?.contact as
@@ -97,7 +99,7 @@ export default function Contact() {
           </h1>
           <p className="mt-6 text-lg leading-relaxed text-muted-foreground">
             Questions about your portfolio, publishing, visibility or the ForgeX
-            Network? Reach out — the Projects team responds quickly.
+            Network? Reach out — the {branding.name} team responds quickly.
           </p>
         </Reveal>
 

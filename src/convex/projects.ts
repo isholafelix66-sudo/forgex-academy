@@ -345,6 +345,7 @@ export const updatePortfolio = mutation({
     location: v.optional(v.string()),
     email: v.optional(v.string()),
     phone: v.optional(v.string()),
+    availability: v.optional(v.string()),
     avatarUrl: v.optional(v.string()),
     coverUrl: v.optional(v.string()),
     template: v.optional(portfolioTemplateValidator),
@@ -378,6 +379,8 @@ export const updatePortfolio = mutation({
     if (args.location !== undefined) patch.location = args.location.slice(0, 80);
     if (args.email !== undefined) patch.email = args.email.slice(0, 160);
     if (args.phone !== undefined) patch.phone = args.phone.slice(0, 40);
+    if (args.availability !== undefined)
+      patch.availability = args.availability.slice(0, 80);
     if (args.avatarUrl !== undefined) patch.avatarUrl = args.avatarUrl;
     if (args.coverUrl !== undefined) patch.coverUrl = args.coverUrl;
     if (args.template !== undefined) patch.template = args.template;
@@ -673,6 +676,165 @@ export const exploreSkills = query({
   },
 });
 
+// ---------------------------------------------------------------------------
+// Explore — showcased work (project cards with their creator attached)
+// ---------------------------------------------------------------------------
+
+/** Fallback filter chips so Explore always shows a usable set. */
+export const DEFAULT_EXPLORE_CATEGORIES = [
+  "Web",
+  "Design",
+  "Video",
+  "Branding",
+  "Mobile App",
+] as const;
+
+export type ExploreProjectCard = {
+  _id: Id<"portfolioProjects">;
+  title: string;
+  summary: string;
+  category: string | null;
+  imageUrl: string | null;
+  tags: string[];
+  liveUrl: string | null;
+  year: string | null;
+  featured: boolean;
+  createdAt: number;
+  owner: {
+    slug: string;
+    displayName: string;
+    headline: string;
+    avatarUrl: string | null;
+  };
+};
+
+/**
+ * Public feed of showcased work from discoverable portfolios. Only work
+ * inside a discoverable, non-suspended portfolio is ever returned.
+ */
+export const exploreProjects = query({
+  args: {
+    q: v.optional(v.string()),
+    category: v.optional(v.string()),
+    limit: v.optional(v.number()),
+  },
+  handler: async (ctx, { q, category, limit }): Promise<ExploreProjectCard[]> => {
+    const cap = Math.min(Math.max(limit ?? 30, 1), 60);
+
+    // Bounded reads: discoverable owners first, then their newest work.
+    const portfolios = await ctx.db
+      .query("portfolios")
+      .withIndex("by_visibility", (i) => i.eq("visibility", "discoverable"))
+      .order("desc")
+      .take(150);
+    const owners = new Map(
+      portfolios.filter((p) => !p.suspended).map((p) => [p._id, p] as const),
+    );
+    if (owners.size === 0) return [];
+
+    const rows = await ctx.db
+      .query("portfolioProjects")
+      .withIndex("by_createdAt")
+      .order("desc")
+      .take(cap * 8);
+
+    const needle = (q ?? "").trim().toLowerCase();
+    const wantedCat = (category ?? "").trim().toLowerCase();
+
+    return rows
+      .filter((p) => !p.removed && owners.has(p.portfolioId))
+      .map((p) => {
+        const owner = owners.get(p.portfolioId)!;
+        return {
+          _id: p._id,
+          title: p.title,
+          summary: p.summary,
+          category: p.category ?? null,
+          imageUrl: p.imageUrl ?? null,
+          tags: p.tags,
+          liveUrl: p.liveUrl ?? null,
+          year: p.year ?? null,
+          featured: p.featured,
+          createdAt: p.createdAt,
+          owner: {
+            slug: owner.slug,
+            displayName: owner.displayName,
+            headline: owner.headline ?? "",
+            avatarUrl: owner.avatarUrl ?? null,
+          },
+          search: [
+            p.title,
+            p.summary,
+            p.category ?? "",
+            p.year ?? "",
+            owner.displayName,
+            owner.headline ?? "",
+            ...p.tags,
+          ]
+            .join(" ")
+            .toLowerCase(),
+        };
+      })
+      .filter((c) => {
+        if (
+          wantedCat &&
+          (c.category ?? "").trim().toLowerCase() !== wantedCat
+        ) {
+          return false;
+        }
+        if (needle && !c.search.includes(needle)) return false;
+        return true;
+      })
+      .sort((a, b) => {
+        if (a.featured !== b.featured) return a.featured ? -1 : 1;
+        return b.createdAt - a.createdAt;
+      })
+      .slice(0, cap)
+      .map(({ search: _search, ...card }) => card);
+  },
+});
+
+/** Category chips for Explore: real categories first, padded with defaults. */
+export const exploreCategories = query({
+  args: {},
+  handler: async (ctx): Promise<{ name: string; count: number }[]> => {
+    const portfolios = await ctx.db
+      .query("portfolios")
+      .withIndex("by_visibility", (i) => i.eq("visibility", "discoverable"))
+      .take(150);
+    const allowed = new Set(
+      portfolios.filter((p) => !p.suspended).map((p) => p._id),
+    );
+
+    const rows = await ctx.db
+      .query("portfolioProjects")
+      .withIndex("by_createdAt")
+      .order("desc")
+      .take(400);
+
+    const counts = new Map<string, { name: string; count: number }>();
+    for (const p of rows) {
+      if (p.removed || !allowed.has(p.portfolioId)) continue;
+      const name = (p.category ?? "").trim();
+      if (!name) continue;
+      const key = name.toLowerCase();
+      const entry = counts.get(key);
+      if (entry) entry.count += 1;
+      else counts.set(key, { name, count: 1 });
+    }
+
+    const out = Array.from(counts.values()).sort((a, b) => b.count - a.count);
+    const seen = new Set(counts.keys());
+    for (const name of DEFAULT_EXPLORE_CATEGORIES) {
+      const key = name.toLowerCase();
+      if (seen.has(key)) continue;
+      seen.add(key);
+      out.push({ name, count: 0 });
+    }
+    return out.slice(0, 10);
+  },
+});
+
 /** Featured discoverable portfolios (landing page showcase). */
 export const featuredPortfolios = query({
   args: { limit: v.optional(v.number()) },
@@ -711,6 +873,7 @@ export const createProject = mutation({
     summary: v.string(),
     description: v.optional(v.string()),
     imageUrl: v.optional(v.string()),
+    category: v.optional(v.string()),
     tags: v.optional(v.array(v.string())),
     liveUrl: v.optional(v.string()),
     repoUrl: v.optional(v.string()),
@@ -746,6 +909,7 @@ export const createProject = mutation({
       summary: args.summary.trim().slice(0, 300),
       description: args.description?.slice(0, 4000),
       imageUrl: args.imageUrl,
+      category: args.category?.trim().slice(0, 40) || undefined,
       tags: (args.tags ?? []).map((t) => t.trim()).filter(Boolean).slice(0, 8),
       liveUrl: args.liveUrl,
       repoUrl: args.repoUrl,
@@ -768,6 +932,7 @@ export const updateProject = mutation({
     summary: v.optional(v.string()),
     description: v.optional(v.string()),
     imageUrl: v.optional(v.string()),
+    category: v.optional(v.string()),
     tags: v.optional(v.array(v.string())),
     liveUrl: v.optional(v.string()),
     repoUrl: v.optional(v.string()),
@@ -788,6 +953,8 @@ export const updateProject = mutation({
     if (rest.description !== undefined)
       patch.description = rest.description.slice(0, 4000);
     if (rest.imageUrl !== undefined) patch.imageUrl = rest.imageUrl;
+    if (rest.category !== undefined)
+      patch.category = rest.category.trim().slice(0, 40) || undefined;
     if (rest.tags !== undefined)
       patch.tags = rest.tags.map((t) => t.trim()).filter(Boolean).slice(0, 8);
     if (rest.liveUrl !== undefined) patch.liveUrl = rest.liveUrl;

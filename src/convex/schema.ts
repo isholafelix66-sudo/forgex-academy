@@ -296,6 +296,8 @@ const portfoliosTable = defineTable({
   location: v.optional(v.string()),
   email: v.optional(v.string()),
   phone: v.optional(v.string()),
+  // e.g. "Open to opportunities" — shown on the public portfolio's About card.
+  availability: v.optional(v.string()),
   avatarUrl: v.optional(v.string()),
   coverUrl: v.optional(v.string()),
   template: portfolioTemplateValidator,
@@ -330,6 +332,8 @@ const portfolioProjectsTable = defineTable({
   summary: v.string(),
   description: v.optional(v.string()),
   imageUrl: v.optional(v.string()),
+  // Work category used by the Explore filters, e.g. "Web", "Branding".
+  category: v.optional(v.string()),
   tags: v.array(v.string()),
   liveUrl: v.optional(v.string()),
   repoUrl: v.optional(v.string()),

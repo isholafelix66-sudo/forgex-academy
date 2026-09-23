@@ -1,6 +1,6 @@
-import { NavLink, useLocation } from "react-router";
-import { useEffect, useState, type ReactNode } from "react";
-import { X, ChevronRight } from "lucide-react";
+import { Link, NavLink, useLocation } from "react-router";
+import { Fragment, useEffect, useState, type ReactNode } from "react";
+import { X, ChevronRight, Plus } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { scrollToTopInstant } from "@/lib/scroll";
 
@@ -23,11 +23,14 @@ export function MobileBottomNav({
   primaryItems,
   moreSections,
   moreFooter,
+  fab,
 }: {
   primaryItems: MobileNavItem[];
   moreSections: MobileNavSection[];
   /** Optional extras rendered at the bottom of the More menu (e.g. theme). */
   moreFooter?: ReactNode;
+  /** Raised centre action, rendered between the tab groups (ForgeX "+"). */
+  fab?: { to: string; label: string };
 }) {
   const [moreOpen, setMoreOpen] = useState(false);
   const location = useLocation();
@@ -45,6 +48,9 @@ export function MobileBottomNav({
 
   const hasMore = moreSections.some((s) => s.items.length > 0);
 
+  // The raised centre action sits between the tab groups (ForgeX "+").
+  const fabIndex = Math.ceil(primaryItems.length / 2) - 1;
+
   const moreHasActive = moreSections.some((s) =>
     s.items.some(
       (item) =>
@@ -58,9 +64,9 @@ export function MobileBottomNav({
       {/* ── Fixed bottom bar (< md only) ────────────────────────────── */}
       <nav className="fixed bottom-0 inset-x-0 z-50 border-t border-white/10 bg-[#0a0c0a]/95 backdrop-blur-xl md:hidden safe-area-bottom">
         <div className="mx-auto flex h-16 max-w-lg items-stretch gap-0.5 px-1">
-          {primaryItems.map((item) => (
+          {primaryItems.map((item, index) => (
+            <Fragment key={item.to}>
             <NavLink
-              key={item.to}
               to={item.to}
               end={item.end}
               onClick={scrollTop}
@@ -80,6 +86,21 @@ export function MobileBottomNav({
                 {item.label}
               </span>
             </NavLink>
+
+            {/* Raised centre button (ForgeX "+") */}
+            {fab && index === fabIndex && (
+              <Link
+                to={fab.to}
+                onClick={scrollTop}
+                aria-label={fab.label}
+                className="relative flex w-16 shrink-0 items-center justify-center"
+              >
+                <span className="absolute -top-4 flex size-12 items-center justify-center rounded-full bg-lime-400 text-black shadow-[0_6px_22px_rgba(163,230,53,0.45)] ring-4 ring-[#0a0c0a] transition-transform active:scale-95">
+                  <Plus className="size-6" />
+                </span>
+              </Link>
+            )}
+            </Fragment>
           ))}
           {hasMore && (
             <button
