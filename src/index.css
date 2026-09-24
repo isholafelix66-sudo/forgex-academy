@@ -179,6 +179,13 @@
     touch-action: manipulation;
     -webkit-tap-highlight-color: oklch(0.868 0.216 129.5 / 0.18);
   }
+  /* The floating bottom navigation paints its own lime circle for the active
+     tab — the lime tap flash above would draw a square behind it, so the
+     whole pill opts out of tap highlighting. */
+  .mobile-nav-pill,
+  .mobile-nav-pill * {
+    -webkit-tap-highlight-color: transparent;
+  }
   body {
     @apply bg-background text-foreground antialiased;
     font-feature-settings: "cv02", "cv03", "cv04", "cv11";

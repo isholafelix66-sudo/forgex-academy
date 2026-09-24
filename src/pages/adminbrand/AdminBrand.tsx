@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { Link } from "react-router";
 import { useAction, useMutation, useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
@@ -38,6 +38,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { BrandMark } from "@/components/site/BrandMark";
 import { SharePortfolioButton } from "@/components/site/SharePortfolioButton";
 import { ImageUploader } from "@/components/media/ImageUploader";
+import { NavSlot } from "@/components/site/MobileBottomNav";
 import {
   Dialog,
   DialogContent,
@@ -338,6 +339,7 @@ function AdminMobileNav({
   onTab: (tab: TabId) => void;
 }) {
   const [moreOpen, setMoreOpen] = useState(false);
+  const indicatorId = `admin-nav-indicator-${useId()}`;
 
   const go = (next: TabId) => {
     onTab(next);
@@ -350,9 +352,12 @@ function AdminMobileNav({
 
   return (
     <>
-      <nav className="pointer-events-none fixed inset-x-0 bottom-0 z-50 md:hidden safe-area-bottom">
-        <div className="pointer-events-auto mx-auto mb-2 w-[calc(100%-1.5rem)] max-w-lg rounded-full border border-white/10 bg-[#0a0c0a]/95 px-1.5 py-1.5 shadow-[0_10px_30px_rgba(0,0,0,0.45)] backdrop-blur-xl">
-          <div className="flex items-center justify-between">
+      <nav
+        className="pointer-events-none fixed inset-x-0 bottom-0 z-50 md:hidden safe-area-bottom"
+        style={{ WebkitTapHighlightColor: "transparent" }}
+      >
+        <div className="mobile-nav-pill pointer-events-auto mx-auto mb-2 w-[calc(100%-1.5rem)] max-w-lg rounded-full border border-white/10 bg-[#0a0c0a]/95 px-1.5 py-1.5 shadow-[0_10px_30px_rgba(0,0,0,0.45)] backdrop-blur-xl">
+          <div className="flex items-center justify-between overflow-visible">
             {ADMIN_MOBILE_PRIMARY.map((id) => {
               const def = TABS.find((t) => t.id === id)!;
               const active = tab === id;
@@ -361,42 +366,22 @@ function AdminMobileNav({
                   key={id}
                   onClick={() => go(id)}
                   aria-label={def.label}
-                  className={cn(
-                    "flex min-w-0 flex-1 items-center justify-center py-0.5",
-                    active ? "text-black" : "text-muted-foreground",
-                  )}
+                  className="flex min-w-0 flex-1 items-center justify-center rounded-full outline-none [-webkit-tap-highlight-color:transparent] focus-visible:ring-2 focus-visible:ring-lime-400/50"
                 >
-                  <span
-                    className={cn(
-                      "flex size-11 shrink-0 items-center justify-center transition-colors",
-                      active
-                        ? "bg-lime-400 text-black shadow-[0_0_0_6px_#0a0c0a,0_8px_20px_rgba(163,230,53,0.35)]"
-                        : "rounded-full",
-                    )}
-                  >
+                  <NavSlot active={active} layoutId={indicatorId}>
                     <def.icon className="size-5" />
-                  </span>
+                  </NavSlot>
                 </button>
               );
             })}
             <button
               onClick={() => setMoreOpen(true)}
               aria-label="More portal sections"
-              className={cn(
-                "flex min-w-0 flex-1 items-center justify-center py-0.5",
-                moreActive ? "text-black" : "text-muted-foreground",
-              )}
+              className="flex min-w-0 flex-1 items-center justify-center rounded-full outline-none [-webkit-tap-highlight-color:transparent] focus-visible:ring-2 focus-visible:ring-lime-400/50"
             >
-              <span
-                className={cn(
-                  "flex size-11 shrink-0 items-center justify-center transition-colors",
-                  moreActive
-                    ? "bg-lime-400 text-black shadow-[0_0_0_6px_#0a0c0a,0_8px_20px_rgba(163,230,53,0.35)]"
-                    : "rounded-full",
-                )}
-              >
+              <NavSlot active={moreActive} layoutId={indicatorId}>
                 <Layers className="size-5" />
-              </span>
+              </NavSlot>
             </button>
           </div>
         </div>
