@@ -13,7 +13,7 @@ import { api } from "@/convex/_generated/api";
 import React, { StrictMode, useEffect, lazy, Suspense, useState, LazyExoticComponent, ComponentType } from "react";
 import { RefreshCw } from "lucide-react";
 import { createRoot } from "react-dom/client";
-import { BrowserRouter, Link, Route, Routes, useLocation } from "react-router";
+import { BrowserRouter, Link, Navigate, Route, Routes, useLocation } from "react-router";
 import "./index.css";
 import { attachRoutePrefetch } from "@/lib/prefetch";
 import { registerServiceWorker } from "@/lib/sw";
@@ -320,10 +320,20 @@ const AdminIncidents = L(() => import("./pages/admin/AdminIncidents.tsx"));
 const AdminActivity = L(() => import("./pages/admin/AdminActivity.tsx"));
 const AdminAlertsPage = L(() => import("./pages/admin/AdminAlerts.tsx"));
 
-// Projects platform management — now inside the dedicated /adminbrand portal.
+// Projects platform management — now inside the dedicated /admin-brand portal.
 const AdminPortalRedirect = L(
   () => import("./pages/PortfolioRedirect.tsx").then((m) => ({ default: m.AdminPortalRedirect })),
 );
+
+/**
+ * Legacy /adminbrand path → the canonical /admin-brand portal route. The
+ * Portfolio admin portal's ONLY authoritative URL is /admin-brand; the old
+ * spelling is kept purely as a redirect so stale bookmarks still land in the
+ * same (Portfolio-only) place.
+ */
+function AdminBrandLegacyRedirect() {
+  return <Navigate to="/admin-brand" replace />;
+}
 
 // Communication & Community module (admin moderation)
 const AdminCommunication = L(() => import("./pages/admin/AdminCommunication.tsx"));
@@ -1183,7 +1193,7 @@ createRoot(document.getElementById("root")!).render(
 
               {/* ── PORTFOLIO CREATOR system — its own auth, dashboard and
                   routes. Signing in here NEVER reaches an Academy dashboard
-                  or the /adminbrand admin portal. ── */}
+                  or the Portfolio admin portal. ── */}
               {/* Portfolio help / issue reporting — open to everyone. */}
               <Route path="/help" element={<Help />} />
               <Route path="/portfolio/auth" element={<PortfolioAuth />} />
@@ -1290,10 +1300,13 @@ createRoot(document.getElementById("root")!).render(
 
 {/* ── ForgeX Network Portfolio — its OWN portal and sign-in.
                     Completely separate from the Academy admin dashboard
-                    above: /adminbrand has its own credential, session,
+                    above: /admin-brand has its own credential, session,
                     content store and SMTP configuration. An Academy admin
-                    session grants no access here, and vice versa. ── */}
-              <Route path="/adminbrand" element={<AdminBrand />} />
+                    session grants no access here, and vice versa. The
+                    canonical URL is /admin-brand; /adminbrand only exists
+                    as a redirect for legacy bookmarks. ── */}
+              <Route path="/admin-brand" element={<AdminBrand />} />
+              <Route path="/adminbrand" element={<AdminBrandLegacyRedirect />} />
               <Route path="/portfolio/signin" element={<PortfolioSignIn />} />
 
               {/* Admin dashboard — password-gated only, no user account needed */}
@@ -1330,9 +1343,10 @@ createRoot(document.getElementById("root")!).render(
                 <Route path="email-center" element={<AdminEmailCenter />} />
 
                 {/* ForgeX Projects management */}
-                {/* Portfolio management moved to /adminbrand (separate portal).
-                    These Academy-admin routes redirect there so no stale link
-                    can bypass the Portfolio's own credential gate. */}
+                {/* Portfolio management moved to /admin-brand (separate
+                    portal, guarded only by the Portfolio admin credential).
+                    These Academy-admin routes redirect there so no stale
+                    link can bypass the Portfolio's own credential gate. */}
                 <Route path="portfolios" element={<AdminPortalRedirect />} />
                 <Route path="projects" element={<AdminPortalRedirect />} />
                 <Route path="waitlist" element={<AdminPortalRedirect />} />

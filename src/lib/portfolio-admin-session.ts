@@ -37,6 +37,8 @@ export function clearPortfolioAdminToken(): void {
 }
 
 /** Where Portfolio management lives. Never an Academy route. */
-export const PORTFOLIO_ADMIN_PATH = "/adminbrand";
+export const PORTFOLIO_ADMIN_PATH = "/admin-brand";
+/** The legacy spelling, kept only as a redirect for stale bookmarks. */
+export const PORTFOLIO_ADMIN_LEGACY_PATH = "/adminbrand";
 /** Public Portfolio sign-in entry point. */
 export const PORTFOLIO_SIGNIN_PATH = "/portfolio/signin";

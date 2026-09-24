@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { NavLink, useNavigate } from "react-router";
+import { useMutation, useQuery } from "convex/react";
+import { api } from "@/convex/_generated/api";
 import {
   Bell,
   ChevronDown,
@@ -25,13 +27,28 @@ import { SharePortfolioButton } from "./SharePortfolioButton";
 import { cn } from "@/lib/utils";
 import { scrollToTopInstant } from "@/lib/scroll";
 import { Button } from "@/components/ui/button";
-import { useAuth } from "@/hooks/use-auth";
 import { Avatar } from "./Avatar";
 import type { MobileNavItem } from "./MobileBottomNav";
+import {
+  getPortfolioUserToken,
+  clearPortfolioUserToken,
+  PORTFOLIO_USER_DASHBOARD_PATH,
+  PORTFOLIO_AUTH_PATH,
+} from "@/lib/portfolio-user-session";
 
 /* ═══════════════════════════════════════════════════════════════════════
-   NAV DATA — the public site is a focused Portfolio experience. Academy and
-   Opportunity Hub remain isolated behind their locked product routes.
+   AUTH SEPARATION — the public site is a PORTFOLIO surface.
+
+   Every signed-in destination here is derived ONLY from the Portfolio
+   creator session (fx-portfolio-user-token). The Academy auth session and
+   Academy roles (`users.role`) are never consulted on this surface:
+
+     • An Academy admin browsing the public site is just a signed-in
+       Portfolio visitor — if they have a creator account they get the
+       creator dashboard link, otherwise the Portfolio sign-in link.
+     • Nothing on this surface can navigate to /admin or /admin-brand:
+       those routes are only reachable by typing the URL directly, and each
+       is gated by its OWN credential system.
    ═══════════════════════════════════════════════════════════════════════ */
 
 type NavItemDef = { to: string; label: string; icon: typeof Home; end?: boolean };
@@ -104,32 +121,39 @@ function HoverDropdown({
    ═══════════════════════════════════════════════════════════════════════ */
 
 export function PublicNav() {
-  const { isAuthenticated, user, signOut } = useAuth();
   const navigate = useNavigate();
   const [scrolled, setScrolled] = useState(false);
   const [notifOpen, setNotifOpen] = useState(false);
+  const revokeSession = useMutation(api.portfolioUsers.signOut);
+
+  // ── PORTFOLIO session only ────────────────────────────────────────────
+  // Signed-in state comes from the Portfolio creator session token — never
+  // from the Academy Convex Auth session (`useAuth()`), which is what used
+  // to leak Academy admin roles onto this public surface.
+  const portfolioToken = getPortfolioUserToken();
+  const portfolioSession = useQuery(
+    api.portfolioUsers.validateSession,
+    portfolioToken ? { token: portfolioToken } : "skip",
+  );
+  // Treat a still-validating session as signed-out *for link targets*, but
+  // never navigate on it — the session query resolves in a tick and the
+  // header simply re-renders with the correct links.
+  const isPortfolioSignedIn = !!portfolioSession;
 
   // Portfolio announcements only — the header notification belongs to the
-  // Portfolio website and is published from /adminbrand, never from Academy.
+  // Portfolio website and is published from the Portfolio admin portal,
+  // never from Academy.
   const unreadCount = usePortfolioNotificationCount();
 
-  const dashboardTo =
-    user?.role === "admin" || user?.role === "owner" ? "/admin" : "/portfolio/dashboard";
-  const profileTo =
-    user?.role === "admin" || user?.role === "owner"
-      ? "/admin/profile"
-      : "/portfolio/dashboard/profile";
-
-  useEffect(() => {
-    const onScroll = () => setScrolled(window.scrollY > 12);
-    onScroll();
-    window.addEventListener("scroll", onScroll, { passive: true });
-    return () => window.removeEventListener("scroll", onScroll);
-  }, []);
-
-  const handleSignOut = async () => {
-    await signOut();
+  // ── Sign-out clears ONLY the Portfolio creator session ───────────────
+  // The server-side session row is revoked (best effort) and the local
+  // token is always dropped. No Academy state is read or touched.
+  const handleSignOut = () => {
+    const token = getPortfolioUserToken();
+    if (token) void revokeSession({ token }).catch(() => {});
+    clearPortfolioUserToken();
     navigate("/");
+    scrollTop();
   };
 
   const desktopLinkClass = ({ isActive }: { isActive: boolean }) =>
@@ -142,14 +166,14 @@ export function PublicNav() {
 
   // Bottom tab bar — matches the ForgeX Network Portfolio app:
   // Home · Explore · [+] · Portfolio · Profile
-  const authTo = isAuthenticated ? "/portfolio/dashboard" : "/portfolio/auth";
+  const authTo = isPortfolioSignedIn ? PORTFOLIO_USER_DASHBOARD_PATH : PORTFOLIO_AUTH_PATH;
   const mobilePrimary: MobileNavItem[] = [
     { to: "/", label: "Home", icon: <Home className="size-5" />, end: true },
     { to: "/explore", label: "Explore", icon: <Compass className="size-5" /> },
     {
       to: authTo,
       label: "Portfolio",
-      icon: isAuthenticated ? (
+      icon: isPortfolioSignedIn ? (
         <LayoutDashboard className="size-5" />
       ) : (
         <PenSquare className="size-5" />
@@ -168,8 +192,8 @@ export function PublicNav() {
   // signed-out visitors go to the Portfolio auth screen (never account
   // creation on the public website, never an admin route).
   const mobileFab = {
-    to: isAuthenticated ? "/portfolio/dashboard/projects" : "/portfolio/auth",
-    label: isAuthenticated ? "Add a project" : "Portfolio sign in",
+    to: isPortfolioSignedIn ? "/portfolio/dashboard/projects" : PORTFOLIO_AUTH_PATH,
+    label: isPortfolioSignedIn ? "Add a project" : "Portfolio sign in",
   };
 
   // Compact-but-readable controls so the header always fits 320–430px.
@@ -275,15 +299,15 @@ export function PublicNav() {
             <SharePortfolioButton showLabel={false} className="sm:hidden" />
             <SharePortfolioButton className="hidden sm:inline-flex" />
 
-            {isAuthenticated ? (
+            {isPortfolioSignedIn ? (
               <>
                 <Button
                   variant="ghost"
                   size="sm"
                   className="hidden h-8 gap-1.5 text-xs font-medium md:inline-flex"
-                  data-prefetch={dashboardTo}
+                  data-prefetch={PORTFOLIO_USER_DASHBOARD_PATH}
                   onClick={() => {
-                    navigate(dashboardTo);
+                    navigate(PORTFOLIO_USER_DASHBOARD_PATH);
                     scrollTop();
                   }}
                 >
@@ -296,8 +320,8 @@ export function PublicNav() {
                     align="right"
                     trigger={
                       <Avatar
-                        name={user?.name ?? "Creator"}
-                        image={user?.image}
+                        name={portfolioSession?.name ?? "Creator"}
+                        image={portfolioSession?.avatarUrl ?? undefined}
                         className="size-9 cursor-pointer"
                       />
                     }
@@ -305,18 +329,18 @@ export function PublicNav() {
                   >
                     <div className="px-3 py-2.5">
                       <p className="truncate text-sm font-semibold">
-                        {user?.name ?? "Creator"}
+                        {portfolioSession?.name ?? "Creator"}
                       </p>
                       <p className="truncate text-xs text-muted-foreground">
-                        {user?.email ?? ""}
+                        {portfolioSession?.email ?? ""}
                       </p>
                     </div>
                     <div className="h-px bg-white/10" />
                     <div className="py-1.5">
                       <button
-                        data-prefetch={profileTo}
+                        data-prefetch="/portfolio/dashboard/profile"
                         onClick={() => {
-                          navigate(profileTo);
+                          navigate("/portfolio/dashboard/profile");
                           scrollTop();
                         }}
                         className="flex w-full items-center gap-2.5 px-3.5 py-2 text-sm text-muted-foreground transition-colors hover:bg-white/5 hover:text-foreground"
@@ -324,7 +348,7 @@ export function PublicNav() {
                         <User className="size-4" /> Account
                       </button>
                       <button
-                        onClick={() => void handleSignOut()}
+                        onClick={handleSignOut}
                         className="flex w-full items-center gap-2.5 px-3.5 py-2 text-sm text-rose-400 transition-colors hover:bg-rose-400/8 hover:text-rose-300"
                       >
                         <LogOut className="size-4" /> Logout
@@ -337,11 +361,15 @@ export function PublicNav() {
                   className="md:hidden"
                   aria-label="Account"
                   onClick={() => {
-                    navigate(profileTo);
+                    navigate("/portfolio/dashboard/profile");
                     scrollTop();
                   }}
                 >
-                  <Avatar name={user?.name ?? "Creator"} image={user?.image} className="size-9" />
+                  <Avatar
+                    name={portfolioSession?.name ?? "Creator"}
+                    image={portfolioSession?.avatarUrl ?? undefined}
+                    className="size-9"
+                  />
                 </button>
               </>
             ) : (
@@ -351,10 +379,10 @@ export function PublicNav() {
                     in — which never opens an admin portal. */}
                 <Button
                   size="sm"
-                  data-prefetch="/portfolio/auth"
+                  data-prefetch={PORTFOLIO_AUTH_PATH}
                   className="h-8 shrink-0 whitespace-nowrap bg-lime-400 px-3 text-xs font-semibold text-black hover:bg-lime-300 sm:px-4"
                   onClick={() => {
-                    navigate("/portfolio/auth");
+                    navigate(PORTFOLIO_AUTH_PATH);
                     scrollTop();
                   }}
                 >

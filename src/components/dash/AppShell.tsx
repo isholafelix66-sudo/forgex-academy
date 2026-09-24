@@ -36,6 +36,14 @@ export function AppShell({
   showRoleLink,
   mobilePrimaryItems,
   mobileMoreSections,
+  /**
+   * ACADEMY-ONLY surfaces set nothing (defaults to true). Non-Academy shells
+   * (the Portfolio creator dashboard) pass false so the Academy auth session
+   * and the Academy ADMIN session can never leak onto them — no Academy
+   * identity fallback, no /admin/profile avatar link, and no button that
+   * signs the visitor's ACADEMY session out of a Portfolio page.
+   */
+  academyAuth = true,
 }: {
   sections: NavSection[];
   footer?: NavItem[];
@@ -52,6 +60,8 @@ export function AppShell({
   showRoleLink?: boolean;
   mobilePrimaryItems?: MobileNavItem[];
   mobileMoreSections?: MobileNavSection[];
+  /** Academy auth scope — see the doc comment on the prop above. */
+  academyAuth?: boolean;
 }) {
   const { user, signOut } = useAuth();
   const { isAdmin } = useAdminSession();
@@ -61,24 +71,34 @@ export function AppShell({
 
   // Password-gated admin sessions have no user account — fall back to the
   // admin profile stored in site content so the header never says "Guest".
+  // ACADEMY ONLY: this fallback is scoped to Academy shells via academyAuth
+  // so a Portfolio creator who happens to hold an Academy admin session in
+  // the same browser never sees Academy admin identity or links here.
+  const adminFallback = academyAuth && isAdmin;
   const adminProfile = (siteContent?.adminProfile ?? {}) as {
     name?: string;
     title?: string;
     image?: string;
   };
   const hasAccount = !!user;
-  const identityName = user?.name ?? (isAdmin ? adminProfile.name || "Administrator" : "Guest");
-  const identityImage = user?.image ?? (isAdmin ? adminProfile.image : undefined);
-  const identityRole = user?.role ?? (isAdmin ? adminProfile.title || "admin" : "guest");
+  const identityName =
+    user?.name ?? (adminFallback ? adminProfile.name || "Administrator" : "Guest");
+  const identityImage = user?.image ?? (adminFallback ? adminProfile.image : undefined);
+  const identityRole =
+    user?.role ?? (adminFallback ? adminProfile.title || "admin" : "guest");
 
   // Where the profile logo points. The password-gated Admin Dashboard has no
   // user account, so its avatar must open the Admin profile settings
   // (/admin/profile) — without this it rendered as a dead, unclickable logo.
-  const profileLink = isAdmin
+  // Non-Academy shells own their profile path outright — it is never
+  // overridden by an Academy admin session.
+  const profileLink = adminFallback
     ? "/admin/profile"
-    : hasAccount
-      ? (profilePath ?? "/dashboard/profile")
-      : null;
+    : !academyAuth
+      ? (profilePath ?? null)
+      : hasAccount
+        ? (profilePath ?? "/dashboard/profile")
+        : null;
 
   const handleSignOut = async () => {
     await signOut();
@@ -198,7 +218,11 @@ export function AppShell({
               {identityRole}
             </p>
           </div>
-          {hasAccount && (
+          {/* Academy shells can sign the ACADEMY session out here. Non-Academy
+              shells never render this button — signing out must happen inside
+              the owning product (e.g. the Portfolio profile page) so a
+              Portfolio page can never terminate an Academy session. */}
+          {academyAuth && hasAccount && (
             <Button variant="ghost" size="icon" onClick={handleSignOut} title="Sign out">
               <LogOut className="size-4" />
             </Button>

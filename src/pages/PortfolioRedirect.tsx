@@ -32,9 +32,10 @@ export function Redirecting({ to }: { to: string }) {
 /**
  * Old Academy-admin portfolio routes → the Portfolio admin portal.
  * Portfolio management is NOT part of the Academy admin dashboard, so these
- * paths now send people to /adminbrand where the Portfolio credential gate
- * decides who gets in.
+ * paths now send people to /admin-brand where the Portfolio credential gate
+ * decides who gets in. The gate there checks ONLY the Portfolio admin
+ * credential — an Academy admin session grants nothing.
  */
 export function AdminPortalRedirect() {
-  return <Navigate to="/adminbrand" replace />;
+  return <Navigate to="/admin-brand" replace />;
 }

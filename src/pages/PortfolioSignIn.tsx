@@ -8,7 +8,7 @@ import { useEffect } from "react";
  * The password sign-in was removed: it opened the admin portal, which a
  * normal Portfolio user must never reach. This route now forwards visitors
  * to the Portfolio auth flow (email → OTP → dashboard). The admin portal
- * is reached only by typing /adminbrand and signing in with its credential.
+ * is reached only by typing /admin-brand and signing in with its credential.
  */
 export default function PortfolioSignIn() {
   const navigate = useNavigate();

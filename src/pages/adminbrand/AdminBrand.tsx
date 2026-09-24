@@ -69,17 +69,17 @@ import {
 } from "@/lib/portfolio-slides";
 
 /* ═══════════════════════════════════════════════════════════════════════════
-   /adminbrand — the ForgeX Network PORTFOLIO management portal.
+   /admin-brand — the ForgeX Network PORTFOLIO management portal.
 
    Completely separate from the Academy admin dashboard:
-     • its own route (/adminbrand)
+     • its own route (/admin-brand; /adminbrand redirects here)
      • its own credential + session (api.portfolioAdmin.*)
      • its own content store (portfolioContent)
      • its own SMTP configuration
 
-   Nothing on this page reads or writes Academy admin state, so an Academy
-   admin session grants no access here — and this session grants no access to
-   Academy.
+   The gate on this page checks ONLY the Portfolio admin credential
+   (api.portfolioAdmin.sessionValid) — an Academy admin session grants no
+   access here, and this session grants no access to Academy.
    ═══════════════════════════════════════════════════════════════════════════ */
 
 const TABS = [
@@ -260,7 +260,7 @@ function Portal({ token, onSignOut }: { token: string; onSignOut: () => void }) 
   };
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen overflow-x-clip bg-background">
       <header className="sticky top-0 z-40 border-b border-white/10 bg-[#0b0d08]/90 backdrop-blur-xl">
         <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-3 px-4 py-3 sm:px-6">
           <div className="flex min-w-0 items-center gap-3">
@@ -287,13 +287,19 @@ function Portal({ token, onSignOut }: { token: string; onSignOut: () => void }) 
           </div>
         </div>
 
-        <div className="no-scrollbar mx-auto flex max-w-7xl gap-1 overflow-x-auto px-4 pb-2 sm:px-6">
+        {/* Tab strip — mobile overflow rules:
+            • fits 100vw (w-full max-w-full, capped by the 7xl shell above)
+            • scrolls horizontally (overflow-x-auto) with hidden scrollbars
+              (.no-scrollbar) and no wrapping (whitespace-nowrap)
+            • children never shrink or collapse (shrink-0) — tabs keep their
+              intrinsic padding and simply scroll off-screen. */}
+        <div className="no-scrollbar mx-auto flex w-full max-w-7xl gap-1 overflow-x-auto whitespace-nowrap px-4 pb-2 sm:px-6">
           {TABS.map((t) => (
             <button
               key={t.id}
               onClick={() => setTab(t.id)}
               className={cn(
-                "inline-flex shrink-0 items-center gap-1.5 rounded-full px-3.5 py-2 text-xs font-semibold transition-colors",
+                "inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full px-3.5 py-2 text-xs font-semibold transition-colors",
                 tab === t.id
                   ? "bg-lime-400 text-black"
                   : "text-muted-foreground hover:bg-white/5 hover:text-foreground",
@@ -2513,7 +2519,7 @@ function AccessSection({ token }: { token: string }) {
       >
         <ul className="space-y-2 text-sm text-muted-foreground">
           {[
-            "Separate route — /adminbrand is the Portfolio portal only.",
+            "Separate route — /admin-brand is the Portfolio portal only.",
             "Separate credential, hashed with PBKDF2-SHA256 (never stored or shipped in plain text).",
             "Separate sessions — a Portfolio session can never open Academy dashboards.",
             "Separate content store — editing the Portfolio cannot overwrite Academy settings.",

@@ -226,6 +226,12 @@ export default function PortfolioShell() {
   return (
     <AppShell
       title="Portfolio"
+      /**
+       * This is a PORTFOLIO surface: the Academy auth session and the Academy
+       * admin session must have no effect here — no Academy identity in the
+       * header, no /admin/profile shortcut, no Academy sign-out button.
+       */
+      academyAuth={false}
       brand={
         <>
           {branding.wordmark}
