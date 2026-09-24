@@ -286,7 +286,12 @@ export const myPortfolio = query({
       .withIndex("by_portfolio", (q) => q.eq("portfolioId", portfolio._id))
       .collect();
     return {
-      portfolio,
+      // The creator account is the source of truth for the portrait. This
+      // also repairs portfolios created before account/portfolio sync existed.
+      portfolio: {
+        ...portfolio,
+        avatarUrl: user.avatarUrl ?? portfolio.avatarUrl,
+      },
       projects: projects
         .filter((p) => !p.removed)
         .sort((a, b) => a.order - b.order),
@@ -394,7 +399,15 @@ export const updatePortfolio = mutation({
     if (args.phone !== undefined) patch.phone = args.phone.slice(0, 40);
     if (args.availability !== undefined)
       patch.availability = args.availability.slice(0, 80);
-    if (args.avatarUrl !== undefined) patch.avatarUrl = args.avatarUrl;
+    if (args.avatarUrl !== undefined) {
+      patch.avatarUrl = args.avatarUrl;
+      // The portfolio editor and the creator profile are two views of the
+      // same portrait. Mirror editor changes into the account so the
+      // dashboard header never keeps an old image.
+      await ctx.db.patch(user._id, {
+        avatarUrl: args.avatarUrl || undefined,
+      });
+    }
     if (args.coverUrl !== undefined) patch.coverUrl = args.coverUrl;
     if (args.template !== undefined) patch.template = args.template;
     if (args.accent !== undefined) patch.accent = args.accent;
@@ -546,9 +559,16 @@ export const publicPortfolio = query({
       .withIndex("by_portfolio", (q) => q.eq("portfolioId", portfolio._id))
       .collect();
 
+    const creator = portfolio.creatorId
+      ? await ctx.db.get(portfolio.creatorId)
+      : null;
+    const publicPortfolio = creator?.avatarUrl
+      ? { ...portfolio, avatarUrl: creator.avatarUrl }
+      : portfolio;
+
     return {
       status: "ok",
-      portfolio,
+      portfolio: publicPortfolio,
       projects: projects
         .filter((p) => !p.removed)
         .sort((a, b) => a.order - b.order),

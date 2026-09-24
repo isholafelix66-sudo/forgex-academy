@@ -242,6 +242,9 @@ export default function PortfolioShell() {
       }
       brandAlt={branding.name}
       profilePath="/portfolio/dashboard/profile"
+      identityName={session?.name || session?.email || "Creator"}
+      identityImage={session?.avatarUrl}
+      identityRole={session?.title || "creator"}
       showRoleLink={false}
       sections={sections}
       mobilePrimaryItems={mobilePrimary}

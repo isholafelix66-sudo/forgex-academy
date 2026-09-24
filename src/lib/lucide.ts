@@ -69,6 +69,7 @@ export { default as CloudUpload } from "lucide-react/dist/esm/icons/cloud-upload
 export { default as Code2 } from "lucide-react/dist/esm/icons/code-2.js";
 export { default as Compass } from "lucide-react/dist/esm/icons/compass.js";
 export { default as Copy } from "lucide-react/dist/esm/icons/copy.js";
+export { default as Crop } from "lucide-react/dist/esm/icons/crop.js";
 export { default as CornerDownRight } from "lucide-react/dist/esm/icons/corner-down-right.js";
 export { default as Database } from "lucide-react/dist/esm/icons/database.js";
 export { default as Download } from "lucide-react/dist/esm/icons/download.js";

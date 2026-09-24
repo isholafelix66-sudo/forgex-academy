@@ -128,7 +128,8 @@ export default function CreatorProfile() {
         <div className="mt-5">
           <ImageUploader
             label="Upload a photo from this device"
-            hint="JPG, PNG or WEBP — up to 15 MB. Camera and gallery both work on mobile."
+            hint="JPG, PNG or WEBP — up to 15 MB. Crop to a square before uploading."
+            crop
             value={avatarUrl || null}
             getUploadUrl={() =>
               creatorUploadUrl({ token: userToken as string })

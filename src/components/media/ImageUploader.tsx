@@ -3,18 +3,21 @@ import { useMutation, useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import {
   Camera,
+  Crop,
   GalleryHorizontalEnd,
   ImagePlus,
   Loader2,
   RefreshCw,
   Trash2,
   UploadCloud,
+  X,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { getAdminToken } from "@/lib/admin-session";
 import { uploadFileToConvex } from "@/lib/convex-upload";
 import { friendlyError } from "@/lib/errors";
+import { getSquareCropSource } from "@/lib/image-crop";
 
 export type UploadedImage = {
   publicId: string;
@@ -44,6 +47,164 @@ type CloudinaryResponse = {
   format?: string;
   bytes?: number;
 };
+
+function ImageCropDialog({
+  file,
+  onCancel,
+  onApply,
+}: {
+  file: File;
+  onCancel: () => void;
+  onApply: (file: File) => void;
+}) {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const [zoom, setZoom] = useState(1);
+  const [offsetX, setOffsetX] = useState(0);
+  const [offsetY, setOffsetY] = useState(0);
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    const image = new Image();
+    const objectUrl = URL.createObjectURL(file);
+    image.onload = () => {
+      if (!canvas) return;
+      const context = canvas.getContext("2d");
+      if (!context) return;
+      const crop = getSquareCropSource(
+        image.naturalWidth,
+        image.naturalHeight,
+        zoom,
+        offsetX,
+        offsetY,
+      );
+      context.clearRect(0, 0, canvas.width, canvas.height);
+      context.drawImage(
+        image,
+        crop.sx,
+        crop.sy,
+        crop.sw,
+        crop.sh,
+        0,
+        0,
+        canvas.width,
+        canvas.height,
+      );
+    };
+    image.src = objectUrl;
+    return () => URL.revokeObjectURL(objectUrl);
+  }, [file, offsetX, offsetY, zoom]);
+
+  const apply = async () => {
+    const canvas = canvasRef.current;
+    if (!canvas || saving) return;
+    setSaving(true);
+    try {
+      const blob = await new Promise<Blob | null>((resolve) =>
+        canvas.toBlob(resolve, "image/jpeg", 0.92),
+      );
+      if (!blob) throw new Error("The cropped image could not be created.");
+      const name = file.name.replace(/\.[^.]+$/, "") || "profile";
+      onApply(new File([blob], `${name}-cropped.jpg`, { type: "image/jpeg" }));
+    } catch {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div
+      className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="image-crop-title"
+    >
+      <div className="w-full max-w-md rounded-3xl border border-white/10 bg-card p-5 shadow-2xl sm:p-6">
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <h2 id="image-crop-title" className="font-display text-lg font-bold">
+              Crop your profile photo
+            </h2>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Choose the part of the image shown in your avatar frame.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={onCancel}
+            className="rounded-lg p-1.5 text-muted-foreground hover:bg-white/8 hover:text-foreground"
+            aria-label="Cancel crop"
+          >
+            <X className="size-4" />
+          </button>
+        </div>
+
+        <div className="mt-5 flex justify-center rounded-2xl bg-black/30 p-3">
+          <canvas
+            ref={canvasRef}
+            width={320}
+            height={320}
+            className="aspect-square size-full max-w-72 rounded-full ring-2 ring-lime-400/70"
+            aria-label="Square profile photo preview"
+          />
+        </div>
+
+        <div className="mt-5 space-y-3">
+          <label className="block text-xs text-muted-foreground">
+            <span className="mb-1.5 flex justify-between"><span>Zoom</span><span>{Math.round(zoom * 100)}%</span></span>
+            <input
+              className="w-full accent-lime-400"
+              type="range"
+              min="1"
+              max="4"
+              step="0.01"
+              value={zoom}
+              onChange={(e) => setZoom(Number(e.target.value))}
+            />
+          </label>
+          <label className="block text-xs text-muted-foreground">
+            <span className="mb-1.5 block">Horizontal position</span>
+            <input
+              className="w-full accent-lime-400"
+              type="range"
+              min="-1"
+              max="1"
+              step="0.01"
+              value={offsetX}
+              onChange={(e) => setOffsetX(Number(e.target.value))}
+            />
+          </label>
+          <label className="block text-xs text-muted-foreground">
+            <span className="mb-1.5 block">Vertical position</span>
+            <input
+              className="w-full accent-lime-400"
+              type="range"
+              min="-1"
+              max="1"
+              step="0.01"
+              value={offsetY}
+              onChange={(e) => setOffsetY(Number(e.target.value))}
+            />
+          </label>
+        </div>
+
+        <div className="mt-6 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+          <Button type="button" variant="outline" onClick={onCancel} disabled={saving}>
+            Cancel
+          </Button>
+          <Button
+            type="button"
+            className="gap-2 bg-lime-400 font-semibold text-black hover:bg-lime-300"
+            onClick={() => void apply()}
+            disabled={saving}
+          >
+            {saving ? <Loader2 className="size-4 animate-spin" /> : <Crop className="size-4" />}
+            Use this crop
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 /**
  * Reusable, device-first image uploader — works on Android, iPhone, tablet and
@@ -76,6 +237,7 @@ export function ImageUploader({
   accept,
   acceptTypes,
   allowVideo = false,
+  crop = false,
   mux,
 }: {
   value?: string | null;
@@ -108,6 +270,8 @@ export function ImageUploader({
   acceptTypes?: string[];
   /** Accept videos too (camera roll, screen recordings) — Mux first. */
   allowVideo?: boolean;
+  /** Let the creator adjust a square crop before the image is uploaded. */
+  crop?: boolean;
   /** Optional Mux direct upload (adaptive streaming). */
   mux?: {
     createUpload: () => Promise<{ uploadId: string; uploadUrl: string }>;
@@ -129,6 +293,7 @@ export function ImageUploader({
   const [progress, setProgress] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [dragging, setDragging] = useState(false);
+  const [cropSource, setCropSource] = useState<File | null>(null);
   const token = getAdminToken();
 
   // Prevent the browser from navigating away when a file is dropped elsewhere.
@@ -367,7 +532,7 @@ export function ImageUploader({
 
   const pick = (ref: React.RefObject<HTMLInputElement | null>) => (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (file) void upload(file);
+    if (file) prepareFile(file);
     e.target.value = "";
     if (ref.current) ref.current.value = "";
   };
@@ -376,12 +541,38 @@ export function ImageUploader({
     e.preventDefault();
     setDragging(false);
     const file = e.dataTransfer.files?.[0];
-    if (file) void upload(file);
+    if (file) prepareFile(file);
   };
+
+  const prepareFile = (file: File) => {
+    const vErr = validate(file);
+    if (vErr) {
+      setError(vErr);
+      return;
+    }
+    if (crop && !isVideoFile(file)) {
+      setCropSource(file);
+      return;
+    }
+    void upload(file);
+  };
+
+  if (cropSource) {
+    return (
+      <ImageCropDialog
+        file={cropSource}
+        onCancel={() => setCropSource(null)}
+        onApply={(file) => {
+          setCropSource(null);
+          void upload(file);
+        }}
+      />
+    );
+  }
 
   if (config === undefined) return null;
 
-  if (!config.configured && !useStorageFallback) {
+  if (!config.configured && !useStorageFallback && !getUploadUrl) {
     return (
       <div className={cn("rounded-xl border border-dashed border-amber-400/30 bg-amber-400/5 p-4 text-xs text-amber-200/90", className)}>
         <p className="font-semibold">Cloudinary is not configured yet.</p>

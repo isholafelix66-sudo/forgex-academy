@@ -432,8 +432,24 @@ export const updateProfile = mutation({
       next.title = patch.title.trim().slice(0, 120) || undefined;
     if (patch.bio !== undefined)
       next.bio = patch.bio.trim().slice(0, 600) || undefined;
-    if (patch.avatarUrl !== undefined)
+    if (patch.avatarUrl !== undefined) {
       next.avatarUrl = patch.avatarUrl || undefined;
+
+      // The creator account and the public portfolio are two records, but the
+      // profile photo is one identity. Keep the public frame in sync whenever
+      // a creator changes their account photo, otherwise the dashboard and the
+      // public portfolio can show different images.
+      const portfolio = await ctx.db
+        .query("portfolios")
+        .withIndex("by_creator", (q) => q.eq("creatorId", user._id))
+        .first();
+      if (portfolio) {
+        await ctx.db.patch(portfolio._id, {
+          avatarUrl: patch.avatarUrl || undefined,
+          updatedAt: Date.now(),
+        });
+      }
+    }
     await ctx.db.patch(user._id, next);
     return true;
   },

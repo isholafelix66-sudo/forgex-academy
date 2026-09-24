@@ -36,6 +36,9 @@ export function AppShell({
   showRoleLink,
   mobilePrimaryItems,
   mobileMoreSections,
+  identityName: identityNameOverride,
+  identityImage: identityImageOverride,
+  identityRole: identityRoleOverride,
   /**
    * ACADEMY-ONLY surfaces set nothing (defaults to true). Non-Academy shells
    * (the Portfolio creator dashboard) pass false so the Academy auth session
@@ -60,6 +63,10 @@ export function AppShell({
   showRoleLink?: boolean;
   mobilePrimaryItems?: MobileNavItem[];
   mobileMoreSections?: MobileNavSection[];
+  /** Product-owned identity for shells that are not backed by Academy auth. */
+  identityName?: string;
+  identityImage?: string | null;
+  identityRole?: string;
   /** Academy auth scope — see the doc comment on the prop above. */
   academyAuth?: boolean;
 }) {
@@ -82,10 +89,13 @@ export function AppShell({
   };
   const hasAccount = !!user;
   const identityName =
-    user?.name ?? (adminFallback ? adminProfile.name || "Administrator" : "Guest");
-  const identityImage = user?.image ?? (adminFallback ? adminProfile.image : undefined);
+    identityNameOverride ?? user?.name ?? (adminFallback ? adminProfile.name || "Administrator" : "Guest");
+  const identityImage =
+    identityImageOverride !== undefined
+      ? identityImageOverride
+      : (user?.image ?? (adminFallback ? adminProfile.image : undefined));
   const identityRole =
-    user?.role ?? (adminFallback ? adminProfile.title || "admin" : "guest");
+    identityRoleOverride ?? user?.role ?? (adminFallback ? adminProfile.title || "admin" : "guest");
 
   // Where the profile logo points. The password-gated Admin Dashboard has no
   // user account, so its avatar must open the Admin profile settings
