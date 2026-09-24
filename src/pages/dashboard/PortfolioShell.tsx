@@ -4,6 +4,7 @@ import { api } from "@/convex/_generated/api";
 import {
   FolderKanban,
   LayoutDashboard,
+  LifeBuoy,
   Loader2,
   MessageSquare,
   PenSquare,
@@ -136,6 +137,11 @@ export default function PortfolioShell() {
           label: "Settings",
           icon: <Settings className="size-4" />,
         },
+        {
+          to: "/help",
+          label: "Get help",
+          icon: <LifeBuoy className="size-4" />,
+        },
       ],
     },
   ];
@@ -182,6 +188,11 @@ export default function PortfolioShell() {
           to: "/portfolio/dashboard/settings",
           label: "Settings",
           icon: <Settings className="size-4" />,
+        },
+        {
+          to: "/help",
+          label: "Get help / report an issue",
+          icon: <LifeBuoy className="size-4" />,
         },
       ],
     },

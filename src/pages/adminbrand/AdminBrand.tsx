@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router";
 import { useAction, useMutation, useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
@@ -14,6 +14,7 @@ import {
   ImageIcon,
   KeyRound,
   Layers,
+  LifeBuoy,
   Loader2,
   Lock,
   LogOut,
@@ -88,6 +89,7 @@ const TABS = [
   { id: "branding", label: "Branding", icon: Palette },
   { id: "home", label: "Homepage", icon: ImageIcon },
   { id: "notifications", label: "Notifications", icon: Bell },
+  { id: "help", label: "Help desk", icon: LifeBuoy },
   { id: "contact", label: "Contact & socials", icon: Mail },
   { id: "email", label: "Email", icon: Send },
   { id: "seo", label: "SEO & sharing", icon: Compass },
@@ -311,6 +313,7 @@ function Portal({ token, onSignOut }: { token: string; onSignOut: () => void }) 
         {tab === "branding" && <BrandingSection token={token} />}
         {tab === "home" && <HomeSlidesSection token={token} />}
         {tab === "notifications" && <NotificationsSection token={token} />}
+        {tab === "help" && <HelpDeskSection token={token} />}
         {tab === "contact" && <ContactSection token={token} />}
         {tab === "email" && <EmailSection token={token} />}
         {tab === "seo" && <SeoSection token={token} />}
@@ -957,6 +960,24 @@ function NotificationsSection({ token }: { token: string }) {
   const [tone, setTone] = useState<NotificationRow["tone"]>("info");
   const [busy, setBusy] = useState(false);
   const [rowBusy, setRowBusy] = useState<string | null>(null);
+  const ensureDefaults = useMutation(api.portfolioNotifications.ensureDefaults);
+  const seeded = useRef(false);
+
+  // First visit with an empty list: publish the two coming-soon announcements
+  // (ForgeX Academy and the Opportunity Hub). Idempotent and fully editable.
+  useEffect(() => {
+    if (seeded.current || rows === undefined || rows.length > 0) return;
+    seeded.current = true;
+    void ensureDefaults({ token })
+      .then((res) => {
+        if (res.created > 0) {
+          toast.success("Added coming-soon announcements for Academy and the Opportunity Hub.");
+        }
+      })
+      .catch(() => {
+        /* the admin can add them manually */
+      });
+  }, [rows, ensureDefaults, token]);
 
   const reset = () => {
     setEditing(null);
@@ -1034,11 +1055,32 @@ function NotificationsSection({ token }: { token: string }) {
         description="Shown in the Portfolio website header — the bell panel and the announcement bar — to every visitor, signed in or not."
         icon={Bell}
         actions={
-          editing ? (
-            <Button variant="outline" className="gap-2 border-white/15" onClick={reset}>
-              <Plus className="size-4" /> New instead
+          <div className="flex flex-wrap gap-2">
+            <Button
+              variant="outline"
+              className="gap-2 border-white/15"
+              onClick={() =>
+                void ensureDefaults({ token })
+                  .then((res) =>
+                    toast.success(
+                      res.created > 0
+                        ? `Added ${res.created} coming-soon announcement(s).`
+                        : "Coming-soon announcements are already there.",
+                    ),
+                  )
+                  .catch((err) =>
+                    toast.error(friendlyError(err, "Could not add the announcements.")),
+                  )
+              }
+            >
+              <Sparkle className="size-4" /> Add coming soon
             </Button>
-          ) : undefined
+            {editing ? (
+              <Button variant="outline" className="gap-2 border-white/15" onClick={reset}>
+                <Plus className="size-4" /> New instead
+              </Button>
+            ) : null}
+          </div>
         }
       >
         <div className="grid gap-4 sm:grid-cols-2">
@@ -1225,6 +1267,327 @@ function NotificationsSection({ token }: { token: string }) {
           </div>
         )}
       </Panel>
+    </div>
+  );
+}
+
+/* ── Help desk (get help / report an issue) ───────────────────────────── */
+
+type HelpReply = {
+  body: string;
+  adminName: string;
+  createdAt: number;
+  emailed: boolean;
+};
+
+type HelpRow = {
+  _id: string;
+  name: string;
+  email: string;
+  topic: string;
+  topicLabel: string;
+  subject: string;
+  message: string;
+  pageUrl: string | null;
+  status: "open" | "answered" | "resolved";
+  replies: HelpReply[];
+  replyCount: number;
+  createdAt: number;
+  updatedAt: number;
+  fromCreator: boolean;
+};
+
+const HELP_STATUS_STYLES: Record<HelpRow["status"], string> = {
+  open: "border-amber-400/35 bg-amber-400/10 text-amber-200",
+  answered: "border-sky-400/35 bg-sky-400/10 text-sky-200",
+  resolved: "border-lime-400/35 bg-lime-400/10 text-lime-300",
+};
+
+/**
+ * Every request sent from the website's Get help page (or the footer link)
+ * lands here: read it, reply by email, and close it out.
+ */
+function HelpDeskSection({ token }: { token: string }) {
+  const [status, setStatus] = useState<"all" | HelpRow["status"]>("open");
+  const stats = useQuery(api.portfolioHelp.stats, { token });
+  const rows = useQuery(api.portfolioHelp.list, { token, status });
+  const reply = useMutation(api.portfolioHelp.reply);
+  const setRequestStatus = useMutation(api.portfolioHelp.setStatus);
+  const remove = useMutation(api.portfolioHelp.remove);
+
+  const [activeId, setActiveId] = useState<string | null>(null);
+  const [draft, setDraft] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  const list = (rows ?? []) as HelpRow[];
+  const active = list.find((r) => r._id === activeId) ?? list[0] ?? null;
+
+  const send = async (resolveAfter: boolean) => {
+    if (!active || draft.trim().length < 2) return;
+    setBusy(true);
+    try {
+      await reply({ token, id: active._id as never, body: draft, resolve: resolveAfter });
+      toast.success(resolveAfter ? "Replied and resolved." : "Reply sent by email.");
+      setDraft("");
+    } catch (err) {
+      toast.error(friendlyError(err, "Could not send that reply."));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const move = async (row: HelpRow, next: HelpRow["status"]) => {
+    try {
+      await setRequestStatus({ token, id: row._id as never, status: next });
+      toast.success(`Marked ${next}.`);
+    } catch (err) {
+      toast.error(friendlyError(err, "Could not update that request."));
+    }
+  };
+
+  const destroy = async (row: HelpRow) => {
+    try {
+      await remove({ token, id: row._id as never });
+      toast.success("Request deleted.");
+      setActiveId(null);
+    } catch (err) {
+      toast.error(friendlyError(err, "Could not delete that request."));
+    }
+  };
+
+  return (
+    <div className="space-y-6">
+      <Panel
+        title="Help desk"
+        description="Requests sent from the website's Get help page. Reply to answer the sender by email, then resolve it. Visitors never need an account to write in."
+        icon={LifeBuoy}
+        actions={
+          <div className="flex flex-wrap rounded-full border border-white/10 bg-black/20 p-0.5">
+            {(["open", "answered", "resolved", "all"] as const).map((s) => (
+              <button
+                key={s}
+                onClick={() => setStatus(s)}
+                className={cn(
+                  "rounded-full px-3 py-1.5 text-[11px] font-semibold capitalize transition-colors",
+                  status === s
+                    ? "bg-lime-400 text-black"
+                    : "text-muted-foreground hover:text-foreground",
+                )}
+              >
+                {s}
+                {s === "open" && stats?.open ? ` (${stats.open})` : ""}
+              </button>
+            ))}
+          </div>
+        }
+      >
+        <div className="grid gap-3 sm:grid-cols-3">
+          {[
+            { label: "Open", value: stats?.open ?? 0, tone: "text-amber-300" },
+            { label: "Answered", value: stats?.answered ?? 0, tone: "text-sky-300" },
+            { label: "Resolved", value: stats?.resolved ?? 0, tone: "text-lime-300" },
+          ].map((card) => (
+            <div key={card.label} className="rounded-2xl border border-white/10 bg-black/20 p-4">
+              <p className="text-[11px] uppercase tracking-wider text-muted-foreground">
+                {card.label}
+              </p>
+              <p className={cn("font-display mt-1 text-2xl font-bold", card.tone)}>
+                {card.value}
+              </p>
+            </div>
+          ))}
+        </div>
+        {stats?.oldestOpen ? (
+          <p className="mt-3 text-[11px] text-muted-foreground">
+            Oldest open request: {new Date(stats.oldestOpen).toLocaleString()}
+          </p>
+        ) : null}
+      </Panel>
+
+      <div className="grid gap-5 lg:grid-cols-[360px_1fr]">
+        <div className="rounded-2xl border border-white/10 bg-card">
+          <div className="border-b border-white/10 px-4 py-3">
+            <p className="font-display text-sm font-semibold">
+              {status === "all" ? "All requests" : `${status[0].toUpperCase()}${status.slice(1)} requests`}
+            </p>
+          </div>
+          <div className="max-h-[60dvh] overflow-y-auto p-2">
+            {rows === undefined ? (
+              <div className="space-y-2 p-2">
+                {[0, 1, 2].map((i) => (
+                  <div key={i} className="h-20 animate-pulse rounded-xl bg-white/5" />
+                ))}
+              </div>
+            ) : list.length === 0 ? (
+              <div className="px-4 py-10 text-center">
+                <LifeBuoy className="mx-auto size-6 text-muted-foreground/40" />
+                <p className="mt-3 text-sm font-medium">Nothing here</p>
+                <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+                  Requests from the website's Get help page appear here.
+                </p>
+              </div>
+            ) : (
+              list.map((row) => (
+                <button
+                  key={row._id}
+                  onClick={() => setActiveId(row._id)}
+                  className={cn(
+                    "w-full rounded-2xl px-3 py-3 text-left transition-colors",
+                    active?._id === row._id ? "bg-white/8" : "hover:bg-white/5",
+                  )}
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <p className="min-w-0 truncate text-sm font-semibold">{row.subject}</p>
+                    <span
+                      className={cn(
+                        "shrink-0 rounded-full border px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider",
+                        HELP_STATUS_STYLES[row.status],
+                      )}
+                    >
+                      {row.status}
+                    </span>
+                  </div>
+                  <p className="mt-1 truncate text-xs text-muted-foreground">
+                    {row.name} · {row.email}
+                  </p>
+                  <p className="mt-1 flex flex-wrap items-center gap-2 text-[10px] text-muted-foreground">
+                    <span className="rounded-full border border-white/10 px-2 py-0.5">
+                      {row.topicLabel}
+                    </span>
+                    {row.fromCreator && (
+                      <span className="rounded-full border border-lime-400/30 px-2 py-0.5 text-lime-300">
+                        Creator
+                      </span>
+                    )}
+                    <span>{new Date(row.createdAt).toLocaleDateString()}</span>
+                  </p>
+                </button>
+              ))
+            )}
+          </div>
+        </div>
+
+        {active ? (
+          <div className="rounded-2xl border border-white/10 bg-card p-4 sm:p-5">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div className="min-w-0">
+                <h3 className="font-display text-base font-bold">{active.subject}</h3>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  {active.name} ·{" "}
+                  <a href={`mailto:${active.email}`} className="text-lime-300 hover:underline">
+                    {active.email}
+                  </a>
+                  {" · "}
+                  {new Date(active.createdAt).toLocaleString()}
+                </p>
+                <div className="mt-2 flex flex-wrap items-center gap-2 text-[10px]">
+                  <span className="rounded-full border border-white/10 px-2 py-0.5 text-muted-foreground">
+                    {active.topicLabel}
+                  </span>
+                  <span
+                    className={cn(
+                      "rounded-full border px-2 py-0.5 font-bold uppercase tracking-wider",
+                      HELP_STATUS_STYLES[active.status],
+                    )}
+                  >
+                    {active.status}
+                  </span>
+                  {active.pageUrl && (
+                    <span className="truncate text-muted-foreground">from {active.pageUrl}</span>
+                  )}
+                </div>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {active.status !== "resolved" ? (
+                  <Button
+                    size="sm"
+                    className="gap-1.5 bg-lime-400 font-semibold text-black hover:bg-lime-300"
+                    onClick={() => void move(active, "resolved")}
+                  >
+                    <Check className="size-3.5" /> Resolve
+                  </Button>
+                ) : (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="gap-1.5 border-white/15"
+                    onClick={() => void move(active, "open")}
+                  >
+                    Reopen
+                  </Button>
+                )}
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="gap-1.5 border-rose-400/30 text-rose-300 hover:bg-rose-400/10"
+                  onClick={() => void destroy(active)}
+                >
+                  <Trash2 className="size-3.5" /> Delete
+                </Button>
+              </div>
+            </div>
+
+            <div className="mt-4 whitespace-pre-line rounded-2xl border border-white/10 bg-black/20 p-4 text-sm leading-relaxed">
+              {active.message}
+            </div>
+
+            {active.replies.length > 0 && (
+              <div className="mt-4 space-y-2">
+                <p className="text-[11px] uppercase tracking-wider text-muted-foreground">
+                  Conversation
+                </p>
+                {active.replies.map((r, i) => (
+                  <div
+                    key={i}
+                    className="rounded-2xl border border-sky-400/20 bg-sky-400/5 p-3.5"
+                  >
+                    <p className="text-[11px] text-muted-foreground">
+                      {r.adminName} · {new Date(r.createdAt).toLocaleString()}
+                      {r.emailed ? " · emailed" : ""}
+                    </p>
+                    <p className="mt-1.5 whitespace-pre-line text-sm leading-relaxed">
+                      {r.body}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            <div className="mt-4">
+              <Label className="text-xs">Reply by email</Label>
+              <Textarea
+                value={draft}
+                onChange={(e) => setDraft(e.target.value)}
+                rows={4}
+                placeholder={`Hi ${active.name.split(" ")[0]}, thanks for flagging this — here's what's happening…`}
+                className="mt-1.5 border-white/10 bg-black/20"
+              />
+              <div className="mt-3 flex flex-wrap gap-2">
+                <Button
+                  onClick={() => void send(false)}
+                  disabled={busy || draft.trim().length < 2}
+                  className="gap-2 bg-lime-400 font-semibold text-black hover:bg-lime-300"
+                >
+                  {busy ? <Loader2 className="size-4 animate-spin" /> : <Send className="size-4" />}
+                  Send reply
+                </Button>
+                <Button
+                  variant="outline"
+                  className="gap-2 border-white/15"
+                  disabled={busy || draft.trim().length < 2}
+                  onClick={() => void send(true)}
+                >
+                  <Check className="size-4" /> Send & resolve
+                </Button>
+              </div>
+              <p className="mt-2 text-[11px] text-muted-foreground">
+                Replies go out through the Portfolio mail service — if email is
+                paused they queue and send when you resume.
+              </p>
+            </div>
+          </div>
+        ) : null}
+      </div>
     </div>
   );
 }

@@ -52,6 +52,7 @@ import type * as notifications from "../notifications.js";
 import type * as portfolioAdmin from "../portfolioAdmin.js";
 import type * as portfolioEmail from "../portfolioEmail.js";
 import type * as portfolioEmailLog from "../portfolioEmailLog.js";
+import type * as portfolioHelp from "../portfolioHelp.js";
 import type * as portfolioMessages from "../portfolioMessages.js";
 import type * as portfolioNotifications from "../portfolioNotifications.js";
 import type * as portfolioUploads from "../portfolioUploads.js";
@@ -132,6 +133,7 @@ declare const fullApi: ApiFromModules<{
   portfolioAdmin: typeof portfolioAdmin;
   portfolioEmail: typeof portfolioEmail;
   portfolioEmailLog: typeof portfolioEmailLog;
+  portfolioHelp: typeof portfolioHelp;
   portfolioMessages: typeof portfolioMessages;
   portfolioNotifications: typeof portfolioNotifications;
   portfolioUploads: typeof portfolioUploads;

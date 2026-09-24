@@ -282,6 +282,7 @@ const TeamSettings = L(() => import("./pages/team/TeamSettings.tsx"));
 // Admin dashboard
 // ---------------------------------------------------------------------------
 const AdminBrand = L(() => import("./pages/adminbrand/AdminBrand.tsx"));
+const Help = L(() => import("./pages/Help.tsx"));
 const PortfolioSignIn = L(() => import("./pages/PortfolioSignIn.tsx"));
 const PortfolioAuth = L(() => import("./pages/PortfolioAuth.tsx"));
 const PortfolioRedirect = L(
@@ -1183,6 +1184,8 @@ createRoot(document.getElementById("root")!).render(
               {/* ── PORTFOLIO CREATOR system — its own auth, dashboard and
                   routes. Signing in here NEVER reaches an Academy dashboard
                   or the /adminbrand admin portal. ── */}
+              {/* Portfolio help / issue reporting — open to everyone. */}
+              <Route path="/help" element={<Help />} />
               <Route path="/portfolio/auth" element={<PortfolioAuth />} />
 
               {/* Legacy password screen redirects to the creator auth flow. */}

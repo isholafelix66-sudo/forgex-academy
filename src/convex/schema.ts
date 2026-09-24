@@ -638,6 +638,50 @@ const portfolioMessagesTable = defineTable({
   .index("by_thread", ["threadId", "createdAt"])
   .index("by_thread_unread", ["threadId", "from", "readAt"]);
 
+/**
+ * Portfolio help requests — the "Get help / report an issue" channel.
+ *
+ * Anyone (visitor, creator, or admin) can send one without an account. The
+ * Portfolio admin portal has a dedicated Help desk to read, reply to and
+ * resolve them; replies are queued through the Portfolio mail service.
+ */
+const portfolioHelpRequestsTable = defineTable({
+  name: v.string(),
+  email: v.string(),
+  topic: v.union(
+    v.literal("bug"),
+    v.literal("account"),
+    v.literal("portfolio"),
+    v.literal("billing"),
+    v.literal("other"),
+  ),
+  subject: v.string(),
+  message: v.string(),
+  /** Where they were when they hit the problem (path + optional email). */
+  pageUrl: v.optional(v.string()),
+  /** Signed-in creator, when they were logged in (guests have no id). */
+  creatorId: v.optional(v.id("portfolioUsers")),
+  status: v.union(
+    v.literal("open"),
+    v.literal("answered"),
+    v.literal("resolved"),
+  ),
+  /** Threaded staff replies (newest last) — keeps the whole history. */
+  replies: v.array(
+    v.object({
+      body: v.string(),
+      adminName: v.string(),
+      createdAt: v.number(),
+      emailed: v.boolean(),
+    }),
+  ),
+  createdAt: v.number(),
+  updatedAt: v.number(),
+})
+  .index("by_createdAt", ["createdAt"])
+  .index("by_status", ["status", "createdAt"])
+  .index("by_creator", ["creatorId", "createdAt"]);
+
 /** Reports raised against a public portfolio. */
 const portfolioReportsTable = defineTable({
   portfolioId: v.id("portfolios"),
@@ -674,6 +718,7 @@ const schema = defineSchema(
     portfolioNotifications: portfolioNotificationsTable,
     portfolioThreads: portfolioThreadsTable,
     portfolioMessages: portfolioMessagesTable,
+    portfolioHelpRequests: portfolioHelpRequestsTable,
     emailPause: emailPauseTable,
     productWaitlist: productWaitlistTable,
     portfolioReports: portfolioReportsTable,

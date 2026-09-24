@@ -7,6 +7,7 @@ import {
   Home,
   InfoIcon,
   LayoutDashboard,
+  LifeBuoy,
   LogOut,
   Mail,
   PenSquare,
@@ -43,6 +44,7 @@ const PRIMARY_NAV: NavItemDef[] = [
 const MORE_ITEMS: NavItemDef[] = [
   { to: "/about", label: "About", icon: InfoIcon },
   { to: "/contact", label: "Contact", icon: Mail },
+  { to: "/help", label: "Get help", icon: LifeBuoy },
 ];
 
 const scrollTop = scrollToTopInstant;

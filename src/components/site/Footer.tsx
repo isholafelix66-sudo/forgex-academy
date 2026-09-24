@@ -1,7 +1,7 @@
 import { Link } from "react-router";
 import { useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
-import { Mail, MapPin, MessageSquare, Phone } from "lucide-react";
+import { LifeBuoy, Mail, MapPin, MessageSquare, Phone } from "lucide-react";
 import logo from "@/assets/logo.svg";
 import { toExternalHref } from "@/lib/url";
 import { BrandMark } from "./BrandMark";
@@ -87,6 +87,7 @@ export function Footer() {
             {[
               { to: "/about", label: "About" },
               { to: "/contact", label: "Contact" },
+              { to: "/help", label: "Get help" },
             ].map((l) => (
               <Link
                 key={l.to}
@@ -107,6 +108,13 @@ export function Footer() {
             >
               <MessageSquare className="size-3.5 text-lime-400" />
               Get in touch
+            </Link>
+            <Link
+              to="/help"
+              className="inline-flex items-center gap-1.5 rounded-lg border border-white/10 bg-white/5 px-3 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:border-lime-400/40 hover:text-lime-300"
+            >
+              <LifeBuoy className="size-3.5 text-lime-400" />
+              Get help
             </Link>
             {/* Social icons managed in the admin portal — same list as the
                 desktop "Follow us" section, opened in a new tab. */}
@@ -152,6 +160,11 @@ export function Footer() {
               <li><Link to="/explore" className="transition-colors hover:text-lime-300">Explore portfolios</Link></li>
               <li><Link to="/about" className="transition-colors hover:text-lime-300">About</Link></li>
               <li><Link to="/contact" className="transition-colors hover:text-lime-300">Contact</Link></li>
+              <li>
+                <Link to="/help" className="transition-colors hover:text-lime-300">
+                  Get help / report an issue
+                </Link>
+              </li>
             </ul>
           </div>
 

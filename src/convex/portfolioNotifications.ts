@@ -108,6 +108,56 @@ export const list = query({
   },
 });
 
+/**
+ * Coming-soon announcements for the rest of the ForgeX Network.
+ *
+ * Idempotent: it only inserts an announcement that doesn't exist yet (matched
+ * by title), so clicking it twice — or opening the Notifications tab again —
+ * never creates duplicates. Editing, unpublishing or deleting them afterwards
+ * is entirely up to the admin.
+ */
+const DEFAULT_ANNOUNCEMENTS = [
+  {
+    title: "ForgeX Academy — coming soon",
+    body: "Structured roadmaps, lessons, projects and certificates are on the way. Get notified the moment the Academy opens.",
+    link: "/academy",
+    linkLabel: "Get notified",
+    tone: "info" as const,
+  },
+  {
+    title: "ForgeX Opportunity Hub — coming soon",
+    body: "Internships, jobs and scholarships that turn skills into opportunity. Be first in line.",
+    link: "/opportunity-hub",
+    linkLabel: "Join the waitlist",
+    tone: "success" as const,
+  },
+];
+
+export const ensureDefaults = mutation({
+  args: { token: v.string() },
+  handler: async (ctx, { token }) => {
+    await requirePortfolioAdminSession(ctx, token);
+    const existing = await ctx.db
+      .query("portfolioNotifications")
+      .withIndex("by_createdAt")
+      .take(200);
+    const titles = new Set(existing.map((r) => r.title));
+    let created = 0;
+    for (const seed of DEFAULT_ANNOUNCEMENTS) {
+      if (titles.has(seed.title)) continue;
+      const now = Date.now();
+      await ctx.db.insert("portfolioNotifications", {
+        ...seed,
+        published: true,
+        createdAt: now,
+        updatedAt: now,
+      });
+      created += 1;
+    }
+    return { created };
+  },
+});
+
 export const create = mutation({
   args: {
     token: v.string(),
