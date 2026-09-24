@@ -73,13 +73,13 @@ export default function Settings() {
           </p>
           <div className="mt-4 flex flex-wrap gap-3">
             {user?.role === "tutor" && user.verified ? (
-              <Link to="/tutor">
+              <Link to="/academy/tutor">
                 <Button className="gap-2 bg-lime-400 font-semibold text-black hover:bg-lime-300">
                   <GraduationCap className="size-4" /> Open tutor dashboard
                 </Button>
               </Link>
             ) : (
-              <Link to="/become-tutor">
+              <Link to="/academy/become-tutor">
                 <Button variant="outline" className="gap-2 border-lime-400/30 text-lime-300 hover:bg-lime-400/10">
                   <GraduationCap className="size-4" /> Apply to teach
                 </Button>

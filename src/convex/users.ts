@@ -402,7 +402,7 @@ export const saveTutorApplication = mutation({
         title: "Application submitted",
         body: "Your tutor application is in for review. Expect a decision within 24 hours or less — we'll email you as soon as an admin decides.",
         type: "tutor",
-        link: "/become-tutor",
+        link: "/academy/become-tutor",
       });
       // Staff alert: a new tutor application is awaiting review.
       await ctx.scheduler.runAfter(0, internal.emailTriggers.notifyStaffNewTutorApplication, {
@@ -432,13 +432,13 @@ export const saveTutorApplication = mutation({
                   <p style="margin:0 0 10px;font-size:14px;line-height:1.6;color:#d6d3d1">Thanks for applying to teach on ForgeX Academy. Your application is now under review.</p>
                   <p style="margin:0 0 10px;font-size:14px;line-height:1.6;color:#d6d3d1">Most decisions are made within <b>24 hours or less</b> — we'll email you the moment an admin approves, verifies or needs more from you.</p>
                   <div style="margin-top:24px">
-                    <a href="${site}/become-tutor" style="display:inline-block;background:#a3e635;color:#0d0f0c;text-decoration:none;font-weight:700;font-size:14px;padding:12px 22px;border-radius:10px">Check application status</a>
+                    <a href="${site}/academy/become-tutor" style="display:inline-block;background:#a3e635;color:#0d0f0c;text-decoration:none;font-weight:700;font-size:14px;padding:12px 22px;border-radius:10px">Check application status</a>
                   </div>
                 </div>
                 <div style="padding:16px 28px;border-top:1px solid #2a2e22;font-size:12px;color:#78716c">You're receiving this because you applied to teach on ForgeX Academy.</div>
               </div>
             </div>`,
-          text: `Hi ${fields.fullName},\n\nThanks for applying to teach on ForgeX Academy. Your application is now under review.\n\nMost decisions are made within 24 hours or less — we'll email you the moment an admin approves, verifies or needs more from you.\n\nCheck application status: ${site}/become-tutor`,
+          text: `Hi ${fields.fullName},\n\nThanks for applying to teach on ForgeX Academy. Your application is now under review.\n\nMost decisions are made within 24 hours or less — we'll email you the moment an admin approves, verifies or needs more from you.\n\nCheck application status: ${site}/academy/become-tutor`,
         });
       }
     };

@@ -168,7 +168,7 @@ export const submitAssignment = mutation({
         title: "Assignment resubmitted",
         body: `${user.name || "A student"} updated their submission for "${assignment.title}".`,
         type: "submission",
-        link: "/tutor",
+        link: "/academy/tutor",
       });
       void monitorEventM(ctx, {
         userId: user._id,
@@ -205,7 +205,7 @@ export const submitAssignment = mutation({
       title: "New assignment submission",
       body: `${user.name || "A student"} submitted "${assignment.title}".`,
       type: "submission",
-      link: "/tutor",
+      link: "/academy/tutor",
     });
     await ctx.scheduler.runAfter(0, internal.emailTriggers.notifyAssignmentSubmissionToTutor, {
       submissionId: id,
@@ -381,7 +381,7 @@ export const gradeSubmission = mutation({
       title: "Assignment graded",
       body: `"${assignment.title}" — ${finalGrade}/${assignment.maxScore}${feedback ? ". Read your feedback." : ""}`,
       type: "grade",
-      link: "/dashboard/assignments",
+      link: "/academy/dashboard/assignments",
     });
     return true;
   },

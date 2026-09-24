@@ -436,7 +436,7 @@ export function teamAssignedEmail(opts: {
       heading: opts.removed ? "Team role updated" : "Welcome to the team! 🤝",
       bodyHtml: opts.removed
         ? `<p>Hi ${escapeHtml(opts.name)}, your ForgeX team role has been removed. If you think this is a mistake, contact an administrator.</p>`
-        : `<p>Hi ${escapeHtml(opts.name)}, you've been added to the <strong style="color:${BRAND.lime};">${escapeHtml(opts.role)}</strong> team on ForgeX Academy.</p><p>Sign in to see your team dashboard, tickets and tools.</p>${limeButton("Open ForgeX Academy", "https://forgex.academy/dashboard")}`,
+        : `<p>Hi ${escapeHtml(opts.name)}, you've been added to the <strong style="color:${BRAND.lime};">${escapeHtml(opts.role)}</strong> team on ForgeX Academy.</p><p>Sign in to see your team dashboard, tickets and tools.</p>${limeButton("Open ForgeX Academy", "https://forgex.academy/academy/dashboard")}`,
     }),
     text: opts.removed
       ? `Hi ${opts.name}, your ForgeX team role has been removed.`
@@ -503,7 +503,7 @@ export function tutorSubmissionEmail(opts: {
           ["Assignment", escapeHtml(opts.assignmentTitle)],
           ["Course", escapeHtml(opts.courseTitle)],
         ])}
-        ${limeButton("Review submission", "https://forgex.academy/tutor")}`,
+        ${limeButton("Review submission", "https://forgex.academy/academy/tutor")}`,
     }),
     text: `Hi ${opts.tutorName}, ${opts.studentName} submitted "${opts.assignmentTitle}" (${opts.courseTitle}). Review it in your tutor dashboard.`,
   };
@@ -522,7 +522,7 @@ export function courseDecisionEmail(opts: {
     html: layout({
       heading: opts.approved ? "Your course is live! 🚀" : "Your course needs changes",
       bodyHtml: opts.approved
-        ? `<p>Great news, ${escapeHtml(opts.tutorName)} — <strong>"${escapeHtml(opts.courseTitle)}"</strong> passed review and is now published on ForgeX Academy.</p>${limeButton("View your course", "https://forgex.academy/tutor/courses")}`
+        ? `<p>Great news, ${escapeHtml(opts.tutorName)} — <strong>"${escapeHtml(opts.courseTitle)}"</strong> passed review and is now published on ForgeX Academy.</p>${limeButton("View your course", "https://forgex.academy/academy/tutor/courses")}`
         : `<p>Hi ${escapeHtml(opts.tutorName)}, <strong>"${escapeHtml(opts.courseTitle)}"</strong> was not approved in its current form.</p>${opts.note ? infoBox([["Reviewer feedback", escapeHtml(opts.note)]]) : ""}<p>Update the course and resubmit it for review whenever you're ready.</p>`,
     }),
     text: opts.approved
@@ -542,7 +542,7 @@ export function tutorInactivityEmail(opts: {
       bodyHtml: `
         <p>Your last sign-in was <strong>${opts.days} days ago</strong>. Your students and courses are waiting.</p>
         <p>Even a short check-in — answering questions or reviewing submissions — keeps your courses thriving.</p>
-        ${limeButton("Return to your Tutor Dashboard", "https://forgex.academy/tutor")}`,
+        ${limeButton("Return to your Tutor Dashboard", "https://forgex.academy/academy/tutor")}`,
     }),
     text: `Hi ${opts.name}, it's been ${opts.days} days since your last sign-in. Your ForgeX students are waiting!`,
   };

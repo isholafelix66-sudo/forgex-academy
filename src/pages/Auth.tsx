@@ -63,7 +63,7 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
   // (pending verification), never a student account. The account's role is
   // the source of truth everywhere else, so it must be right from day one.
   const intendedRole =
-    redirect.startsWith("/become-tutor") ? ("tutor" as const) : undefined;
+    redirect.startsWith("/academy/become-tutor") ? ("tutor" as const) : undefined;
 
 
 
@@ -120,11 +120,12 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
   const landingDest = useMemo(() => {
     if (authLoading || !isAuthenticated || !user) return null;
 
-    if (user?.role === "admin" || user?.role === "owner") return "/admin";
-    // Signed-in users land in their Projects workspace (the portfolio
-    // dashboard). `/` is the public marketing site and must never be the
-    // post-auth destination for a signed-in account.
-    return "/portfolio";
+    // An explicit protected returnTo always wins (course player, dashboard
+    // form, tutor application, and so on). It can only be a same-site path.
+    if (searchParams.get("returnTo")) return redirect;
+    if (user?.role === "admin" || user?.role === "owner") return "/academy/admin";
+    if (user?.role === "tutor" && user.verified) return "/academy/tutor";
+    return "/academy/dashboard";
   }, [authLoading, isAuthenticated, user]);
 
   useEffect(() => {
@@ -133,6 +134,8 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
   }, [
     landingDest,
     navigate,
+    redirect,
+    searchParams,
   ]);
 
   // When a freshly verified student still needs a display name, also nudge
@@ -264,10 +267,10 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
             </h1>
             <p className="mt-1.5 text-sm text-muted-foreground">
               {mode === "signup"
-                ? "Build your portfolio once and share one link."
+                ? "Create your Academy account and start learning."
                 : mode === "reset"
                   ? "We'll email you a code to regain access."
-                  : "Sign in to continue building your portfolio."}
+                  : "Sign in to continue your learning journey."}
             </p>
           </div>
 

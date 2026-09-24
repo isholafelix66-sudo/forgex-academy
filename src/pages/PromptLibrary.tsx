@@ -459,7 +459,7 @@ export default function PromptLibrary() {
                 full AI workflow.
               </p>
             </div>
-            <Link to="/ai-hub">
+            <Link to="/academy/ai-hub">
               <Button className="gap-2 bg-lime-400 font-semibold text-black hover:bg-lime-300 glow-lime-soft">
                 Explore the AI Hub <ArrowRight className="size-4" />
               </Button>
@@ -479,7 +479,7 @@ export default function PromptLibrary() {
               your details and copy a finished, ready-to-use prompt in seconds.
             </p>
             <div className="mt-7 flex flex-wrap items-center justify-center gap-3">
-              <Link to="/courses">
+              <Link to="/academy/courses">
                 <Button size="lg" className="gap-2 bg-lime-400 font-semibold text-black hover:bg-lime-300 glow-lime-soft">
                   Learn design & creative skills <ArrowRight className="size-4" />
                 </Button>

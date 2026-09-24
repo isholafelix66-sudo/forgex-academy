@@ -26,7 +26,7 @@ export default function TutorCourses() {
         title="My courses"
         description="Create, edit and submit courses for admin review."
         actions={
-          <Link to="/tutor/courses/new">
+          <Link to="/academy/tutor"/courses/new">
             <Button className="gap-2 bg-lime-400 font-semibold text-black hover:bg-lime-300">
               <Plus className="size-4" /> New course
             </Button>
@@ -46,7 +46,7 @@ export default function TutorCourses() {
           title="No courses yet"
           description="Create your first course — it stays a draft until an admin approves it."
           action={
-            <Link to="/tutor/courses/new">
+            <Link to="/academy/tutor"/courses/new">
               <Button className="bg-lime-400 font-semibold text-black hover:bg-lime-300">
                 Create your first course
               </Button>

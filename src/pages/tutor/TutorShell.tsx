@@ -30,10 +30,10 @@ export default function TutorShell() {
     {
       label: "Teaching",
       items: [
-        { to: "/tutor", label: "Overview", icon: <LayoutDashboard className="size-4" />, end: true },
-        { to: "/tutor/courses", label: "My courses", icon: <BookOpen className="size-4" /> },
+        { to: "/academy/tutor"", label: "Overview", icon: <LayoutDashboard className="size-4" />, end: true },
+        { to: "/academy/tutor"/courses", label: "My courses", icon: <BookOpen className="size-4" /> },
         {
-          to: "/tutor/grading",
+          to: "/academy/tutor"/grading",
           label: "Grading",
           icon: <ClipboardCheck className="size-4" />,
           badge:
@@ -43,16 +43,16 @@ export default function TutorShell() {
               </span>
             ) : undefined,
         },
-        { to: "/tutor/students", label: "Students", icon: <Users className="size-4" /> },
-        { to: "/tutor/announcements", label: "Announcements", icon: <Megaphone className="size-4" /> },
-        { to: "/tutor/support", label: "Support", icon: <LifeBuoy className="size-4" /> },
+        { to: "/academy/tutor"/students", label: "Students", icon: <Users className="size-4" /> },
+        { to: "/academy/tutor"/announcements", label: "Announcements", icon: <Megaphone className="size-4" /> },
+        { to: "/academy/tutor"/support", label: "Support", icon: <LifeBuoy className="size-4" /> },
       ],
     },
     {
       label: "Communication",
       items: [
         {
-          to: "/tutor/inbox",
+          to: "/academy/tutor"/inbox",
           label: "Inbox",
           icon: <MessageSquare className="size-4" />,
           badge:
@@ -63,7 +63,7 @@ export default function TutorShell() {
             ) : undefined,
         },
         {
-          to: "/tutor/communities",
+          to: "/academy/tutor"/communities",
           label: "Course Communities",
           icon: <MessageCircle className="size-4" />,
           badge:
@@ -78,8 +78,8 @@ export default function TutorShell() {
     {
       label: "Account",
       items: [
-        { to: "/tutor/profile", label: "Tutor Profile", icon: <UserCircle className="size-4" /> },
-        { to: "/tutor/settings", label: "Settings", icon: <Settings className="size-4" /> },
+        { to: "/academy/tutor"/profile", label: "Tutor Profile", icon: <UserCircle className="size-4" /> },
+        { to: "/academy/tutor"/settings", label: "Settings", icon: <Settings className="size-4" /> },
       ],
     },
   ];
@@ -95,7 +95,7 @@ export default function TutorShell() {
         Admin preview — you're viewing the tutor dashboard without an account.
       </span>
       <Link
-        to="/admin"
+        to="/academy/admin"
         className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-lime-400/30 bg-lime-400/10 px-2.5 py-1 font-semibold text-lime-300 transition-colors hover:bg-lime-400/20"
       >
         <ArrowLeft className="size-3.5" /> Back to admin
@@ -104,32 +104,32 @@ export default function TutorShell() {
   ) : undefined;
 
   const mobilePrimary: MobileNavItem[] = [
-    { to: "/tutor", label: "Overview", icon: <LayoutDashboard className="size-5" />, end: true },
-    { to: "/tutor/courses", label: "Courses", icon: <BookOpen className="size-5" /> },
-    { to: "/tutor/grading", label: "Grading", icon: <ClipboardCheck className="size-5" /> },
-    { to: "/tutor/students", label: "Students", icon: <Users className="size-5" /> },
+    { to: "/academy/tutor"", label: "Overview", icon: <LayoutDashboard className="size-5" />, end: true },
+    { to: "/academy/tutor"/courses", label: "Courses", icon: <BookOpen className="size-5" /> },
+    { to: "/academy/tutor"/grading", label: "Grading", icon: <ClipboardCheck className="size-5" /> },
+    { to: "/academy/tutor"/students", label: "Students", icon: <Users className="size-5" /> },
   ];
 
   const mobileMore: MobileNavSection[] = [
     {
       label: "Teaching",
       items: [
-        { to: "/tutor/announcements", label: "Announcements", icon: <Megaphone className="size-4" /> },
-        { to: "/tutor/support", label: "Support", icon: <LifeBuoy className="size-4" /> },
+        { to: "/academy/tutor"/announcements", label: "Announcements", icon: <Megaphone className="size-4" /> },
+        { to: "/academy/tutor"/support", label: "Support", icon: <LifeBuoy className="size-4" /> },
       ],
     },
     {
       label: "Communication",
       items: [
-        { to: "/tutor/inbox", label: "Inbox", icon: <MessageSquare className="size-4" /> },
-        { to: "/tutor/communities", label: "Communities", icon: <MessageCircle className="size-4" /> },
+        { to: "/academy/tutor"/inbox", label: "Inbox", icon: <MessageSquare className="size-4" /> },
+        { to: "/academy/tutor"/communities", label: "Communities", icon: <MessageCircle className="size-4" /> },
       ],
     },
     {
       label: "Account",
       items: [
-        { to: "/tutor/profile", label: "Tutor Profile", icon: <UserCircle className="size-4" /> },
-        { to: "/tutor/settings", label: "Settings", icon: <Settings className="size-4" /> },
+        { to: "/academy/tutor"/profile", label: "Tutor Profile", icon: <UserCircle className="size-4" /> },
+        { to: "/academy/tutor"/settings", label: "Settings", icon: <Settings className="size-4" /> },
       ],
     },
   ];

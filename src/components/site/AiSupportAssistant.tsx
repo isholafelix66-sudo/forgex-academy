@@ -431,7 +431,7 @@ export function AiSupportAssistant() {
               <button
                 onClick={() => {
                   close();
-                  navigate("/auth?mode=signin");
+                  navigate("/academy/login?mode=signin");
                 }}
                 className="flex items-center gap-1 rounded-lg border border-lime-400/40 bg-lime-400/10 px-2.5 py-1 text-[11px] font-semibold text-lime-200 transition-colors hover:bg-lime-400/20"
               >

@@ -527,7 +527,7 @@ export default function AIHub() {
 
         {/* ------------------------------------------------ Cross-link: Prompt Library */}
         <Link
-          to="/prompts"
+          to="/academy/prompts"
           className="group mt-5 flex items-center gap-3 rounded-2xl border border-white/10 bg-card p-4 transition-colors hover:border-lime-400/35 sm:p-5"
         >
           <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-lime-400/12 text-lime-300">
@@ -617,12 +617,12 @@ export default function AIHub() {
               how to actually use it. Pick a roadmap and start building.
             </p>
             <div className="mt-7 flex flex-wrap items-center justify-center gap-3">
-              <Link to="/courses">
+              <Link to="/academy/courses">
                 <Button size="lg" className="gap-2 bg-lime-400 font-semibold text-black hover:bg-lime-300 glow-lime-soft">
                   Explore courses <ArrowRight className="size-4" />
                 </Button>
               </Link>
-              <Link to="/auth?mode=signup">
+              <Link to="/academy/login"?mode=signup">
                 <Button size="lg" variant="outline" className="border-white/15 hover:border-lime-400/40 hover:text-lime-300">
                   Join ForgeX free
                 </Button>

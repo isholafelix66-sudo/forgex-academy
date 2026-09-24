@@ -43,11 +43,11 @@ const KIND_META: Record<
   AnyResult["kind"],
   { label: string; icon: React.ComponentType<{ className?: string }>; to: (r: AnyResult) => string }
 > = {
-  course: { label: "Courses", icon: BookOpen, to: (r) => `/courses/${r.slug}` },
-  roadmap: { label: "Roadmaps", icon: Map, to: () => "/roadmap" },
-  prompt: { label: "Prompt Library", icon: FileText, to: (r) => `/prompts/${r.slug}` },
-  resource: { label: "AI Hub", icon: Bot, to: () => "/ai-hub" },
-  announcement: { label: "Updates", icon: Megaphone, to: () => "/updates" },
+  course: { label: "Courses", icon: BookOpen, to: (r) => `/academy/courses/${r.slug}` },
+  roadmap: { label: "Roadmaps", icon: Map, to: () => "/academy/roadmap" },
+  prompt: { label: "Prompt Library", icon: FileText, to: (r) => `/academy/prompts/${r.slug}` },
+  resource: { label: "AI Hub", icon: Bot, to: () => "/academy/ai-hub" },
+  announcement: { label: "Updates", icon: Megaphone, to: () => "/academy/updates" },
 };
 
 export function SiteSearch({ open, onOpenChange }: { open: boolean; onOpenChange: (open: boolean) => void }) {

@@ -189,7 +189,7 @@ export default function RoadmapPage() {
                           ? `${mine.levels.filter((l) => l.done).length}/${mine.levels.length} levels complete`
                           : "Free · learn at your own pace"}
                       </span>
-                      <Link to="/courses">
+                      <Link to="/academy/courses">
                         <Button variant="outline" size="sm" className="gap-1.5 border-white/15 hover:border-lime-400/40 hover:text-lime-300">
                           Browse courses <ArrowRight className="size-3.5" />
                         </Button>

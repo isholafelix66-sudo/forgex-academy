@@ -74,7 +74,7 @@ export default function TutorPage() {
             title="Tutor not found"
             description="This tutor page doesn't exist or hasn't been published yet."
             action={
-              <Link to="/tutors" className="text-sm text-lime-300 hover:underline">
+              <Link to="/academy/tutors" className="text-sm text-lime-300 hover:underline">
                 ← Browse all tutors
               </Link>
             }
@@ -92,7 +92,7 @@ export default function TutorPage() {
         <Reveal>
           <div className="flex flex-wrap items-center justify-between gap-3">
             <Link
-              to="/tutors"
+              to="/academy/tutors"
               className="inline-flex items-center gap-1.5 text-sm text-muted-foreground transition-colors hover:text-lime-300"
             >
               <ArrowLeft className="size-4" /> All tutors

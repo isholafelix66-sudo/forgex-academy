@@ -6,10 +6,10 @@ import { displayName, guardOwnerAccount, hydrateCourse, hydrateCourses, isDesign
 import { difficultyValidator, ROLES, roleValidator, questionValidator, assignmentQuestionValidator, resourceValidator } from "./schema";
 import { messagePreview } from "./messages";
 import { recordDeletedCatalogSlug } from "./aiCourseSeed";
-import { verifyPassword } from "./adminCrypto";
+import { verifyPassword } from "./academy/adminCrypto";
 
 // ---------------------------------------------------------------------------
-// Admin password gate (access is URL-only: /admin + this password)
+// Admin password gate (access is URL-only: /academy/admin + this password)
 //
 // The Admin Dashboard is unlocked by the access password. Once Owner
 // security is initialized, the gate validates against the HASHED Owner
@@ -22,7 +22,7 @@ import { verifyPassword } from "./adminCrypto";
 // password (via OTP to the security email), update the security email, or
 // revoke sessions. A leaked session token alone can do none of those things.
 import { ADMIN_ACCESS_PASSWORD } from "./lib";
-import { createOwnerSession } from "./adminSecurity";
+import { createOwnerSession } from "./academy/adminSecurity";
 
 /** Case-insensitive password match (the default password is a word). */
 const matches = (a: string, b: string) =>
@@ -370,7 +370,7 @@ export const setUserRole = mutation({
           ? "An admin granted you the tutor role. The Tutor Dashboard is unlocked."
           : "Your account role was updated by an administrator.",
       type: "role",
-      link: role === ROLES.TUTOR ? "/tutor" : "/dashboard",
+      link: role === ROLES.TUTOR ? "/academy/tutor" : "/academy/dashboard",
     });
     return true;
   },
@@ -437,7 +437,7 @@ export const promoteToOwner = mutation({
       title: "You are now the platform Owner 👑",
       body: "An administrator promoted your account. The Owner account cannot be signed out remotely or removed from user management.",
       type: "role",
-      link: "/dashboard",
+      link: "/academy/dashboard",
     });
     return true;
   },
@@ -476,7 +476,7 @@ export const forceSignOutUser = mutation({
     let revoked = 0;
     for (const session of sessions) {
       // Delete the session and every refresh token that belongs to it, the
-      // same way @convex-dev/auth's own invalidateSessions does.
+      // same way @convex-dev/academy/login's own invalidateSessions does.
       await ctx.db.delete(session._id);
       const refreshTokens = await ctx.db
         .query("authRefreshTokens")
@@ -493,7 +493,7 @@ export const forceSignOutUser = mutation({
       title: "You were signed out",
       body: "An administrator signed your account out of all devices. Sign in again to continue.",
       type: "security",
-      link: "/auth",
+      link: "/academy/login",
     });
     return { revoked };
   },
@@ -923,16 +923,16 @@ function decisionEmail(
         html: shell("Application approved 🎉", [
           `Hi ${fullName},`, "Our admin team approved your application.",
           "The tutor dashboard unlocks once your account is verified — most verifications happen within 24 hours or less. We'll email you as soon as it's done.",
-        ], { label: "View application status", href: `${site}/become-tutor` }),
-        text: plain([`Hi ${fullName},`, "Our admin team approved your application.", "The tutor dashboard unlocks once your account is verified — most verifications happen within 24 hours or less."], { label: "View application status", href: `${site}/become-tutor` }),
+        ], { label: "View application status", href: `${site}/academy/become-tutor` }),
+        text: plain([`Hi ${fullName},`, "Our admin team approved your application.", "The tutor dashboard unlocks once your account is verified — most verifications happen within 24 hours or less."], { label: "View application status", href: `${site}/academy/become-tutor` }),
       };
     case "verify":
       return {
         subject: "You're now a verified ForgeX tutor ✓",
         html: shell("You're now a verified tutor ✓", [
           `Congratulations ${fullName},`, "An admin verified your account. Your verified badge is live and the tutor dashboard is unlocked — you can start creating courses right away.",
-        ], { label: "Open your tutor dashboard", href: `${site}/tutor` }),
-        text: plain([`Congratulations ${fullName},`, "An admin verified your account. Your verified badge is live and the tutor dashboard is unlocked."], { label: "Open your tutor dashboard", href: `${site}/tutor` }),
+        ], { label: "Open your tutor dashboard", href: `${site}/academy/tutor` }),
+        text: plain([`Congratulations ${fullName},`, "An admin verified your account. Your verified badge is live and the tutor dashboard is unlocked."], { label: "Open your tutor dashboard", href: `${site}/academy/tutor` }),
       };
     case "reject":
       return {
@@ -940,8 +940,8 @@ function decisionEmail(
         html: shell("Application not approved", [
           `Hi ${fullName},`, "Unfortunately your application could not be approved at this time.",
           reason ? `Reason: ${reason}` : "", "You're welcome to re-apply with more detail — we'd love to have you teach.",
-        ], { label: "Review & re-apply", href: `${site}/become-tutor` }),
-        text: plain([`Hi ${fullName},`, "Unfortunately your application could not be approved at this time.", reason ? `Reason: ${reason}` : "", "You're welcome to re-apply with more detail."], { label: "Review & re-apply", href: `${site}/become-tutor` }),
+        ], { label: "Review & re-apply", href: `${site}/academy/become-tutor` }),
+        text: plain([`Hi ${fullName},`, "Unfortunately your application could not be approved at this time.", reason ? `Reason: ${reason}` : "", "You're welcome to re-apply with more detail."], { label: "Review & re-apply", href: `${site}/academy/become-tutor` }),
       };
     case "request-info":
       return {
@@ -949,8 +949,8 @@ function decisionEmail(
         html: shell("More information required", [
           `Hi ${fullName},`, "Before we can verify your account we need a little more from you.",
           reason ? `What's needed: ${reason}` : "", "Please update your application and resubmit — we'll review it within 24 hours or less.",
-        ], { label: "Update your application", href: `${site}/become-tutor` }),
-        text: plain([`Hi ${fullName},`, "Before we can verify your account we need a little more from you.", reason ? `What's needed: ${reason}` : "", "Please update your application and resubmit."], { label: "Update your application", href: `${site}/become-tutor` }),
+        ], { label: "Update your application", href: `${site}/academy/become-tutor` }),
+        text: plain([`Hi ${fullName},`, "Before we can verify your account we need a little more from you.", reason ? `What's needed: ${reason}` : "", "Please update your application and resubmit."], { label: "Update your application", href: `${site}/academy/become-tutor` }),
       };
     case "suspend":
       return {
@@ -958,16 +958,16 @@ function decisionEmail(
         html: shell("Account suspended", [
           `Hi ${fullName},`, "Your tutor account was suspended and dashboard access has been revoked.",
           reason ? `Reason: ${reason}` : "", "If you believe this is a mistake, contact the ForgeX support team.",
-        ], { label: "Learn more", href: `${site}/become-tutor` }),
-        text: plain([`Hi ${fullName},`, "Your tutor account was suspended and dashboard access has been revoked.", reason ? `Reason: ${reason}` : ""], { label: "Learn more", href: `${site}/become-tutor` }),
+        ], { label: "Learn more", href: `${site}/academy/become-tutor` }),
+        text: plain([`Hi ${fullName},`, "Your tutor account was suspended and dashboard access has been revoked.", reason ? `Reason: ${reason}` : ""], { label: "Learn more", href: `${site}/academy/become-tutor` }),
       };
     case "reactivate":
       return {
         subject: "Your tutor account is back ✓",
         html: shell("Account reactivated", [
           `Welcome back ${fullName}!`, "Your tutor account has been reactivated and your dashboard access is restored.",
-        ], { label: "Open your tutor dashboard", href: `${site}/tutor` }),
-        text: plain([`Welcome back ${fullName}!`, "Your tutor account has been reactivated and your dashboard access is restored."], { label: "Open your tutor dashboard", href: `${site}/tutor` }),
+        ], { label: "Open your tutor dashboard", href: `${site}/academy/tutor` }),
+        text: plain([`Welcome back ${fullName}!`, "Your tutor account has been reactivated and your dashboard access is restored."], { label: "Open your tutor dashboard", href: `${site}/academy/tutor` }),
       };
     default:
       return null;
@@ -1060,7 +1060,7 @@ export const reviewTutorApplication = mutation({
     const user = await ctx.db.get(tutorId);
     if (user) {
       if (action === "approve" || action === "verify" || action === "reactivate") {
-        // Public tutor page slug (e.g. /tutor/david-ogunleye) — assigned once
+        // Public tutor page slug (e.g. /academy/tutor/david-ogunleye) — assigned once
         // at approval time and never regenerated, so shareable links stay
         // stable. Falls back to a uniquified form when the slug is taken.
         let slug = user.slug;
@@ -1100,32 +1100,32 @@ export const reviewTutorApplication = mutation({
       approve: {
         title: "Application approved 🎉",
         body: "Your tutor application was approved. Once an admin verifies your account, the Tutor Dashboard unlocks.",
-        link: "/become-tutor",
+        link: "/academy/become-tutor",
       },
       verify: {
         title: "You're now a verified tutor ✓",
         body: "The verified badge now appears on your profile, courses and the tutor directory.",
-        link: "/tutor",
+        link: "/academy/tutor",
       },
       reject: {
         title: "Application not approved",
         body: reason ?? "Your application could not be approved.",
-        link: "/become-tutor",
+        link: "/academy/become-tutor",
       },
       "request-info": {
         title: "More information required",
         body: reason ?? "Please update your application with the requested information.",
-        link: "/become-tutor",
+        link: "/academy/become-tutor",
       },
       suspend: {
         title: "Account suspended",
         body: reason ?? "Your tutor account was suspended. Dashboard access is revoked.",
-        link: "/become-tutor",
+        link: "/academy/become-tutor",
       },
       reactivate: {
         title: "Account reactivated",
         body: "Your tutor account has been reactivated. Welcome back!",
-        link: "/tutor",
+        link: "/academy/tutor",
       },
     };
 
@@ -1225,7 +1225,7 @@ export const reviewCourse = mutation({
           ? `"${course.title}" was not approved. ${note}`
           : `"${course.title}" was not approved.`,
       type: "course",
-      link: "/tutor/courses",
+      link: "/academy/tutor/courses",
     });
     await ctx.scheduler.runAfter(0, internal.emailTriggers.notifyCourseDecisionToTutor, {
       courseId,

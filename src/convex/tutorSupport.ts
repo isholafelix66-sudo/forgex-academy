@@ -65,7 +65,7 @@ export const submitSupportMessage = mutation({
         title: `Tutor support: ${subject}`,
         body: `${tutor.name ?? "A tutor"} reported: ${body.slice(0, 90)}`,
         type: "support",
-        link: "/admin/communication/reports",
+        link: "/academy/admin/communication/reports",
       });
     }
     return id;
@@ -138,7 +138,7 @@ export const adminSupportRespond = mutation({
       title: `Update on “${doc.subject}”`,
       body: trimmed.slice(0, 90),
       type: "support",
-      link: "/tutor/support",
+      link: "/academy/tutor/support",
     });
     return true;
   },

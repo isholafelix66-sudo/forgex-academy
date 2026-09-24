@@ -29,7 +29,7 @@ export default function TeamRegister() {
     return <div className="flex min-h-[60vh] items-center justify-center"><Loader2 className="size-6 animate-spin text-lime-300" /></div>;
   }
   if (!isAuthenticated) {
-    return <Navigate to="/auth?returnTo=%2Fteam%2Fregister" replace />;
+    return <Navigate to="/academy/login?returnTo=%2Fteam%2Fregister" replace />;
   }
 
   const send = async () => {
@@ -62,7 +62,7 @@ export default function TeamRegister() {
         <span className="flex size-14 items-center justify-center rounded-2xl bg-lime-400/12 text-lime-300"><Send className="size-6" /></span>
         <h1 className="mt-5 font-display text-2xl font-bold">Application received</h1>
         <p className="mt-2 text-sm text-muted-foreground">The team will review your application and contact you when there is an update.</p>
-        <Link to="/team" className="mt-6 text-sm font-semibold text-lime-300 hover:underline">Back to team workspace</Link>
+        <Link to="/academy/team" className="mt-6 text-sm font-semibold text-lime-300 hover:underline">Back to team workspace</Link>
       </div>
     );
   }

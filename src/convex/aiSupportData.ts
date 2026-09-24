@@ -319,7 +319,7 @@ async function createEscalatedTicketCore(
       title: `New AI-escalated ticket ${ticketNumber}`,
       body: args.subject.slice(0, 140),
       type: "ai_support_ticket",
-      link: "/admin/ai-support",
+      link: "/academy/admin/ai-support",
       read: false,
       createdAt: now,
     });
@@ -799,7 +799,7 @@ export const teamReplyToTicket = mutation({
         title: `Support replied on ${ticket.ticketNumber}`,
         body: args.body.slice(0, 140),
         type: "ai_support_ticket",
-        link: "/dashboard/support",
+        link: "/academy/dashboard/support",
         read: false,
         createdAt: now,
       });

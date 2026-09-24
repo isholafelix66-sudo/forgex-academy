@@ -106,7 +106,7 @@ export default function CourseDetail() {
             title="Course not found"
             description="This course may have been unpublished or removed."
             action={
-              <Link to="/courses">
+              <Link to="/academy/courses">
                 <Button variant="outline">Browse courses</Button>
               </Link>
             }
@@ -122,7 +122,7 @@ export default function CourseDetail() {
       return;
     }
     if (isTutorAccount) {
-      navigate("/tutor");
+      navigate("/academy/tutor");
       return;
     }
     // Essential write with outage protection: if Convex is unreachable the
@@ -184,7 +184,7 @@ export default function CourseDetail() {
       <section className="mx-auto max-w-7xl px-4 pb-24 pt-10 sm:px-6">
         <Reveal>
           <Link
-            to="/courses"
+            to="/academy/courses"
             className="inline-flex items-center gap-1.5 text-sm text-muted-foreground transition-colors hover:text-lime-300"
           >
             <ArrowLeft className="size-4" /> All courses
@@ -214,7 +214,7 @@ export default function CourseDetail() {
                 )}
                 <DifficultyBadge difficulty={course.difficulty} />
                 {course.roadmap && (
-                  <Link to="/roadmap">
+                  <Link to="/academy/roadmap">
                     <Badge variant="outline" className="border-white/15 text-muted-foreground hover:text-lime-300">
                       <Rocket className="size-3" /> {course.roadmap.name}
                       {course.level ? ` · Level ${course.level.title}` : ""}
@@ -373,7 +373,7 @@ export default function CourseDetail() {
                       </p>
                     </div>
                     {isEnrolled ? (
-                      <Link to="/dashboard/assignments" className="shrink-0">
+                      <Link to="/academy/dashboard"/assignments" className="shrink-0">
                         <Button
                           size="sm"
                           className="w-full bg-lime-400 font-semibold text-black hover:bg-lime-300 sm:w-auto"

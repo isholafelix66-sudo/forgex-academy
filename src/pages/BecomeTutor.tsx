@@ -218,7 +218,7 @@ export default function BecomeTutor() {
             You're already a verified tutor! 🎓
           </h1>
           <p className="mt-3 text-muted-foreground">Your tutor dashboard is unlocked.</p>
-          <Link to="/tutor" className="mt-6 inline-block">
+          <Link to="/academy/tutor" className="mt-6 inline-block">
             <Button className="gap-2 bg-lime-400 font-semibold text-black hover:bg-lime-300">
               Open tutor dashboard <ArrowRight className="size-4" />
             </Button>
@@ -254,7 +254,7 @@ export default function BecomeTutor() {
               <li className="flex gap-2"><ShieldCheck className="mt-0.5 size-4 shrink-0 text-lime-400" /> Once verified, the tutor dashboard unlocks automatically</li>
             </ul>
           </div>
-          <Link to="/become-tutor" className="mt-8 inline-block text-sm text-lime-300 hover:underline">
+          <Link to="/academy/become-tutor" className="mt-8 inline-block text-sm text-lime-300 hover:underline">
             Back to application status
           </Link>
         </section>
@@ -465,7 +465,7 @@ export default function BecomeTutor() {
         submit,
       });
       if (submit) {
-        navigate("/become-tutor", { replace: true });
+        navigate("/academy/become-tutor", { replace: true });
       } else {
         setSavedNotice(true);
         setTimeout(() => setSavedNotice(false), 2500);

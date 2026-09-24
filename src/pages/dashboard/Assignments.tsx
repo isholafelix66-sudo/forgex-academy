@@ -235,7 +235,7 @@ export default function Assignments() {
           title="No assignments yet"
           description="Assignments appear here when tutors post them in your enrolled courses."
           action={
-            <Link to="/courses">
+            <Link to="/academy/courses">
               <Button className="bg-lime-400 font-semibold text-black hover:bg-lime-300">
                 Browse courses
               </Button>

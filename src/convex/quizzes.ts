@@ -1,7 +1,7 @@
 import { mutation, query } from "./_generated/server";
 import { v } from "convex/values";
 import { checkRateLimit, notify, requireUser, requireUserDoc } from "./lib";
-import { tryCompleteCourseInternal } from "./learn";
+import { tryCompleteCourseInternal } from "./academy/learn";
 import { courseRequirements } from "./lmsShared";
 import type { Question } from "./schema";
 
@@ -143,7 +143,7 @@ export const submitQuiz = mutation({
       title: percentPassed ? "Quiz passed ✓" : "Quiz submitted",
       body: `"${quiz.title}": ${score}/${maxScore}${percentPassed ? "" : ` — ${passingPercent}% needed to pass`}.`,
       type: "quiz",
-      link: course ? `/learn/${course.slug}` : "/dashboard",
+      link: course ? `/academy/learn/${course.slug}` : "/academy/dashboard",
     });
 
     return { attemptId, score, maxScore, passed: percentPassed, passingPercent };

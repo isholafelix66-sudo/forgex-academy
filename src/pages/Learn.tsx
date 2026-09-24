@@ -173,7 +173,7 @@ export default function Learn() {
           title="Course not found"
           description="This course may have been unpublished or removed."
           action={
-            <Link to="/courses">
+            <Link to="/academy/courses">
               <Button variant="outline">Browse courses</Button>
             </Link>
           }
@@ -590,7 +590,7 @@ export default function Learn() {
       <header className="sticky top-0 z-40 border-b border-white/8 bg-[#0d0f0c]/90 backdrop-blur-xl">
         <div className="mx-auto flex h-16 max-w-7xl items-center gap-2 px-4 sm:gap-3 sm:px-6">
           <Link
-            to="/dashboard/my-courses"
+            to="/academy/dashboard"/my-courses"
             className="inline-flex shrink-0 items-center gap-1.5 text-sm text-muted-foreground transition-colors hover:text-lime-300"
           >
             <ArrowLeft className="size-4" /> My courses
@@ -757,7 +757,7 @@ export default function Learn() {
                 {course.assignments.map((a) => (
                   <Link
                     key={a._id}
-                    to="/dashboard/assignments"
+                    to="/academy/dashboard"/assignments"
                     className="flex items-center gap-3 border-b border-white/5 px-4 py-3 text-left transition-colors last:border-b-0 hover:bg-white/5"
                   >
                     <span className="flex size-7 shrink-0 items-center justify-center rounded-full bg-amber-400/12 text-amber-300">
@@ -1180,7 +1180,7 @@ export default function Learn() {
                   <p className="mt-1 text-sm text-muted-foreground">
                     Your certificate is waiting with a unique ID and QR code.
                   </p>
-                  <Link to="/dashboard/certificates" className="mt-4 inline-block">
+                  <Link to="/academy/dashboard"/certificates" className="mt-4 inline-block">
                     <Button className="gap-2 bg-lime-400 font-semibold text-black hover:bg-lime-300">
                       <Award className="size-4" /> View certificate
                     </Button>

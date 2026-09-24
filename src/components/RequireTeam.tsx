@@ -28,7 +28,7 @@ export function RequireTeam({ children }: { children: ReactNode }) {
     const returnTo = `${location.pathname}${location.search}`;
     return (
       <Navigate
-        to={`/auth?returnTo=${encodeURIComponent(returnTo)}`}
+        to={`/academy/login?returnTo=${encodeURIComponent(returnTo)}`}
         replace
       />
     );
@@ -55,13 +55,13 @@ export function RequireTeam({ children }: { children: ReactNode }) {
           </p>
           <div className="mt-6 flex flex-col gap-3">
             <Link
-              to="/team/register"
+              to="/academy/team/register"
               className="inline-flex items-center justify-center rounded-xl bg-lime-400 px-5 py-2.5 text-sm font-semibold text-black transition-colors hover:bg-lime-300"
             >
               Apply to Join
             </Link>
             <Link
-              to="/dashboard"
+              to="/academy/dashboard"
               className="inline-flex items-center justify-center rounded-xl border border-white/15 px-5 py-2.5 text-sm font-medium text-muted-foreground transition-colors hover:border-lime-400/40 hover:text-lime-300"
             >
               Student Dashboard
@@ -75,7 +75,7 @@ export function RequireTeam({ children }: { children: ReactNode }) {
   // Verify the URL slug matches the user's team
   const teamData = myTeam.team as { slug: string } | undefined;
   if (teamSlug && teamData?.slug && teamData.slug !== teamSlug) {
-    return <Navigate to={`/team/${teamData.slug}`} replace />;
+    return <Navigate to={`/academy/team/${teamData.slug}`} replace />;
   }
 
   return children;

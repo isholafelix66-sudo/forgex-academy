@@ -53,7 +53,7 @@ async function moderateNotify(
   body: string,
 ) {
   try {
-    await notify(ctx, { userId, title, body, type: "moderation", link: "/dashboard/notifications" });
+    await notify(ctx, { userId, title, body, type: "moderation", link: "/academy/dashboard/notifications" });
   } catch {
     /* target may be deleted — ignore */
   }
@@ -1117,7 +1117,7 @@ export const adminSetMemberRole = mutation({
           ? `An admin made you a community tutor in ${community.name}. You can now moderate the community.`
           : `Your community tutor role in ${community.name} was removed by an admin.`,
       type: "moderation",
-      link: "/dashboard/communities",
+      link: "/academy/dashboard/communities",
     });
     return true;
   },

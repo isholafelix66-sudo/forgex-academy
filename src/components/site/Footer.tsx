@@ -1,8 +1,7 @@
-import { Link } from "react-router";
+import { Link, useLocation } from "react-router";
 import { useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
-import { Lock, Mail, MapPin, MessageSquare, Phone } from "lucide-react";
-import { toast } from "sonner";
+import { BookOpen, Mail, MapPin, MessageSquare, Phone } from "lucide-react";
 import logo from "@/assets/logo.svg";
 import { toExternalHref } from "@/lib/url";
 import { BrandMark } from "./BrandMark";
@@ -36,7 +35,36 @@ const DESCRIPTION =
   "The portfolio platform of ForgeX Network. Create your portfolio once, " +
   "turn it into your own professional website, and share one link anywhere.";
 
+function AcademyFooter() {
+  return (
+    <footer className="border-t border-white/10 bg-black/30">
+      <div className="mx-auto flex max-w-7xl flex-col gap-6 px-4 pb-28 pt-8 sm:px-6 md:flex-row md:items-center md:justify-between md:pb-10">
+        <div>
+          <p className="font-display text-lg font-bold">ForgeX <span className="text-lime-400">Academy</span></p>
+          <p className="mt-2 max-w-xl text-sm text-muted-foreground">
+            Learn practical, project-led skills from verified tutors and keep building with the full ForgeX community.
+          </p>
+        </div>
+        <nav className="flex flex-wrap gap-2" aria-label="Academy footer navigation">
+          {[
+            ["/academy/courses", "Courses"],
+            ["/academy/tutors", "Tutors"],
+            ["/academy/showcase", "Showcase"],
+            ["/academy/prompts", "Prompts"],
+            ["/portfolio", "Portfolio"],
+          ].map(([to, label]) => (
+            <Link key={to} to={to} className="rounded-lg border border-white/10 bg-white/5 px-3 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:border-lime-400/40 hover:text-lime-300">
+              {label}
+            </Link>
+          ))}
+        </nav>
+      </div>
+    </footer>
+  );
+}
+
 export function Footer() {
+  const { pathname } = useLocation();
   const content = useQuery(api.public.siteContentAll);
   const branding = useBranding();
   const brandLogo = (content?.logo as string | undefined) || logo;
@@ -63,6 +91,10 @@ export function Footer() {
           .filter((s) => s.enabled !== false && s.url)
           .sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
       : DEFAULT_SOCIALS;
+
+  if (pathname.startsWith("/academy")) {
+    return <AcademyFooter />;
+  }
 
   return (
     <footer className="border-t border-white/10 bg-black/30">
@@ -99,13 +131,10 @@ export function Footer() {
             ))}
             <Link
               to="/academy"
-              onClick={() => toast("ForgeX Academy is coming soon")}
-              aria-label="ForgeX Academy, locked — coming soon"
-              title="ForgeX Academy is coming soon"
-              className="inline-flex max-w-full items-center gap-1.5 whitespace-nowrap rounded-lg border border-white/10 bg-white/5 px-3 py-1.5 text-xs font-medium text-muted-foreground/70 transition-colors hover:border-lime-400/30 hover:text-muted-foreground"
+              className="inline-flex max-w-full items-center gap-1.5 whitespace-nowrap rounded-lg border border-lime-400/20 bg-lime-400/5 px-3 py-1.5 text-xs font-medium text-lime-300 transition-colors hover:border-lime-400/40 hover:bg-lime-400/10"
             >
+              <BookOpen className="size-3" aria-hidden="true" />
               Academy
-              <Lock className="size-3 text-lime-400/60" aria-hidden="true" />
             </Link>
             <Link
               to="/opportunity-hub"

@@ -228,10 +228,10 @@ export const sendMessage = mutation({
       type: "message",
       link:
         receiver.role === "tutor"
-          ? "/tutor/inbox"
+          ? "/academy/tutor/inbox"
           : receiver.role === "admin"
-            ? "/admin/chat"
-            : "/dashboard/messages",
+            ? "/academy/admin/chat"
+            : "/academy/dashboard/messages",
     });
 
     // Email the recipient so they never miss a message even when offline.
@@ -243,10 +243,10 @@ export const sendMessage = mutation({
       const senderName = user.name || "a ForgeX user";
       const inbox =
         receiver.role === "tutor"
-          ? "/tutor/inbox"
+          ? "/academy/tutor/inbox"
           : receiver.role === "admin"
-            ? "/admin/chat"
-            : "/dashboard/messages";
+            ? "/academy/admin/chat"
+            : "/academy/dashboard/messages";
       await ctx.scheduler.runAfter(0, internal.email.sendEmail, {
         to: receiver.email,
         subject: `New message from ${senderName} 💬`,

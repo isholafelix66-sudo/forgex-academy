@@ -228,7 +228,7 @@ export default function PromptDetail() {
             <p className="mx-auto mt-2 max-w-md text-sm text-muted-foreground">
               This prompt doesn’t exist or isn’t published yet.
             </p>
-            <Link to="/prompts">
+            <Link to="/academy/prompts">
               <Button className="mt-6 gap-2 bg-lime-400 font-semibold text-black hover:bg-lime-300">
                 <ArrowLeft className="size-4" /> Back to the library
               </Button>
@@ -245,7 +245,7 @@ export default function PromptDetail() {
     <PageShell>
       <section className="mx-auto max-w-7xl px-4 py-10 sm:px-6 sm:py-14">
         <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm text-muted-foreground">
-          <Link to="/prompts" className="inline-flex items-center gap-1 transition-colors hover:text-lime-300">
+          <Link to="/academy/prompts" className="inline-flex items-center gap-1 transition-colors hover:text-lime-300">
             <ArrowLeft className="size-3.5" /> Prompt Library
           </Link>
           <ChevronRight className="size-3.5" />
@@ -381,7 +381,7 @@ export default function PromptDetail() {
                 </pre>
               </div>
 
-              <Link to="/ai-hub">
+              <Link to="/academy/ai-hub">
                 <div className="group flex items-center gap-3 rounded-2xl border border-white/10 bg-card p-5 transition-colors hover:border-lime-400/35">
                   <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-lime-400/12 text-lime-300">
                     <Bot className="size-5" />

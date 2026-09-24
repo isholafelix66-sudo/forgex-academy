@@ -124,7 +124,7 @@ export default function Communities() {
           description="Enroll in a course and its community appears here automatically — you'll be able to chat with classmates and your tutor."
           action={
             <Link
-              to="/courses"
+              to="/academy/courses"
               className="inline-flex items-center gap-2 rounded-xl bg-lime-400 px-5 py-2.5 text-sm font-semibold text-black transition-colors hover:bg-lime-300"
             >
               Browse courses

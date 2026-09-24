@@ -349,7 +349,7 @@ function DetailsForm({
       setSaved(true);
       if (savedTimer.current) window.clearTimeout(savedTimer.current);
       savedTimer.current = window.setTimeout(() => setSaved(false), 2500);
-      if (!courseId) navigate(`/tutor/courses/${id}?step=lessons`, { replace: true });
+      if (!courseId) navigate(`/academy/tutor/courses/${id}?step=lessons`, { replace: true });
       else onSaved?.(id);
     } catch (err) {
       setError(friendlyError(err, "Couldn't save the course — please try again."));

@@ -15,7 +15,7 @@ export default function RoadmapProgress() {
         title="My Roadmaps"
         description="Levels unlock as you complete the courses inside them."
         actions={
-          <Link to="/roadmap">
+          <Link to="/academy/roadmap">
             <Button variant="outline" className="border-white/15 hover:border-lime-400/40 hover:text-lime-300">
               All roadmaps <ArrowRight className="size-3.5" />
             </Button>

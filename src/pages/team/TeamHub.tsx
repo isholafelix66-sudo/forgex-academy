@@ -27,12 +27,12 @@ export default function TeamHub() {
   }
 
   if (!isAuthenticated) {
-    return <Navigate to="/auth?returnTo=/team" replace />;
+    return <Navigate to="/academy/login"?returnTo=/team" replace />;
   }
 
   // Admins go to admin panel
   if (user?.role === "admin") {
-    return <Navigate to="/admin" replace />;
+    return <Navigate to="/academy/admin" replace />;
   }
 
   const teamRole = teamData?.teamRole;

@@ -631,7 +631,7 @@ export default function CommunityRoom() {
       {/* Header */}
       <div className="flex flex-wrap items-center gap-3 rounded-2xl border border-white/10 bg-card px-4 py-3">
         <Button variant="ghost" size="icon" asChild className="shrink-0 text-muted-foreground">
-          <Link to="/dashboard/communities" title="Back to communities">
+          <Link to="/academy/dashboard"/communities" title="Back to communities">
             <ArrowLeft className="size-4" />
           </Link>
         </Button>

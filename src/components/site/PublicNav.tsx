@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState } from "react";
-import { NavLink, useNavigate } from "react-router";
+import { NavLink, useLocation, useNavigate } from "react-router";
 import { useMutation, useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import {
   Bell,
+  BookOpen,
   ChevronDown,
   Compass,
   Home,
@@ -23,6 +24,8 @@ import {
   usePortfolioNotificationCount,
 } from "./PortfolioNotifications";
 import { BrandMark } from "./BrandMark";
+import logo from "@/assets/logo.svg";
+import { useAuth } from "@/hooks/use-auth";
 import { SharePortfolioButton } from "./SharePortfolioButton";
 import { cn } from "@/lib/utils";
 import { scrollToTopInstant } from "@/lib/scroll";
@@ -62,9 +65,18 @@ const MORE_ITEMS: NavItemDef[] = [
   { to: "/about", label: "About", icon: InfoIcon },
   { to: "/contact", label: "Contact", icon: Mail },
   { to: "/help", label: "Get help", icon: LifeBuoy },
+  { to: "/academy", label: "ForgeX Academy", icon: BookOpen },
 ];
 
 const scrollTop = scrollToTopInstant;
+
+const ACADEMY_NAV: NavItemDef[] = [
+  { to: "/academy", label: "Academy", icon: Home, end: true },
+  { to: "/academy/courses", label: "Courses", icon: BookOpen },
+  { to: "/academy/tutors", label: "Tutors", icon: User },
+  { to: "/academy/showcase", label: "Showcase", icon: Sparkles },
+  { to: "/academy/prompts", label: "Prompts", icon: PenSquare },
+];
 
 /* ═══════════════════════════════════════════════════════════════════════
    DESKTOP HOVER DROPDOWN (lightweight, no Radix)
@@ -120,8 +132,76 @@ function HoverDropdown({
    MAIN COMPONENT
    ═══════════════════════════════════════════════════════════════════════ */
 
+function AcademyPublicNav() {
+  const navigate = useNavigate();
+  const { isLoading, isAuthenticated, user } = useAuth();
+
+  const destination = !isLoading && isAuthenticated
+    ? user?.role === "admin" || user?.role === "owner"
+      ? "/academy/admin"
+      : user?.role === "tutor" && user.verified
+        ? "/academy/tutor"
+        : "/academy/dashboard"
+    : "/academy/login";
+
+  const desktopLinkClass = ({ isActive }: { isActive: boolean }) =>
+    cn(
+      "rounded-full px-3 py-2 text-[13px] font-medium transition-colors whitespace-nowrap",
+      isActive
+        ? "bg-lime-400/10 text-lime-300"
+        : "text-muted-foreground hover:bg-white/5 hover:text-foreground",
+    );
+
+  const mobileItems: MobileNavItem[] = [
+    { to: "/academy", label: "Academy", icon: <Home className="size-5" />, end: true },
+    { to: "/academy/courses", label: "Courses", icon: <BookOpen className="size-5" /> },
+    { to: "/portfolio", label: "Portfolio", icon: <Compass className="size-5" /> },
+    { to: destination, label: isAuthenticated ? "Dashboard" : "Sign in", icon: <User className="size-5" /> },
+  ];
+
+  return (
+    <>
+      <header className="sticky top-0 z-50 border-b border-white/10 bg-[#0d0f0c]/90 backdrop-blur-xl">
+        <div className="mx-auto flex h-16 max-w-7xl items-center justify-between gap-3 px-3 sm:px-6 lg:h-[4.5rem]">
+          <Link to="/academy" onClick={scrollTop} className="flex min-w-0 items-center gap-2.5">
+            <img src={logo} alt="ForgeX Academy" className="size-8 shrink-0 rounded-lg" />
+            <span className="font-display truncate text-sm font-extrabold uppercase tracking-[0.18em] sm:text-lg">
+              ForgeX <span className="text-lime-400">Academy</span>
+            </span>
+          </Link>
+
+          <nav className="hidden min-w-0 items-center gap-0.5 md:flex" aria-label="Academy navigation">
+            {ACADEMY_NAV.map((item) => (
+              <NavLink key={item.to} to={item.to} end={item.end} onClick={scrollTop} className={desktopLinkClass}>
+                {item.label}
+              </NavLink>
+            ))}
+            <Link
+              to="/portfolio"
+              onClick={scrollTop}
+              className="ml-1 rounded-full border border-lime-400/20 bg-lime-400/5 px-3 py-2 text-[13px] font-semibold text-lime-300 transition-colors hover:bg-lime-400/10"
+            >
+              Portfolio
+            </Link>
+          </nav>
+
+          <Button
+            size="sm"
+            className="h-9 shrink-0 bg-lime-400 px-3 text-xs font-semibold text-black hover:bg-lime-300 sm:px-4"
+            onClick={() => { navigate(destination); scrollTop(); }}
+          >
+            {isLoading ? "Loading…" : isAuthenticated ? "Dashboard" : "Sign in"}
+          </Button>
+        </div>
+      </header>
+      <MobileBottomNav primaryItems={mobileItems} moreSections={[]} />
+    </>
+  );
+}
+
 export function PublicNav() {
   const navigate = useNavigate();
+  const { pathname } = useLocation();
   const [scrolled, setScrolled] = useState(false);
   const [notifOpen, setNotifOpen] = useState(false);
   const revokeSession = useMutation(api.portfolioUsers.signOut);
@@ -199,6 +279,10 @@ export function PublicNav() {
   // Compact-but-readable controls so the header always fits 320–430px.
   const iconButtonClass =
     "relative flex size-8 shrink-0 items-center justify-center rounded-full border border-white/10 bg-white/5 text-muted-foreground transition-colors hover:border-lime-400/40 hover:text-lime-300 sm:size-9";
+
+  if (pathname.startsWith("/academy")) {
+    return <AcademyPublicNav />;
+  }
 
   return (
     <>

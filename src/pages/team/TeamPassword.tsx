@@ -18,19 +18,19 @@ export default function TeamPassword() {
   }
 
   if (!isAuthenticated) {
-    return <Navigate to="/auth?returnTo=/team" replace />;
+    return <Navigate to="/academy/login?returnTo=/team" replace />;
   }
 
   const teamRole = (user as Record<string, unknown> | undefined)
     ?.teamRole as string | undefined;
 
   if (user?.role === "admin") {
-    return <Navigate to="/admin" replace />;
+    return <Navigate to="/academy/admin" replace />;
   }
 
   if (teamRole) {
     return <Navigate to={`/team/${teamRole}`} replace />;
   }
 
-  return <Navigate to="/team" replace />;
+  return <Navigate to="/academy/team" replace />;
 }

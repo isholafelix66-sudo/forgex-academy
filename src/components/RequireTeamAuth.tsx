@@ -34,7 +34,7 @@ export function RequireTeamAuth({ children }: { children: ReactNode }) {
     const returnTo = `${location.pathname}${location.search}`;
     return (
       <Navigate
-        to={`/auth?returnTo=${encodeURIComponent(returnTo)}`}
+        to={`/academy/login?returnTo=${encodeURIComponent(returnTo)}`}
         replace
       />
     );
@@ -64,7 +64,7 @@ export function RequireTeamAuth({ children }: { children: ReactNode }) {
             role.
           </p>
           <Link
-            to="/dashboard"
+            to="/academy/dashboard"
             className="mt-6 inline-flex items-center justify-center rounded-xl border border-white/15 px-5 py-2.5 text-sm font-medium text-muted-foreground transition-colors hover:border-lime-400/40 hover:text-lime-300"
           >
             Student Dashboard

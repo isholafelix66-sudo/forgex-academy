@@ -38,8 +38,8 @@ export default function DashboardHome() {
   // admin) account is never shown student content here — they belong in
   // their own dashboard. (The other /dashboard/* pages — communities,
   // messaging — stay reachable for tutors via their own shell.)
-  if (user?.role === "tutor") return <Navigate to="/tutor" replace />;
-  if (user?.role === "admin") return <Navigate to="/admin" replace />;
+  if (user?.role === "tutor") return <Navigate to="/academy/tutor" replace />;
+  if (user?.role === "admin") return <Navigate to="/academy/admin" replace />;
 
   // Admin picks win when present; otherwise fall back to the existing
   // personalized recommendations query.
@@ -90,7 +90,7 @@ export default function DashboardHome() {
             : "Pick up where you left off and keep building."
         }
         actions={
-          <Link to="/courses">
+          <Link to="/academy/courses">
             <Button className="gap-2 bg-lime-400 font-semibold text-black hover:bg-lime-300">
               <BookOpen className="size-4" /> Browse courses
             </Button>
@@ -134,7 +134,7 @@ export default function DashboardHome() {
         </div>
         <div className="grid gap-4 sm:grid-cols-2">
           <Link
-            to="/ai-hub"
+            to="/academy/ai-hub"
             className="group flex flex-col gap-4 rounded-2xl border border-white/10 bg-card p-6 transition-colors hover:border-lime-400/40"
           >
             <span className="flex size-11 items-center justify-center rounded-xl bg-lime-400/12 text-lime-300">
@@ -153,7 +153,7 @@ export default function DashboardHome() {
           </Link>
 
           <Link
-            to="/prompts"
+            to="/academy/prompts"
             className="group flex flex-col gap-4 rounded-2xl border border-white/10 bg-card p-6 transition-colors hover:border-lime-400/40"
           >
             <span className="flex size-11 items-center justify-center rounded-xl bg-lime-400/12 text-lime-300">
@@ -177,7 +177,7 @@ export default function DashboardHome() {
       <section>
         <div className="mb-4 flex items-center justify-between">
           <h2 className="font-display text-xl font-bold">Courses in progress</h2>
-          <Link to="/dashboard/my-courses" className="inline-flex items-center gap-1 text-sm text-lime-300 hover:underline">
+          <Link to="/academy/dashboard"/my-courses" className="inline-flex items-center gap-1 text-sm text-lime-300 hover:underline">
             View all <ArrowRight className="size-3.5" />
           </Link>
         </div>
@@ -193,7 +193,7 @@ export default function DashboardHome() {
             title="No courses in progress"
             description="Enroll in your first course and start building."
             action={
-              <Link to="/courses">
+              <Link to="/academy/courses">
                 <Button className="bg-lime-400 font-semibold text-black hover:bg-lime-300">
                   Browse courses
                 </Button>
@@ -223,7 +223,7 @@ export default function DashboardHome() {
             {announcements?.slice(0, 3).map((a) => (
               <Link
                 key={a._id}
-                to="/updates"
+                to="/academy/updates"
                 className="block rounded-2xl border border-white/10 bg-card p-4 transition-colors hover:border-lime-400/30"
               >
                 <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-0.5">
@@ -252,7 +252,7 @@ export default function DashboardHome() {
               Add your name so certificates and greetings show correctly.
             </p>
           </div>
-          <Link to="/dashboard/profile">
+          <Link to="/academy/dashboard"/profile">
             <Button className="shrink-0 gap-2 bg-lime-400 font-semibold text-black hover:bg-lime-300">
               Edit profile
               <ArrowRight className="size-4" />
@@ -295,7 +295,7 @@ export default function DashboardHome() {
               View and share your verifiable certificates.
             </p>
           </div>
-          <Link to="/dashboard/certificates">
+          <Link to="/academy/dashboard"/certificates">
             <Button variant="outline" className="border-lime-400/30 text-lime-300 hover:bg-lime-400/10">
               View certificates
             </Button>

@@ -257,7 +257,7 @@ export async function communityCapacity(
  * community that is open (not manually closed) and still has space. Falls
  * back to `ensureCommunityForCourse` (creates the primary community) when
  * every existing one is full/closed — the student is then left unassigned
- * until a tutor/admin places them (sync swallows the capacity error).
+ * until a tutor/academy/admin places them (sync swallows the capacity error).
  */
 export async function pickCommunityForCourse(
   ctx: MutationCtx,
@@ -305,7 +305,7 @@ export async function ensureCommunityForCourse(
  *  decision wins and we refuse to silently re-add).
  *
  * New STUDENT memberships are gated by the community's student capacity:
- *  closed → error, full → error. Staff (tutor/admin) memberships and existing
+ *  closed → error, full → error. Staff (tutor/academy/admin) memberships and existing
  *  members are never blocked. */
 export async function addMembership(
   ctx: MutationCtx,
@@ -412,7 +412,7 @@ export const syncMyCommunities = mutation({
         await addMembership(ctx, community._id, user._id, role);
       } catch {
         // Community full or closed — the student stays unassigned until a
-        // tutor/admin places them in a cohort. Never fail the whole sync.
+        // tutor/academy/admin places them in a cohort. Never fail the whole sync.
       }
     }
     return targets.size;
@@ -500,7 +500,7 @@ async function hydrateCommunityMessage(
     }
   }
   // Deleted content is retained in storage for moderation but never
-  // leaked to students/tutors — they see the deletion placeholder only.
+  // leaked to students/academy/tutors — they see the deletion placeholder only.
   const hidden = m.deleted;
   return {
     _id: m._id,
@@ -931,7 +931,7 @@ export const communityMessageAlerts = query({
 
 // ---------------------------------------------------------------------------
 // ---------------------------------------------------------------------------
-// Queries — tutor community management center (/tutor/communities)
+// Queries — tutor community management center (/academy/tutor/communities)
 // ---------------------------------------------------------------------------
 
 /** Verified tutor: every community of every course they teach, with the

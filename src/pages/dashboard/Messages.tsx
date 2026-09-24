@@ -210,7 +210,7 @@ export default function Messages() {
 
       <p className="text-xs text-muted-foreground">
         Tip: visit a{" "}
-        <Link to="/tutors" className="text-lime-300 hover:underline">
+        <Link to="/academy/tutors" className="text-lime-300 hover:underline">
           tutor's profile
         </Link>{" "}
         to start a conversation with them.

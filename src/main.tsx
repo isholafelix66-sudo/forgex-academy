@@ -20,7 +20,6 @@ import { registerServiceWorker } from "@/lib/sw";
 import { scrollToTopInstant } from "@/lib/scroll";
 import { PublicLayout } from "@/components/site/PublicLayout";
 import { AiSupportAssistant } from "@/components/site/AiSupportAssistant";
-import { FeatureGate } from "@/components/site/FeatureGate";
 import { ProductEntry } from "@/pages/ComingSoon";
 import { ConnectionBanner } from "@/components/network/ConnectionBanner";
 import { NameSetupDialog } from "@/components/NameSetupDialog";
@@ -30,10 +29,8 @@ import { NameSetupDialog } from "@/components/NameSetupDialog";
  * Academy feature flag and renders nothing while Academy is locked.
  */
 function AcademyOnlyAssistantMount() {
-  const flags = useQuery(api.projects.featureFlags);
-  const academyActive =
-    flags?.find((f) => f.key === "academy")?.state === "active";
-  if (!academyActive) return null;
+  const { pathname } = useLocation();
+  if (!pathname.startsWith("/academy")) return null;
   return (
     <Suspense fallback={null}>
       <AiSupportAssistant />
@@ -356,6 +353,17 @@ function LegacyPortfolioMessagesRedirect() {
 
 function LegacyPortfolioProfileRedirect() {
   return <Navigate to="/portfolio/dashboard/profile" replace />;
+}
+
+/** Keep pre-module Academy bookmarks working without exposing the Portfolio. */
+function AcademyLegacyRedirect() {
+  const { pathname, search } = useLocation();
+  return <Navigate to={`/academy${pathname}${search}`} replace />;
+}
+
+function AcademyAuthLegacyRedirect() {
+  const { search } = useLocation();
+  return <Navigate to={`/academy/login${search}`} replace />;
 }
 
 // Communication & Community module (admin moderation)
@@ -1080,124 +1088,42 @@ createRoot(document.getElementById("root")!).render(
                 <Route path="/about" element={<About />} />
                 <Route path="/contact" element={<Contact />} />
 
-                {/* ── Locked future products. Their own URLs open a Coming
-                    Soon page while locked, and forward to the real product
-                    home if an admin flips the flag to active. ── */}
-                <Route
-                  path="/academy"
-                  element={<ProductEntry product="academy" to="/courses" />}
-                />
                 <Route
                   path="/opportunity-hub"
                   element={<ProductEntry product="opportunity-hub" to="/" />}
                 />
 
-                {/* ── Academy stays wired end-to-end behind its flag, so
-                    launching it later is a flag change, not a rebuild. ── */}
-                <Route
-                  path="/courses"
-                  element={
-                    <FeatureGate product="academy">
-                      <Courses />
-                    </FeatureGate>
-                  }
-                />
-                <Route
-                  path="/courses/:slug"
-                  element={
-                    <FeatureGate product="academy">
-                      <CourseDetail />
-                    </FeatureGate>
-                  }
-                />
-                <Route
-                  path="/tutors"
-                  element={
-                    <FeatureGate product="academy">
-                      <Tutors />
-                    </FeatureGate>
-                  }
-                />
-                <Route
-                  path="/tutors/:id"
-                  element={
-                    <FeatureGate product="academy">
-                      <TutorDetail />
-                    </FeatureGate>
-                  }
-                />
-                <Route
-                  path="/roadmap"
-                  element={
-                    <FeatureGate product="academy">
-                      <RoadmapPage />
-                    </FeatureGate>
-                  }
-                />
-                <Route
-                  path="/updates"
-                  element={
-                    <FeatureGate product="academy">
-                      <Updates />
-                    </FeatureGate>
-                  }
-                />
-                <Route
-                  path="/stories"
-                  element={
-                    <FeatureGate product="academy">
-                      <Stories />
-                    </FeatureGate>
-                  }
-                />
-                <Route
-                  path="/ai-hub"
-                  element={
-                    <FeatureGate product="academy">
-                      <AIHub />
-                    </FeatureGate>
-                  }
-                />
-                <Route
-                  path="/prompts"
-                  element={
-                    <FeatureGate product="academy">
-                      <PromptLibrary />
-                    </FeatureGate>
-                  }
-                />
-                <Route
-                  path="/prompts/:slug"
-                  element={
-                    <FeatureGate product="academy">
-                      <PromptDetail />
-                    </FeatureGate>
-                  }
-                />
-                <Route
-                  path="/become-tutor"
-                  element={
-                    <FeatureGate product="academy">
-                      <BecomeTutor />
-                    </FeatureGate>
-                  }
-                />
-                <Route
-                  path="/verify/:certificateId"
-                  element={
-                    <FeatureGate product="academy">
-                      <VerifyCertificate />
-                    </FeatureGate>
-                  }
-                />
-                <Route
-                  path="/tutor/:slug"
-                  element={
-                    <FeatureGate product="academy">
-                      <TutorPage />
-                    </FeatureGate>
-                  }
-                />
+                {/* ForgeX Academy is a restored, first-class product. Its
+                    existing catalog is the homepage so no placeholder or new
+                    implementation replaces the working Academy experience. */}
+                <Route path="/academy" element={<Courses />} />
+                <Route path="/academy/courses" element={<Courses />} />
+                <Route path="/academy/courses/:slug" element={<CourseDetail />} />
+                <Route path="/academy/tutors" element={<Tutors />} />
+                <Route path="/academy/tutors/:id" element={<TutorDetail />} />
+                <Route path="/academy/roadmap" element={<RoadmapPage />} />
+                <Route path="/academy/updates" element={<Updates />} />
+                <Route path="/academy/showcase" element={<Stories />} />
+                <Route path="/academy/stories" element={<Stories />} />
+                <Route path="/academy/ai-hub" element={<AIHub />} />
+                <Route path="/academy/prompts" element={<PromptLibrary />} />
+                <Route path="/academy/prompts/:slug" element={<PromptDetail />} />
+                <Route path="/academy/become-tutor" element={<BecomeTutor />} />
+                <Route path="/academy/verify/:certificateId" element={<VerifyCertificate />} />
+                <Route path="/academy/tutor/:slug" element={<TutorPage />} />
+                <Route path="/academy/about" element={<About />} />
+                <Route path="/academy/contact" element={<Contact />} />
+
+                {/* Old unprefixed Academy links remain safe redirects. */}
+                <Route path="/courses/*" element={<AcademyLegacyRedirect />} />
+                <Route path="/tutors/*" element={<AcademyLegacyRedirect />} />
+                <Route path="/roadmap/*" element={<AcademyLegacyRedirect />} />
+                <Route path="/updates/*" element={<AcademyLegacyRedirect />} />
+                <Route path="/stories/*" element={<AcademyLegacyRedirect />} />
+                <Route path="/ai-hub/*" element={<AcademyLegacyRedirect />} />
+                <Route path="/prompts/*" element={<AcademyLegacyRedirect />} />
+                <Route path="/become-tutor/*" element={<AcademyLegacyRedirect />} />
+                <Route path="/verify/*" element={<AcademyLegacyRedirect />} />
 
                 {/* Catch-all 404 also renders inside the public shell. */}
                 <Route path="*" element={<NotFound />} />
@@ -1210,15 +1136,26 @@ createRoot(document.getElementById("root")!).render(
               <Route path="/p/:slug" element={<PublicPortfolio />} />
 
               <Route
-                path="/auth"
-                element={<AuthPage redirectAfterAuth="/portfolio" />}
+                path="/academy/login"
+                element={<AuthPage redirectAfterAuth="/academy/dashboard" />}
               />
+              <Route
+                path="/academy/signup"
+                element={<Navigate to="/academy/login?mode=signup" replace />}
+              />
+              <Route path="/academy/reset" element={<Navigate to="/academy/login?mode=reset" replace />} />
+              <Route path="/auth/*" element={<AcademyAuthLegacyRedirect />} />
 
               {/* ── PORTFOLIO CREATOR system — its own auth, dashboard and
                   routes. Signing in here NEVER reaches an Academy dashboard
                   or the Portfolio admin portal. ── */}
               {/* Portfolio help / issue reporting — open to everyone. */}
               <Route path="/help" element={<Help />} />
+              <Route path="/dashboard/*" element={<AcademyLegacyRedirect />} />
+              <Route path="/learn/*" element={<AcademyLegacyRedirect />} />
+              <Route path="/tutor/*" element={<AcademyLegacyRedirect />} />
+              <Route path="/team/*" element={<AcademyLegacyRedirect />} />
+              <Route path="/admin/*" element={<AcademyLegacyRedirect />} />
               <Route path="/portfolio/auth" element={<PortfolioAuth />} />
 
               {/* Legacy password screen redirects to the creator auth flow. */}
@@ -1244,27 +1181,23 @@ createRoot(document.getElementById("root")!).render(
               <Route path="/portfolio/messages" element={<LegacyPortfolioMessagesRedirect />} />
               <Route path="/portfolio/profile" element={<LegacyPortfolioProfileRedirect />} />
 
-              {/* Course player (signed in) — Academy, locked by default. */}
+              {/* Course player (signed in) — Academy product. */}
               <Route
-                path="/learn/:slug"
+                path="/academy/learn/:slug"
                 element={
-                  <FeatureGate product="academy" redirectAuthenticatedTo="/portfolio">
-                    <RequireAuth>
-                      <Learn />
-                    </RequireAuth>
-                  </FeatureGate>
+                  <RequireAuth>
+                    <Learn />
+                  </RequireAuth>
                 }
               />
 
-              {/* Student dashboard — Academy, locked by default. */}
+              {/* Student dashboard — Academy product. */}
               <Route
-                path="/dashboard"
+                path="/academy/dashboard"
                 element={
-                  <FeatureGate product="academy" redirectAuthenticatedTo="/portfolio">
-                    <RequireAuth>
-                      <DashboardShell />
-                    </RequireAuth>
-                  </FeatureGate>
+                  <RequireAuth>
+                    <DashboardShell />
+                  </RequireAuth>
                 }
               >
                 <Route index element={<DashboardHome />} />
@@ -1288,16 +1221,13 @@ createRoot(document.getElementById("root")!).render(
               </Route>
 
               {/* Tutor dashboard — verified tutors only, or the admin session
-                  (password gate, no account) can preview it read-only.
-                  Academy product, so it is gated like the rest of it. */}
+                  (password gate, no account) can preview it read-only. */}
               <Route
-                path="/tutor"
+                path="/academy/tutor"
                 element={
-                  <FeatureGate product="academy" redirectAuthenticatedTo="/portfolio">
-                    <RequireTutor>
-                      <TutorShell />
-                    </RequireTutor>
-                  </FeatureGate>
+                  <RequireTutor>
+                    <TutorShell />
+                  </RequireTutor>
                 }
               >
                 <Route index element={<TutorOverview />} />
@@ -1319,10 +1249,11 @@ createRoot(document.getElementById("root")!).render(
                   Static routes under /tutor (courses, grading, …) win over
                   this dynamic segment, so the dashboard keeps working. */}
 
-              {/* Team Hub — workspace password access */}
-              <Route path="/team" element={<TeamHub />} />
-              <Route path="/team/register" element={<TeamRegister />} />
-              <Route path="/team/access/:teamSlug" element={<TeamPassword />} />              <Route path="/team/:teamSlug" element={<RequireTeamAuth><TeamDashboardShell /></RequireTeamAuth>}>
+              {/* Team Hub — Academy workspace password access. */}
+              <Route path="/academy/team" element={<TeamHub />} />
+              <Route path="/academy/team/register" element={<TeamRegister />} />
+              <Route path="/academy/team/access/:teamSlug" element={<TeamPassword />} />
+              <Route path="/academy/team/:teamSlug" element={<RequireTeamAuth><TeamDashboardShell /></RequireTeamAuth>}>
                 <Route index element={<AcademicOverview />} />
                 <Route path="settings" element={<TeamSettings />} />
               </Route>
@@ -1339,8 +1270,8 @@ createRoot(document.getElementById("root")!).render(
               <Route path="/adminbrand" element={<AdminBrandLegacyRedirect />} />
               <Route path="/portfolio/signin" element={<PortfolioSignIn />} />
 
-              {/* Admin dashboard — password-gated only, no user account needed */}
-              <Route path="/admin" element={<AdminShell />}>
+              {/* Admin dashboard — password-gated only, no user account needed. */}
+              <Route path="/academy/admin" element={<AdminShell />}>
                 <Route index element={<AdminOverview />} />
                 <Route path="users" element={<AdminUsers />} />
                 <Route path="applications" element={<AdminApplications />} />

@@ -11,7 +11,7 @@ import {
   requireTutorPreview,
 } from "./lib";
 import { questionValidator, type Question } from "./schema";
-import { completeLessonInternal, enrollmentFor } from "./learn";
+import { completeLessonInternal, enrollmentFor } from "./academy/learn";
 import { courseRequirements, effectiveWatchedPercent } from "./lmsShared";
 
 const normalize = (s: string) => s.trim().toLowerCase().replace(/\s+/g, " ");
@@ -121,7 +121,7 @@ export const submitLessonQuiz = mutation({
         passed ? " — lesson unlocked!" : ""
       }.`,
       type: "quiz",
-      link: course ? `/learn/${course.slug}` : "/dashboard",
+      link: course ? `/academy/learn/${course.slug}` : "/academy/dashboard",
     });
 
     return {

@@ -99,7 +99,7 @@ export const submitContact = mutation({
         title: `New contact message from ${trimmedName}`,
         body: messageBody.slice(0, 90),
         type: "message",
-        link: "/admin/chat",
+        link: "/academy/admin/chat",
       });
       return { via: "chat" as const };
     }

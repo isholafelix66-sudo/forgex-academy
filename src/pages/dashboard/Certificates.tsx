@@ -109,7 +109,7 @@ export default function Certificates() {
           title="No certificates yet"
           description="Complete all lessons in a course to earn a verifiable certificate."
           action={
-            <Link to="/courses">
+            <Link to="/academy/courses">
               <Button className="bg-lime-400 font-semibold text-black hover:bg-lime-300">
                 Find a course to finish
               </Button>

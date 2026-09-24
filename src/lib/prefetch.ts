@@ -11,21 +11,21 @@
 type Importer = () => Promise<unknown>;
 
 const EXACT: Array<[string, Importer]> = [
-  ["/courses", () => import("@/pages/Courses.tsx")],
-  ["/tutors", () => import("@/pages/Tutors.tsx")],
-  ["/roadmap", () => import("@/pages/RoadmapPage.tsx")],
-  ["/updates", () => import("@/pages/Updates.tsx")],
-  ["/stories", () => import("@/pages/Stories.tsx")],
-  ["/ai-hub", () => import("@/pages/AIHub.tsx")],
-  ["/prompts", () => import("@/pages/PromptLibrary.tsx")],
+  ["/academy/courses", () => import("@/pages/Courses.tsx")],
+  ["/academy/tutors", () => import("@/pages/Tutors.tsx")],
+  ["/academy/roadmap", () => import("@/pages/RoadmapPage.tsx")],
+  ["/academy/updates", () => import("@/pages/Updates.tsx")],
+  ["/academy/showcase", () => import("@/pages/Stories.tsx")],
+  ["/academy/ai-hub", () => import("@/pages/AIHub.tsx")],
+  ["/academy/prompts", () => import("@/pages/PromptLibrary.tsx")],
   ["/contact", () => import("@/pages/Contact.tsx")],
   ["/about", () => import("@/pages/About.tsx")],
-  ["/become-tutor", () => import("@/pages/BecomeTutor.tsx")],
-  ["/auth", () => import("@/pages/Auth.tsx")],
-  ["/dashboard", () => import("@/pages/dashboard/DashboardShell.tsx")],
-  ["/tutor", () => import("@/pages/tutor/TutorShell.tsx")],
-  ["/tutor/communities", () => import("@/pages/tutor/TutorCommunities.tsx")],
-  ["/admin", () => import("@/pages/admin/AdminShell.tsx")],
+  ["/academy/become-tutor", () => import("@/pages/BecomeTutor.tsx")],
+  ["/academy/login", () => import("@/pages/Auth.tsx")],
+  ["/academy/dashboard", () => import("@/pages/dashboard/DashboardShell.tsx")],
+  ["/academy/tutor", () => import("@/pages/tutor/TutorShell.tsx")],
+  ["/academy/tutor/communities", () => import("@/pages/tutor/TutorCommunities.tsx")],
+  ["/academy/admin", () => import("@/pages/admin/AdminShell.tsx")],
 ];
 
 // Tutor dashboard subroutes live under /tutor/ too — they must keep
@@ -45,13 +45,13 @@ const TUTOR_DASHBOARD_SUBROUTES = new Set([
 ]);
 
 const PREFIX: Array<[string, Importer]> = [
-  ["/learn/", () => import("@/pages/Learn.tsx")],
-  ["/verify/", () => import("@/pages/VerifyCertificate.tsx")],
-  ["/courses/", () => import("@/pages/CourseDetail.tsx")],
-  ["/prompts/", () => import("@/pages/PromptDetail.tsx")],
-  ["/tutors/", () => import("@/pages/TutorDetail.tsx")],
-  ["/tutor/communities/", () => import("@/pages/tutor/TutorCommunityManage.tsx")],
-  ["/tutor/", () => import("@/pages/TutorPage.tsx")],
+  ["/academy/learn/", () => import("@/pages/Learn.tsx")],
+  ["/academy/verify/", () => import("@/pages/VerifyCertificate.tsx")],
+  ["/academy/courses/", () => import("@/pages/CourseDetail.tsx")],
+  ["/academy/prompts/", () => import("@/pages/PromptDetail.tsx")],
+  ["/academy/tutors/", () => import("@/pages/TutorDetail.tsx")],
+  ["/academy/tutor/communities/", () => import("@/pages/tutor/TutorCommunityManage.tsx")],
+  ["/academy/tutor/", () => import("@/pages/TutorPage.tsx")],
 ];
 
 const prefetched = new Set<string>();
@@ -62,8 +62,8 @@ function resolve(path: string): Importer | null {
   if (exact) return exact[1];
   // A tutor-dashboard subroute (/tutor/courses, /tutor/grading, …) is not a
   // public slug — skip the /tutor/ prefix entry for those.
-  if (clean.startsWith("/tutor/") && !clean.slice("/tutor/".length).includes("/")) {
-    const segment = clean.slice("/tutor/".length).split("?")[0].split("#")[0];
+  if (clean.startsWith("/academy/tutor/") && !clean.slice("/academy/tutor/".length).includes("/")) {
+    const segment = clean.slice("/academy/tutor/".length).split("?")[0].split("#")[0];
     if (TUTOR_DASHBOARD_SUBROUTES.has(segment)) return null;
   }
   for (const [prefix, imp] of PREFIX) {

@@ -24,7 +24,7 @@ export default function MyCourses() {
         title="My Courses"
         description="Every course you've enrolled in, with live progress."
         actions={
-          <Link to="/courses">
+          <Link to="/academy/courses">
             <Button className="gap-2 bg-lime-400 font-semibold text-black hover:bg-lime-300">
               Browse more <ArrowRight className="size-4" />
             </Button>
@@ -44,7 +44,7 @@ export default function MyCourses() {
           title="You haven't enrolled in any courses yet"
           description="Pick a course, hit enroll, and start building your skills."
           action={
-            <Link to="/courses">
+            <Link to="/academy/courses">
               <Button className="bg-lime-400 font-semibold text-black hover:bg-lime-300">
                 Explore courses
               </Button>

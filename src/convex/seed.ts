@@ -471,7 +471,7 @@ export const ensureSeedData = mutation({
   handler: async (ctx, { force }) => {
     // Self-healing seed: check the WHOLE catalog, not just categories. If a
     // first seed ever fails partway (e.g. a deploy-time timeout) it leaves
-    // categories behind while courses/roadmaps are still missing — the old
+    // categories behind while courses/academy/roadmaps are still missing — the old
     // "categories exist → skip everything" check would then never repair it,
     // and public pages would stay empty for visitors. Re-running repairs it.
     // ---

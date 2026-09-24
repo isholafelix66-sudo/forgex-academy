@@ -130,7 +130,7 @@ export default function Connections() {
           action={
             tab !== "blocked" ? (
               <Link
-                to="/dashboard/discover"
+                to="/academy/dashboard"/discover"
                 className="inline-flex items-center gap-2 rounded-xl bg-lime-400 px-5 py-2.5 text-sm font-semibold text-black transition-colors hover:bg-lime-300"
               >
                 <UserPlus className="size-4" /> Discover students

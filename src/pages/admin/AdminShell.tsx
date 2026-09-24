@@ -235,12 +235,12 @@ export default function AdminShell() {
     {
       label: "Platform",
       items: [
-        { to: "/admin", label: "Overview", icon: <LayoutDashboard className="size-4" />, end: true },
-        { to: "/admin/users", label: "Users & roles", icon: <Users className="size-4" /> },
-        { to: "/admin/inbox", label: "Inbox", icon: <Inbox className="size-4" /> },
-        { to: "/admin/chat", label: "Chat logs", icon: <MessageSquare className="size-4" /> },
+        { to: "/academy/admin"", label: "Overview", icon: <LayoutDashboard className="size-4" />, end: true },
+        { to: "/academy/admin"/users", label: "Users & roles", icon: <Users className="size-4" /> },
+        { to: "/academy/admin"/inbox", label: "Inbox", icon: <Inbox className="size-4" /> },
+        { to: "/academy/admin"/chat", label: "Chat logs", icon: <MessageSquare className="size-4" /> },
         {
-          to: "/admin/applications",
+          to: "/academy/admin"/applications",
           label: "Tutor verification",
           icon: <BadgeCheck className="size-4" />,
           badge:
@@ -250,21 +250,21 @@ export default function AdminShell() {
               </span>
             ) : undefined,
         },
-        { to: "/admin/courses", label: "Courses", icon: <BookOpen className="size-4" /> },
-        { to: "/admin/catalog", label: "Categories & roadmaps", icon: <ListChecks className="size-4" /> },
-        { to: "/admin/teams", label: "Team Access", icon: <Users className="size-4" /> },
-        { to: "/admin/ai-support", label: "AI Support", icon: <Bot className="size-4" /> },
-        { to: "/admin/email-center", label: "Email Center", icon: <Mail className="size-4" /> },
-        { to: "/tutor", label: "Tutor dashboard (preview)", icon: <GraduationCap className="size-4" /> },
+        { to: "/academy/admin"/courses", label: "Courses", icon: <BookOpen className="size-4" /> },
+        { to: "/academy/admin"/catalog", label: "Categories & roadmaps", icon: <ListChecks className="size-4" /> },
+        { to: "/academy/admin"/teams", label: "Team Access", icon: <Users className="size-4" /> },
+        { to: "/academy/admin"/ai-support", label: "AI Support", icon: <Bot className="size-4" /> },
+        { to: "/academy/admin"/email-center", label: "Email Center", icon: <Mail className="size-4" /> },
+        { to: "/academy/tutor", label: "Tutor dashboard (preview)", icon: <GraduationCap className="size-4" /> },
       ],
     },
     {
       label: "System",
       items: [
-        { to: "/admin/system", label: "System health", icon: <Activity className="size-4" /> },
-        { to: "/admin/system/errors", label: "Error tracking", icon: <Bug className="size-4" /> },
+        { to: "/academy/admin"/system", label: "System health", icon: <Activity className="size-4" /> },
+        { to: "/academy/admin"/system/errors", label: "Error tracking", icon: <Bug className="size-4" /> },
         {
-          to: "/admin/system/incidents",
+          to: "/academy/admin"/system/incidents",
           label: "Incidents",
           icon: <Siren className="size-4" />,
           badge: incidentCount ? (
@@ -273,31 +273,31 @@ export default function AdminShell() {
             </span>
           ) : undefined,
         },
-        { to: "/admin/system/activity", label: "Activity log", icon: <History className="size-4" /> },
-        { to: "/admin/system/alerts", label: "Alerts", icon: <BellRing className="size-4" /> },
+        { to: "/academy/admin"/system/activity", label: "Activity log", icon: <History className="size-4" /> },
+        { to: "/academy/admin"/system/alerts", label: "Alerts", icon: <BellRing className="size-4" /> },
       ],
     },
     {
       label: "Content",
       items: [
-        { to: "/admin/updates", label: "Updates & news", icon: <Megaphone className="size-4" /> },
-        { to: "/admin/stories", label: "Student stories", icon: <Heart className="size-4" /> },
-        { to: "/admin/ai-hub", label: "AI Hub", icon: <Bot className="size-4" /> },
-        { to: "/admin/prompts", label: "Prompt Library", icon: <Braces className="size-4" /> },
-        { to: "/admin/content", label: "Website & branding", icon: <PenSquare className="size-4" /> },
-        { to: "/admin/media", label: "Media library", icon: <ImageIcon className="size-4" /> },
-        { to: "/admin/form-builder", label: "Tutor registration form", icon: <ClipboardList className="size-4" /> },
-        { to: "/admin/certificates", label: "Certificates", icon: <Award className="size-4" /> },
-        { to: "/admin/audit", label: "Audit log", icon: <ScrollText className="size-4" /> },
+        { to: "/academy/admin"/updates", label: "Updates & news", icon: <Megaphone className="size-4" /> },
+        { to: "/academy/admin"/stories", label: "Student stories", icon: <Heart className="size-4" /> },
+        { to: "/academy/admin"/ai-hub", label: "AI Hub", icon: <Bot className="size-4" /> },
+        { to: "/academy/admin"/prompts", label: "Prompt Library", icon: <Braces className="size-4" /> },
+        { to: "/academy/admin"/content", label: "Website & branding", icon: <PenSquare className="size-4" /> },
+        { to: "/academy/admin"/media", label: "Media library", icon: <ImageIcon className="size-4" /> },
+        { to: "/academy/admin"/form-builder", label: "Tutor registration form", icon: <ClipboardList className="size-4" /> },
+        { to: "/academy/admin"/certificates", label: "Certificates", icon: <Award className="size-4" /> },
+        { to: "/academy/admin"/audit", label: "Audit log", icon: <ScrollText className="size-4" /> },
       ],
     },
     {
       label: "Communication",
       items: [
-        { to: "/admin/communication", label: "Communities", icon: <MessageCircle className="size-4" /> },
-        { to: "/admin/communication/dms", label: "Private DMs", icon: <MessageSquare className="size-4" /> },
+        { to: "/academy/admin"/communication", label: "Communities", icon: <MessageCircle className="size-4" /> },
+        { to: "/academy/admin"/communication/dms", label: "Private DMs", icon: <MessageSquare className="size-4" /> },
         {
-          to: "/admin/communication/reports",
+          to: "/academy/admin"/communication/reports",
           label: "Reports & tutor support",
           icon: <Flag className="size-4" />,
           badge:
@@ -307,63 +307,63 @@ export default function AdminShell() {
               </span>
             ) : undefined,
         },
-        { to: "/admin/communication/audit", label: "Audit log", icon: <ScrollText className="size-4" /> },
+        { to: "/academy/admin"/communication/audit", label: "Audit log", icon: <ScrollText className="size-4" /> },
       ],
     },
     {
       label: "Account",
       items: [
-        { to: "/admin/profile", label: "Admin profile", icon: <UserCircle className="size-4" /> },
+        { to: "/academy/admin"/profile", label: "Admin profile", icon: <UserCircle className="size-4" /> },
       ],
     },
   ];
 
   const mobilePrimary: MobileNavItem[] = [
-    { to: "/admin", label: "Overview", icon: <LayoutDashboard className="size-5" />, end: true },
-    { to: "/admin/users", label: "Users", icon: <Users className="size-5" /> },
-    { to: "/admin/courses", label: "Courses", icon: <BookOpen className="size-5" /> },
-    { to: "/admin/inbox", label: "Inbox", icon: <Inbox className="size-5" /> },
+    { to: "/academy/admin"", label: "Overview", icon: <LayoutDashboard className="size-5" />, end: true },
+    { to: "/academy/admin"/users", label: "Users", icon: <Users className="size-5" /> },
+    { to: "/academy/admin"/courses", label: "Courses", icon: <BookOpen className="size-5" /> },
+    { to: "/academy/admin"/inbox", label: "Inbox", icon: <Inbox className="size-5" /> },
   ];
 
   const mobileMore: MobileNavSection[] = [
     {
       label: "Platform",
       items: [
-        { to: "/admin/applications", label: "Tutor verification", icon: <BadgeCheck className="size-4" /> },
-        { to: "/admin/chat", label: "Chat logs", icon: <MessageSquare className="size-4" /> },
-        { to: "/admin/catalog", label: "Categories & roadmaps", icon: <ListChecks className="size-4" /> },
-        { to: "/admin/teams", label: "Team Access", icon: <Users className="size-4" /> },
-        { to: "/admin/ai-support", label: "AI Support", icon: <Bot className="size-4" /> },
-        { to: "/admin/email-center", label: "Email Center", icon: <Mail className="size-4" /> },
-        { to: "/admin/system", label: "System health", icon: <Activity className="size-4" /> },
-        { to: "/admin/system/incidents", label: "Incidents", icon: <Siren className="size-4" /> },
+        { to: "/academy/admin"/applications", label: "Tutor verification", icon: <BadgeCheck className="size-4" /> },
+        { to: "/academy/admin"/chat", label: "Chat logs", icon: <MessageSquare className="size-4" /> },
+        { to: "/academy/admin"/catalog", label: "Categories & roadmaps", icon: <ListChecks className="size-4" /> },
+        { to: "/academy/admin"/teams", label: "Team Access", icon: <Users className="size-4" /> },
+        { to: "/academy/admin"/ai-support", label: "AI Support", icon: <Bot className="size-4" /> },
+        { to: "/academy/admin"/email-center", label: "Email Center", icon: <Mail className="size-4" /> },
+        { to: "/academy/admin"/system", label: "System health", icon: <Activity className="size-4" /> },
+        { to: "/academy/admin"/system/incidents", label: "Incidents", icon: <Siren className="size-4" /> },
       ],
     },
     {
       label: "Content",
       items: [
-        { to: "/admin/updates", label: "Updates & news", icon: <Megaphone className="size-4" /> },
-        { to: "/admin/stories", label: "Student stories", icon: <Heart className="size-4" /> },
-        { to: "/admin/ai-hub", label: "AI Hub", icon: <Bot className="size-4" /> },
-        { to: "/admin/prompts", label: "Prompt Library", icon: <Braces className="size-4" /> },
-        { to: "/admin/content", label: "Website & branding", icon: <PenSquare className="size-4" /> },
-        { to: "/admin/media", label: "Media library", icon: <ImageIcon className="size-4" /> },
-        { to: "/admin/certificates", label: "Certificates", icon: <Award className="size-4" /> },
-        { to: "/admin/audit", label: "Audit log", icon: <ScrollText className="size-4" /> },
+        { to: "/academy/admin"/updates", label: "Updates & news", icon: <Megaphone className="size-4" /> },
+        { to: "/academy/admin"/stories", label: "Student stories", icon: <Heart className="size-4" /> },
+        { to: "/academy/admin"/ai-hub", label: "AI Hub", icon: <Bot className="size-4" /> },
+        { to: "/academy/admin"/prompts", label: "Prompt Library", icon: <Braces className="size-4" /> },
+        { to: "/academy/admin"/content", label: "Website & branding", icon: <PenSquare className="size-4" /> },
+        { to: "/academy/admin"/media", label: "Media library", icon: <ImageIcon className="size-4" /> },
+        { to: "/academy/admin"/certificates", label: "Certificates", icon: <Award className="size-4" /> },
+        { to: "/academy/admin"/audit", label: "Audit log", icon: <ScrollText className="size-4" /> },
       ],
     },
     {
       label: "Communication",
       items: [
-        { to: "/admin/communication", label: "Communities", icon: <MessageCircle className="size-4" /> },
-        { to: "/admin/communication/dms", label: "Private DMs", icon: <MessageSquare className="size-4" /> },
-        { to: "/admin/communication/reports", label: "Reports & support", icon: <Flag className="size-4" /> },
+        { to: "/academy/admin"/communication", label: "Communities", icon: <MessageCircle className="size-4" /> },
+        { to: "/academy/admin"/communication/dms", label: "Private DMs", icon: <MessageSquare className="size-4" /> },
+        { to: "/academy/admin"/communication/reports", label: "Reports & support", icon: <Flag className="size-4" /> },
       ],
     },
     {
       label: "Account",
       items: [
-        { to: "/admin/profile", label: "Admin profile", icon: <UserCircle className="size-4" /> },
+        { to: "/academy/admin"/profile", label: "Admin profile", icon: <UserCircle className="size-4" /> },
       ],
     },
   ];

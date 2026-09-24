@@ -30,7 +30,7 @@ export function CourseCard({ course, className }: { course: CourseCardData; clas
   const enrolled = course.progress !== undefined;
   return (
     <Link
-      to={`/courses/${course.slug}`}
+      to={`/academy/courses/${course.slug}`}
       className={cn(
         "card-lift group flex flex-col overflow-hidden rounded-2xl border border-white/8 bg-card",
         className,

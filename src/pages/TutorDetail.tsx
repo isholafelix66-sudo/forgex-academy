@@ -50,7 +50,7 @@ export default function TutorDetail() {
             icon={<GraduationCap className="size-6" />}
             title="Tutor not found"
             action={
-              <Link to="/tutors" className="text-sm text-lime-300 hover:underline">
+              <Link to="/academy/tutors" className="text-sm text-lime-300 hover:underline">
                 ← Back to tutors
               </Link>
             }
@@ -65,7 +65,7 @@ export default function TutorDetail() {
       <section className="mx-auto max-w-7xl px-4 pb-24 pt-10 sm:px-6">
         <Reveal>
           <Link
-            to="/tutors"
+            to="/academy/tutors"
             className="inline-flex items-center gap-1.5 text-sm text-muted-foreground transition-colors hover:text-lime-300"
           >
             <ArrowLeft className="size-4" /> All tutors

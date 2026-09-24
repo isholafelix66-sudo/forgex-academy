@@ -115,7 +115,7 @@ export const submitStudentSupport = mutation({
           title: `New student support: ${args.subject}`,
           body: `${user.name || "A student"} submitted a support request.`,
           type: "student_support",
-          link: "/team/student-support",
+          link: "/academy/team/student-support",
         });
       }
     }
@@ -185,7 +185,7 @@ export const updateStudentSupportCase = mutation({
         title: `Support case ${doc.caseNumber} updated`,
         body: `Your support request status changed to ${args.status.replace(/_/g, " ")}.`,
         type: "student_support",
-        link: "/dashboard",
+        link: "/academy/dashboard",
       });
     }
 
@@ -304,7 +304,7 @@ export const sendConversationMessage = mutation({
           title: `New message in ${conv.subject}`,
           body: `${user.name || "Someone"}: ${args.body.slice(0, 80)}`,
           type: "message",
-          link: `/team`,
+          link: `/academy/team`,
         });
       }
     }
@@ -510,7 +510,7 @@ export const startCourseReview = mutation({
         title: `Course review started: ${course.title}`,
         body: `The Academic Team has started reviewing your course.`,
         type: "course_review",
-        link: "/tutor/courses",
+        link: "/academy/tutor/courses",
       });
     }
 
@@ -845,7 +845,7 @@ export const requestCourseRevision = mutation({
       title: `Revision requested: ${course.title}`,
       body: args.feedback.slice(0, 200),
       type: "course_review",
-      link: "/tutor/courses",
+      link: "/academy/tutor/courses",
     });
 
     await logActivity(ctx, {
@@ -879,7 +879,7 @@ export const approveCourse = mutation({
       title: `Course approved: ${course.title}`,
       body: "Your course has been approved and is now live.",
       type: "course_review",
-      link: "/tutor/courses",
+      link: "/academy/tutor/courses",
     });
 
     await logActivity(ctx, {
@@ -933,7 +933,7 @@ export const escalateToAdmin = mutation({
           title: `Escalation: ${args.targetLabel || args.targetType}`,
           body: `${user.name || "Team member"} escalated: ${args.reason.slice(0, 150)}`,
           type: "escalation",
-          link: "/admin",
+          link: "/academy/admin",
         });
       }
     }
@@ -1028,7 +1028,7 @@ export const replyToStudentCase = mutation({
         title: `Reply to your support case ${doc.caseNumber}`,
         body: args.body.slice(0, 150),
         type: "student_support",
-        link: "/dashboard",
+        link: "/academy/dashboard",
       });
     }
 
@@ -1071,7 +1071,7 @@ export const escalateStudentCase = mutation({
           title: `Escalated: ${doc.caseNumber}`,
           body: args.note.slice(0, 150),
           type: "escalation",
-          link: "/team/academic",
+          link: "/academy/team/academic",
         });
       }
       if (args.escalateTo === "admin" && u.role === "admin") {
@@ -1080,7 +1080,7 @@ export const escalateStudentCase = mutation({
           title: `Escalated: ${doc.caseNumber}`,
           body: args.note.slice(0, 150),
           type: "escalation",
-          link: "/admin",
+          link: "/academy/admin",
         });
       }
     }
@@ -1221,7 +1221,7 @@ export const replyToTutorSupportCase = mutation({
       title: `Update on: ${doc.subject}`,
       body: args.body.trim().slice(0, 150),
       type: "support",
-      link: "/tutor/support",
+      link: "/academy/tutor/support",
     });
 
     await logActivity(ctx, {
@@ -1482,7 +1482,7 @@ export const adminSendDirectMessage = mutation({
       title: `New message from ${user.name || "Admin"}`,
       body: args.body.slice(0, 80),
       type: "message",
-      link: "/team",
+      link: "/academy/team",
     });
 
     return convId;

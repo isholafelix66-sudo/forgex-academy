@@ -8,7 +8,7 @@ import {
   requireTutorPreview,
 } from "./lib";
 import { questionValidator, type Question } from "./schema";
-import { enrollmentFor, finishCourseInternal } from "./learn";
+import { enrollmentFor, finishCourseInternal } from "./academy/learn";
 
 const normalize = (s: string) => s.trim().toLowerCase().replace(/\s+/g, " ");
 
@@ -113,7 +113,7 @@ export const submitFinalExam = mutation({
         ? `You passed the final exam for "${exam.title}" (${percent}%) — certificate unlocked!`
         : `"${exam.title}": you scored ${percent}% (${exam.passPercent}% needed to pass).`,
       type: "exam",
-      link: course ? `/learn/${course.slug}` : "/dashboard",
+      link: course ? `/academy/learn/${course.slug}` : "/academy/dashboard",
     });
 
     return { attemptId, score: g.score, totalMarks: exam.totalMarks, percent, passed };

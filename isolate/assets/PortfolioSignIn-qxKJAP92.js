@@ -1,1 +1,0 @@
-import{y as a,r as e,j as o,am as r}from"./index-ZTDwh0Pi.js";function i(){const t=a();return e.useEffect(()=>{t("/portfolio/auth",{replace:!0})},[t]),o.jsx(r,{to:"/portfolio/auth",replace:!0})}export{i as default};

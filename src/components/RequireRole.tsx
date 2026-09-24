@@ -150,12 +150,12 @@ export function RequireTutor({ children }: { children: ReactNode }) {
     case "render":
       return children;
     case "redirect-admin":
-      return <Navigate to="/admin" replace />;
+      return <Navigate to="/academy/admin" replace />;
     case "redirect-auth": {
       const returnTo = `${location.pathname}${location.search}`;
       return (
         <Navigate
-          to={`/auth?returnTo=${encodeURIComponent(returnTo)}`}
+          to={`/academy/login?returnTo=${encodeURIComponent(returnTo)}`}
           replace
         />
       );
@@ -167,7 +167,7 @@ export function RequireTutor({ children }: { children: ReactNode }) {
           title="Tutor verification pending"
           body="Your application was approved — an admin is verifying your account. Most verifications happen within 24 hours or less. The Tutor Dashboard unlocks as soon as you're verified, and we'll email you the decision."
         >
-          <Link to="/become-tutor">
+          <Link to="/academy/become-tutor">
             <Button variant="outline">View application status</Button>
           </Link>
         </GateScreen>
@@ -179,7 +179,7 @@ export function RequireTutor({ children }: { children: ReactNode }) {
           title="Application under review"
           body="Your application is under review — check back within the next 24 hours or less. An admin will verify your account, and we'll email you the moment a decision is made. The Tutor Dashboard unlocks automatically once verified."
         >
-          <Link to="/become-tutor">
+          <Link to="/academy/become-tutor">
             <Button variant="outline">View application status</Button>
           </Link>
         </GateScreen>
@@ -195,13 +195,13 @@ export function RequireTutor({ children }: { children: ReactNode }) {
               : "This area is for verified tutors. Apply to teach — applications are reviewed by our admin team."
           }
         >
-          <Link to="/become-tutor">
+          <Link to="/academy/become-tutor">
             <Button className="bg-lime-400 font-semibold text-black hover:bg-lime-300">
               Apply to teach
             </Button>
           </Link>
           {user?.role !== "tutor" && (
-            <Link to="/dashboard">
+            <Link to="/academy/dashboard">
               <Button variant="outline">Student dashboard</Button>
             </Link>
           )}
@@ -229,7 +229,7 @@ export function RequireAdmin({ children }: { children: ReactNode }) {
       title="Administrator access required"
       body="You don't have permission to view the Admin Dashboard. If you're the first user of this Academy, claim administrator access from your profile."
     >
-      <Link to="/dashboard">
+      <Link to="/academy/dashboard">
         <Button variant="outline">Back to dashboard</Button>
       </Link>
     </GateScreen>

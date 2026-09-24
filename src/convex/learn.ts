@@ -257,7 +257,7 @@ export async function finishCourseInternal(
   enrollment: Doc<"enrollments">,
 ) {
   await ctx.db.patch(enrollment._id, { status: "completed", progress: 100 });
-  // Only issue a certificate when the admin/tutor explicitly enabled it.
+  // Only issue a certificate when the admin/academy/tutor explicitly enabled it.
   if (course.hasCertificate) {
     const existing = await ctx.db
       .query("certificates")
@@ -282,7 +282,7 @@ export async function finishCourseInternal(
         title: "Course completed! 🎉",
       body: `You earned a certificate for "${course.title}". Show it off — it's verifiable.`,
       type: "certificate",
-      link: "/dashboard/certificates",
+      link: "/academy/dashboard/certificates",
     });
     // Transactional email: certificate notification via Gmail SMTP.
     const email = "email" in user ? String(user.email ?? "") : "";
@@ -517,7 +517,7 @@ export const enroll = mutation({
       title: "Enrolled in a new course",
       body: `You're enrolled in "${course.title}". Jump in and start the first lesson.`,
       type: "course",
-      link: `/courses/${course.slug}`,
+      link: `/academy/courses/${course.slug}`,
     });
 
     // Communication module: every course has a community, and enrolling
@@ -534,7 +534,7 @@ export const enroll = mutation({
         title: "New student enrolled",
         body: `${user.name || "A student"} enrolled in "${course.title}".`,
         type: "enrollment",
-        link: `/tutor`,
+        link: `/academy/tutor`,
       });
       await ctx.scheduler.runAfter(0, internal.emailTriggers.notifyNewEnrollmentToTutor, {
         enrollmentId: id,

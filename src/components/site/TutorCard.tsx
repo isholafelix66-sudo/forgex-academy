@@ -24,7 +24,7 @@ export function TutorCard({
 }) {
   return (
     <Link
-      to={tutor.slug ? `/tutor/${tutor.slug}` : `/tutors/${tutor._id}`}
+      to={tutor.slug ? `/academy/tutor/${tutor.slug}` : `/academy/tutors/${tutor._id}`}
       className={cn(
         "card-lift group flex flex-col items-center gap-3 rounded-2xl border border-white/8 bg-card p-6 text-center",
         className,

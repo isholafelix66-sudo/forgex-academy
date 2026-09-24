@@ -103,16 +103,19 @@ export function AppShell({
   // Non-Academy shells own their profile path outright — it is never
   // overridden by an Academy admin session.
   const profileLink = adminFallback
-    ? "/admin/profile"
+    ? "/academy/admin/profile"
     : !academyAuth
       ? (profilePath ?? null)
       : hasAccount
-        ? (profilePath ?? "/dashboard/profile")
+        ? (profilePath ?? "/academy/dashboard/profile")
         : null;
+
+  const productHomePath = academyAuth ? "/academy" : "/";
+  const productHomeLabel = academyAuth ? "Academy home" : "Portfolio";
 
   const handleSignOut = async () => {
     await signOut();
-    navigate("/");
+    navigate(productHomePath);
   };
 
   // The admin dashboard is password-gated and reachable ONLY by visiting
@@ -121,13 +124,13 @@ export function AppShell({
   // (hidden on shells for products that are currently locked).
   const roleLink =
     showRoleLink !== false && user?.role === "tutor" && user.verified
-      ? { to: "/tutor", label: "Tutor dashboard" }
+      ? { to: "/academy/tutor", label: "Tutor dashboard" }
       : null;
 
   const sidebar = (
     <div className="flex h-full flex-col">
       <div className="flex h-16 items-center gap-2.5 border-b border-white/8 px-5">
-        <Link to="/" className="flex items-center gap-2.5">
+        <Link to={productHomePath} className="flex items-center gap-2.5">
           <img src={logo} alt={brandAlt ?? "ForgeX"} className="size-8 rounded-lg" />
           <span className="font-display text-base font-bold">
             {brand ?? (
@@ -145,11 +148,11 @@ export function AppShell({
             dashboard home, keeping the public site and the authenticated
             workspace clearly separated. Inter 600, 15px, -0.01em. */}
         <Link
-          to="/"
+          to={productHomePath}
           className="flex items-center gap-3 rounded-xl border border-lime-400/20 bg-lime-400/6 px-3 py-2.5 text-[15px] font-semibold tracking-[-0.01em] text-foreground transition-colors hover:border-lime-400/40 hover:bg-lime-400/12 hover:text-lime-300"
         >
           <HomeIcon className="size-4 shrink-0 text-lime-400" />
-          <span className="flex-1 truncate">ForgeX Home</span>
+          <span className="flex-1 truncate">{productHomeLabel}</span>
         </Link>
         {sections.map((section, i) => (
           <div key={i}>
@@ -262,11 +265,11 @@ export function AppShell({
                 phones (14px/600 on mobile, 15px/600 from sm). Goes to the
                 main public website homepage, NOT the dashboard home. */}
             <Link
-              to="/"
+              to={productHomePath}
               className="inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full border border-white/12 bg-white/5 px-3 py-2 text-[14px] font-semibold tracking-[-0.01em] text-foreground transition-colors hover:border-lime-400/40 hover:bg-lime-400/10 hover:text-lime-300 sm:px-3.5 sm:text-[15px]"
             >
               <HomeIcon className="size-4 shrink-0 text-lime-400" />
-              ForgeX Home
+              {productHomeLabel}
             </Link>
             {/* roleLink intentionally NOT duplicated in the header — the
                 sidebar (≥768px) is the single source for dashboard links, so

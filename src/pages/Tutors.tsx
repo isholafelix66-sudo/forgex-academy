@@ -110,7 +110,7 @@ export default function Tutors() {
               Apply to become a verified ForgeX Academy tutor. Get reviewed by
               our admin team and start teaching.
             </p>
-            <Link to="/become-tutor" className="mt-5 inline-block">
+            <Link to="/academy/become-tutor" className="mt-5 inline-block">
               <Button className="gap-2 bg-lime-400 font-semibold text-black hover:bg-lime-300">
                 Apply to teach <GraduationCap className="size-4" />
               </Button>
