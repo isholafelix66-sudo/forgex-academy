@@ -1,7 +1,8 @@
 import { Link } from "react-router";
 import { useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
-import { LifeBuoy, Mail, MapPin, MessageSquare, Phone } from "lucide-react";
+import { Lock, Mail, MapPin, MessageSquare, Phone } from "lucide-react";
+import { toast } from "sonner";
 import logo from "@/assets/logo.svg";
 import { toExternalHref } from "@/lib/url";
 import { BrandMark } from "./BrandMark";
@@ -83,20 +84,41 @@ export function Footer() {
 
           {/* Secondary navigation — the bottom tab bar only carries the four
               primary destinations, so the rest lives here on mobile. */}
-          <div className="mt-4 flex flex-wrap gap-1.5">
+          <div className="mt-4 flex flex-wrap gap-2">
             {[
               { to: "/about", label: "About" },
               { to: "/contact", label: "Contact" },
-              { to: "/help", label: "Get help" },
             ].map((l) => (
               <Link
                 key={l.to}
                 to={l.to}
-                className="rounded-lg border border-white/10 bg-white/5 px-3 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:border-lime-400/40 hover:text-lime-300"
+                className="inline-flex max-w-full items-center whitespace-nowrap rounded-lg border border-white/10 bg-white/5 px-3 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:border-lime-400/40 hover:text-lime-300"
               >
                 {l.label}
               </Link>
             ))}
+            <Link
+              to="/academy"
+              onClick={() => toast("ForgeX Academy is coming soon")}
+              aria-label="ForgeX Academy, locked — coming soon"
+              title="ForgeX Academy is coming soon"
+              className="inline-flex max-w-full items-center gap-1.5 whitespace-nowrap rounded-lg border border-white/10 bg-white/5 px-3 py-1.5 text-xs font-medium text-muted-foreground/70 transition-colors hover:border-lime-400/30 hover:text-muted-foreground"
+            >
+              Academy
+              <Lock className="size-3 text-lime-400/60" aria-hidden="true" />
+            </Link>
+            <Link
+              to="/opportunity-hub"
+              className="inline-flex max-w-full items-center whitespace-nowrap rounded-lg border border-white/10 bg-white/5 px-3 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:border-lime-400/40 hover:text-lime-300"
+            >
+              Opportunity Hub
+            </Link>
+            <Link
+              to="/help"
+              className="inline-flex max-w-full items-center whitespace-nowrap rounded-lg border border-white/10 bg-white/5 px-3 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:border-lime-400/40 hover:text-lime-300"
+            >
+              Get help
+            </Link>
           </div>
 
           <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-white/10 pt-4">
@@ -108,13 +130,6 @@ export function Footer() {
             >
               <MessageSquare className="size-3.5 text-lime-400" />
               Get in touch
-            </Link>
-            <Link
-              to="/help"
-              className="inline-flex items-center gap-1.5 rounded-lg border border-white/10 bg-white/5 px-3 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:border-lime-400/40 hover:text-lime-300"
-            >
-              <LifeBuoy className="size-3.5 text-lime-400" />
-              Get help
             </Link>
             {/* Social icons managed in the admin portal — same list as the
                 desktop "Follow us" section, opened in a new tab. */}
