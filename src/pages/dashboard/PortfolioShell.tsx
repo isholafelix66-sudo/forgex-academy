@@ -5,6 +5,7 @@ import {
   FolderKanban,
   LayoutDashboard,
   Loader2,
+  MessageSquare,
   PenSquare,
   Settings,
   User,
@@ -49,6 +50,21 @@ export default function PortfolioShell() {
   );
   const ensurePortfolio = useMutation(api.projects.ensureMyPortfolio);
   const [error, setError] = useState<string | null>(null);
+
+  // Unread portfolio messages (visitor conversations) — shown as a dot on the
+  // Messages item so nothing is missed while working on the portfolio.
+  const unreadMessages = useQuery(
+    api.portfolioMessages.ownerUnreadCount,
+    userToken ? { token: userToken } : "skip",
+  );
+  const messagesIcon = (size: string) => (
+    <span className="relative inline-flex">
+      <MessageSquare className={size} />
+      {(unreadMessages ?? 0) > 0 && (
+        <span className="absolute -right-1 -top-1 size-2 rounded-full bg-lime-400 ring-2 ring-[#0b0d08]" />
+      )}
+    </span>
+  );
 
   // Create the portfolio on first visit so every section has something to
   // edit. The mutation is idempotent and cannot double-create.
@@ -99,6 +115,12 @@ export default function PortfolioShell() {
           label: "Projects",
           icon: <FolderKanban className="size-4" />,
         },
+        {
+          to: "/portfolio/dashboard/messages",
+          label:
+            (unreadMessages ?? 0) > 0 ? `Messages (${unreadMessages})` : "Messages",
+          icon: messagesIcon("size-4"),
+        },
       ],
     },
     {
@@ -143,6 +165,16 @@ export default function PortfolioShell() {
   ];
 
   const mobileMore: MobileNavSection[] = [
+    {
+      label: "Portfolio",
+      items: [
+        {
+          to: "/portfolio/dashboard/messages",
+          label: "Messages",
+          icon: messagesIcon("size-4"),
+        },
+      ],
+    },
     {
       label: "Account",
       items: [

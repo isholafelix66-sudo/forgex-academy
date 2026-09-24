@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Avatar } from "@/components/site/Avatar";
+import { ImageUploader } from "@/components/media/ImageUploader";
 import { Field } from "@/components/portfolio/PortfolioFields";
 import { TextInput } from "@/components/portfolio/PortfolioFields";
 import { toast } from "sonner";
@@ -31,6 +32,10 @@ export default function CreatorProfile() {
   const updateProfile = useMutation(api.portfolioUsers.updateProfile);
   const updateEmail = useMutation(api.portfolioUsers.updateEmail);
   const signOut = useMutation(api.portfolioUsers.signOut);
+  // Device uploads for the creator's own photo: Cloudinary when configured,
+  // otherwise Portfolio storage scoped to this creator session.
+  const creatorUploadUrl = useMutation(api.portfolioUploads.creatorUploadUrl);
+  const creatorResolveUrl = useMutation(api.portfolioUploads.creatorResolveUrl);
 
   const [name, setName] = useState("");
   const [title, setTitle] = useState("");
@@ -118,6 +123,24 @@ export default function CreatorProfile() {
             </p>
             <p className="truncate text-sm text-muted-foreground">{title || "Creator"}</p>
           </div>
+        </div>
+
+        <div className="mt-5">
+          <ImageUploader
+            label="Upload a photo from this device"
+            hint="JPG, PNG or WEBP — up to 15 MB. Camera and gallery both work on mobile."
+            value={avatarUrl || null}
+            getUploadUrl={() =>
+              creatorUploadUrl({ token: userToken as string })
+            }
+            resolveUploadUrl={(storageId) =>
+              creatorResolveUrl({
+                token: userToken as string,
+                storageId: storageId as never,
+              })
+            }
+            onUploaded={(img) => setAvatarUrl(img.secureUrl)}
+          />
         </div>
 
         <div className="mt-6 grid gap-4 sm:grid-cols-2">

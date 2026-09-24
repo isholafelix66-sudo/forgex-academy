@@ -17,6 +17,7 @@ export function BrandMark({
   showProduct = false,
   showTagline = false,
   onClick,
+  shrink = true,
 }: {
   branding?: Branding;
   to?: string | null;
@@ -27,6 +28,11 @@ export function BrandMark({
   /** Show the tagline line ("Create • Showcase • Grow"). */
   showTagline?: boolean;
   onClick?: () => void;
+  /**
+   * When false the wordmark may shrink and truncate to fit its container
+   * (used by the mobile header so the bar never overflows on small phones).
+   */
+  shrink?: boolean;
 }) {
   const fallback = useBranding();
   const b = branding ?? fallback;
@@ -75,7 +81,7 @@ export function BrandMark({
     <Link
       to={to}
       onClick={onClick}
-      className="group flex min-w-0 shrink-0 items-center"
+      className={cn("group flex min-w-0 items-center", shrink ? "shrink-0" : "shrink")}
       aria-label={b.name}
     >
       {body}

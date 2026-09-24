@@ -87,6 +87,11 @@ export default function PortfolioAuth() {
       setStep("code");
       setResendIn(45);
       toast.success(res.message);
+      if (res.deliveryOnHold) {
+        toast.info(
+          "Portfolio email is paused right now — your code is queued and will arrive when the team resumes sending.",
+        );
+      }
     } catch (err) {
       setError(friendlyError(err, "We couldn't send your code. Try again."));
     } finally {
@@ -209,7 +214,7 @@ export default function PortfolioAuth() {
               )}
 
               <Button
-                onClick={() => void sendCode("signin")}
+                onClick={() => void sendCode(mode)}
                 disabled={busy || !email.trim()}
                 className="h-11 w-full gap-2 bg-lime-400 font-semibold text-black hover:bg-lime-300"
               >
@@ -217,10 +222,24 @@ export default function PortfolioAuth() {
                   <Loader2 className="size-4 animate-spin" />
                 ) : (
                   <>
-                    Continue with Email <ArrowRight className="size-4" />
+                    {mode === "signup" ? "Create account with Email" : "Continue with Email"}{" "}
+                    <ArrowRight className="size-4" />
                   </>
                 )}
               </Button>
+
+              {/* If the email simply isn't registered yet, let them create the
+                  account in one tap instead of hitting a dead end. */}
+              {error && mode === "signin" && /no portfolio account/i.test(error) && (
+                <Button
+                  variant="outline"
+                  disabled={busy || !email.trim()}
+                  onClick={() => void sendCode("signup")}
+                  className="h-11 w-full gap-2 border-lime-400/40 bg-lime-400/10 font-semibold text-lime-300 hover:bg-lime-400/20"
+                >
+                  Create my account with this email
+                </Button>
+              )}
 
               <div className="flex items-center justify-between pt-1 text-sm">
                 {mode === "signin" ? (

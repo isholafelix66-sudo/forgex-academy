@@ -71,6 +71,7 @@ export function ChatComposer({
   members,
   canMentionEveryone,
   onBodyChange,
+  uploadUrlProvider,
 }: {
   onSend: (payload: ComposerPayload) => Promise<void>;
   disabled?: boolean;
@@ -82,8 +83,15 @@ export function ChatComposer({
   canMentionEveryone?: boolean;
   /** Fired on every body change (typing indicator). */
   onBodyChange?: (body: string) => void;
+  /**
+   * Optional replacement upload URL source. The Portfolio chat passes its own
+   * session-scoped endpoint so creators and signed-out visitors can attach
+   * files without an Academy account; everything else keeps the default.
+   */
+  uploadUrlProvider?: () => Promise<string>;
 }) {
   const generateUploadUrl = useMutation(api.storage.generateUploadUrl);
+  const resolveUpload = uploadUrlProvider ?? (() => generateUploadUrl({}));
 
   const [body, setBody] = useState("");
   const [busy, setBusy] = useState(false);
@@ -207,7 +215,7 @@ export function ChatComposer({
       const attachment = await uploadChatFile(
         file,
         "voice",
-        () => generateUploadUrl({}),
+        () => resolveUpload(),
         seconds,
       );
       await onSend({ body: "", attachment });
@@ -251,7 +259,7 @@ export function ChatComposer({
       const attachment = await uploadChatFile(
         pending.file,
         pending.kind,
-        () => generateUploadUrl({}),
+        () => resolveUpload(),
       );
       await onSend({ body: "", attachment });
       if (pending.previewUrl) URL.revokeObjectURL(pending.previewUrl);

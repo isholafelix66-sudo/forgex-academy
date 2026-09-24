@@ -396,6 +396,13 @@ const portfolioSettingsTable = defineTable({
       resetLinkTtlMinutes: v.number(),
     }),
   ),
+  /**
+   * Portfolio email pause — when true, Portfolio mail is still queued (OTP
+   * codes, notifications, admin composes) but nothing is sent until it is
+   * resumed. Lets the portal be quiet without losing a single message.
+   */
+  emailPaused: v.optional(v.boolean()),
+  emailPausedAt: v.optional(v.number()),
   seo: v.optional(
     v.object({
       titleTemplate: v.string(),
@@ -525,6 +532,112 @@ const portfolioEmailLogsTable = defineTable({
   .index("by_createdAt", ["createdAt"])
   .index("by_status", ["status"]);
 
+/**
+ * Academy email pause switch (singleton, key "email"). When paused, the shared
+ * email queue keeps collecting every message but the worker claims nothing, so
+ * turning the Academy back on resumes delivery exactly where it stopped — no
+ * email is ever lost while the service is quiet.
+ */
+const emailPauseTable = defineTable({
+  key: v.string(),
+  paused: v.boolean(),
+  pausedAt: v.optional(v.number()),
+  pausedBy: v.optional(v.string()),
+  updatedAt: v.number(),
+}).index("by_key", ["key"]);
+
+/**
+ * Portfolio announcements — the header notification banner shown on the public
+ * Portfolio website. FULLY Portfolio-owned: created, published and deleted
+ * from the Portfolio admin portal (/adminbrand), with no connection to the
+ * Academy `announcements` / `notifications` tables.
+ */
+const portfolioNotificationsTable = defineTable({
+  title: v.string(),
+  body: v.string(),
+  /** Optional call-to-action target (in-app path or absolute URL). */
+  link: v.optional(v.string()),
+  linkLabel: v.optional(v.string()),
+  /** Visual tone of the pill in the header. */
+  tone: v.union(
+    v.literal("info"),
+    v.literal("success"),
+    v.literal("warning"),
+  ),
+  /** Published items are visible to every visitor; drafts stay admin-only. */
+  published: v.boolean(),
+  createdAt: v.number(),
+  updatedAt: v.number(),
+})
+  .index("by_published", ["published", "createdAt"])
+  .index("by_createdAt", ["createdAt"]);
+
+/* ═════════════════════════════════════════════════════════════════════════
+   PORTFOLIO MESSAGING — visitor ↔ portfolio owner conversations.
+
+   Same architecture and UI as the ForgeX chat (thread + message rows, one
+   conversation per visitor, unread counters, read receipts), but stored in
+   Portfolio-owned tables keyed to a portfolio + creator. Guests message
+   without an account using a server-issued guest token kept in the browser.
+   ═════════════════════════════════════════════════════════════════════════ */
+
+const portfolioThreadsTable = defineTable({
+  portfolioId: v.id("portfolios"),
+  portfolioSlug: v.string(),
+  /** Owner account — recipients of this conversation. */
+  creatorId: v.id("portfolioUsers"),
+  /** SHA-256 of the guest's conversation token (never the raw token). */
+  guestTokenHash: v.string(),
+  /** Minimum identity for a guest sender: a display name + optional contact. */
+  guestName: v.string(),
+  guestEmail: v.optional(v.string()),
+  /** Which portfolio project/section the visitor came from (optional). */
+  context: v.optional(v.string()),
+  status: v.union(
+    v.literal("open"),
+    v.literal("archived"),
+    v.literal("spam"),
+  ),
+  lastMessageAt: v.number(),
+  lastMessagePreview: v.string(),
+  lastFrom: v.union(v.literal("guest"), v.literal("owner")),
+  /** Unread counters for each side (guest counter drives the visitor badge). */
+  guestUnread: v.number(),
+  ownerUnread: v.number(),
+  createdAt: v.number(),
+  updatedAt: v.number(),
+})
+  .index("by_token", ["guestTokenHash"])
+  .index("by_creator", ["creatorId", "lastMessageAt"])
+  .index("by_portfolio", ["portfolioId", "lastMessageAt"])
+  .index("by_lastMessageAt", ["lastMessageAt"]);
+
+const portfolioMessagesTable = defineTable({
+  threadId: v.id("portfolioThreads"),
+  /** Who wrote it — the guest visitor or the portfolio owner. */
+  from: v.union(v.literal("guest"), v.literal("owner")),
+  body: v.string(),
+  /** Optional attachment (image / file / voice) in Convex file storage. */
+  kind: v.optional(
+    v.union(
+      v.literal("text"),
+      v.literal("image"),
+      v.literal("file"),
+      v.literal("voice"),
+    ),
+  ),
+  storageId: v.optional(v.id("_storage")),
+  url: v.optional(v.string()),
+  fileName: v.optional(v.string()),
+  fileSize: v.optional(v.number()),
+  mimeType: v.optional(v.string()),
+  duration: v.optional(v.number()),
+  createdAt: v.number(),
+  readAt: v.optional(v.number()),
+})
+  .index("by_thread", ["threadId", "createdAt"])
+  .index("by_thread_unread", ["threadId", "from", "readAt"]);
+
 /** Reports raised against a public portfolio. */
 const portfolioReportsTable = defineTable({
   portfolioId: v.id("portfolios"),
@@ -558,6 +671,10 @@ const schema = defineSchema(
     featureFlags: featureFlagsTable,
     portfolios: portfoliosTable,
     portfolioProjects: portfolioProjectsTable,
+    portfolioNotifications: portfolioNotificationsTable,
+    portfolioThreads: portfolioThreadsTable,
+    portfolioMessages: portfolioMessagesTable,
+    emailPause: emailPauseTable,
     productWaitlist: productWaitlistTable,
     portfolioReports: portfolioReportsTable,
     portfolioSettings: portfolioSettingsTable,

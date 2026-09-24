@@ -18,7 +18,12 @@ import {
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { PageHeader } from "@/components/dash/PageHeader";
-import { Field, ImageField, TextInput } from "@/components/portfolio/PortfolioFields";
+import {
+  Field,
+  ImageField,
+  TextInput,
+  isVideoUrl,
+} from "@/components/portfolio/PortfolioFields";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { friendlyError } from "@/lib/errors";
@@ -211,7 +216,17 @@ export default function PortfolioProjects() {
             >
               <span className="flex size-16 shrink-0 items-center justify-center overflow-hidden rounded-2xl bg-white/5">
                 {p.imageUrl ? (
-                  <img src={p.imageUrl} alt="" className="size-full object-cover" />
+                  isVideoUrl(p.imageUrl) ? (
+                    <video
+                      src={p.imageUrl}
+                      className="size-full object-cover"
+                      muted
+                      loop
+                      playsInline
+                    />
+                  ) : (
+                    <img src={p.imageUrl} alt="" className="size-full object-cover" />
+                  )
                 ) : (
                   <FolderKanban className="size-5 text-muted-foreground" />
                 )}
@@ -397,11 +412,14 @@ export default function PortfolioProjects() {
                 />
               </Field>
               <div className="sm:col-span-2">
-                <Field label="Cover image">
+                <Field
+                  label="Cover media"
+                  hint="Upload a photo or a short video straight from your device — it's shown on your public project card."
+                >
                   <ImageField
                     value={form.imageUrl}
                     onChange={(url) => setForm({ ...form, imageUrl: url })}
-                    label="Upload image"
+                    label="Upload from device"
                     height="h-40"
                   />
                 </Field>

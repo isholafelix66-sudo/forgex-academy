@@ -1,5 +1,5 @@
 import { useRef, useState, type ReactNode } from "react";
-import { useMutation } from "convex/react";
+import { useAction, useMutation, useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import {
   ArrowDown,
@@ -15,6 +15,17 @@ import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import { uploadFileToConvex } from "@/lib/convex-upload";
 import { friendlyError } from "@/lib/errors";
+import { getPortfolioUserToken } from "@/lib/portfolio-user-session";
+
+/** True for URLs that should be rendered as video rather than a still. */
+export function isVideoUrl(url: string | null | undefined): boolean {
+  if (!url) return false;
+  return (
+    /\.(mp4|webm|mov|m4v|m3u8)(\?|#|$)/i.test(url) ||
+    url.includes("stream.mux.com") ||
+    url.includes("res.cloudinary.com/video/upload")
+  );
+}
 
 /** Small labelled field wrapper used across the portfolio editor. */
 export function Field({
@@ -52,34 +63,126 @@ export function ImageField({
   onChange,
   label = "Upload image",
   height = "h-36",
+  allowVideo = true,
 }: {
   value?: string | null;
   onChange: (url: string | null) => void;
   label?: string;
   height?: string;
+  /** Accept a short video as well as an image (Mux → Cloudinary → storage). */
+  allowVideo?: boolean;
 }) {
-  const generateUrl = useMutation(api.storage.generateUploadUrl);
-  const resolveUrl = useMutation(api.storage.resolveUploadedFile);
+  // Portfolio creator session (NOT the Academy user upload endpoints — a
+  // creator has no Academy account), with Cloudinary preferred when the
+  // project has keys and built-in storage as the always-available fallback.
+  const creatorUploadUrl = useMutation(api.portfolioUploads.creatorUploadUrl);
+  const creatorResolveUrl = useMutation(api.portfolioUploads.creatorResolveUrl);
+  const muxCreate = useAction(api.portfolioVideo.createUpload);
+  const muxPlayback = useAction(api.portfolioVideo.playbackId);
+  const mediaConfig = useQuery(api.cloudinary.mediaConfig);
   const galleryRef = useRef<HTMLInputElement>(null);
   const cameraRef = useRef<HTMLInputElement>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const token = getPortfolioUserToken() ?? "";
+
   const upload = async (file: File) => {
-    if (!file.type.startsWith("image/")) {
+    const isVideo = file.type.startsWith("video/");
+    if (isVideo && !allowVideo) {
       setError("Please choose an image (JPG, PNG or WEBP).");
       return;
     }
-    if (file.size > 10 * 1024 * 1024) {
-      setError("That image is larger than 10 MB — please pick a smaller one.");
+    if (!isVideo && !file.type.startsWith("image/")) {
+      setError("Please choose an image (JPG, PNG or WEBP).");
+      return;
+    }
+    const limit = isVideo ? 200 * 1024 * 1024 : 15 * 1024 * 1024;
+    if (file.size > limit) {
+      setError(
+        isVideo
+          ? "That video is larger than 200 MB — please choose a smaller clip."
+          : "That image is larger than 15 MB — please pick a smaller one.",
+      );
+      return;
+    }
+    if (!token) {
+      setError("Sign in to your Portfolio account to upload.");
       return;
     }
     setBusy(true);
     setError(null);
     try {
-      const { storageId } = await uploadFileToConvex(file, () => generateUrl({}));
-      const url = await resolveUrl({ storageId: storageId as never });
-      if (!url) throw new Error("The image couldn't be stored.");
+      // Videos: Mux (adaptive streaming) first, then Cloudinary video, then
+      // built-in storage.
+      if (isVideo) {
+        if (mediaConfig?.configured) {
+          const form = new FormData();
+          form.append("file", file);
+          form.append("upload_preset", mediaConfig.uploadPreset);
+          const res = await fetch(
+            `https://api.cloudinary.com/v1_1/${mediaConfig.cloudName}/video/upload`,
+            { method: "POST", body: form },
+          );
+          if (res.ok) {
+            const data = (await res.json()) as { secure_url?: string };
+            if (data.secure_url) {
+              onChange(data.secure_url);
+              return;
+            }
+          }
+        }
+        try {
+          const { uploadId, uploadUrl } = await muxCreate({
+            token,
+            role: "creator" as const,
+            title: file.name,
+          });
+          const put = await fetch(uploadUrl, {
+            method: "PUT",
+            headers: { "Content-Type": file.type || "video/mp4" },
+            body: file,
+          });
+          if (!put.ok) throw new Error(`Mux upload failed (${put.status}).`);
+          for (let attempt = 0; attempt < 20; attempt += 1) {
+            const ready = await muxPlayback({
+              token,
+              role: "creator" as const,
+              uploadId,
+            });
+            if (ready?.url) {
+              onChange(ready.mp4Url ?? ready.url);
+              return;
+            }
+            await new Promise((r) => setTimeout(r, 2000));
+          }
+          throw new Error("Mux is still processing this video — try again shortly.");
+        } catch (err) {
+          console.warn("[portfolio upload] Mux unavailable, using storage:", err);
+        }
+      } else if (mediaConfig?.configured) {
+        const form = new FormData();
+        form.append("file", file);
+        form.append("upload_preset", mediaConfig.uploadPreset);
+        const res = await fetch(
+          `https://api.cloudinary.com/v1_1/${mediaConfig.cloudName}/image/upload`,
+          { method: "POST", body: form },
+        );
+        if (res.ok) {
+          const data = (await res.json()) as { secure_url?: string };
+          if (data.secure_url) {
+            onChange(data.secure_url);
+            return;
+          }
+        }
+      }
+
+      // Always-available fallback: built-in file storage.
+      const { storageId } = await uploadFileToConvex(file, () =>
+        creatorUploadUrl({ token }),
+      );
+      const url = await creatorResolveUrl({ token, storageId: storageId as never });
+      if (!url) throw new Error("The file couldn't be stored.");
       onChange(url);
     } catch (err) {
       setError(friendlyError(err, "Upload failed."));
@@ -102,7 +205,7 @@ export function ImageField({
       <input
         ref={galleryRef}
         type="file"
-        accept="image/jpeg,image/png,image/webp"
+        accept={allowVideo ? "image/jpeg,image/png,image/webp,video/mp4,video/webm,video/quicktime" : "image/jpeg,image/png,image/webp"}
         className="hidden"
         onChange={pick(galleryRef)}
       />
@@ -117,7 +220,18 @@ export function ImageField({
 
       {value ? (
         <div className="group relative overflow-hidden rounded-xl border border-white/10 bg-black/30">
-          <img src={value} alt="" className={cn("w-full object-cover", height)} />
+          {isVideoUrl(value) ? (
+            <video
+              src={value}
+              className={cn("w-full object-cover", height)}
+              muted
+              loop
+              playsInline
+              controls
+            />
+          ) : (
+            <img src={value} alt="" className={cn("w-full object-cover", height)} />
+          )}
           <div className="absolute inset-0 flex items-center justify-center gap-2 bg-black/60 opacity-0 transition-opacity group-hover:opacity-100">
             <Button
               type="button"
@@ -177,7 +291,9 @@ export function ImageField({
                 </Button>
               </div>
               <span className="text-[11px] text-muted-foreground/70">
-                JPG · PNG · WEBP (max 10 MB)
+                {allowVideo
+                  ? "JPG · PNG · WEBP · MP4 · MOV (video up to 200 MB)"
+                  : "JPG · PNG · WEBP (max 15 MB)"}
               </span>
             </>
           )}

@@ -1,7 +1,5 @@
 import { useEffect, useRef, useState } from "react";
 import { NavLink, useNavigate } from "react-router";
-import { useQuery } from "convex/react";
-import { api } from "@/convex/_generated/api";
 import {
   Bell,
   ChevronDown,
@@ -16,7 +14,11 @@ import {
   User,
 } from "lucide-react";
 import { MobileBottomNav } from "./MobileBottomNav";
-import { SiteNotifications } from "./SiteNotifications";
+import {
+  PortfolioAnnouncementStrip,
+  PortfolioNotifications,
+  usePortfolioNotificationCount,
+} from "./PortfolioNotifications";
 import { BrandMark } from "./BrandMark";
 import { SharePortfolioButton } from "./SharePortfolioButton";
 import { cn } from "@/lib/utils";
@@ -105,8 +107,9 @@ export function PublicNav() {
   const [scrolled, setScrolled] = useState(false);
   const [notifOpen, setNotifOpen] = useState(false);
 
-  const headerNotifications = useQuery(api.notifications.myNotificationsForHeader);
-  const unreadCount = headerNotifications?.filter((n) => !n.read).length ?? 0;
+  // Portfolio announcements only — the header notification belongs to the
+  // Portfolio website and is published from /adminbrand, never from Academy.
+  const unreadCount = usePortfolioNotificationCount();
 
   const dashboardTo =
     user?.role === "admin" || user?.role === "owner" ? "/admin" : "/portfolio/dashboard";
@@ -167,8 +170,9 @@ export function PublicNav() {
     label: isAuthenticated ? "Add a project" : "Portfolio sign in",
   };
 
+  // Compact-but-readable controls so the header always fits 320–430px.
   const iconButtonClass =
-    "relative flex size-9 items-center justify-center rounded-full border border-white/10 bg-white/5 text-muted-foreground transition-colors hover:border-lime-400/40 hover:text-lime-300";
+    "relative flex size-8 shrink-0 items-center justify-center rounded-full border border-white/10 bg-white/5 text-muted-foreground transition-colors hover:border-lime-400/40 hover:text-lime-300 sm:size-9";
 
   return (
     <>
@@ -180,14 +184,24 @@ export function PublicNav() {
             : "border-white/8 bg-[#0d0f0c]/85 backdrop-blur-xl",
         )}
       >
-        <div className="mx-auto flex h-16 max-w-7xl items-center justify-between gap-3 px-4 sm:px-6 lg:h-[4.5rem]">
-          {/* Brand */}
-          <BrandMark
-            onClick={scrollTop}
-            size="lg"
-            showProduct
-            className="transition-opacity hover:opacity-90"
-          />
+        <div className="mx-auto flex h-16 max-w-7xl items-center justify-between gap-2 px-3 sm:gap-3 sm:px-6 lg:h-[4.5rem]">
+          {/* Brand — compact and truncating on phones, full size from sm up. */}
+          <span className="min-w-0 flex-1 sm:hidden">
+            <BrandMark
+              onClick={scrollTop}
+              size="sm"
+              className="truncate transition-opacity hover:opacity-90"
+              shrink={false}
+            />
+          </span>
+          <span className="hidden sm:inline-flex">
+            <BrandMark
+              onClick={scrollTop}
+              size="lg"
+              showProduct
+              className="transition-opacity hover:opacity-90"
+            />
+          </span>
 
           {/* Desktop nav */}
           <nav className="hidden items-center gap-0.5 md:flex">
@@ -236,8 +250,8 @@ export function PublicNav() {
             </HoverDropdown>
           </nav>
 
-          {/* Right side */}
-          <div className="flex shrink-0 items-center gap-2">
+          {/* Right side — two actions only, sized to fit the smallest phones. */}
+          <div className="flex min-w-0 shrink-0 items-center gap-1.5 sm:gap-2">
             <button
               aria-label={
                 unreadCount > 0
@@ -255,7 +269,9 @@ export function PublicNav() {
               )}
             </button>
 
-            <SharePortfolioButton />
+            {/* Icon-only share on phones; the labelled pill returns ≥ sm. */}
+            <SharePortfolioButton showLabel={false} className="sm:hidden" />
+            <SharePortfolioButton className="hidden sm:inline-flex" />
 
             {isAuthenticated ? (
               <>
@@ -334,13 +350,13 @@ export function PublicNav() {
                 <Button
                   size="sm"
                   data-prefetch="/portfolio/auth"
-                  className="h-8 bg-lime-400 text-xs font-semibold text-black hover:bg-lime-300"
+                  className="h-8 shrink-0 whitespace-nowrap bg-lime-400 px-3 text-xs font-semibold text-black hover:bg-lime-300 sm:px-4"
                   onClick={() => {
                     navigate("/portfolio/auth");
                     scrollTop();
                   }}
                 >
-                  Sign In
+                  Sign in
                 </Button>
               </>
             )}
@@ -348,7 +364,10 @@ export function PublicNav() {
         </div>
       </header>
 
-      <SiteNotifications open={notifOpen} onOpenChange={setNotifOpen} />
+      {/* The published Portfolio announcement, right under the header. */}
+      <PortfolioAnnouncementStrip />
+
+      <PortfolioNotifications open={notifOpen} onOpenChange={setNotifOpen} />
 
       {/* Bottom bar matches the ForgeX Network Portfolio app exactly:
           Home · Explore · [+] · Portfolio · Profile. The secondary

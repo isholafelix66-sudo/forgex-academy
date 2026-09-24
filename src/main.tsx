@@ -217,6 +217,7 @@ const PortfolioShell = L(() => import("./pages/dashboard/PortfolioShell.tsx"));
 const PortfolioOverview = L(() => import("./pages/dashboard/PortfolioOverview.tsx"));
 const PortfolioEditor = L(() => import("./pages/dashboard/PortfolioEditor.tsx"));
 const PortfolioProjects = L(() => import("./pages/dashboard/PortfolioProjects.tsx"));
+const PortfolioMessages = L(() => import("./pages/dashboard/PortfolioMessages.tsx"));
 const PortfolioSettings = L(() => import("./pages/dashboard/PortfolioSettings.tsx"));
 const PortfolioAccount = L(() => import("./pages/dashboard/PortfolioAccount.tsx"));
 
@@ -1192,6 +1193,7 @@ createRoot(document.getElementById("root")!).render(
                 <Route path="edit" element={<PortfolioEditor />} />
                 <Route path="edit/:section" element={<PortfolioEditor />} />
                 <Route path="projects" element={<PortfolioProjects />} />
+                <Route path="messages" element={<PortfolioMessages />} />
                 <Route path="profile" element={<CreatorProfile />} />
                 <Route path="settings" element={<PortfolioSettings />} />
               </Route>

@@ -22,6 +22,22 @@ import {
 import { internal } from "./_generated/api";
 import { requirePortfolioAdminSession } from "./portfolioAdmin";
 
+/** Automatic retries per message before it is parked as failed. */
+export const MAX_SEND_ATTEMPTS = 4;
+/** Backoff between retries: 30s → 2m → 8m (capped). */
+function retryDelayMs(attempts: number) {
+  return Math.min(30_000 * 4 ** Math.max(attempts - 1, 0), 15 * 60 * 1000);
+}
+
+/** Reads the Portfolio email pause switch (missing row = not paused). */
+async function emailPaused(ctx: MutationCtx) {
+  const doc = await ctx.db
+    .query("portfolioSettings")
+    .withIndex("by_key", (q) => q.eq("key", "portfolio"))
+    .first();
+  return !!doc?.emailPaused;
+}
+
 /* ── Deliver one message + log the outcome ─────────────────────────────── */
 
 /**
@@ -86,33 +102,27 @@ export const attemptSend = internalMutation({
     const row = await ctx.db.get(logId);
     if (!row || row.status === "sent") return;
 
+    // Paused: keep the message queued and untouched. Nothing is sent and the
+    // row stays "pending", so unpausing delivers it exactly as written.
+    if (await emailPaused(ctx)) return;
+
     const settings = await ctx.db
       .query("portfolioSettings")
       .withIndex("by_key", (q) => q.eq("key", "portfolio"))
       .first();
     const smtp = settings?.smtp;
+    const usable =
+      !!smtp && !!smtp.host && !!smtp.username && !!smtp.password;
 
-    if (!smtp || !smtp.host || !smtp.username || !smtp.password) {
-      await ctx.db.patch(logId, {
-        status: "failed",
-        error:
-          "Portfolio SMTP is not configured — add it in /adminbrand → Email.",
-        attempts: row.attempts + 1,
-      });
-      return;
-    }
-
-    await ctx.scheduler.runAfter(
-      0,
-      internal.portfolioEmail.sendQueued,
-      {
-        logId,
-        smtp,
-        to: row.to,
-        subject: row.subject,
-        html: row.html,
-      },
-    );
+    // A missing SMTP account is no longer a dead end: the Node sender falls
+    // back to the platform email integration, so OTP codes still arrive.
+    await ctx.scheduler.runAfter(0, internal.portfolioEmail.sendQueued, {
+      logId,
+      smtp: usable ? smtp : undefined,
+      to: row.to,
+      subject: row.subject,
+      html: row.html,
+    });
   },
 });
 
@@ -134,12 +144,101 @@ export const recordOutcome = internalMutation({
         error: undefined,
       });
     } else {
+      const attempts = row.attempts + 1;
+      // Transient failures retry themselves with backoff instead of dying on
+      // the first bad minute (network blips, rate limits, provider hiccups).
+      const willRetry = attempts < MAX_SEND_ATTEMPTS;
       await ctx.db.patch(logId, {
-        status: "failed",
+        status: willRetry ? "pending" : "failed",
         error: (error ?? "Send failed.").slice(0, 400),
-        attempts: row.attempts + 1,
+        attempts,
+      });
+      if (willRetry) {
+        await ctx.scheduler.runAfter(
+          retryDelayMs(attempts),
+          internal.portfolioEmailLog.attemptSend,
+          { logId },
+        );
+      }
+    }
+  },
+});
+
+/* ── Pause / resume the Portfolio mail service ─────────────────────────── */
+
+/** Current pause state for the admin portal. */
+export const emailSettings = query({
+  args: { token: v.string() },
+  handler: async (ctx, { token }) => {
+    await requirePortfolioAdminSession(ctx, token);
+    const doc = await ctx.db
+      .query("portfolioSettings")
+      .withIndex("by_key", (q) => q.eq("key", "portfolio"))
+      .first();
+    const pending = await ctx.db
+      .query("portfolioEmailLogs")
+      .withIndex("by_status", (q) => q.eq("status", "pending"))
+      .take(200);
+    return {
+      paused: !!doc?.emailPaused,
+      pausedAt: doc?.emailPausedAt ?? null,
+      smtpConfigured: !!(doc?.smtp?.host && doc?.smtp?.username && doc?.smtp?.password),
+      pending: pending.length,
+    };
+  },
+});
+
+/**
+ * Pause / resume all Portfolio email. Pausing never drops a message: queued
+ * rows simply wait, and resuming re-dispatches every pending one immediately.
+ */
+export const setPaused = mutation({
+  args: { token: v.string(), paused: v.boolean() },
+  handler: async (ctx, { token, paused }) => {
+    await requirePortfolioAdminSession(ctx, token);
+    const doc = await ctx.db
+      .query("portfolioSettings")
+      .withIndex("by_key", (q) => q.eq("key", "portfolio"))
+      .first();
+    if (!doc) throw new Error("Portfolio settings are missing.");
+    await ctx.db.patch(doc._id, {
+      emailPaused: paused,
+      emailPausedAt: paused ? Date.now() : undefined,
+      updatedAt: Date.now(),
+    });
+
+    if (!paused) {
+      // Resume exactly where we stopped.
+      const pending = await ctx.db
+        .query("portfolioEmailLogs")
+        .withIndex("by_status", (q) => q.eq("status", "pending"))
+        .take(200);
+      for (const row of pending) {
+        await ctx.scheduler.runAfter(0, internal.portfolioEmailLog.attemptSend, {
+          logId: row._id,
+        });
+      }
+      return { paused, dispatched: pending.length };
+    }
+    return { paused, dispatched: 0 };
+  },
+});
+
+/** Re-dispatch every queued message (admin "retry the queue" button). */
+export const drainQueue = mutation({
+  args: { token: v.string() },
+  handler: async (ctx, { token }) => {
+    await requirePortfolioAdminSession(ctx, token);
+    const pending = await ctx.db
+      .query("portfolioEmailLogs")
+      .withIndex("by_status", (q) => q.eq("status", "pending"))
+      .take(200);
+    for (const row of pending) {
+      await ctx.scheduler.runAfter(0, internal.portfolioEmailLog.attemptSend, {
+        logId: row._id,
       });
     }
+    return { dispatched: pending.length };
   },
 });
 

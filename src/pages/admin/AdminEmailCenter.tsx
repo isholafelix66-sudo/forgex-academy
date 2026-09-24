@@ -10,6 +10,8 @@ import {
   Loader2,
   Mail,
   MailOpen,
+  Pause,
+  Play,
   RefreshCw,
   Search,
   Send,
@@ -161,6 +163,33 @@ export default function AdminEmailCenter() {
     api.emailData.adminGetEmail,
     authed && detailId ? { token, id: detailId as never } : "skip",
   );
+
+  // Academy email service pause switch (lossless: the queue keeps collecting).
+  const queueSettings = useQuery(
+    api.emailData.adminGetQueueSettings,
+    authed ? { token } : "skip",
+  );
+  const setEmailPaused = useMutation(api.emailData.adminSetEmailPaused);
+  const [pausingEmail, setPausingEmail] = useState(false);
+
+  const toggleEmailPause = async () => {
+    const next = !(queueSettings?.paused ?? false);
+    setPausingEmail(true);
+    try {
+      await setEmailPaused({ token, paused: next });
+      toast.success(
+        next
+          ? "Email paused — new emails keep queueing until you resume."
+          : "Email resumed — the queue is draining now.",
+      );
+    } catch (err) {
+      toast.error(
+        err instanceof Error ? err.message : "Couldn't change the email service.",
+      );
+    } finally {
+      setPausingEmail(false);
+    }
+  };
 
   const compose = useMutation(api.emailData.adminCompose);
   const retryEmail = useMutation(api.emailData.adminRetryEmail);
@@ -357,7 +386,61 @@ export default function AdminEmailCenter() {
                 </div>
               ))}
             </div>
-            <div className="rounded-2xl border border-white/10 bg-card p-5">
+            {/* Pause / resume the whole email service (e.g. while the Academy
+                is closed). Nothing is lost — the queue holds everything. */}
+            <div
+              className={`mt-5 flex flex-wrap items-center justify-between gap-4 rounded-2xl border p-5 ${
+                queueSettings?.paused
+                  ? "border-amber-400/35 bg-amber-400/5"
+                  : "border-white/10 bg-card"
+              }`}
+            >
+              <div className="min-w-0">
+                <h3 className="flex items-center gap-2 text-sm font-semibold">
+                  {queueSettings?.paused ? (
+                    <Pause className="size-4 text-amber-300" />
+                  ) : (
+                    <Send className="size-4 text-lime-300" />
+                  )}
+                  Email service
+                  <span
+                    className={`rounded-full border px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider ${
+                      queueSettings?.paused
+                        ? "border-amber-400/40 text-amber-200"
+                        : "border-lime-400/30 text-lime-300"
+                    }`}
+                  >
+                    {queueSettings === undefined
+                      ? "…"
+                      : queueSettings.paused
+                        ? "Paused"
+                        : "Running"}
+                  </span>
+                </h3>
+                <p className="mt-1.5 max-w-2xl text-xs leading-relaxed text-muted-foreground">
+                  {queueSettings?.paused
+                    ? "Delivery is paused. OTP codes, certificates, broadcasts and automations keep queueing and go out the moment you resume — nothing is lost."
+                    : "Pause to make the Academy quiet (for example while it's closed). Emails keep queueing and deliver in order when you resume."}
+                </p>
+              </div>
+              <Button
+                onClick={() => void toggleEmailPause()}
+                disabled={pausingEmail || queueSettings === undefined}
+                variant="outline"
+                className="gap-2 border-white/15"
+              >
+                {pausingEmail ? (
+                  <Loader2 className="size-4 animate-spin" />
+                ) : queueSettings?.paused ? (
+                  <Play className="size-4" />
+                ) : (
+                  <Pause className="size-4" />
+                )}
+                {queueSettings?.paused ? "Resume email" : "Pause email"}
+              </Button>
+            </div>
+
+            <div className="mt-5 rounded-2xl border border-white/10 bg-card p-5">
               <h3 className="text-sm font-semibold">Automated emails by type</h3>
               {stats.byType.length === 0 ? (
                 <p className="mt-3 text-sm text-muted-foreground">No emails logged yet.</p>

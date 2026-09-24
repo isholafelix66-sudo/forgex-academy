@@ -19,6 +19,15 @@ export type MobileNavSection = {
 /** Reset scroll on every in-app navigation click (bottom nav, More menu…). */
 const scrollTop = scrollToTopInstant;
 
+/**
+ * Mobile bottom navigation.
+ *
+ * A floating dark pill (Home · Explore · + · Portfolio · Profile) where the
+ * active destination slides into a lime circle with a dark notch — the same
+ * treatment as the ForgeX Network mobile reference. Labels stay available to
+ * screen readers; the pill itself is icon-only so it never overflows on small
+ * phones.
+ */
 export function MobileBottomNav({
   primaryItems,
   moreSections,
@@ -51,92 +60,100 @@ export function MobileBottomNav({
   // The raised centre action sits between the tab groups (ForgeX "+").
   const fabIndex = Math.ceil(primaryItems.length / 2) - 1;
 
-  const moreHasActive = moreSections.some((s) =>
-    s.items.some(
-      (item) =>
-        location.pathname === item.to ||
-        (!item.end && location.pathname.startsWith(item.to + "/")),
-    ),
-  );
+  const isItemActive = (item: MobileNavItem) =>
+    location.pathname === item.to ||
+    (!item.end && location.pathname.startsWith(item.to + "/"));
+
+  const moreHasActive = moreSections.some((s) => s.items.some(isItemActive));
+  const primaryHasActive = primaryItems.some(isItemActive);
+  const moreIsActive = moreHasActive && !primaryHasActive;
+
+  const activeCircle =
+    "bg-lime-400 text-black shadow-[0_0_0_6px_#0a0c0a,0_8px_20px_rgba(163,230,53,0.35)]";
+  const inactiveCircle = "rounded-full text-muted-foreground group-active:text-foreground/70";
 
   return (
     <>
-      {/* ── Fixed bottom bar (< md only) ────────────────────────────── */}
-      <nav className="fixed bottom-0 inset-x-0 z-50 border-t border-white/10 bg-[#0a0c0a]/95 backdrop-blur-xl md:hidden safe-area-bottom">
-        <div className="mx-auto flex h-16 max-w-lg items-stretch gap-0.5 px-1">
-          {primaryItems.map((item, index) => (
-            <Fragment key={`${item.to}-${item.label}`}>
-            <NavLink
-              to={item.to}
-              end={item.end}
-              onClick={scrollTop}
-              className={({ isActive }) =>
-                cn(
-                  "flex min-w-0 flex-1 flex-col items-center justify-center gap-1 px-0.5 py-0 text-[11px] leading-snug text-balance transition-colors",
-                  isActive
-                    ? "text-lime-300"
-                    : "text-muted-foreground active:text-foreground/70",
-                )
-              }
-            >
-              <span className="flex size-6 shrink-0 items-center justify-center">
-                {item.icon}
-              </span>
-              <span className="w-full truncate text-center leading-tight">
-                {item.label}
-              </span>
-            </NavLink>
+      {/* Floating pill tab bar (< md only) */}
+      <nav className="pointer-events-none fixed inset-x-0 bottom-0 z-50 md:hidden safe-area-bottom">
+        <div className="pointer-events-auto mx-auto mb-2 w-[calc(100%-1.5rem)] max-w-lg rounded-full border border-white/10 bg-[#0a0c0a]/95 px-1.5 py-1.5 shadow-[0_10px_30px_rgba(0,0,0,0.45)] backdrop-blur-xl">
+          <div className="flex items-center justify-between">
+            {primaryItems.map((item, index) => (
+              <Fragment key={`${item.to}-${item.label}`}>
+                <NavLink
+                  to={item.to}
+                  end={item.end}
+                  onClick={scrollTop}
+                  aria-label={item.label}
+                  className={({ isActive }) =>
+                    cn(
+                      "group flex min-w-0 flex-1 items-center justify-center py-0.5",
+                      isActive ? "text-black" : "text-muted-foreground",
+                    )
+                  }
+                >
+                  {({ isActive }) => (
+                    <span
+                      className={cn(
+                        "flex size-11 shrink-0 items-center justify-center transition-colors",
+                        isActive ? activeCircle : inactiveCircle,
+                      )}
+                    >
+                      {item.icon}
+                      <span className="sr-only">{item.label}</span>
+                    </span>
+                  )}
+                </NavLink>
 
-            {/* Raised centre button (ForgeX "+") */}
-            {fab && index === fabIndex && (
-              <Link
-                to={fab.to}
-                onClick={scrollTop}
-                aria-label={fab.label}
-                className="relative flex w-16 shrink-0 items-center justify-center"
+                {/* Raised centre button (ForgeX "+") */}
+                {fab && index === fabIndex && (
+                  <Link
+                    to={fab.to}
+                    onClick={scrollTop}
+                    aria-label={fab.label}
+                    className="relative flex shrink-0 items-center justify-center px-1"
+                  >
+                    <span className="flex size-11 items-center justify-center rounded-full bg-lime-400 text-black shadow-[0_6px_22px_rgba(163,230,53,0.45)] ring-4 ring-[#0a0c0a] transition-transform active:scale-95">
+                      <Plus className="size-5" />
+                    </span>
+                  </Link>
+                )}
+              </Fragment>
+            ))}
+
+            {hasMore && (
+              <button
+                onClick={() => setMoreOpen(true)}
+                aria-label="More"
+                className={cn(
+                  "group flex min-w-0 flex-1 items-center justify-center py-0.5",
+                  moreIsActive ? "text-black" : "text-muted-foreground",
+                )}
               >
-                <span className="absolute -top-4 flex size-12 items-center justify-center rounded-full bg-lime-400 text-black shadow-[0_6px_22px_rgba(163,230,53,0.45)] ring-4 ring-[#0a0c0a] transition-transform active:scale-95">
-                  <Plus className="size-6" />
+                <span
+                  className={cn(
+                    "flex size-11 shrink-0 items-center justify-center transition-colors",
+                    moreIsActive ? activeCircle : inactiveCircle,
+                  )}
+                >
+                  <span className="grid grid-cols-2 gap-[3px]">
+                    <span className="size-[4px] rounded-full bg-current" />
+                    <span className="size-[4px] rounded-full bg-current" />
+                    <span className="size-[4px] rounded-full bg-current" />
+                    <span className="size-[4px] rounded-full bg-current" />
+                  </span>
+                  <span className="sr-only">More</span>
                 </span>
-              </Link>
+              </button>
             )}
-            </Fragment>
-          ))}
-          {hasMore && (
-            <button
-              onClick={() => {
-                setMoreOpen(true);
-              }}
-              className={cn(
-                "flex min-w-0 flex-1 flex-col items-center justify-center gap-1 px-0.5 text-[11px] font-medium transition-colors active:text-foreground/70",
-                moreHasActive &&
-                  !primaryItems.some(
-                    (p) =>
-                      location.pathname === p.to ||
-                      (!p.end && location.pathname.startsWith(p.to + "/")),
-                  )
-                  ? "text-lime-300"
-                  : "text-muted-foreground",
-              )}
-            >
-              <span className="flex size-6 items-center justify-center">
-                <div className="grid grid-cols-2 gap-[3px]">
-                  <span className="size-[4px] rounded-full bg-current" />
-                  <span className="size-[4px] rounded-full bg-current" />
-                  <span className="size-[4px] rounded-full bg-current" />
-                  <span className="size-[4px] rounded-full bg-current" />
-                </div>
-              </span>
-              <span className="w-full truncate text-center leading-tight">More</span>
-            </button>
-          )}
+          </div>
         </div>
       </nav>
 
       {/* ── More: full-screen menu ──────────────────────────────────── */}
       {moreOpen && (
         <div
-          className="fixed inset-0 z-50 w-full h-full overflow-y-auto bg-background md:hidden safe-area-bottom"
+          className="fixed inset-0 z-50 h-full w-full overflow-y-auto bg-background md:hidden safe-area-bottom"
           role="dialog"
           aria-modal="true"
           aria-label="More menu"

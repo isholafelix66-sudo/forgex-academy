@@ -4,6 +4,7 @@ import { api } from "@/convex/_generated/api";
 import { ArrowLeft, ArrowUpRight, CalendarDays, Check, FolderKanban, Loader2, Mail, Share2, Wrench } from "lucide-react";
 import { Avatar } from "@/components/site/Avatar";
 import { SafeImage } from "@/components/site/SafeImage";
+import { isVideoUrl } from "@/components/portfolio/PortfolioFields";
 import { getPortfolioUserToken } from "@/lib/portfolio-user-session";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
@@ -55,7 +56,20 @@ export default function PublicProject() {
             <h1 className="mt-4 text-4xl font-extrabold leading-tight tracking-tight sm:text-6xl">{project.title}</h1>
             <p className="mt-5 max-w-2xl text-lg leading-relaxed text-white/65">{project.summary}</p>
             {project.liveUrl && <a href={project.liveUrl} target="_blank" rel="noopener noreferrer" className="mt-7 inline-flex items-center gap-2 rounded-full bg-lime-400 px-5 py-3 text-sm font-bold text-black transition-colors hover:bg-lime-300">Visit live project <ArrowUpRight className="size-4" /></a>}
-            <div className="mt-10 overflow-hidden rounded-3xl border border-white/10"><SafeImage src={project.imageUrl} alt={project.title} className="aspect-[16/10] w-full object-cover" fallback={<div className="flex aspect-[16/10] items-center justify-center bg-lime-400/10"><FolderKanban className="size-12 text-lime-300" /></div>} /></div>
+            <div className="mt-10 overflow-hidden rounded-3xl border border-white/10">
+              {isVideoUrl(project.imageUrl) ? (
+                <video
+                  src={project.imageUrl ?? undefined}
+                  className="aspect-[16/10] w-full object-cover"
+                  muted
+                  loop
+                  playsInline
+                  controls
+                />
+              ) : (
+                <SafeImage src={project.imageUrl} alt={project.title} className="aspect-[16/10] w-full object-cover" fallback={<div className="flex aspect-[16/10] items-center justify-center bg-lime-400/10"><FolderKanban className="size-12 text-lime-300" /></div>} />
+              )}
+            </div>
             {project.description && <div className="prose prose-invert mt-10 max-w-none"><h2 className="font-display text-2xl text-white">The brief</h2><p className="mt-3 whitespace-pre-line leading-relaxed text-white/65">{project.description}</p></div>}
           </article>
           <aside className="space-y-5 lg:sticky lg:top-24">

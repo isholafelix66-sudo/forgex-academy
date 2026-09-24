@@ -1,6 +1,7 @@
 import { v } from "convex/values";
 import {
   internalMutation,
+  internalQuery,
   mutation,
   query,
   type MutationCtx,
@@ -198,9 +199,21 @@ export const requestOtp = mutation({
       isNew: purpose === "signup",
     });
 
+    // Is the Portfolio mail service paused? The code is still created and
+    // queued — we just tell the person the truth instead of pretending the
+    // email is already in their inbox.
+    const settings = await ctx.db
+      .query("portfolioSettings")
+      .withIndex("by_key", (q) => q.eq("key", "portfolio"))
+      .first();
+    const deliveryOnHold = !!settings?.emailPaused;
+
     return {
       isNew: purpose === "signup",
-      message: `We sent a 6-digit code to ${maskedEmail(normalized)}.`,
+      deliveryOnHold,
+      message: deliveryOnHold
+        ? "Portfolio email is paused at the moment — your code is queued and will be sent as soon as email resumes."
+        : `We sent a 6-digit code to ${maskedEmail(normalized)}.`,
     };
   },
 });
@@ -347,6 +360,20 @@ export const completeOnboarding = mutation({
 });
 
 /* ── Session helpers for the client ────────────────────────────────────── */
+
+/**
+ * Internal: resolve a creator session token to its account id. Used by Node
+ * actions (video uploads) that cannot call the public query directly with
+ * extra arguments.
+ */
+export const internalCreatorByToken = internalQuery({
+  args: { token: v.string() },
+  handler: async (ctx, { token }) => {
+    const user = await getPortfolioUser(ctx, token);
+    if (!user) return null;
+    return { _id: user._id as string, email: user.email, name: user.name ?? null };
+  },
+});
 
 /** Validate a session token (used by the router guard and pages). */
 export const validateSession = query({

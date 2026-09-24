@@ -13,7 +13,7 @@
  */
 
 import { v } from "convex/values";
-import { internalMutation, mutation, query } from "./_generated/server";
+import { internalMutation, internalQuery, mutation, query } from "./_generated/server";
 import { internal } from "./_generated/api";
 import { requireAdminSession } from "./lib";
 import { AUTOMATIONS } from "./emailTriggers";
@@ -143,6 +143,14 @@ export const internalClaimBatch = internalMutation({
   args: {},
   handler: async (ctx) => {
     const now = Date.now();
+
+    // Paused? Claim nothing. Every queued email keeps its place in line, so
+    // resuming the service delivers the backlog untouched.
+    const pause = await ctx.db
+      .query("emailPause")
+      .withIndex("by_key", (q) => q.eq("key", "email"))
+      .unique();
+    if (pause?.paused) return [];
 
     // Recover rows stuck in "processing" (crashed isolate mid-batch).
     const stale = await ctx.db
@@ -630,7 +638,7 @@ export const adminSetAutomationSubject = mutation({
   },
 });
 
-/** Queue settings: configurable retry limit. */
+/** Queue settings: configurable retry limit + the global pause switch. */
 export const adminGetQueueSettings = query({
   args: { token: v.string() },
   handler: async (ctx, args) => {
@@ -639,7 +647,16 @@ export const adminGetQueueSettings = query({
       .query("emailSettings")
       .withIndex("by_key", (q) => q.eq("key", "queue"))
       .unique();
-    return { maxRetries: s?.maxRetries ?? DEFAULT_MAX_RETRIES, updatedAt: s?.updatedAt ?? null };
+    const pause = await ctx.db
+      .query("emailPause")
+      .withIndex("by_key", (q) => q.eq("key", "email"))
+      .unique();
+    return {
+      maxRetries: s?.maxRetries ?? DEFAULT_MAX_RETRIES,
+      paused: pause?.paused ?? false,
+      pausedAt: pause?.pausedAt ?? null,
+      updatedAt: s?.updatedAt ?? null,
+    };
   },
 });
 
@@ -658,5 +675,57 @@ export const adminSetQueueSettings = mutation({
       await ctx.db.insert("emailSettings", { key: "queue", maxRetries, updatedAt: Date.now() });
     }
     return { ok: true };
+  },
+});
+
+/** Internal: is the Academy email service currently paused? */
+export const internalEmailPaused = internalQuery({
+  args: {},
+  handler: async (ctx) => {
+    const pause = await ctx.db
+      .query("emailPause")
+      .withIndex("by_key", (q) => q.eq("key", "email"))
+      .unique();
+    return pause?.paused ?? false;
+  },
+});
+
+/**
+ * Pause / resume the Academy email service.
+ *
+ * Pausing is safe by design: the queue keeps accepting every email (welcome,
+ * OTP, certificates, broadcasts, automations) and simply stops delivering
+ * until an admin resumes. Nothing is lost, nothing errors, and the backlog
+ * drains in order afterwards.
+ */
+export const adminSetEmailPaused = mutation({
+  args: { token: v.string(), paused: v.boolean() },
+  handler: async (ctx, args) => {
+    await requireAdminSession(ctx, args.token);
+    const existing = await ctx.db
+      .query("emailPause")
+      .withIndex("by_key", (q) => q.eq("key", "email"))
+      .unique();
+    if (existing) {
+      await ctx.db.patch(existing._id, {
+        paused: args.paused,
+        pausedAt: args.paused ? Date.now() : undefined,
+        updatedAt: Date.now(),
+      });
+    } else {
+      await ctx.db.insert("emailPause", {
+        key: "email",
+        paused: args.paused,
+        pausedAt: args.paused ? Date.now() : undefined,
+        updatedAt: Date.now(),
+      });
+    }
+
+    // Resuming dispatches the backlog right away instead of waiting for the
+    // next cron tick.
+    if (!args.paused) {
+      await ctx.scheduler.runAfter(0, internal.emailService.processPendingBatch, {});
+    }
+    return { ok: true, paused: args.paused };
   },
 });

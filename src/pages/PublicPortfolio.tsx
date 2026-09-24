@@ -15,6 +15,7 @@ import {
   Lock,
   Mail,
   MapPin,
+  MessageSquare,
   Phone,
   Share2,
   Sparkles,
@@ -29,6 +30,8 @@ import { cn } from "@/lib/utils";
 import { friendlyError } from "@/lib/errors";
 import { useBranding } from "@/lib/branding";
 import { getPortfolioUserToken } from "@/lib/portfolio-user-session";
+import { PortfolioChatSheet } from "@/components/chat/PortfolioChat";
+import { isVideoUrl } from "@/components/portfolio/PortfolioFields";
 import { toast } from "sonner";
 
 const ACCENTS: Record<string, string> = {
@@ -87,6 +90,7 @@ export default function PublicPortfolio() {
 
   const [copied, setCopied] = useState(false);
   const [reportOpen, setReportOpen] = useState(false);
+  const [chatOpen, setChatOpen] = useState(false);
 
   const portfolio = data?.status === "ok" ? data.portfolio : null;
 
@@ -234,14 +238,24 @@ export default function PublicPortfolio() {
               </a>
             ))}
           </nav>
-          <button
-            onClick={copyLink}
-            className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-current/20 px-3 py-1.5 text-xs font-semibold transition-colors"
-            style={{ color: accent, borderColor: `${accent}55` }}
-          >
-            {copied ? <Check className="size-3.5" /> : <Share2 className="size-3.5" />}
-            {copied ? "Copied" : "Share"}
-          </button>
+          <div className="flex shrink-0 items-center gap-2">
+            <button
+              onClick={() => setChatOpen(true)}
+              className="inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-bold text-black transition-transform hover:scale-[1.03]"
+              style={{ background: accent }}
+            >
+              <MessageSquare className="size-3.5" />
+              Message
+            </button>
+            <button
+              onClick={copyLink}
+              className="inline-flex items-center gap-1.5 rounded-full border border-current/20 px-3 py-1.5 text-xs font-semibold transition-colors"
+              style={{ color: accent, borderColor: `${accent}55` }}
+            >
+              {copied ? <Check className="size-3.5" /> : <Share2 className="size-3.5" />}
+              {copied ? "Copied" : "Share"}
+            </button>
+          </div>
         </div>
       </header>
 
@@ -387,21 +401,35 @@ export default function PublicPortfolio() {
                       theme.panel,
                     )}
                   >
-                    <SafeImage
-                      src={p.imageUrl}
-                      alt={p.title}
-                      className="h-44 w-full object-cover"
-                      fallback={
-                        <div
-                          className="flex h-44 w-full items-center justify-center"
-                          style={{
-                            background: `linear-gradient(135deg, ${accent}22, transparent)`,
-                          }}
-                        >
-                          <FolderKanban className="size-8" style={{ color: accent }} />
-                        </div>
-                      }
-                    />
+                    {isVideoUrl(p.imageUrl) ? (
+                      /* Video project media (Mux / Cloudinary / uploaded clip). */
+                      <video
+                        src={p.imageUrl ?? undefined}
+                        className="h-44 w-full object-cover"
+                        muted
+                        loop
+                        playsInline
+                        preload="metadata"
+                        onMouseOver={(e) => void e.currentTarget.play().catch(() => {})}
+                        onMouseOut={(e) => e.currentTarget.pause()}
+                      />
+                    ) : (
+                      <SafeImage
+                        src={p.imageUrl}
+                        alt={p.title}
+                        className="h-44 w-full object-cover"
+                        fallback={
+                          <div
+                            className="flex h-44 w-full items-center justify-center"
+                            style={{
+                              background: `linear-gradient(135deg, ${accent}22, transparent)`,
+                            }}
+                          >
+                            <FolderKanban className="size-8" style={{ color: accent }} />
+                          </div>
+                        }
+                      />
+                    )}
                     <div className="flex flex-1 flex-col p-5">
                       <div className="flex items-start justify-between gap-3">
                         <h3 className="font-display text-lg font-semibold leading-snug">
@@ -545,13 +573,22 @@ export default function PublicPortfolio() {
               Want to work together or just say hello? Reach out.
             </p>
             <div className="mt-4 flex flex-wrap gap-3">
+              <button
+                onClick={() => setChatOpen(true)}
+                className="inline-flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-bold text-black transition-transform hover:scale-[1.02]"
+                style={{ background: accent }}
+              >
+                <MessageSquare className="size-4" /> Message me
+              </button>
               {contactEmail && (
                 <a
                   href={`mailto:${contactEmail}`}
-                  className="inline-flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-bold text-black"
-                  style={{ background: accent }}
+                  className={cn(
+                    "inline-flex items-center gap-2 rounded-xl border px-4 py-2.5 text-sm font-semibold",
+                    theme.chip,
+                  )}
                 >
-                  <Mail className="size-4" /> Email me
+                  <Mail className="size-4" /> Email
                 </a>
               )}
               {contactPhone && (
@@ -610,6 +647,14 @@ export default function PublicPortfolio() {
       >
         <Sparkles className="size-3.5" /> Portfolio sign in
       </Link>
+
+      {/* Messaging — the same chat experience as ForgeX, no account needed. */}
+      <PortfolioChatSheet
+        open={chatOpen}
+        onOpenChange={setChatOpen}
+        slug={slug}
+        ownerName={portfolio.displayName}
+      />
 
       {reportOpen && (
         <ReportDialog

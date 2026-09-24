@@ -212,6 +212,21 @@ export const sendAuthCodeEmail = internalAction({
     kind: v.union(v.literal("otp"), v.literal("password_reset")),
   },
   handler: async (ctx, args) => {
+    // Admins can pause the whole Academy email service (e.g. while the
+    // Academy is closed). Respect it here too so security codes don't keep
+    // leaving the building during the pause.
+    const paused = await ctx.runQuery(internal.emailData.internalEmailPaused, {});
+    if (paused) {
+      await ctx.runMutation(internal.emailData.logAuthEmailMeta, {
+        to: args.to,
+        subject: "[held] verification code (email paused)",
+        emailType: args.kind,
+        ok: false,
+        errorCode: "paused",
+      });
+      return { sent: false, paused: true };
+    }
+
     const expiryMinutes = 15;
     const tpl =
       args.kind === "otp"

@@ -27,6 +27,13 @@ export type UploadedImage = {
 
 const ACCEPT_TYPES = ["image/jpeg", "image/png", "image/webp"];
 const ACCEPT_ATTR = "image/jpeg,image/png,image/webp";
+const VIDEO_ACCEPT_TYPES = [
+  ...ACCEPT_TYPES,
+  "video/mp4",
+  "video/webm",
+  "video/quicktime",
+];
+const VIDEO_ACCEPT_ATTR = `${ACCEPT_ATTR},video/mp4,video/webm,video/quicktime`;
 const DEFAULT_MAX_BYTES = 15 * 1024 * 1024; // 15 MB
 
 type CloudinaryResponse = {
@@ -64,6 +71,12 @@ export function ImageUploader({
   maxBytes = DEFAULT_MAX_BYTES,
   compact = false,
   adminToken,
+  getUploadUrl,
+  resolveUploadUrl,
+  accept,
+  acceptTypes,
+  allowVideo = false,
+  mux,
 }: {
   value?: string | null;
   label?: string;
@@ -82,7 +95,29 @@ export function ImageUploader({
    * zero external services.
    */
   adminToken?: string;
+  /**
+   * Anything that can hand out a one-time Convex storage upload URL (e.g. a
+   * Portfolio creator or Portfolio admin session). When provided, uploads
+   * work even without Cloudinary keys and without an Academy account.
+   */
+  getUploadUrl?: () => Promise<string>;
+  /** Resolves an uploaded storage id to its public URL. */
+  resolveUploadUrl?: (storageId: string) => Promise<string>;
+  /** Override the accepted MIME types (e.g. to allow video). */
+  accept?: string;
+  acceptTypes?: string[];
+  /** Accept videos too (camera roll, screen recordings) — Mux first. */
+  allowVideo?: boolean;
+  /** Optional Mux direct upload (adaptive streaming). */
+  mux?: {
+    createUpload: () => Promise<{ uploadId: string; uploadUrl: string }>;
+    getPlaybackId: (
+      uploadId: string,
+    ) => Promise<{ url: string; mp4Url?: string } | null>;
+  };
 }) {
+  const ACCEPTED = acceptTypes ?? (allowVideo ? VIDEO_ACCEPT_TYPES : ACCEPT_TYPES);
+  const ACCEPT = accept ?? (allowVideo ? VIDEO_ACCEPT_ATTR : ACCEPT_ATTR);
   const config = useQuery(api.cloudinary.mediaConfig);
   const mediaRecord = useMutation(api.cloudinary.mediaRecord);
   const adminUploadUrl = useMutation(api.storage.adminGenerateUploadUrl);
@@ -107,9 +142,98 @@ export function ImageUploader({
     };
   }, []);
 
+  const isVideoFile = (file: File) => file.type.startsWith("video/");
+
+  /**
+   * Videos: Mux first (adaptive streaming), then Cloudinary video, then
+   * built-in Convex storage — the first one that is configured wins, so a
+   * missing key never blocks the upload.
+   */
+  const uploadVideo = async (file: File) => {
+    setProgress(10);
+
+    // 1) Mux direct upload.
+    if (mux) {
+      try {
+        const { uploadId, uploadUrl } = await mux.createUpload();
+        const put = await fetch(uploadUrl, {
+          method: "PUT",
+          headers: { "Content-Type": file.type || "video/mp4" },
+          body: file,
+        });
+        if (!put.ok) throw new Error(`Mux upload failed (${put.status}).`);
+        setProgress(70);
+        // Mux processes asynchronously — poll briefly for the playback ID.
+        for (let attempt = 0; attempt < 20; attempt += 1) {
+          const ready = await mux.getPlaybackId(uploadId);
+          if (ready) {
+            setProgress(100);
+            onUploaded({
+              publicId: uploadId,
+              secureUrl: ready.mp4Url ?? ready.url,
+              format: "mux",
+              bytes: file.size,
+            });
+            return;
+          }
+          await new Promise((r) => setTimeout(r, 2000));
+        }
+        throw new Error("Mux is still processing this video.");
+      } catch (err) {
+        // Fall through to Cloudinary / storage so the upload still succeeds.
+        console.warn("[upload] Mux unavailable, falling back:", err);
+      }
+    }
+
+    // 2) Cloudinary video (unsigned preset).
+    if (config?.configured) {
+      const form = new FormData();
+      form.append("file", file);
+      form.append("upload_preset", config.uploadPreset);
+      const res = await fetch(
+        `https://api.cloudinary.com/v1_1/${config.cloudName}/video/upload`,
+        { method: "POST", body: form },
+      );
+      if (res.ok) {
+        const result = (await res.json()) as CloudinaryResponse & {
+          secure_url?: string;
+        };
+        setProgress(100);
+        onUploaded({
+          publicId: result.public_id,
+          secureUrl: result.secure_url,
+          width: result.width,
+          height: result.height,
+          format: result.format,
+          bytes: result.bytes,
+        });
+        return;
+      }
+    }
+
+    // 3) Built-in storage (works with zero external keys).
+    if (getUploadUrl && resolveUploadUrl) {
+      const { storageId } = await uploadFileToConvex(file, getUploadUrl);
+      const url = await resolveUploadUrl(storageId);
+      if (!url) throw new Error("The video couldn't be stored — please try again.");
+      setProgress(100);
+      onUploaded({
+        publicId: storageId,
+        secureUrl: url,
+        format: file.type.split("/")[1],
+        bytes: file.size,
+      });
+      return;
+    }
+
+    throw new Error("Video uploads aren't available right now — try again shortly.");
+  };
+
   const validate = (file: File): string | null => {
-    if (!ACCEPT_TYPES.includes(file.type)) {
-      return "Unsupported file type — please choose a JPG, PNG or WEBP image.";
+    if (!ACCEPTED.includes(file.type)) {
+      return allowVideo
+        ? "Unsupported file type — choose a JPG, PNG, WEBP, MP4, MOV or WEBM file."
+        : "Unsupported file type — please choose a JPG, PNG or WEBP image.";
     }
     if (file.size > maxBytes) {
       return `File is too large (max ${Math.round(maxBytes / 1024 / 1024)} MB).`;
@@ -123,14 +247,18 @@ export function ImageUploader({
       setError(vErr);
       return;
     }
-    if (!config?.configured && !useStorageFallback) {
-      setError("Image uploads are unavailable right now — Cloudinary isn't configured.");
+    if (!config?.configured && !useStorageFallback && !getUploadUrl) {
+      setError("Uploads are unavailable right now — try again in a moment.");
       return;
     }
     setBusy(true);
     setError(null);
     setProgress(0);
     try {
+      if (isVideoFile(file)) {
+        await uploadVideo(file);
+        return;
+      }
       if (config?.configured) {
         const form = new FormData();
         form.append("file", file);
@@ -187,9 +315,28 @@ export function ImageUploader({
         return;
       }
 
-      // Cloudinary not configured — admin portal fallback: upload straight to
+      // Cloudinary not configured — session fallback: upload straight to
       // built-in Convex file storage (no external keys needed) and hand the
-      // resolved public URL back to the caller, which saves it to siteContent.
+      // resolved public URL back to the caller.
+      if (getUploadUrl && resolveUploadUrl) {
+        setProgress(30);
+        const { storageId } = await uploadFileToConvex(file, getUploadUrl);
+        setProgress(70);
+        const url = await resolveUploadUrl(storageId);
+        if (!url) {
+          throw new Error("The file couldn't be stored — please upload it again.");
+        }
+        setProgress(100);
+        onUploaded({
+          publicId: storageId,
+          secureUrl: url,
+          format: file.type.split("/")[1],
+          bytes: file.size,
+        });
+        return;
+      }
+
+      // Admin portal fallback: built-in Convex file storage via admin session.
       if (useStorageFallback && adminToken) {
         setProgress(30);
         const { storageId } = await uploadFileToConvex(file, () =>
@@ -264,7 +411,7 @@ export function ImageUploader({
       <input
         ref={galleryRef}
         type="file"
-        accept={ACCEPT_ATTR}
+        accept={ACCEPT}
         className="hidden"
         onChange={pick(galleryRef)}
       />
@@ -272,7 +419,7 @@ export function ImageUploader({
       <input
         ref={cameraRef}
         type="file"
-        accept={ACCEPT_ATTR}
+        accept={ACCEPT}
         capture="environment"
         className="hidden"
         onChange={pick(cameraRef)}

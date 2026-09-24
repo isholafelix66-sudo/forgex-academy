@@ -5,6 +5,7 @@ import { api } from "@/convex/_generated/api";
 import {
   AlertTriangle,
   Ban,
+  Bell,
   Check,
   Compass,
   Eye,
@@ -18,6 +19,8 @@ import {
   LogOut,
   Mail,
   Palette,
+  Pause,
+  Play,
   Plus,
   RotateCcw,
   Save,
@@ -33,6 +36,14 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { BrandMark } from "@/components/site/BrandMark";
 import { SharePortfolioButton } from "@/components/site/SharePortfolioButton";
+import { ImageUploader } from "@/components/media/ImageUploader";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 import { getPortfolioUserToken } from "@/lib/portfolio-user-session";
 import { toast } from "sonner";
@@ -76,6 +87,7 @@ const TABS = [
   { id: "projects", label: "Projects", icon: FolderKanban },
   { id: "branding", label: "Branding", icon: Palette },
   { id: "home", label: "Homepage", icon: ImageIcon },
+  { id: "notifications", label: "Notifications", icon: Bell },
   { id: "contact", label: "Contact & socials", icon: Mail },
   { id: "email", label: "Email", icon: Send },
   { id: "seo", label: "SEO & sharing", icon: Compass },
@@ -291,19 +303,131 @@ function Portal({ token, onSignOut }: { token: string; onSignOut: () => void }) 
         </div>
       </header>
 
-      <main className="mx-auto max-w-5xl px-4 py-8 sm:px-6 sm:py-10">
+      <main className="mx-auto max-w-5xl px-4 py-8 pb-24 sm:px-6 sm:py-10 md:pb-10">
         {tab === "overview" && <Overview token={token} />}
         {tab === "creators" && <CreatorsSection token={token} />}
         {tab === "portfolios" && <PortfoliosSection token={token} />}
         {tab === "projects" && <ProjectsSection token={token} />}
         {tab === "branding" && <BrandingSection token={token} />}
         {tab === "home" && <HomeSlidesSection token={token} />}
+        {tab === "notifications" && <NotificationsSection token={token} />}
         {tab === "contact" && <ContactSection token={token} />}
         {tab === "email" && <EmailSection token={token} />}
         {tab === "seo" && <SeoSection token={token} />}
         {tab === "access" && <AccessSection token={token} />}
       </main>
+
+      {/* Mobile navigation — the same floating pill as the rest of ForgeX,
+          with every portal section reachable from the More sheet. */}
+      <AdminMobileNav tab={tab} onTab={setTab} />
     </div>
+  );
+}
+
+/** Quick destinations in the pill; everything else lives in the More sheet. */
+const ADMIN_MOBILE_PRIMARY: TabId[] = ["overview", "creators", "notifications", "email"];
+
+function AdminMobileNav({
+  tab,
+  onTab,
+}: {
+  tab: TabId;
+  onTab: (tab: TabId) => void;
+}) {
+  const [moreOpen, setMoreOpen] = useState(false);
+
+  const go = (next: TabId) => {
+    onTab(next);
+    setMoreOpen(false);
+    window.scrollTo({ top: 0 });
+  };
+
+  const moreActive =
+    !ADMIN_MOBILE_PRIMARY.includes(tab) && moreOpen;
+
+  return (
+    <>
+      <nav className="pointer-events-none fixed inset-x-0 bottom-0 z-50 md:hidden safe-area-bottom">
+        <div className="pointer-events-auto mx-auto mb-2 w-[calc(100%-1.5rem)] max-w-lg rounded-full border border-white/10 bg-[#0a0c0a]/95 px-1.5 py-1.5 shadow-[0_10px_30px_rgba(0,0,0,0.45)] backdrop-blur-xl">
+          <div className="flex items-center justify-between">
+            {ADMIN_MOBILE_PRIMARY.map((id) => {
+              const def = TABS.find((t) => t.id === id)!;
+              const active = tab === id;
+              return (
+                <button
+                  key={id}
+                  onClick={() => go(id)}
+                  aria-label={def.label}
+                  className={cn(
+                    "flex min-w-0 flex-1 items-center justify-center py-0.5",
+                    active ? "text-black" : "text-muted-foreground",
+                  )}
+                >
+                  <span
+                    className={cn(
+                      "flex size-11 shrink-0 items-center justify-center transition-colors",
+                      active
+                        ? "bg-lime-400 text-black shadow-[0_0_0_6px_#0a0c0a,0_8px_20px_rgba(163,230,53,0.35)]"
+                        : "rounded-full",
+                    )}
+                  >
+                    <def.icon className="size-5" />
+                  </span>
+                </button>
+              );
+            })}
+            <button
+              onClick={() => setMoreOpen(true)}
+              aria-label="More portal sections"
+              className={cn(
+                "flex min-w-0 flex-1 items-center justify-center py-0.5",
+                moreActive ? "text-black" : "text-muted-foreground",
+              )}
+            >
+              <span
+                className={cn(
+                  "flex size-11 shrink-0 items-center justify-center transition-colors",
+                  moreActive
+                    ? "bg-lime-400 text-black shadow-[0_0_0_6px_#0a0c0a,0_8px_20px_rgba(163,230,53,0.35)]"
+                    : "rounded-full",
+                )}
+              >
+                <Layers className="size-5" />
+              </span>
+            </button>
+          </div>
+        </div>
+      </nav>
+
+      <Dialog open={moreOpen} onOpenChange={setMoreOpen}>
+        <DialogContent className="inset-x-0 bottom-0 top-auto max-h-[80dvh] w-full max-w-lg translate-x-0 translate-y-0 gap-0 rounded-b-none rounded-t-3xl border-white/10 bg-[#0b0e0c]/97 p-0 backdrop-blur-xl sm:left-1/2 sm:top-1/2 sm:bottom-auto sm:-translate-x-1/2 sm:-translate-y-1/2 sm:rounded-3xl">
+          <DialogHeader className="border-b border-white/10 px-4 py-3 text-left">
+            <DialogTitle className="font-display text-sm">Portfolio admin</DialogTitle>
+            <DialogDescription className="text-xs">
+              Everything you can manage here.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="max-h-[60dvh] overflow-y-auto p-2 pb-6">
+            {TABS.map((t) => (
+              <button
+                key={t.id}
+                onClick={() => go(t.id)}
+                className={cn(
+                  "flex w-full items-center gap-3 rounded-xl px-3 py-3 text-left text-sm font-medium transition-colors",
+                  tab === t.id
+                    ? "bg-lime-400/12 text-lime-300"
+                    : "text-muted-foreground hover:bg-white/5 hover:text-foreground",
+                )}
+              >
+                <t.icon className="size-4 shrink-0" />
+                <span className="flex-1">{t.label}</span>
+                {tab === t.id && <Check className="size-4 shrink-0" />}
+              </button>
+            ))}
+          </div>
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }
 
@@ -638,6 +762,10 @@ function HomeSlidesSection({ token }: { token: string }) {
   const content = useQuery(api.portfolioAdmin.publicContentAll);
   const setContent = useMutation(api.portfolioAdmin.setContent);
   const deleteContent = useMutation(api.portfolioAdmin.deleteContent);
+  // Device uploads for slide images: Cloudinary when configured, otherwise
+  // Portfolio admin storage — never the Academy upload endpoints.
+  const adminUploadUrl = useMutation(api.portfolioUploads.adminUploadUrl);
+  const adminResolveUrl = useMutation(api.portfolioUploads.adminResolveUrl);
   const { busy, saved, run } = useSave();
   const [draft, setDraft] = useState<PortfolioSlide[] | null>(null);
 
@@ -647,11 +775,10 @@ function HomeSlidesSection({ token }: { token: string }) {
   const update = (i: number, patch: Partial<PortfolioSlide>) =>
     setDraft(slides.map((s, j) => (j === i ? { ...s, ...patch } : s)));
 
-  return (
-    <Panel
-      title="Home hero slideshow"
-      description="The rotating images on the Home page. Paste a high-quality image URL for each slide — they resize fluidly on every screen size."
-      icon={ImageIcon}
+  return (      <Panel
+        title="Home hero slideshow"
+        description="The rotating images on the Home page. Paste a URL or upload straight from your device for each slide — they resize fluidly on every screen size."
+        icon={ImageIcon}
       actions={
         <div className="flex flex-wrap gap-2">
           <Button
@@ -732,6 +859,17 @@ function HomeSlidesSection({ token }: { token: string }) {
                   placeholder="https://…"
                   onChange={(v) => update(i, { image: v })}
                 />
+                <ImageUploader
+                  label="Or upload from this device"
+                  hint="JPG, PNG or WEBP — up to 15 MB. Uploads work without any external keys."
+                  value={s.image || null}
+                  compact
+                  getUploadUrl={() => adminUploadUrl({ token })}
+                  resolveUploadUrl={(storageId) =>
+                    adminResolveUrl({ token, storageId: storageId as never })
+                  }
+                  onUploaded={(img) => update(i, { image: img.secureUrl })}
+                />
                 <div className="grid gap-3 sm:grid-cols-2">
                   <TextField
                     label="Caption (optional)"
@@ -776,6 +914,320 @@ function HomeSlidesSection({ token }: { token: string }) {
 }
 
 /* ── Contact & socials ─────────────────────────────────────────────────── */
+
+/* ── Notifications (the public header announcement) ────────────────────── */
+
+type NotificationRow = {
+  _id: string;
+  title: string;
+  body: string;
+  link: string | null;
+  linkLabel: string | null;
+  tone: "info" | "success" | "warning";
+  published: boolean;
+  createdAt: number;
+  updatedAt: number;
+};
+
+const TONE_OPTIONS: Array<{ value: NotificationRow["tone"]; label: string }> = [
+  { value: "info", label: "Info (blue)" },
+  { value: "success", label: "Good news (lime)" },
+  { value: "warning", label: "Heads-up (amber)" },
+];
+
+/**
+ * The notification shown in the Portfolio website header (bell + bar).
+ *
+ * Fully Portfolio-owned: whatever is published here — and ONLY what is
+ * published here — appears to visitors on the public site. Academy
+ * announcements live in a different system and never surface here.
+ */
+function NotificationsSection({ token }: { token: string }) {
+  const rows = useQuery(api.portfolioNotifications.list, { token });
+  const create = useMutation(api.portfolioNotifications.create);
+  const update = useMutation(api.portfolioNotifications.update);
+  const setPublished = useMutation(api.portfolioNotifications.setPublished);
+  const remove = useMutation(api.portfolioNotifications.remove);
+
+  const [editing, setEditing] = useState<string | null>(null);
+  const [title, setTitle] = useState("");
+  const [body, setBody] = useState("");
+  const [link, setLink] = useState("");
+  const [linkLabel, setLinkLabel] = useState("");
+  const [tone, setTone] = useState<NotificationRow["tone"]>("info");
+  const [busy, setBusy] = useState(false);
+  const [rowBusy, setRowBusy] = useState<string | null>(null);
+
+  const reset = () => {
+    setEditing(null);
+    setTitle("");
+    setBody("");
+    setLink("");
+    setLinkLabel("");
+    setTone("info");
+  };
+
+  const startEdit = (row: NotificationRow) => {
+    setEditing(row._id);
+    setTitle(row.title);
+    setBody(row.body);
+    setLink(row.link ?? "");
+    setLinkLabel(row.linkLabel ?? "");
+    setTone(row.tone);
+  };
+
+  const submit = async () => {
+    setBusy(true);
+    try {
+      if (editing) {
+        await update({
+          token,
+          id: editing as never,
+          title,
+          body,
+          link,
+          linkLabel,
+          tone,
+        });
+        toast.success("Notification updated.");
+      } else {
+        await create({ token, title, body, link, linkLabel, tone, published: true });
+        toast.success("Notification published to the Portfolio header.");
+      }
+      reset();
+    } catch (err) {
+      toast.error(friendlyError(err, "Could not save the notification."));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const toggle = async (row: NotificationRow) => {
+    setRowBusy(row._id);
+    try {
+      await setPublished({ token, id: row._id as never, published: !row.published });
+      toast.success(row.published ? "Unpublished." : "Published.");
+    } catch (err) {
+      toast.error(friendlyError(err, "Could not change that notification."));
+    } finally {
+      setRowBusy(null);
+    }
+  };
+
+  const destroy = async (row: NotificationRow) => {
+    setRowBusy(row._id);
+    try {
+      await remove({ token, id: row._id as never });
+      toast.success("Notification deleted.");
+      if (editing === row._id) reset();
+    } catch (err) {
+      toast.error(friendlyError(err, "Could not delete that notification."));
+    } finally {
+      setRowBusy(null);
+    }
+  };
+
+  return (
+    <div className="space-y-6">
+      <Panel
+        title={editing ? "Edit notification" : "New notification"}
+        description="Shown in the Portfolio website header — the bell panel and the announcement bar — to every visitor, signed in or not."
+        icon={Bell}
+        actions={
+          editing ? (
+            <Button variant="outline" className="gap-2 border-white/15" onClick={reset}>
+              <Plus className="size-4" /> New instead
+            </Button>
+          ) : undefined
+        }
+      >
+        <div className="grid gap-4 sm:grid-cols-2">
+          <TextField
+            label="Title"
+            value={title}
+            placeholder="Visitors can now message you"
+            onChange={setTitle}
+          />
+          <div>
+            <Label className="text-xs">Style</Label>
+            <select
+              value={tone}
+              onChange={(e) => setTone(e.target.value as NotificationRow["tone"])}
+              className="mt-1.5 h-10 w-full rounded-md border border-white/10 bg-black/20 px-3 text-sm"
+            >
+              {TONE_OPTIONS.map((o) => (
+                <option key={o.value} value={o.value}>
+                  {o.label}
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
+
+        <div className="mt-4">
+          <Label className="text-xs">Message</Label>
+          <Textarea
+            value={body}
+            onChange={(e) => setBody(e.target.value)}
+            rows={3}
+            placeholder="Every portfolio now has a Message button — no account needed to reach you."
+            className="mt-1.5 border-white/10 bg-black/20"
+          />
+        </div>
+
+        <div className="mt-4 grid gap-4 sm:grid-cols-2">
+          <TextField
+            label="Link (optional)"
+            value={link}
+            placeholder="/explore or https://…"
+            hint="In-app path or a full https address."
+            onChange={setLink}
+          />
+          <TextField
+            label="Link label (optional)"
+            value={linkLabel}
+            placeholder="Explore portfolios"
+            onChange={setLinkLabel}
+          />
+        </div>
+
+        <div className="mt-5 flex flex-wrap gap-2">
+          <Button
+            onClick={() => void submit()}
+            disabled={busy}
+            className="gap-2 bg-lime-400 font-semibold text-black hover:bg-lime-300"
+          >
+            {busy ? <Loader2 className="size-4 animate-spin" /> : <Save className="size-4" />}
+            {editing ? "Save changes" : "Publish notification"}
+          </Button>
+          {!editing && (
+            <Button
+              variant="outline"
+              className="gap-2 border-white/15"
+              disabled={busy}
+              onClick={() => {
+                void (async () => {
+                  setBusy(true);
+                  try {
+                    await create({ token, title, body, link, linkLabel, tone, published: false });
+                    toast.success("Draft saved — publish it when you're ready.");
+                    reset();
+                  } catch (err) {
+                    toast.error(friendlyError(err, "Could not save the draft."));
+                  } finally {
+                    setBusy(false);
+                  }
+                })();
+              }}
+            >
+              Save as draft
+            </Button>
+          )}
+        </div>
+      </Panel>
+
+      <Panel
+        title="All notifications"
+        description="Published items appear in the header immediately. Drafts stay hidden from the public site."
+        icon={Bell}
+      >
+        {rows === undefined ? (
+          <div className="space-y-2">
+            {[0, 1].map((i) => (
+              <div key={i} className="h-20 animate-pulse rounded-2xl border border-white/8 bg-white/5" />
+            ))}
+          </div>
+        ) : rows.length === 0 ? (
+          <p className="rounded-2xl border border-dashed border-white/15 p-6 text-center text-sm text-muted-foreground">
+            No notifications yet. Publish one above and it shows up in the Portfolio header.
+          </p>
+        ) : (
+          <div className="space-y-3">
+            {rows.map((row) => (
+              <div
+                key={row._id}
+                className={cn(
+                  "rounded-2xl border p-4",
+                  row.published
+                    ? "border-lime-400/25 bg-lime-400/5"
+                    : "border-white/10 bg-black/20",
+                )}
+              >
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <p className="font-display text-sm font-semibold">{row.title}</p>
+                      <span
+                        className={cn(
+                          "rounded-full border px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider",
+                          row.published
+                            ? "border-lime-400/30 bg-lime-400/10 text-lime-300"
+                            : "border-white/15 text-muted-foreground",
+                        )}
+                      >
+                        {row.published ? "Published" : "Draft"}
+                      </span>
+                      <span className="rounded-full border border-white/10 px-2 py-0.5 text-[10px] uppercase tracking-wider text-muted-foreground">
+                        {row.tone}
+                      </span>
+                    </div>
+                    <p className="mt-1.5 whitespace-pre-line text-sm leading-relaxed text-muted-foreground">
+                      {row.body}
+                    </p>
+                    {row.link && (
+                      <p className="mt-1.5 text-[11px] text-lime-300">
+                        {row.linkLabel ?? "Open"} → {row.link}
+                      </p>
+                    )}
+                    <p className="mt-1.5 text-[10px] text-muted-foreground">
+                      Updated {new Date(row.updatedAt).toLocaleString()}
+                    </p>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="gap-1.5 border-white/15"
+                      disabled={rowBusy === row._id}
+                      onClick={() => void toggle(row)}
+                    >
+                      {row.published ? (
+                        <>
+                          <Pause className="size-3.5" /> Unpublish
+                        </>
+                      ) : (
+                        <>
+                          <Play className="size-3.5" /> Publish
+                        </>
+                      )}
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="gap-1.5 border-white/15"
+                      onClick={() => startEdit(row)}
+                    >
+                      Edit
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="gap-1.5 border-rose-400/30 text-rose-300 hover:bg-rose-400/10"
+                      disabled={rowBusy === row._id}
+                      onClick={() => void destroy(row)}
+                    >
+                      <Trash2 className="size-3.5" /> Delete
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </Panel>
+    </div>
+  );
+}
 
 type Social = { platform: string; url: string; enabled: boolean; order: number };
 const SOCIAL_PLATFORMS = [
@@ -1059,8 +1511,136 @@ function EmailSection({ token }: { token: string }) {
         </div>
       </Panel>
 
+      <EmailPausePanel token={token} />
+
       <EmailManagement token={token} />
     </div>
+  );
+}
+
+/**
+ * Pause / resume Portfolio email.
+ *
+ * Pausing is lossless: OTP codes, notifications and admin messages keep
+ * queueing and are delivered in order the moment you resume. Every send also
+ * falls back to the platform email service, so a missing or unhealthy SMTP
+ * account can no longer stop Portfolio mail.
+ */
+function EmailPausePanel({ token }: { token: string }) {
+  const settings = useQuery(api.portfolioEmailLog.emailSettings, { token });
+  const setPaused = useMutation(api.portfolioEmailLog.setPaused);
+  const drainQueue = useMutation(api.portfolioEmailLog.drainQueue);
+  const [busy, setBusy] = useState<"toggle" | "drain" | null>(null);
+
+  const paused = settings?.paused ?? false;
+
+  const toggle = async () => {
+    setBusy("toggle");
+    try {
+      const res = await setPaused({ token, paused: !paused });
+      toast.success(
+        !paused
+          ? "Portfolio email paused — everything keeps queueing."
+          : `Portfolio email resumed — ${res.dispatched} queued message(s) dispatched.`,
+      );
+    } catch (err) {
+      toast.error(friendlyError(err, "Could not change the email service."));
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const drain = async () => {
+    setBusy("drain");
+    try {
+      const res = await drainQueue({ token });
+      toast.success(`Re-sent ${res.dispatched} queued message(s).`);
+    } catch (err) {
+      toast.error(friendlyError(err, "Could not drain the queue."));
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  return (
+    <Panel
+      title="Email service"
+      description="Pause Portfolio email whenever you want the mailbox quiet — messages keep queueing and go out when you resume."
+      icon={Pause}
+      actions={
+        <div className="flex flex-wrap gap-2">
+          <Button
+            variant="outline"
+            className="gap-2 border-white/15"
+            disabled={busy !== null}
+            onClick={() => void drain()}
+          >
+            {busy === "drain" ? (
+              <Loader2 className="size-4 animate-spin" />
+            ) : (
+              <Send className="size-4" />
+            )}
+            Retry queue
+          </Button>
+          <Button
+            onClick={() => void toggle()}
+            disabled={busy !== null}
+            className={cn(
+              "gap-2 font-semibold",
+              paused
+                ? "bg-lime-400 text-black hover:bg-lime-300"
+                : "border border-amber-400/40 bg-amber-400/10 text-amber-200 hover:bg-amber-400/20",
+            )}
+          >
+            {busy === "toggle" ? (
+              <Loader2 className="size-4 animate-spin" />
+            ) : paused ? (
+              <Play className="size-4" />
+            ) : (
+              <Pause className="size-4" />
+            )}
+            {paused ? "Resume email" : "Pause email"}
+          </Button>
+        </div>
+      }
+    >
+      <div className="grid gap-3 sm:grid-cols-3">
+        <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
+          <p className="text-[11px] uppercase tracking-wider text-muted-foreground">Status</p>
+          <p
+            className={cn(
+              "font-display mt-1 text-lg font-bold",
+              paused ? "text-amber-300" : "text-lime-300",
+            )}
+          >
+            {settings === undefined ? "…" : paused ? "Paused" : "Running"}
+          </p>
+          {paused && settings?.pausedAt && (
+            <p className="mt-1 text-[11px] text-muted-foreground">
+              Since {new Date(settings.pausedAt).toLocaleString()}
+            </p>
+          )}
+        </div>
+        <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
+          <p className="text-[11px] uppercase tracking-wider text-muted-foreground">Queued</p>
+          <p className="font-display mt-1 text-lg font-bold">{settings?.pending ?? 0}</p>
+          <p className="mt-1 text-[11px] text-muted-foreground">
+            Messages waiting to be delivered.
+          </p>
+        </div>
+        <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
+          <p className="text-[11px] uppercase tracking-wider text-muted-foreground">Delivery</p>
+          <p className="font-display mt-1 text-lg font-bold">
+            {settings?.smtpConfigured ? "SMTP + fallback" : "Fallback"}
+          </p>
+          <p className="mt-1 text-[11px] text-muted-foreground">
+            {settings?.smtpConfigured
+              ? "Your SMTP account, with the platform sender as backup."
+              : "No SMTP saved yet — mail is delivered through the platform sender."}
+          </p>
+        </div>
+      </div>
+    </Panel>
   );
 }
 
