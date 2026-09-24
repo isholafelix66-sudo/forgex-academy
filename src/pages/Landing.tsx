@@ -72,7 +72,6 @@ const TEMPLATES = [
 export default function Landing() {
   const branding = useBranding();
   const featured = useQuery(api.projects.exploreProjects, { limit: 24 });
-  const categories = useQuery(api.projects.exploreCategories);
   const storedSlides = useQuery(api.portfolioAdmin.publicContent, {
     key: PORTFOLIO_SLIDES_KEY,
   });
@@ -87,7 +86,7 @@ export default function Landing() {
   const featuredWork = work.filter((p) => p.featured).slice(0, 2);
   const topWork = (featuredWork.length > 0 ? featuredWork : work).slice(0, 2);
   const recentWork = work.filter((p) => !topWork.includes(p)).slice(0, 6);
-  const chips = (categories ?? []).slice(0, 5);
+  const chips = ["Web", "Design", "Video", "Branding"];
 
   return (
     <div className="relative overflow-x-clip">
@@ -161,11 +160,11 @@ export default function Landing() {
           </Link>
           {chips.map((c) => (
             <Link
-              key={c.name}
-              to={`/explore?category=${encodeURIComponent(c.name)}`}
+              key={c}
+              to={`/explore?category=${encodeURIComponent(c)}`}
               className="shrink-0 rounded-full border border-white/10 bg-white/[0.03] px-5 py-2.5 text-xs font-semibold text-muted-foreground transition-colors hover:border-white/25 hover:text-foreground"
             >
-              {c.name}
+              {c}
             </Link>
           ))}
         </div>

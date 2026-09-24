@@ -5,10 +5,7 @@ import {
   ArrowRight,
   Compass,
   Globe,
-  HeartHandshake,
   Lightbulb,
-  Lock,
-  Rocket,
   ShieldCheck,
   Sparkles,
   Target,
@@ -17,7 +14,6 @@ import {
 import { Button } from "@/components/ui/button";
 import { Reveal } from "@/components/site/Reveal";
 import { SectionHeading } from "@/components/site/SectionHeading";
-import { cn } from "@/lib/utils";
 import { useBranding } from "@/lib/branding";
 
 const VALUES = [
@@ -40,30 +36,6 @@ const VALUES = [
     icon: Users,
     title: "Built for everyone starting out",
     body: "Students, self-taught builders, career switchers and freelancers. You don't need a design agency or a developer to look credible.",
-  },
-];
-
-const PRODUCTS = [
-  {
-    key: "projects",
-    label: "Portfolio",
-    state: "live",
-    icon: Rocket,
-    body: "Where you create, manage and share your professional portfolio as your own website.",
-  },
-  {
-    key: "academy",
-    label: "Academy",
-    state: "locked",
-    icon: Lock,
-    body: "Structured learning paths, practical projects, assessments and verifiable certificates.",
-  },
-  {
-    key: "opportunity-hub",
-    label: "Opportunity Hub",
-    state: "locked",
-    icon: HeartHandshake,
-    body: "Internships, jobs, scholarships and entrepreneurship — the bridge from skills to opportunity.",
   },
 ];
 
@@ -93,7 +65,7 @@ export default function About() {
             professional website. Then you share one link: your CV, your bio,
             your applications, anywhere.
           </p>
-          <div className="mt-8 flex flex-wrap gap-3">            <Link to="/portfolio/signin">
+          <div className="mt-8 flex flex-wrap gap-3">            <Link to="/portfolio/auth">
               <Button
                 size="lg"
                 className="gap-2 bg-lime-400 font-semibold text-black hover:bg-lime-300"
@@ -191,79 +163,8 @@ export default function About() {
         </div>
       </section>
 
-      {/* Ecosystem */}
       <section className="mx-auto max-w-7xl px-4 pb-24 sm:px-6">
-        <SectionHeading
-          eyebrow="The bigger picture"
-          title={`Part of ${branding.name}`}
-          description={`${branding.productLabel} is the first product of ${branding.name}. Two more are on the way — and they'll plug straight into the portfolio you build here.`}
-        />
-        <div className="mt-12 grid gap-5 md:grid-cols-3">
-          {PRODUCTS.map((p) => {
-            const live = p.state === "live";
-            return (
-              <Reveal key={p.key} className="h-full">
-                <div
-                  className={cn(
-                    "flex h-full flex-col rounded-3xl border p-6",
-                    live
-                      ? "border-lime-400/35 bg-gradient-to-br from-lime-400/12 to-card"
-                      : "border-white/10 bg-card",
-                  )}
-                >
-                  <div className="flex items-center justify-between">
-                    <span
-                      className={cn(
-                        "flex size-11 items-center justify-center rounded-2xl",
-                        live ? "bg-lime-400/15 text-lime-300" : "bg-white/5 text-muted-foreground",
-                      )}
-                    >
-                      <p.icon className="size-5" />
-                    </span>
-                    <span
-                      className={cn(
-                        "rounded-full border px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider",
-                        live
-                          ? "border-lime-400/40 bg-lime-400/10 text-lime-300"
-                          : "border-white/10 text-muted-foreground",
-                      )}
-                    >
-                      {live ? "Live" : "Coming soon"}
-                    </span>
-                  </div>
-                  <h3 className="font-display mt-5 text-xl font-bold">{p.label}</h3>
-                  <p className="mt-2 flex-1 text-sm leading-relaxed text-muted-foreground">
-                    {p.body}
-                  </p>
-                  <Link
-                    to={
-                      live
-                        ? "/explore"
-                        : p.key === "academy"
-                          ? "/academy"
-                          : "/opportunity-hub"
-                    }
-                    className="mt-5"
-                  >
-                    <Button
-                      variant={live ? "default" : "outline"}
-                      className={cn(
-                        "w-full gap-2",
-                        live
-                          ? "bg-lime-400 font-semibold text-black hover:bg-lime-300"
-                          : "border-white/15 text-muted-foreground hover:border-lime-400/40 hover:text-lime-300",
-                      )}
-                    >
-                      {live ? "Explore now" : "Notify me"} <ArrowRight className="size-4" />
-                    </Button>
-                  </Link>
-                </div>
-              </Reveal>
-            );
-          })}
-        </div>
-
-        <Reveal className="mt-16">
+        <Reveal>
           <div className="rounded-3xl border border-lime-400/20 bg-gradient-to-br from-lime-400/10 via-card to-transparent p-10 text-center">
             <h2 className="font-display text-2xl font-bold sm:text-3xl">
               Ready to build yours?
@@ -272,7 +173,7 @@ export default function About() {
               It takes minutes to create your portfolio, and you can publish,
               keep it private, or make it discoverable whenever you're ready.
             </p>
-            <Link to="/portfolio/signin" className="mt-7 inline-block">
+            <Link to="/portfolio/auth" className="mt-7 inline-block">
               <Button size="lg" className="gap-2 bg-lime-400 font-semibold text-black hover:bg-lime-300 glow-lime-soft">
                 Create my portfolio <ArrowRight className="size-4" />
               </Button>

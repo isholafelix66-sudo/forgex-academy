@@ -174,7 +174,7 @@ export default function PublicPortfolio() {
                 Explore portfolios
               </Button>
             </Link>
-            <Link to="/portfolio/signin">
+            <Link to="/portfolio/auth">
               <Button className="bg-lime-400 font-semibold text-black hover:bg-lime-300">
                 Sign In
               </Button>
@@ -379,10 +379,11 @@ export default function PublicPortfolio() {
               {[...data.projects]
                 .sort((a, b) => Number(b.featured) - Number(a.featured))
                 .map((p) => (
-                  <article
+                  <Link
                     key={p._id}
+                    to={`/p/${slug}/project/${p._id}`}
                     className={cn(
-                      "flex flex-col overflow-hidden rounded-2xl border transition-transform hover:-translate-y-0.5",
+                      "group flex flex-col overflow-hidden rounded-2xl border transition-transform hover:-translate-y-0.5",
                       theme.panel,
                     )}
                   >
@@ -416,7 +417,7 @@ export default function PublicPortfolio() {
                         {p.summary}
                       </p>
                       {p.tags.length > 0 && (
-                        <div className="mt-3 flex flex-wrap gap-1.5">
+                        <div className="mt-3 flex flex-wrap gap-1.5" aria-label="Tools used">
                           {p.tags.map((t) => (
                             <span
                               key={t}
@@ -430,6 +431,9 @@ export default function PublicPortfolio() {
                           ))}
                         </div>
                       )}
+                      <span className="mt-4 inline-flex items-center gap-1 text-xs font-semibold opacity-0 transition-opacity group-hover:opacity-100" style={{ color: accent }}>
+                        View case study <ArrowUpRight className="size-3" />
+                      </span>
                       {(p.liveUrl || p.repoUrl) && (
                         <div className="mt-4 flex flex-wrap gap-2 pt-1">
                           {p.liveUrl && (
@@ -459,7 +463,7 @@ export default function PublicPortfolio() {
                         </div>
                       )}
                     </div>
-                  </article>
+                  </Link>
                 ))}
             </div>
           </Section>
@@ -601,7 +605,7 @@ export default function PublicPortfolio() {
 
       {/* Floating "create yours" pill */}
       <Link
-        to="/portfolio/signin"
+        to="/portfolio/auth"
         className="fixed bottom-5 right-5 z-40 inline-flex items-center gap-2 rounded-full border border-white/10 bg-black/85 px-4 py-2.5 text-xs font-semibold text-lime-300 shadow-xl shadow-black/40 backdrop-blur transition-colors hover:bg-black"
       >
         <Sparkles className="size-3.5" /> Portfolio sign in

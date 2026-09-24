@@ -30,15 +30,6 @@ const DEFAULT_SOCIALS = [
   { platform: "tiktok", url: "https://tiktok.com", enabled: true, order: 5 },
 ];
 
-const UPCOMING = [
-  "Academy 🔒",
-  "Opportunity Hub 🔒",
-  "Learning paths",
-  "Certificates",
-  "Internships",
-  "Scholarships",
-];
-
 /** Fallback description — editable in the admin panel's branding section. */
 const DESCRIPTION =
   "The portfolio platform of ForgeX Network. Create your portfolio once, " +
@@ -96,8 +87,6 @@ export function Footer() {
             {[
               { to: "/about", label: "About" },
               { to: "/contact", label: "Contact" },
-              { to: "/academy", label: "Academy 🔒" },
-              { to: "/opportunity-hub", label: "Opportunity Hub 🔒" },
             ].map((l) => (
               <Link
                 key={l.to}
@@ -163,16 +152,6 @@ export function Footer() {
               <li><Link to="/explore" className="transition-colors hover:text-lime-300">Explore portfolios</Link></li>
               <li><Link to="/about" className="transition-colors hover:text-lime-300">About</Link></li>
               <li><Link to="/contact" className="transition-colors hover:text-lime-300">Contact</Link></li>
-              <li>
-                <Link to="/academy" className="transition-colors hover:text-lime-300">
-                  Academy <span className="text-lime-400/80">🔒</span>
-                </Link>
-              </li>
-              <li>
-                <Link to="/opportunity-hub" className="transition-colors hover:text-lime-300">
-                  Opportunity Hub <span className="text-lime-400/80">🔒</span>
-                </Link>
-              </li>
             </ul>
           </div>
 
@@ -232,9 +211,7 @@ export function Footer() {
             © {new Date().getFullYear()} {branding.name}. All rights reserved.
           </p>
           <p className="hidden md:block">
-            A module of{" "}
-            <span className="font-medium text-lime-400">{branding.name}</span> —
-            discover, express, build.
+            Create • showcase • grow with your own professional portfolio.
           </p>
         </div>
       </div>

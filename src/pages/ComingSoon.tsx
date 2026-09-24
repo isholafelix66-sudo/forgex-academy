@@ -34,9 +34,9 @@ export function ComingSoon({ product }: { product: ProductKey }) {
   const notifyMe = useMutation(api.projects.notifyMe);
 
   const flag = flags?.find((f) => f.key === product);
-  const label = flag?.label ?? meta.label;
-  const tagline = flag?.tagline ?? meta.tagline;
-  const copy = flag?.comingSoonCopy?.trim() || meta.blurb;
+  const label = "this ForgeX experience";
+  const tagline = "A private workspace is being prepared for a future release.";
+  const copy = "This area is not part of the public Portfolio experience yet. You can still build and share your work today.";
 
   const [email, setEmail] = useState("");
   const [sending, setSending] = useState(false);
@@ -80,7 +80,7 @@ export function ComingSoon({ product }: { product: ProductKey }) {
           className="inline-flex items-center gap-2 rounded-full border border-lime-400/25 bg-lime-400/10 px-4 py-1.5 text-xs font-semibold uppercase tracking-widest text-lime-300"
         >
           <Lock className="size-3.5" />
-          Coming soon
+          Private workspace
         </motion.span>
 
         <motion.h1
@@ -89,7 +89,7 @@ export function ComingSoon({ product }: { product: ProductKey }) {
           transition={{ duration: 0.6, delay: 0.05 }}
           className="font-display mt-6 text-4xl font-bold leading-[1.05] tracking-tight sm:text-6xl"
         >
-          {label} is <span className="text-gradient">coming soon</span>
+          This area is <span className="text-gradient">private</span>
         </motion.h1>
 
         <motion.p
@@ -107,7 +107,7 @@ export function ComingSoon({ product }: { product: ProductKey }) {
           transition={{ duration: 0.6, delay: 0.18 }}
           className="mt-3 text-sm font-medium text-lime-300/90"
         >
-          {tagline}
+          We’re keeping this workspace separate from the public Portfolio product.
         </motion.p>
 
         {/* Notify me */}
@@ -122,7 +122,7 @@ export function ComingSoon({ product }: { product: ProductKey }) {
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               placeholder="you@example.com"
-              aria-label={`Email me when ${label} launches`}
+              aria-label="Email me about future ForgeX updates"
               className="h-11 flex-1 border-white/10 bg-black/20"
             />
             <Button
@@ -141,26 +141,15 @@ export function ComingSoon({ product }: { product: ProductKey }) {
             </Button>
           </form>
           <p className="mt-3 text-xs text-muted-foreground">
-            We only email you about this launch. No spam, unsubscribe any time.
+            No spam. Unsubscribe any time.
           </p>
         </Reveal>
 
-        {/* What's coming */}
-        <div className="mt-16 grid gap-4 text-left sm:grid-cols-3">
-          {highlights.map((item, i) => (
-            <Reveal key={item} delay={0.06 * i}>
-              <div className="h-full rounded-2xl border border-white/10 bg-card p-5">
-                <span className="flex size-9 items-center justify-center rounded-xl bg-lime-400/12 text-lime-300">
-                  <Check className="size-4" />
-                </span>
-                <p className="mt-3 text-sm leading-relaxed text-foreground/85">
-                  {item}
-                </p>
-              </div>
-            </Reveal>
-          ))}
-        </div>
-      </section>
+        <div className="mt-16 grid gap-4 text-left sm:grid-cols-1">
+          <div className="rounded-2xl border border-white/10 bg-card p-5 text-sm leading-relaxed text-foreground/85">
+            The public Portfolio remains available while this private workspace is being prepared.
+          </div>
+        </div>      </section>
 
       {/* Meanwhile — the live product */}
       <section className="mx-auto max-w-5xl px-4 pb-24 sm:px-6">

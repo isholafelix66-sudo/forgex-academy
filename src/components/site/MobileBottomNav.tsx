@@ -65,7 +65,7 @@ export function MobileBottomNav({
       <nav className="fixed bottom-0 inset-x-0 z-50 border-t border-white/10 bg-[#0a0c0a]/95 backdrop-blur-xl md:hidden safe-area-bottom">
         <div className="mx-auto flex h-16 max-w-lg items-stretch gap-0.5 px-1">
           {primaryItems.map((item, index) => (
-            <Fragment key={item.to}>
+            <Fragment key={`${item.to}-${item.label}`}>
             <NavLink
               to={item.to}
               end={item.end}

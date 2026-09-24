@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { NavLink, useLocation, useNavigate } from "react-router";
+import { NavLink, useNavigate } from "react-router";
 import { useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import {
@@ -9,7 +9,6 @@ import {
   Home,
   InfoIcon,
   LayoutDashboard,
-  Lock,
   LogOut,
   Mail,
   PenSquare,
@@ -26,12 +25,10 @@ import { Button } from "@/components/ui/button";
 import { useAuth } from "@/hooks/use-auth";
 import { Avatar } from "./Avatar";
 import type { MobileNavItem } from "./MobileBottomNav";
-import { PRODUCT_META, type ProductKey } from "@/lib/features";
 
 /* ═══════════════════════════════════════════════════════════════════════
-   NAV DATA — the public site is about Projects. Academy and Opportunity
-   Hub remain visible as LOCKED future products (they open a Coming Soon
-   page, never the product itself).
+   NAV DATA — the public site is a focused Portfolio experience. Academy and
+   Opportunity Hub remain isolated behind their locked product routes.
    ═══════════════════════════════════════════════════════════════════════ */
 
 type NavItemDef = { to: string; label: string; icon: typeof Home; end?: boolean };
@@ -39,11 +36,6 @@ type NavItemDef = { to: string; label: string; icon: typeof Home; end?: boolean 
 const PRIMARY_NAV: NavItemDef[] = [
   { to: "/", label: "Home", icon: Home, end: true },
   { to: "/explore", label: "Explore", icon: Compass },
-];
-
-const PRODUCT_NAV: { to: string; product: ProductKey }[] = [
-  { to: "/academy", product: "academy" },
-  { to: "/opportunity-hub", product: "opportunity-hub" },
 ];
 
 const MORE_ITEMS: NavItemDef[] = [
@@ -109,20 +101,12 @@ function HoverDropdown({
 
 export function PublicNav() {
   const { isAuthenticated, user, signOut } = useAuth();
-  const flags = useQuery(api.projects.featureFlags);
   const navigate = useNavigate();
-  const location = useLocation();
   const [scrolled, setScrolled] = useState(false);
   const [notifOpen, setNotifOpen] = useState(false);
 
   const headerNotifications = useQuery(api.notifications.myNotificationsForHeader);
   const unreadCount = headerNotifications?.filter((n) => !n.read).length ?? 0;
-
-  // Products render in the nav as locked until their flag says otherwise.
-  const lockedProducts = PRODUCT_NAV.filter((p) => {
-    const flag = flags?.find((f) => f.key === p.product);
-    return (flag?.state ?? "locked") !== "active";
-  });
 
   const dashboardTo =
     user?.role === "admin" || user?.role === "owner" ? "/admin" : "/portfolio/dashboard";
@@ -150,8 +134,6 @@ export function PublicNav() {
         ? "bg-lime-400/10 text-lime-300"
         : "text-muted-foreground hover:bg-white/5 hover:text-foreground",
     );
-
-  const productsHasActive = lockedProducts.some((p) => location.pathname === p.to);
 
   // Bottom tab bar — matches the ForgeX Network Portfolio app:
   // Home · Explore · [+] · Portfolio · Profile
@@ -221,16 +203,8 @@ export function PublicNav() {
               </NavLink>
             ))}
 
-            {/* The public Portfolio site is PORTFOLIO-ONLY: no Academy
-                product links, no locked-product menu, no ecosystem strip.
-                Locked products simply aren't advertised here. */}
+            {/* Portfolio-only public navigation: no product teaser links. */}
             <HoverDropdown
-              trigger={
-                <>
-                  More
-                  <ChevronDown className="ml-1 size-3.5" />
-                </>
-              }
               trigger={
                 <>
                   More

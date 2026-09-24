@@ -168,6 +168,7 @@ export { default as Siren } from "lucide-react/dist/esm/icons/siren.js";
 export { default as SlidersHorizontal } from "lucide-react/dist/esm/icons/sliders-horizontal.js";
 export { default as SmilePlus } from "lucide-react/dist/esm/icons/smile-plus.js";
 export { default as Sparkles } from "lucide-react/dist/esm/icons/sparkles.js";
+export { default as Sparkle } from "lucide-react/dist/esm/icons/sparkle.js";
 export { default as Square } from "lucide-react/dist/esm/icons/square.js";
 export { default as SquarePen } from "lucide-react/dist/esm/icons/square-pen.js";
 export { default as Star } from "lucide-react/dist/esm/icons/star.js";

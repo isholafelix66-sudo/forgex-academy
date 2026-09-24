@@ -19,6 +19,7 @@ import { attachRoutePrefetch } from "@/lib/prefetch";
 import { registerServiceWorker } from "@/lib/sw";
 import { scrollToTopInstant } from "@/lib/scroll";
 import { PublicLayout } from "@/components/site/PublicLayout";
+import { AiSupportAssistant } from "@/components/site/AiSupportAssistant";
 import { FeatureGate } from "@/components/site/FeatureGate";
 import { ProductEntry } from "@/pages/ComingSoon";
 import { ConnectionBanner } from "@/components/network/ConnectionBanner";
@@ -211,6 +212,7 @@ const NotFound = L(() => import("./pages/NotFound.tsx"));
 // ---------------------------------------------------------------------------
 const Explore = L(() => import("./pages/Explore.tsx"));
 const PublicPortfolio = L(() => import("./pages/PublicPortfolio.tsx"));
+const PublicProject = L(() => import("./pages/PublicProject.tsx"));
 const PortfolioShell = L(() => import("./pages/dashboard/PortfolioShell.tsx"));
 const PortfolioOverview = L(() => import("./pages/dashboard/PortfolioOverview.tsx"));
 const PortfolioEditor = L(() => import("./pages/dashboard/PortfolioEditor.tsx"));
@@ -1169,6 +1171,7 @@ createRoot(document.getElementById("root")!).render(
               {/* Public portfolio website — a standalone personal site
                   (/p/<slug>) with its own minimal chrome, deliberately
                   outside the marketing shell. */}
+              <Route path="/p/:slug/project/:projectId" element={<PublicProject />} />
               <Route path="/p/:slug" element={<PublicPortfolio />} />
 
               <Route
