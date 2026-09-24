@@ -13,7 +13,7 @@ import { api } from "@/convex/_generated/api";
 import React, { StrictMode, useEffect, lazy, Suspense, useState, LazyExoticComponent, ComponentType } from "react";
 import { RefreshCw } from "lucide-react";
 import { createRoot } from "react-dom/client";
-import { BrowserRouter, Link, Navigate, Route, Routes, useLocation } from "react-router";
+import { BrowserRouter, Link, Navigate, Route, Routes, useLocation, useParams } from "react-router";
 import "./index.css";
 import { attachRoutePrefetch } from "@/lib/prefetch";
 import { registerServiceWorker } from "@/lib/sw";
@@ -269,6 +269,7 @@ const TutorPage = L(() => import("./pages/TutorPage.tsx"));
 // Team Workspace
 // ---------------------------------------------------------------------------
 const TeamHub = L(() => import("./pages/team/TeamHub.tsx"));
+const TeamRegister = L(() => import("./pages/team/TeamRegister.tsx"));
 const TeamPassword = L(() => import("./pages/team/TeamPassword.tsx"));
 const TeamDashboardShell = L(() => import("./pages/team/TeamDashboardShell.tsx"));
 const AcademicOverview = L(() => import("./pages/team/AcademicOverview.tsx"));
@@ -333,6 +334,28 @@ const AdminPortalRedirect = L(
  */
 function AdminBrandLegacyRedirect() {
   return <Navigate to="/admin-brand" replace />;
+}
+
+/** Keep old Portfolio editor bookmarks working after the dashboard move. */
+function LegacyPortfolioSectionRedirect() {
+  const { section } = useParams<{ section?: string }>();
+  return <Navigate to={`/portfolio/dashboard/edit${section ? `/${section}` : ""}`} replace />;
+}
+
+function LegacyPortfolioProjectsRedirect() {
+  return <Navigate to="/portfolio/dashboard/projects" replace />;
+}
+
+function LegacyPortfolioSettingsRedirect() {
+  return <Navigate to="/portfolio/dashboard/settings" replace />;
+}
+
+function LegacyPortfolioMessagesRedirect() {
+  return <Navigate to="/portfolio/dashboard/messages" replace />;
+}
+
+function LegacyPortfolioProfileRedirect() {
+  return <Navigate to="/portfolio/dashboard/profile" replace />;
 }
 
 // Communication & Community module (admin moderation)
@@ -1214,6 +1237,12 @@ createRoot(document.getElementById("root")!).render(
               {/* Back-compat: the old workspace path redirects into the
                   creator dashboard. */}
               <Route path="/portfolio" element={<PortfolioRedirect />} />
+              <Route path="/portfolio/edit" element={<LegacyPortfolioSectionRedirect />} />
+              <Route path="/portfolio/edit/:section" element={<LegacyPortfolioSectionRedirect />} />
+              <Route path="/portfolio/projects" element={<LegacyPortfolioProjectsRedirect />} />
+              <Route path="/portfolio/settings" element={<LegacyPortfolioSettingsRedirect />} />
+              <Route path="/portfolio/messages" element={<LegacyPortfolioMessagesRedirect />} />
+              <Route path="/portfolio/profile" element={<LegacyPortfolioProfileRedirect />} />
 
               {/* Course player (signed in) — Academy, locked by default. */}
               <Route
@@ -1292,6 +1321,7 @@ createRoot(document.getElementById("root")!).render(
 
               {/* Team Hub — workspace password access */}
               <Route path="/team" element={<TeamHub />} />
+              <Route path="/team/register" element={<TeamRegister />} />
               <Route path="/team/access/:teamSlug" element={<TeamPassword />} />              <Route path="/team/:teamSlug" element={<RequireTeamAuth><TeamDashboardShell /></RequireTeamAuth>}>
                 <Route index element={<AcademicOverview />} />
                 <Route path="settings" element={<TeamSettings />} />

@@ -216,7 +216,7 @@ export default function PortfolioEditor() {
         {SECTIONS.map((s) => (
           <Link
             key={s.id}
-            to={s.id === "profile" ? "/portfolio/edit" : `/portfolio/edit/${s.id}`}
+            to={s.id === "profile" ? "/portfolio/dashboard/edit" : `/portfolio/dashboard/edit/${s.id}`}
             className={cn(
               "shrink-0 rounded-full border px-3.5 py-1.5 text-xs font-semibold transition-colors",
               active.id === s.id

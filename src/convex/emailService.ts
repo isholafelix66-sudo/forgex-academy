@@ -134,6 +134,20 @@ export const processPendingBatch = internalAction({
       const batch = await ctx.runMutation(internal.emailData.internalClaimBatch, {});
       if (batch.length === 0) return;
 
+      // The claim and the network send are separate operations. Re-check the
+      // pause here, and before each item below, so a pause takes effect even
+      // when a worker was already scheduled.
+      const releaseIfPaused = async (items: typeof batch) => {
+        if (items.length === 0) return false;
+        const paused = await ctx.runQuery(internal.emailData.internalEmailPaused, {});
+        if (!paused) return false;
+        await ctx.runMutation(internal.emailData.internalReleaseBatch, {
+          ids: items.map((item) => item.id),
+        });
+        return true;
+      };
+      if (await releaseIfPaused(batch)) return;
+
       // SMTP is preferred when configured; the platform integration below is
       // the guaranteed fallback, so a missing/expired SMTP key can never stop
       // the queue from delivering.
@@ -149,7 +163,11 @@ export const processPendingBatch = internalAction({
       }
 
       let failures = 0;
-      for (const item of batch) {
+      for (let index = 0; index < batch.length; index += 1) {
+        const item = batch[index];
+        if (await releaseIfPaused(batch.slice(index))) {
+          break;
+        }
         let res: { ok: boolean; errorCode?: string } = mailer
           ? await sendOne(mailer, item)
           : { ok: false, errorCode: "not_configured" };

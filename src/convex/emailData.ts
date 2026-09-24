@@ -203,6 +203,25 @@ export const internalClaimBatch = internalMutation({
   },
 });
 
+/**
+ * Return a claimed batch to the queue when delivery is paused. This closes
+ * the race where an admin pauses email after the worker claims rows but before
+ * the network send begins.
+ */
+export const internalReleaseBatch = internalMutation({
+  args: { ids: v.array(v.id("emailLogs")) },
+  handler: async (ctx, args) => {
+    for (const id of args.ids) {
+      await ctx.db.patch(id, {
+        status: "pending",
+        lastError: undefined,
+        nextRetryAt: undefined,
+      });
+    }
+    return args.ids.length;
+  },
+});
+
 /** Log metadata for an authentication email (OTP / reset) — code NEVER stored. */
 export const logAuthEmailMeta = internalMutation({
   args: {

@@ -621,17 +621,17 @@ function Overview({ token }: { token: string }) {
         icon={ImageIcon}
       >
         <div className="flex flex-wrap gap-2">
-          <Link to="/portfolio">
+          <Link to="/portfolio/dashboard">
             <Button className="gap-2 bg-lime-400 font-semibold text-black hover:bg-lime-300">
               Open Portfolio editor
             </Button>
           </Link>
-          <Link to="/portfolio/projects">
+          <Link to="/portfolio/dashboard/projects">
             <Button variant="outline" className="border-white/15">
               Manage projects
             </Button>
           </Link>
-          <Link to="/portfolio/settings">
+          <Link to="/portfolio/dashboard/settings">
             <Button variant="outline" className="border-white/15">
               Public link &amp; visibility
             </Button>

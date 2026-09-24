@@ -204,7 +204,7 @@ export default function PublicPortfolio() {
             ? "Only you can see this — your portfolio is still a draft."
             : "You're viewing your live portfolio."}
           <Link
-            to="/portfolio/edit"
+            to="/portfolio/dashboard/edit"
             className="rounded-full border border-lime-400/40 px-3 py-0.5 transition-colors hover:bg-lime-400 hover:text-black"
           >
             Edit portfolio

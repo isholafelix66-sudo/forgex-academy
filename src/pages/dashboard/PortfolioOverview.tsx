@@ -65,14 +65,14 @@ export default function PortfolioOverview() {
   const checklist = useMemo(() => {
     if (!portfolio) return [];
     return [
-      { label: "Add your display name", done: portfolio.displayName.trim().length > 1, to: "/portfolio/edit" },
-      { label: "Write a headline", done: !!portfolio.headline?.trim(), to: "/portfolio/edit" },
-      { label: "Add a profile photo", done: !!portfolio.avatarUrl, to: "/portfolio/edit" },
-      { label: "Tell your story in About", done: (portfolio.about ?? portfolio.bio ?? "").trim().length > 40, to: "/portfolio/edit/about" },
-      { label: "List your skills", done: portfolio.skills.length > 0, to: "/portfolio/edit/skills" },
-      { label: "Show at least one project", done: projects.length > 0, to: "/portfolio/projects" },
-      { label: "Add a way to contact you", done: !!(portfolio.email || portfolio.phone), to: "/portfolio/edit" },
-      { label: "Add a social link", done: portfolio.links.length > 0, to: "/portfolio/edit/links" },
+      { label: "Add your display name", done: portfolio.displayName.trim().length > 1, to: "/portfolio/dashboard/edit" },
+      { label: "Write a headline", done: !!portfolio.headline?.trim(), to: "/portfolio/dashboard/edit" },
+      { label: "Add a profile photo", done: !!portfolio.avatarUrl, to: "/portfolio/dashboard/edit" },
+      { label: "Tell your story in About", done: (portfolio.about ?? portfolio.bio ?? "").trim().length > 40, to: "/portfolio/dashboard/edit/about" },
+      { label: "List your skills", done: portfolio.skills.length > 0, to: "/portfolio/dashboard/edit/skills" },
+      { label: "Show at least one project", done: projects.length > 0, to: "/portfolio/dashboard/projects" },
+      { label: "Add a way to contact you", done: !!(portfolio.email || portfolio.phone), to: "/portfolio/dashboard/edit" },
+      { label: "Add a social link", done: portfolio.links.length > 0, to: "/portfolio/dashboard/edit/links" },
     ];
   }, [portfolio, projects.length]);
 
@@ -131,7 +131,7 @@ export default function PortfolioOverview() {
                 <ExternalLink className="size-4" /> View live
               </Button>
             </Link>
-            <Link to="/portfolio/edit">
+            <Link to="/portfolio/dashboard/edit">
               <Button className="gap-2 bg-lime-400 font-semibold text-black hover:bg-lime-300">
                 <PenSquare className="size-4" /> Edit portfolio
               </Button>
@@ -297,7 +297,7 @@ export default function PortfolioOverview() {
         <div className="flex items-center justify-between gap-3">
           <h3 className="font-display text-lg font-bold">Your projects</h3>
           <Link
-            to="/portfolio/projects"
+            to="/portfolio/dashboard/projects"
             className="inline-flex items-center gap-1.5 text-xs font-semibold text-lime-300"
           >
             Manage <ArrowRight className="size-3.5" />
@@ -310,7 +310,7 @@ export default function PortfolioOverview() {
               No projects yet. Projects are the strongest part of a portfolio —
               add the work you're proud of.
             </p>
-            <Link to="/portfolio/projects" className="mt-4 inline-block">
+            <Link to="/portfolio/dashboard/projects" className="mt-4 inline-block">
               <Button className="gap-2 bg-lime-400 font-semibold text-black hover:bg-lime-300">
                 <CircleUser className="size-4" /> Add your first project
               </Button>
@@ -332,7 +332,7 @@ export default function PortfolioOverview() {
                   <p className="truncate text-xs text-muted-foreground">{p.summary}</p>
                 </div>
                 <Link
-                  to="/portfolio/projects"
+                  to="/portfolio/dashboard/projects"
                   className="shrink-0 text-xs font-semibold text-lime-300"
                 >
                   Edit
