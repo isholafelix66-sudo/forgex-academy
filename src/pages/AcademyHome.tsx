@@ -216,6 +216,23 @@ export default function AcademyHome() {
   const continueCourse = continueLearning?.[0]?.course ?? null;
   const continueRow = continueLearning?.[0] ?? null;
 
+  // Pre-warm the course-player chunk as soon as a continue-learning course is
+  // known, so tapping the pill opens the player instantly even on weak
+  // mobile connections (where fetching the chunk on tap previously caused a
+  // long spinner, or worse, the deploy-recovery reload).
+  useEffect(() => {
+    if (!continueCourse) return;
+    const warm = () => {
+      void import("@/pages/Learn.tsx").catch(() => {});
+    };
+    if (typeof window.requestIdleCallback === "function") {
+      const id = window.requestIdleCallback(warm, { timeout: 4_000 });
+      return () => window.cancelIdleCallback(id);
+    }
+    const t = setTimeout(warm, 1_500);
+    return () => clearTimeout(t);
+  }, [continueCourse]);
+
   return (
     <div className="relative overflow-x-clip">
       {/* ── Hero ─────────────────────────────────────────────────────────── */}

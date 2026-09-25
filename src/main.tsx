@@ -78,16 +78,27 @@ function lazyRetry(
           msg,
         );
       if (isChunkError && typeof window !== "undefined") {
-        // Patient retry: on mobile a transient network hiccup (weak signal,
-        // radio waking up) fails the first fetch. Retry with growing backoff
-        // before considering a reload — a full page reload reads as "the app
-        // refreshed itself" and must stay a true last resort.
-        for (const delay of [300, 1_200, 3_000]) {
+        // Patient retry: on weak/mobile connections a route chunk can take
+        // far longer than a few seconds to download. Retry with growing
+        // backoff for up to ~60s while the route's Suspense spinner shows —
+        // the page must NEVER reload just because the network is slow.
+        // Whether an attempt failed "fast" (<1.5s, typically an instant 404
+        // from a stale post-deploy chunk URL) or "slow" (timed out on a weak
+        // connection) decides what happens when retries are exhausted: fast
+        // failures get the one-time reachability-gated reload, slow failures
+        // throw so the error boundary can keep re-rendering until the
+        // network delivers.
+        const startedAt = Date.now();
+        let lastAttemptFast = true;
+        for (const delay of [200, 400, 800, 1_600, 3_000, 5_000, 7_000, 10_000, 10_000, 15_000]) {
+          if (Date.now() - startedAt > 60_000) break;
+          if (typeof navigator !== "undefined" && !navigator.onLine) break;
           await new Promise((r) => setTimeout(r, delay));
+          const attemptStarted = Date.now();
           try {
             return await loader();
           } catch {
-            // keep retrying
+            lastAttemptFast = Date.now() - attemptStarted < 1_500;
           }
         }
         // Still failing — usually a deploy changed under us. NEVER reload
@@ -102,6 +113,12 @@ function lazyRetry(
             (document.visibilityState as string) === "prerendering") ||
           (typeof navigator !== "undefined" && !navigator.onLine)
         ) {
+          throw err;
+        }
+        // Slow failures mean the network is struggling, not that the site
+        // moved — reloading here just loops. Only reload for fast, repeated
+        // failures (the stale-deploy signature).
+        if (!lastAttemptFast) {
           throw err;
         }
         // Reload ONLY when the site itself answers — otherwise this was a
