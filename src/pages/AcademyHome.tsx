@@ -11,6 +11,8 @@ import {
   GraduationCap,
   Map as MapIcon,
   Megaphone,
+  MessageSquareHeart,
+  PenSquare,
   PlayCircle,
   Sparkles,
   Star,
@@ -38,7 +40,11 @@ import { parseTutorialVideo } from "@/lib/tutorial-video";
 /*  Defaults — used only when the admin has not published custom homepage copy */
 /* --------------------------------------------------------------------------- */
 
-const DEFAULT_HERO_TITLE = "Learn. Build. Succeed.";
+const DEFAULT_HERO_TITLE = "Discover. Express. Build.";
+/** The previous homepage default — treated as legacy so the rebranded copy
+ *  shows even if it was saved to siteContent verbatim. Genuinely custom
+ *  admin copy is always respected. */
+const LEGACY_HERO_TITLE = "Learn. Build. Succeed.";
 const DEFAULT_HERO_SUBTITLE =
   "Practical, industry-relevant learning that prepares you for real-world opportunities — structured roadmaps, verified tutors, and certificates that mean something.";
 
@@ -183,7 +189,11 @@ export default function AcademyHome() {
     isAuthenticated ? {} : "skip",
   );
 
-  const heroTitle = str(content?.heroTitle) ?? DEFAULT_HERO_TITLE;
+  const storedHeroTitle = str(content?.heroTitle);
+  const heroTitle =
+    storedHeroTitle && storedHeroTitle !== LEGACY_HERO_TITLE
+      ? storedHeroTitle
+      : DEFAULT_HERO_TITLE;
   const heroSubtitle = str(content?.heroSubtitle) ?? DEFAULT_HERO_SUBTITLE;
   const robotSrc = str(content?.heroImage) ?? undefined;
   const heroSlides = useMemo(
@@ -308,7 +318,7 @@ export default function AcademyHome() {
       {/* ── Stats strip ──────────────────────────────────────────────────── */}
       {stats && (
         <section className="mx-auto max-w-7xl px-4 pb-14 sm:px-6">
-          <div className="grid gap-6 rounded-3xl border border-white/10 bg-card p-8 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="grid grid-cols-4 gap-2 rounded-3xl border border-white/10 bg-card p-4 sm:gap-6 sm:p-8">
             <Stat value={`${stats.courses}`} label="Courses published" />
             <Stat value={`${stats.tutors}`} label="Verified tutors" delay={0.05} />
             <Stat value={`${stats.students}`} label="Learners" delay={0.1} />
@@ -392,6 +402,13 @@ export default function AcademyHome() {
             >
               All tutors
               <ArrowRight className="size-4 transition-transform group-hover:translate-x-0.5" />
+            </Link>
+            <Link
+              to="/academy/become-tutor"
+              className="group inline-flex shrink-0 items-center gap-2 text-sm font-semibold text-muted-foreground transition-colors hover:text-lime-300"
+            >
+              <PenSquare className="size-4 transition-transform group-hover:-rotate-6" />
+              Apply to teach
             </Link>
           </div>
           <div className="mt-8 grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
@@ -591,6 +608,16 @@ export default function AcademyHome() {
                   className="border-white/15 hover:border-lime-400/40 hover:text-lime-300"
                 >
                   Browse courses
+                </Button>
+              </Link>
+              <Link to="/academy/become-tutor">
+                <Button
+                  size="lg"
+                  variant="ghost"
+                  className="gap-2 text-lime-300 hover:bg-lime-400/10 hover:text-lime-200"
+                >
+                  <PenSquare className="size-4" />
+                  Apply to teach
                 </Button>
               </Link>
             </div>

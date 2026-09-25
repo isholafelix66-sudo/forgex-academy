@@ -11,10 +11,10 @@ export function Stat({
 }) {
   return (
     <Reveal delay={delay} className="text-center">
-      <div className="font-display text-4xl font-bold tracking-tight text-gradient sm:text-5xl">
+      <div className="font-display text-2xl font-bold tracking-tight text-gradient sm:text-4xl lg:text-5xl">
         {value}
       </div>
-      <div className="mt-1.5 text-sm text-muted-foreground">{label}</div>
+      <div className="mt-1.5 text-[11px] leading-snug text-muted-foreground sm:text-sm">{label}</div>
     </Reveal>
   );
 }

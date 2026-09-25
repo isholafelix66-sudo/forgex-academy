@@ -125,6 +125,7 @@ export { default as Megaphone } from "lucide-react/dist/esm/icons/megaphone.js";
 export { default as Menu } from "lucide-react/dist/esm/icons/menu.js";
 export { default as MessageCircle } from "lucide-react/dist/esm/icons/message-circle.js";
 export { default as MessageCircleHeart } from "lucide-react/dist/esm/icons/message-circle-heart.js";
+export { default as MessageSquareHeart } from "lucide-react/dist/esm/icons/message-square-heart.js";
 export { default as MessageSquare } from "lucide-react/dist/esm/icons/message-square.js";
 export { default as MessageSquareText } from "lucide-react/dist/esm/icons/message-square-text.js";
 export { default as MessageSquareWarning } from "lucide-react/dist/esm/icons/message-square-warning.js";

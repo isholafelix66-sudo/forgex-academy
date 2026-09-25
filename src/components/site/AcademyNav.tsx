@@ -3,9 +3,9 @@ import {
   BookOpen,
   Home,
   LayoutDashboard,
+  LogIn,
   Map as MapIcon,
-  PenSquare,
-  Sparkles,
+  MessageSquareHeart,
   User,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -31,7 +31,7 @@ const ACADEMY_NAV: NavItemDef[] = [
   { to: "/academy/courses", label: "Courses" },
   { to: "/academy/tutors", label: "Tutors" },
   { to: "/academy/roadmap", label: "Roadmap" },
-  { to: "/academy/showcase", label: "Showcase" },
+  { to: "/academy/showcase", label: "Testimonies" },
   { to: "/academy/prompts", label: "Prompts" },
 ];
 
@@ -65,11 +65,11 @@ export function AcademyNav() {
     { to: "/academy", label: "Home", icon: <Home className="size-5" />, end: true },
     { to: "/academy/courses", label: "Courses", icon: <BookOpen className="size-5" /> },
     { to: "/academy/roadmap", label: "Roadmap", icon: <MapIcon className="size-5" /> },
-    { to: "/academy/showcase", label: "Showcase", icon: <Sparkles className="size-5" /> },
+    { to: "/academy/showcase", label: "Testimonies", icon: <MessageSquareHeart className="size-5" /> },
     {
       to: destination,
       label: isAuthenticated ? "Me" : "Sign in",
-      icon: isAuthenticated ? <User className="size-5" /> : <PenSquare className="size-5" />,
+      icon: isAuthenticated ? <User className="size-5" /> : <LogIn className="size-5" />,
       end: true,
     },
   ];

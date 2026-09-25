@@ -49,7 +49,7 @@ function AcademyFooter() {
           {[
             ["/academy/courses", "Courses"],
             ["/academy/tutors", "Tutors"],
-            ["/academy/showcase", "Showcase"],
+            ["/academy/showcase", "Testimonies"],
             ["/academy/prompts", "Prompts"],
           ].map(([to, label]) => (
             <Link key={to} to={to} className="rounded-lg border border-white/10 bg-white/5 px-3 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:border-lime-400/40 hover:text-lime-300">

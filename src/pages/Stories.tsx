@@ -398,8 +398,9 @@ export default function Stories() {
             )}
           </div>
 
-          {/* Share form (sticky on desktop) */}
-          <div className="rounded-3xl border border-white/10 bg-card p-6 sm:p-7 lg:sticky lg:top-24">
+          {/* Share form (sticky on desktop). `#share` is targeted by the
+              homepage floating button. */}
+          <div id="share" className="scroll-mt-24 rounded-3xl border border-white/10 bg-card p-6 sm:p-7 lg:sticky lg:top-24">
             <div className="flex items-center gap-3">
               <span className="flex size-10 items-center justify-center rounded-2xl bg-lime-400/12 text-lime-300">
                 <Sparkles className="size-5" />
