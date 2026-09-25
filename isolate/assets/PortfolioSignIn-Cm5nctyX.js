@@ -1,0 +1,1 @@
+import{ad as a,r as e,j as o,br as r}from"./index-DGCdZF-N.js";function i(){const t=a();return e.useEffect(()=>{t("/portfolio/auth",{replace:!0})},[t]),o.jsx(r,{to:"/portfolio/auth",replace:!0})}export{i as default};
