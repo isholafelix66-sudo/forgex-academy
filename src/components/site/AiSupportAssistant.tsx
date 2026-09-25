@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router";
 import { useAction, useMutation, useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
-import { Bot, Loader2, MessageSquareHeart, Send, Sparkles, UserPlus, X } from "lucide-react";
+import { Bot, Loader2, Send, Sparkles, UserPlus, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { friendlyError } from "@/lib/errors";
 import { DraggableFab } from "./DraggableFab";
@@ -68,8 +68,9 @@ export function AiSupportAssistant() {
   // Dashboard areas have their own full support pages and the chat FAB —
   // the assistant FAB lives on public pages only (panel still opens via event).
   const onDashboardArea = /^\/(?:dashboard|tutor|admin|team)(?:\/|$)/.test(pathname);
-  // The floating "Share your story" button is an ACADEMY marketing affordance.
-  // Portfolio routes have their own chrome and must never surface it.
+  // The assistant (and its floating button) is an ACADEMY product surface.
+  // The Portfolio website has its own chrome and must never show Academy AI
+  // branding — the FAB is hidden on every non-Academy route.
   const hideFab = onDashboardArea || !isAcademyPath(pathname) || isPortfolioPath(pathname);
 
   const [input, setInput] = useState("");
@@ -295,21 +296,16 @@ export function AiSupportAssistant() {
   return (
     <>
       {/* Draggable floating button — sits safely above the mobile bottom nav.
-          Hidden inside dashboard areas so it never collides with the chat FAB. */}
-      {/* Floating "Share your story" button — sits safely above the mobile
-          bottom nav. Hidden inside dashboard areas and off-Academy routes.
-          Previously this FAB opened the AI assistant (sparkle icon) and read
-          as AI branding on the marketing pages; it now leads to the Academy
-          testimony page instead. */}
+          Academy-only: hidden inside dashboard areas and on every Portfolio
+          route so the Portfolio website never surfaces Academy AI branding. */}
       {!open && !hideFab && (
         <DraggableFab
-          onClick={() => navigate("/academy/showcase#share")}
-          title="Share your story"
-          ariaLabel="Share your story"
-          className="fixed z-50 flex h-12 items-center justify-center gap-2 rounded-full border border-lime-400/40 bg-[#11150f] px-4 text-sm font-semibold text-lime-300 shadow-xl shadow-lime-400/15 transition-[transform] hover:scale-105 hover:text-lime-200 active:scale-95 bottom-[calc(5.5rem+env(safe-area-inset-bottom,0px))] right-4 md:bottom-6 md:right-5"
+          onClick={() => setOpen(true)}
+          title="Open the ForgeX AI Support Assistant"
+          ariaLabel="Open the ForgeX AI Support Assistant"
+          className="fixed z-50 flex size-14 items-center justify-center rounded-full border border-lime-400/40 bg-[#11150f] text-lime-300 shadow-xl shadow-lime-400/15 transition-[transform] hover:scale-105 hover:text-lime-200 active:scale-95 bottom-[calc(5.5rem+env(safe-area-inset-bottom,0px))] right-4 md:bottom-6 md:right-5"
         >
-          <MessageSquareHeart className="size-5" />
-          Share your story
+          <Sparkles className="size-6" />
         </DraggableFab>
       )}
 

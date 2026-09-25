@@ -214,6 +214,7 @@ export default function AcademyHome() {
   const recentUpdates = (updates ?? []).slice(0, 3);
   const latestAnnouncement = (announcements ?? [])[0] ?? null;
   const continueCourse = continueLearning?.[0]?.course ?? null;
+  const continueRow = continueLearning?.[0] ?? null;
 
   return (
     <div className="relative overflow-x-clip">
@@ -297,6 +298,19 @@ export default function AcademyHome() {
                     <span className="block truncate text-sm font-medium">
                       {continueCourse.title}
                     </span>
+                    {continueRow && (
+                      <span className="mt-1.5 flex items-center gap-2">
+                        <span className="h-1 w-20 overflow-hidden rounded-full bg-white/10">
+                          <span
+                            className="block h-full rounded-full bg-lime-400 transition-[width]"
+                            style={{ width: `${Math.min(100, Math.max(2, Math.round(continueRow.progress)))}%` }}
+                          />
+                        </span>
+                        <span className="shrink-0 text-[11px] font-medium text-muted-foreground">
+                          {Math.round(continueRow.progress)}% · {continueRow.completedLessons}/{continueRow.totalLessons} lessons
+                        </span>
+                      </span>
+                    )}
                   </span>
                   <ArrowRight className="size-4 shrink-0 text-lime-300 transition-transform group-hover:translate-x-0.5" />
                 </Link>

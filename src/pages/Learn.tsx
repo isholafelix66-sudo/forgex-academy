@@ -182,8 +182,11 @@ export default function Learn() {
     );
   }
 
-  // Signed-out users land here only after enrollment → route to sign-in
-  if (!isAuthenticated || !enrollment) {
+  // Signed-out users land here only after enrollment → route to sign-in.
+  // While the enrollment query is still loading (`undefined`) we must NOT
+  // flash the "Enroll to start learning" screen — that read as the page
+  // refreshing every time it was opened from the homepage.
+  if (!isAuthenticated) {
     return (
       <div className="min-h-screen bg-background px-4 py-24">
         <EmptyState
@@ -194,11 +197,42 @@ export default function Learn() {
             <Button
               className="bg-lime-400 font-semibold text-black hover:bg-lime-300"
               onClick={() =>
-                navigate(`/auth?returnTo=${encodeURIComponent(`/learn/${course.slug}`)}`)
+                navigate(
+                  `/academy/login?returnTo=${encodeURIComponent(`/academy/learn/${course.slug}`)}`,
+                )
               }
             >
               Sign in to enroll
             </Button>
+          }
+        />
+      </div>
+    );
+  }
+
+  // Authenticated but enrollment still loading → brief spinner, no flash.
+  if (enrollment === undefined) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-background">
+        <Loader2 className="size-6 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
+
+  // Authenticated, enrollment resolved, and genuinely not enrolled.
+  if (!enrollment) {
+    return (
+      <div className="min-h-screen bg-background px-4 py-24">
+        <EmptyState
+          icon={<GraduationCap className="size-6" />}
+          title="Enroll to start learning"
+          description={`You haven't enrolled in "${course.title}" yet.`}
+          action={
+            <Link to={`/academy/courses/${course.slug}`}>
+              <Button className="bg-lime-400 font-semibold text-black hover:bg-lime-300">
+                View course
+              </Button>
+            </Link>
           }
         />
       </div>
