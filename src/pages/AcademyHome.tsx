@@ -11,9 +11,7 @@ import {
   GraduationCap,
   Map as MapIcon,
   Megaphone,
-  MessageSquareHeart,
   PenSquare,
-  PlayCircle,
   Sparkles,
   Star,
   Users,
@@ -32,7 +30,6 @@ import { HowToVideo } from "@/components/site/HowToVideo";
 import { HeroRobot } from "@/components/site/HeroRobot";
 import { cn } from "@/lib/utils";
 import { timeAgo } from "@/lib/format";
-import { useAuth } from "@/hooks/use-auth";
 import { normalizeHeroSlides, type HeroSlide } from "@/lib/hero-slides";
 import { parseTutorialVideo } from "@/lib/tutorial-video";
 
@@ -175,7 +172,6 @@ function HeroSlides({
 /* --------------------------------------------------------------------------- */
 
 export default function AcademyHome() {
-  const { isAuthenticated } = useAuth();
   const content = useQuery(api.public.siteContentAll);
   const slideshows = useQuery(api.public.featuredCourseSlideshows);
   const tutors = useQuery(api.public.popularTutors);
@@ -184,10 +180,6 @@ export default function AcademyHome() {
   const updates = useQuery(api.public.updatesList);
   const stories = useQuery(api.stories.featuredStories);
   const stats = useQuery(api.public.stats);
-  const continueLearning = useQuery(
-    api.public.myContinueLearning,
-    isAuthenticated ? {} : "skip",
-  );
 
   const storedHeroTitle = str(content?.heroTitle);
   const heroTitle =
@@ -213,25 +205,6 @@ export default function AcademyHome() {
   const homeStories = (stories ?? []).slice(0, 3);
   const recentUpdates = (updates ?? []).slice(0, 3);
   const latestAnnouncement = (announcements ?? [])[0] ?? null;
-  const continueCourse = continueLearning?.[0]?.course ?? null;
-  const continueRow = continueLearning?.[0] ?? null;
-
-  // Pre-warm the course-player chunk as soon as a continue-learning course is
-  // known, so tapping the pill opens the player instantly even on weak
-  // mobile connections (where fetching the chunk on tap previously caused a
-  // long spinner, or worse, the deploy-recovery reload).
-  useEffect(() => {
-    if (!continueCourse) return;
-    const warm = () => {
-      void import("@/pages/Learn.tsx").catch(() => {});
-    };
-    if (typeof window.requestIdleCallback === "function") {
-      const id = window.requestIdleCallback(warm, { timeout: 4_000 });
-      return () => window.cancelIdleCallback(id);
-    }
-    const t = setTimeout(warm, 1_500);
-    return () => clearTimeout(t);
-  }, [continueCourse]);
 
   return (
     <div className="relative overflow-x-clip">
@@ -297,42 +270,6 @@ export default function AcademyHome() {
                 </Button>
               </Link>
             </motion.div>
-
-            {/* Continue learning — signed-in students only */}
-            {continueCourse && (
-              <Reveal className="mt-6">
-                <Link
-                  to={`/academy/learn/${continueCourse.slug}`}
-                  className="group inline-flex max-w-full items-center gap-3 rounded-2xl border border-lime-400/25 bg-lime-400/5 p-3 pr-4 transition-colors hover:border-lime-400/45"
-                >
-                  <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-lime-400/15 text-lime-300">
-                    <PlayCircle className="size-5" />
-                  </span>
-                  <span className="min-w-0">
-                    <span className="block text-[11px] font-semibold uppercase tracking-widest text-lime-400/80">
-                      Continue learning
-                    </span>
-                    <span className="block truncate text-sm font-medium">
-                      {continueCourse.title}
-                    </span>
-                    {continueRow && (
-                      <span className="mt-1.5 flex items-center gap-2">
-                        <span className="h-1 w-20 overflow-hidden rounded-full bg-white/10">
-                          <span
-                            className="block h-full rounded-full bg-lime-400 transition-[width]"
-                            style={{ width: `${Math.min(100, Math.max(2, Math.round(continueRow.progress)))}%` }}
-                          />
-                        </span>
-                        <span className="shrink-0 text-[11px] font-medium text-muted-foreground">
-                          {Math.round(continueRow.progress)}% · {continueRow.completedLessons}/{continueRow.totalLessons} lessons
-                        </span>
-                      </span>
-                    )}
-                  </span>
-                  <ArrowRight className="size-4 shrink-0 text-lime-300 transition-transform group-hover:translate-x-0.5" />
-                </Link>
-              </Reveal>
-            )}
           </div>
 
           <motion.div
