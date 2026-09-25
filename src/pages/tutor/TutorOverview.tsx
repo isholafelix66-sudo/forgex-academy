@@ -147,12 +147,12 @@ export default function TutorOverview() {
             </p>
           </div>
           <div className="flex w-full shrink-0 flex-wrap gap-2 sm:w-auto">
-            <Link to="/academy/tutor"/support">
+            <Link to="/academy/tutor/support">
               <Button variant="outline" className="gap-2 border-white/10">
                 <LifeBuoy className="size-4" /> Report an issue
               </Button>
             </Link>
-            <Link to="/academy/tutor"/students">
+            <Link to="/academy/tutor/students">
               <Button className="gap-2 bg-lime-400 font-semibold text-black hover:bg-lime-300">
                 <Users className="size-4" /> View students
               </Button>
@@ -209,7 +209,7 @@ export default function TutorOverview() {
                 How many students completed each module, per cohort — spot the drop-offs at a glance.
               </p>
             </div>
-            <Link to="/academy/tutor"/communities" className="shrink-0 whitespace-nowrap text-xs text-lime-300 hover:underline">
+            <Link to="/academy/tutor/communities" className="shrink-0 whitespace-nowrap text-xs text-lime-300 hover:underline">
               Manage communities <ArrowRight className="ml-0.5 inline size-3" />
             </Link>
           </div>
@@ -359,25 +359,25 @@ export default function TutorOverview() {
             </div>
             <div className="divide-y divide-white/5">
               <AttentionRow
-                to="/academy/tutor"/communities"
+                to="/academy/tutor/communities"
                 icon={<MessageSquare className="size-4 text-amber-300" />}
                 label="Unanswered questions"
                 value={analytics === undefined ? "…" : String(unanswered)}
               />
               <AttentionRow
-                to="/academy/tutor"/grading"
+                to="/academy/tutor/grading"
                 icon={<ClipboardCheck className="size-4 text-amber-300" />}
                 label="Submissions to grade"
                 value={analytics === undefined ? "…" : String(pendingCount)}
               />
               <AttentionRow
-                to="/academy/tutor"/communities"
+                to="/academy/tutor/communities"
                 icon={<BookOpen className="size-4 text-lime-300" />}
                 label="Active communities"
                 value={analytics === undefined ? "…" : String(activeCommunities)}
               />
               <AttentionRow
-                to="/academy/tutor"/announcements"
+                to="/academy/tutor/announcements"
                 icon={<Megaphone className="size-4 text-lime-300" />}
                 label="Published announcements"
                 value={analytics === undefined ? "…" : String(announcementCount)}
@@ -389,7 +389,7 @@ export default function TutorOverview() {
           <section className="rounded-2xl border border-white/10 bg-card">
             <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 border-b border-white/10 px-5 py-4">
               <h3 className="font-display min-w-0 truncate text-sm font-semibold">Latest submissions</h3>
-              <Link to="/academy/tutor"/grading" className="shrink-0 whitespace-nowrap text-xs text-lime-300 hover:underline">
+              <Link to="/academy/tutor/grading" className="shrink-0 whitespace-nowrap text-xs text-lime-300 hover:underline">
                 Grade now
               </Link>
             </div>
@@ -402,7 +402,7 @@ export default function TutorOverview() {
                 {recentPending.map((s) => (
                   <Link
                     key={s._id}
-                    to="/academy/tutor"/grading"
+                    to="/academy/tutor/grading"
                     className="flex items-center gap-3 rounded-xl border border-white/8 bg-black/20 px-3 py-2.5 transition-colors hover:border-lime-400/40"
                   >
                     <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-amber-400/12 text-amber-300">
@@ -427,7 +427,7 @@ export default function TutorOverview() {
           <section className="rounded-2xl border border-white/10 bg-card">
             <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 border-b border-white/10 px-5 py-4">
               <h3 className="font-display min-w-0 truncate text-sm font-semibold">Your courses</h3>
-              <Link to="/academy/tutor"/courses" className="shrink-0 whitespace-nowrap text-xs text-lime-300 hover:underline">
+              <Link to="/academy/tutor/courses" className="shrink-0 whitespace-nowrap text-xs text-lime-300 hover:underline">
                 Manage
               </Link>
             </div>
@@ -450,7 +450,7 @@ export default function TutorOverview() {
               {(courses ?? []).length === 0 && (
                 <p className="text-sm text-muted-foreground">
                   No courses yet —{" "}
-                  <Link to="/academy/tutor"/courses/new" className="text-lime-300 hover:underline">
+                  <Link to="/academy/tutor/courses/new" className="text-lime-300 hover:underline">
                     create your first
                   </Link>
                   .

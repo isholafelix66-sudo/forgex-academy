@@ -29,7 +29,7 @@ export default function StudentDMs() {
           description="Find a classmate and start a private chat — students in the same course can message each other right away."
           action={
             <Link
-              to="/academy/dashboard"/discover"
+              to="/academy/dashboard/discover"
               className="inline-flex items-center gap-2 rounded-xl bg-lime-400 px-5 py-2.5 text-sm font-semibold text-black transition-colors hover:bg-lime-300"
             >
               <UserPlus className="size-4" /> Discover students

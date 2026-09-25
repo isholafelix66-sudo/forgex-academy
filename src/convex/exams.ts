@@ -8,7 +8,7 @@ import {
   requireTutorPreview,
 } from "./lib";
 import { questionValidator, type Question } from "./schema";
-import { enrollmentFor, finishCourseInternal } from "./academy/learn";
+import { enrollmentFor, finishCourseInternal } from "./learn";
 
 const normalize = (s: string) => s.trim().toLowerCase().replace(/\s+/g, " ");
 

@@ -173,7 +173,7 @@ export default function TutorCommunityManage() {
           description="This community doesn't exist, or it belongs to a course you don't teach. Communities are scoped to the tutor assigned to the course."
           action={
             <Link
-              to="/academy/tutor"/communities"
+              to="/academy/tutor/communities"
               className="inline-flex items-center gap-2 rounded-xl bg-lime-400 px-5 py-2.5 text-sm font-semibold text-black transition-colors hover:bg-lime-300"
             >
               <ArrowLeft className="size-4" /> Back to Course Communities
@@ -257,7 +257,7 @@ export default function TutorCommunityManage() {
       {/* Back + header */}
       <div className="flex flex-wrap items-center gap-3">
         <Link
-          to="/academy/tutor"/communities"
+          to="/academy/tutor/communities"
           className="inline-flex items-center gap-1.5 rounded-xl border border-white/10 px-3 py-2 text-sm font-medium text-muted-foreground transition-colors hover:border-lime-400/40 hover:text-lime-300"
         >
           <ArrowLeft className="size-4" /> Course Communities

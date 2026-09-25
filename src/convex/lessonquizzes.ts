@@ -11,7 +11,7 @@ import {
   requireTutorPreview,
 } from "./lib";
 import { questionValidator, type Question } from "./schema";
-import { completeLessonInternal, enrollmentFor } from "./academy/learn";
+import { completeLessonInternal, enrollmentFor } from "./learn";
 import { courseRequirements, effectiveWatchedPercent } from "./lmsShared";
 
 const normalize = (s: string) => s.trim().toLowerCase().replace(/\s+/g, " ");

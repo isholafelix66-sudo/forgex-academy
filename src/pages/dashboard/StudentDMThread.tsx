@@ -128,7 +128,7 @@ export default function StudentDMThread() {
       {/* Header */}
       <div className="flex items-center gap-3 rounded-2xl border border-white/10 bg-card px-4 py-3">
         <Button variant="ghost" size="icon" asChild className="shrink-0 text-muted-foreground">
-          <Link to="/academy/dashboard"/dms" title="Back to DMs">
+          <Link to="/academy/dashboard/dms" title="Back to DMs">
             <ArrowLeft className="size-4" />
           </Link>
         </Button>

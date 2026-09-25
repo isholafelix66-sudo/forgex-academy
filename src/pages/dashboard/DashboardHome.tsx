@@ -177,7 +177,7 @@ export default function DashboardHome() {
       <section>
         <div className="mb-4 flex items-center justify-between">
           <h2 className="font-display text-xl font-bold">Courses in progress</h2>
-          <Link to="/academy/dashboard"/my-courses" className="inline-flex items-center gap-1 text-sm text-lime-300 hover:underline">
+          <Link to="/academy/dashboard/my-courses" className="inline-flex items-center gap-1 text-sm text-lime-300 hover:underline">
             View all <ArrowRight className="size-3.5" />
           </Link>
         </div>
@@ -252,7 +252,7 @@ export default function DashboardHome() {
               Add your name so certificates and greetings show correctly.
             </p>
           </div>
-          <Link to="/academy/dashboard"/profile">
+          <Link to="/academy/dashboard/profile">
             <Button className="shrink-0 gap-2 bg-lime-400 font-semibold text-black hover:bg-lime-300">
               Edit profile
               <ArrowRight className="size-4" />
@@ -295,7 +295,7 @@ export default function DashboardHome() {
               View and share your verifiable certificates.
             </p>
           </div>
-          <Link to="/academy/dashboard"/certificates">
+          <Link to="/academy/dashboard/certificates">
             <Button variant="outline" className="border-lime-400/30 text-lime-300 hover:bg-lime-400/10">
               View certificates
             </Button>

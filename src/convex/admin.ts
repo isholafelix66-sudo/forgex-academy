@@ -6,7 +6,7 @@ import { displayName, guardOwnerAccount, hydrateCourse, hydrateCourses, isDesign
 import { difficultyValidator, ROLES, roleValidator, questionValidator, assignmentQuestionValidator, resourceValidator } from "./schema";
 import { messagePreview } from "./messages";
 import { recordDeletedCatalogSlug } from "./aiCourseSeed";
-import { verifyPassword } from "./academy/adminCrypto";
+import { verifyPassword } from "./adminCrypto";
 
 // ---------------------------------------------------------------------------
 // Admin password gate (access is URL-only: /academy/admin + this password)
@@ -22,7 +22,7 @@ import { verifyPassword } from "./academy/adminCrypto";
 // password (via OTP to the security email), update the security email, or
 // revoke sessions. A leaked session token alone can do none of those things.
 import { ADMIN_ACCESS_PASSWORD } from "./lib";
-import { createOwnerSession } from "./academy/adminSecurity";
+import { createOwnerSession } from "./adminSecurity";
 
 /** Case-insensitive password match (the default password is a word). */
 const matches = (a: string, b: string) =>

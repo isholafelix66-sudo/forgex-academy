@@ -27,7 +27,7 @@ export default function TeamHub() {
   }
 
   if (!isAuthenticated) {
-    return <Navigate to="/academy/login"?returnTo=/team" replace />;
+    return <Navigate to="/academy/login?returnTo=/team" replace />;
   }
 
   // Admins go to admin panel

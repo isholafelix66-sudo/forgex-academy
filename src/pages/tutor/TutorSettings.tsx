@@ -72,7 +72,7 @@ export default function TutorSettings() {
                 A shareable mini website — edit the content under Tutor Profile.
               </p>
             </div>
-            <Link to="/academy/tutor"/profile">
+            <Link to="/academy/tutor/profile">
               <Button variant="outline" className="border-lime-400/30 text-lime-300 hover:bg-lime-400/10">
                 Edit profile
               </Button>

@@ -1,7 +1,7 @@
 import { mutation, query } from "./_generated/server";
 import { v } from "convex/values";
 import { checkRateLimit, notify, requireUser, requireUserDoc } from "./lib";
-import { tryCompleteCourseInternal } from "./academy/learn";
+import { tryCompleteCourseInternal } from "./learn";
 import { courseRequirements } from "./lmsShared";
 import type { Question } from "./schema";
 

@@ -622,7 +622,7 @@ export default function AIHub() {
                   Explore courses <ArrowRight className="size-4" />
                 </Button>
               </Link>
-              <Link to="/academy/login"?mode=signup">
+              <Link to="/academy/login?mode=signup">
                 <Button size="lg" variant="outline" className="border-white/15 hover:border-lime-400/40 hover:text-lime-300">
                   Join ForgeX free
                 </Button>

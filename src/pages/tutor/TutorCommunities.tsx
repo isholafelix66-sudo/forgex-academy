@@ -160,7 +160,7 @@ export default function TutorCommunities() {
           description="Communities are created automatically when students enroll in your courses — or ask an admin to create a cohort for you. They'll appear here as soon as they exist."
           action={
             <Link
-              to="/academy/tutor"/courses"
+              to="/academy/tutor/courses"
               className="inline-flex items-center gap-2 rounded-xl bg-lime-400 px-5 py-2.5 text-sm font-semibold text-black transition-colors hover:bg-lime-300"
             >
               <Plus className="size-4" /> View my courses

@@ -373,7 +373,7 @@ export default function CourseDetail() {
                       </p>
                     </div>
                     {isEnrolled ? (
-                      <Link to="/academy/dashboard"/assignments" className="shrink-0">
+                      <Link to="/academy/dashboard/assignments" className="shrink-0">
                         <Button
                           size="sm"
                           className="w-full bg-lime-400 font-semibold text-black hover:bg-lime-300 sm:w-auto"

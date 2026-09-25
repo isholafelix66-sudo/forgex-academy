@@ -192,7 +192,7 @@ function ShareStoryForm({ onDone }: { onDone?: () => void }) {
       {!isAuthenticated && (
         <p className="rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-xs leading-relaxed text-muted-foreground">
           You don&rsquo;t need an account to share a story — but{" "}
-          <Link to="/academy/login"" className="font-semibold text-lime-300 hover:underline">
+          <Link to="/academy/login" className="font-semibold text-lime-300 hover:underline">
             signing in
           </Link>{" "}
           lets you track your submission here and helps us verify it.
@@ -433,7 +433,7 @@ export default function Stories() {
                   Explore courses <ArrowRight className="size-4" />
                 </Button>
               </Link>
-              <Link to="/academy/login"?mode=signup">
+              <Link to="/academy/login?mode=signup">
                 <Button size="lg" variant="outline" className="border-white/15 hover:border-lime-400/40 hover:text-lime-300">
                   Join ForgeX free
                 </Button>
