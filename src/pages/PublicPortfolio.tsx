@@ -173,7 +173,7 @@ export default function PublicPortfolio() {
           <h1 className="font-display mt-5 text-xl font-bold">{title}</h1>
           <p className="mt-2 text-sm leading-relaxed text-muted-foreground">{body}</p>
           <div className="mt-6 flex flex-wrap justify-center gap-3">
-            <Link to="/explore">
+            <Link to="/portfolio/explore">
               <Button variant="outline" className="border-white/15">
                 Explore portfolios
               </Button>
@@ -630,7 +630,7 @@ export default function PublicPortfolio() {
               <Flag className="size-3.5" /> Report
             </button>
             <Link
-              to="/"
+              to="/portfolio"
               className="inline-flex items-center gap-1.5 font-semibold transition-colors"
               style={{ color: accent }}
             >

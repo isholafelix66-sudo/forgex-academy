@@ -73,7 +73,7 @@ export default function About() {
                 Sign In <ArrowRight className="size-4" />
               </Button>
             </Link>
-            <Link to="/explore">
+            <Link to="/portfolio/explore">
               <Button
                 size="lg"
                 variant="outline"

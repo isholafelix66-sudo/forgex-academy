@@ -10,7 +10,7 @@ import {
   InputOTPSlot,
 } from "@/components/ui/input-otp";
 import { useAuth } from "@/hooks/use-auth";
-import { PublicNav } from "@/components/site/PublicNav";
+import { AcademyNav } from "@/components/site/AcademyNav";
 import { Footer } from "@/components/site/Footer";
 import { BackgroundFX } from "@/components/site/PublicLayout";
 import logo from "@/assets/logo.svg";
@@ -249,7 +249,7 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
   return (
     <div className="relative flex min-h-screen flex-col">
       <BackgroundFX />
-      <PublicNav />
+      <AcademyNav />
       <div className="flex flex-1 items-center justify-center px-4 py-12">
         <div className="w-full max-w-md">
           <div className="mb-6 text-center">
@@ -476,7 +476,7 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
           </p>
         </div>
       </div>
-      <Footer />
+      <Footer product="academy" />
     </div>
   );
 }

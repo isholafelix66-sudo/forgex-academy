@@ -19,6 +19,8 @@ import { attachRoutePrefetch } from "@/lib/prefetch";
 import { registerServiceWorker } from "@/lib/sw";
 import { scrollToTopInstant } from "@/lib/scroll";
 import { PublicLayout } from "@/components/site/PublicLayout";
+import { AcademyLayout } from "@/components/site/AcademyLayout";
+import { isPortfolioPath } from "@/lib/product";
 import { AiSupportAssistant } from "@/components/site/AiSupportAssistant";
 import { ProductEntry } from "@/pages/ComingSoon";
 import { ConnectionBanner } from "@/components/network/ConnectionBanner";
@@ -30,7 +32,7 @@ import { NameSetupDialog } from "@/components/NameSetupDialog";
  */
 function AcademyOnlyAssistantMount() {
   const { pathname } = useLocation();
-  if (!pathname.startsWith("/academy")) return null;
+  if (isPortfolioPath(pathname)) return null;
   return (
     <Suspense fallback={null}>
       <AiSupportAssistant />
@@ -178,7 +180,9 @@ class ChatErrorBoundary extends React.Component<
  */
 function LazyFloatingChatWrapper() {
   const { pathname } = useLocation();
-  if (pathname.startsWith("/team")) return null;
+  // Academy-only: hidden on /team (token auth) and on every Portfolio route so
+  // the Portfolio website never surfaces Academy chat.
+  if (pathname.startsWith("/team") || isPortfolioPath(pathname)) return null;
   return (
     <ChatErrorBoundary>
       <LazyFloatingChat />
@@ -187,6 +191,8 @@ function LazyFloatingChatWrapper() {
 }
 
 const Landing = L(() => import("./pages/Landing.tsx"));
+const AcademyHome = L(() => import("./pages/AcademyHome.tsx"));
+const AcademyAbout = L(() => import("./pages/AcademyAbout.tsx"));
 const About = L(() => import("./pages/About.tsx"));
 const Courses = L(() => import("./pages/Courses.tsx"));
 const CourseDetail = L(() => import("./pages/CourseDetail.tsx"));
@@ -331,6 +337,12 @@ const AdminPortalRedirect = L(
  */
 function AdminBrandLegacyRedirect() {
   return <Navigate to="/admin-brand" replace />;
+}
+
+/** Legacy Portfolio public paths → their canonical /portfolio/* URLs. */
+function ExploreLegacyRedirect() {
+  const { search } = useLocation();
+  return <Navigate to={`/portfolio/explore${search}`} replace />;
 }
 
 /** Keep old Portfolio editor bookmarks working after the dashboard move. */
@@ -1081,22 +1093,13 @@ createRoot(document.getElementById("root")!).render(
                   pages swaps only the page content, so the whole viewport
                   never unmounts/repaints (the old white flash on every
                   desktop navigation). ── */}
-              <Route element={<PublicLayout />}>
-                {/* ── Projects — the live product ── */}
-                <Route path="/" element={<Landing />} />
-                <Route path="/explore" element={<Explore />} />
-                <Route path="/about" element={<About />} />
-                <Route path="/contact" element={<Contact />} />
-
-                <Route
-                  path="/opportunity-hub"
-                  element={<ProductEntry product="opportunity-hub" to="/" />}
-                />
-
-                {/* ForgeX Academy is a restored, first-class product. Its
-                    existing catalog is the homepage so no placeholder or new
-                    implementation replaces the working Academy experience. */}
-                <Route path="/academy" element={<Courses />} />
+              {/* ══ FORGE X ACADEMY — the MAIN website. The root "/" and every
+                  /academy route render Academy pages inside the Academy shell
+                  (Academy header + Academy footer). No Portfolio chrome or
+                  content ever appears here. ══ */}
+              <Route element={<AcademyLayout />}>
+                <Route path="/" element={<AcademyHome />} />
+                <Route path="/academy" element={<AcademyHome />} />
                 <Route path="/academy/courses" element={<Courses />} />
                 <Route path="/academy/courses/:slug" element={<CourseDetail />} />
                 <Route path="/academy/tutors" element={<Tutors />} />
@@ -1111,8 +1114,14 @@ createRoot(document.getElementById("root")!).render(
                 <Route path="/academy/become-tutor" element={<BecomeTutor />} />
                 <Route path="/academy/verify/:certificateId" element={<VerifyCertificate />} />
                 <Route path="/academy/tutor/:slug" element={<TutorPage />} />
-                <Route path="/academy/about" element={<About />} />
+                <Route path="/academy/about" element={<AcademyAbout />} />
                 <Route path="/academy/contact" element={<Contact />} />
+
+                {/* The Opportunity Hub teaser belongs to the main ForgeX site. */}
+                <Route
+                  path="/opportunity-hub"
+                  element={<ProductEntry product="opportunity-hub" to="/academy" />}
+                />
 
                 {/* Old unprefixed Academy links remain safe redirects. */}
                 <Route path="/courses/*" element={<AcademyLegacyRedirect />} />
@@ -1125,9 +1134,33 @@ createRoot(document.getElementById("root")!).render(
                 <Route path="/become-tutor/*" element={<AcademyLegacyRedirect />} />
                 <Route path="/verify/*" element={<AcademyLegacyRedirect />} />
 
-                {/* Catch-all 404 also renders inside the public shell. */}
+                {/* Short Academy paths resolve to the Academy pages. */}
+                <Route path="/about" element={<Navigate to="/academy/about" replace />} />
+                <Route path="/contact" element={<Navigate to="/academy/contact" replace />} />
+
+                {/* Convenience Academy aliases → the Academy dashboard. */}
+                <Route path="/academy/notifications" element={<Navigate to="/academy/dashboard/notifications" replace />} />
+                <Route path="/academy/settings" element={<Navigate to="/academy/dashboard/settings" replace />} />
+                <Route path="/academy/profile" element={<Navigate to="/academy/dashboard/profile" replace />} />
+                <Route path="/academy/students" element={<Navigate to="/academy/dashboard/discover" replace />} />
+
+                {/* Unknown paths get Academy chrome — Academy is the main site. */}
                 <Route path="*" element={<NotFound />} />
               </Route>
+
+              {/* ══ FORGE X PORTFOLIO — a completely separate product, reachable
+                  ONLY under /portfolio. Its public pages use the Portfolio
+                  shell (Portfolio header + Portfolio footer). ══ */}
+              <Route element={<PublicLayout />}>
+                <Route path="/portfolio" element={<Landing />} />
+                <Route path="/portfolio/explore" element={<Explore />} />
+                <Route path="/portfolio/about" element={<About />} />
+                {/* Unknown Portfolio paths keep the Portfolio chrome. */}
+                <Route path="/portfolio/*" element={<NotFound />} />
+              </Route>
+
+              {/* Back-compat for the old Portfolio public paths. */}
+              <Route path="/explore" element={<ExploreLegacyRedirect />} />
 
               {/* Public portfolio website — a standalone personal site
                   (/p/<slug>) with its own minimal chrome, deliberately
@@ -1171,9 +1204,9 @@ createRoot(document.getElementById("root")!).render(
                 <Route path="settings" element={<PortfolioSettings />} />
               </Route>
 
-              {/* Back-compat: the old workspace path redirects into the
-                  creator dashboard. */}
-              <Route path="/portfolio" element={<PortfolioRedirect />} />
+              {/* Back-compat: the old workspace paths redirect into the
+                  creator dashboard. /portfolio itself now renders the
+                  Portfolio homepage inside the Portfolio shell above. */}
               <Route path="/portfolio/edit" element={<LegacyPortfolioSectionRedirect />} />
               <Route path="/portfolio/edit/:section" element={<LegacyPortfolioSectionRedirect />} />
               <Route path="/portfolio/projects" element={<LegacyPortfolioProjectsRedirect />} />
@@ -1268,7 +1301,8 @@ createRoot(document.getElementById("root")!).render(
                     as a redirect for legacy bookmarks. ── */}
               <Route path="/admin-brand" element={<AdminBrand />} />
               <Route path="/adminbrand" element={<AdminBrandLegacyRedirect />} />
-              <Route path="/portfolio/signin" element={<PortfolioSignIn />} />
+              {/* Requested Portfolio admin route → the existing portal. */}
+              <Route path="/portfolio/admin" element={<Navigate to="/admin-brand" replace />} />
 
               {/* Admin dashboard — password-gated only, no user account needed. */}
               <Route path="/academy/admin" element={<AdminShell />}>

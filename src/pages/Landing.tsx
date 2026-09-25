@@ -129,7 +129,7 @@ export default function Landing() {
               className="mt-7"
             >
               <Link
-                to="/explore"
+                to="/portfolio/explore"
                 className="group inline-flex items-center gap-2 text-sm font-semibold text-lime-300 transition-colors hover:text-lime-200"
               >
                 Explore portfolios
@@ -153,7 +153,7 @@ export default function Landing() {
       <section className="mx-auto max-w-7xl px-4 pb-16 sm:px-6 sm:pb-20">
         <div className="no-scrollbar -mx-4 flex gap-2 overflow-x-auto px-4 pb-1 sm:mx-0 sm:flex-wrap sm:px-0">
           <Link
-            to="/explore"
+            to="/portfolio/explore"
             className="shrink-0 rounded-full bg-lime-400 px-5 py-2.5 text-xs font-bold text-black transition-colors hover:bg-lime-300"
           >
             All
@@ -161,7 +161,7 @@ export default function Landing() {
           {chips.map((c) => (
             <Link
               key={c}
-              to={`/explore?category=${encodeURIComponent(c)}`}
+              to={`/portfolio/explore?category=${encodeURIComponent(c)}`}
               className="shrink-0 rounded-full border border-white/10 bg-white/[0.03] px-5 py-2.5 text-xs font-semibold text-muted-foreground transition-colors hover:border-white/25 hover:text-foreground"
             >
               {c}
@@ -174,7 +174,7 @@ export default function Landing() {
             Featured Projects
           </h2>
           <Link
-            to="/explore"
+            to="/portfolio/explore"
             aria-label="See all projects"
             className="flex size-10 shrink-0 items-center justify-center rounded-full border border-white/10 bg-white/[0.04] text-muted-foreground transition-colors hover:border-lime-400/40 hover:text-lime-300"
           >
@@ -209,7 +209,7 @@ export default function Landing() {
                 Recent Projects
               </h2>
               <Link
-                to="/explore"
+                to="/portfolio/explore"
                 aria-label="See all recent projects"
                 className="flex size-10 shrink-0 items-center justify-center rounded-full border border-white/10 bg-white/[0.04] text-muted-foreground transition-colors hover:border-lime-400/40 hover:text-lime-300"
               >
@@ -443,7 +443,7 @@ function EmptyWork() {
         Publish a project and make it discoverable — the first featured work
         shows up right here.
       </p>
-      <Link to="/explore" className="mt-6 inline-block">
+      <Link to="/portfolio/explore" className="mt-6 inline-block">
         <Button className="gap-2 bg-lime-400 font-semibold text-black hover:bg-lime-300">
           Explore portfolios <ArrowRight className="size-4" />
         </Button>

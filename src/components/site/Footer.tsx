@@ -1,7 +1,7 @@
 import { Link, useLocation } from "react-router";
 import { useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
-import { BookOpen, Mail, MapPin, MessageSquare, Phone } from "lucide-react";
+import { Mail, MapPin, MessageSquare, Phone } from "lucide-react";
 import logo from "@/assets/logo.svg";
 import { toExternalHref } from "@/lib/url";
 import { BrandMark } from "./BrandMark";
@@ -51,7 +51,6 @@ function AcademyFooter() {
             ["/academy/tutors", "Tutors"],
             ["/academy/showcase", "Showcase"],
             ["/academy/prompts", "Prompts"],
-            ["/portfolio", "Portfolio"],
           ].map(([to, label]) => (
             <Link key={to} to={to} className="rounded-lg border border-white/10 bg-white/5 px-3 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:border-lime-400/40 hover:text-lime-300">
               {label}
@@ -63,7 +62,11 @@ function AcademyFooter() {
   );
 }
 
-export function Footer() {
+export function Footer({
+  product,
+}: {
+  product?: "academy" | "portfolio";
+} = {}) {
   const { pathname } = useLocation();
   const content = useQuery(api.public.siteContentAll);
   const branding = useBranding();
@@ -92,7 +95,12 @@ export function Footer() {
           .sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
       : DEFAULT_SOCIALS;
 
-  if (pathname.startsWith("/academy")) {
+  // The active product is determined by the route (or explicitly by the
+  // layout that mounts this footer) — never inferred from the signed-in user.
+  const isAcademy = product
+    ? product === "academy"
+    : pathname === "/" || pathname.startsWith("/academy");
+  if (isAcademy) {
     return <AcademyFooter />;
   }
 
@@ -118,8 +126,8 @@ export function Footer() {
               primary destinations, so the rest lives here on mobile. */}
           <div className="mt-4 flex flex-wrap gap-2">
             {[
-              { to: "/about", label: "About" },
-              { to: "/contact", label: "Contact" },
+              { to: "/portfolio", label: "Home" },
+              { to: "/portfolio/about", label: "About" },
             ].map((l) => (
               <Link
                 key={l.to}
@@ -129,19 +137,6 @@ export function Footer() {
                 {l.label}
               </Link>
             ))}
-            <Link
-              to="/academy"
-              className="inline-flex max-w-full items-center gap-1.5 whitespace-nowrap rounded-lg border border-lime-400/20 bg-lime-400/5 px-3 py-1.5 text-xs font-medium text-lime-300 transition-colors hover:border-lime-400/40 hover:bg-lime-400/10"
-            >
-              <BookOpen className="size-3" aria-hidden="true" />
-              Academy
-            </Link>
-            <Link
-              to="/opportunity-hub"
-              className="inline-flex max-w-full items-center whitespace-nowrap rounded-lg border border-white/10 bg-white/5 px-3 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:border-lime-400/40 hover:text-lime-300"
-            >
-              Opportunity Hub
-            </Link>
             <Link
               to="/help"
               className="inline-flex max-w-full items-center whitespace-nowrap rounded-lg border border-white/10 bg-white/5 px-3 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:border-lime-400/40 hover:text-lime-300"
@@ -154,7 +149,7 @@ export function Footer() {
             {/* Sends an in-app message to the ForgeX team inbox (Contact form),
                 never a mailto: redirect to the visitor's email app. */}
             <Link
-              to="/contact"
+              to="/help"
               className="inline-flex items-center gap-1.5 rounded-lg border border-white/10 bg-white/5 px-3 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:border-lime-400/40 hover:text-lime-300"
             >
               <MessageSquare className="size-3.5 text-lime-400" />
@@ -200,10 +195,9 @@ export function Footer() {
           <div className="hidden md:block">
             <h4 className="text-sm font-semibold text-foreground">Quick links</h4>
             <ul className="mt-4 space-y-2.5 text-sm text-muted-foreground">
-              <li><Link to="/" className="transition-colors hover:text-lime-300">Home</Link></li>
-              <li><Link to="/explore" className="transition-colors hover:text-lime-300">Explore portfolios</Link></li>
-              <li><Link to="/about" className="transition-colors hover:text-lime-300">About</Link></li>
-              <li><Link to="/contact" className="transition-colors hover:text-lime-300">Contact</Link></li>
+              <li><Link to="/portfolio" className="transition-colors hover:text-lime-300">Home</Link></li>
+              <li><Link to="/portfolio/explore" className="transition-colors hover:text-lime-300">Explore portfolios</Link></li>
+              <li><Link to="/portfolio/about" className="transition-colors hover:text-lime-300">About</Link></li>
               <li>
                 <Link to="/help" className="transition-colors hover:text-lime-300">
                   Get help / report an issue
@@ -237,7 +231,7 @@ export function Footer() {
                 </li>
               )}
               {!contact.email && !contact.phone && !contact.address && (
-                <li><Link to="/contact" className="transition-colors hover:text-lime-300">Contact page</Link></li>
+                <li><Link to="/help" className="transition-colors hover:text-lime-300">Get help</Link></li>
               )}
             </ul>
 

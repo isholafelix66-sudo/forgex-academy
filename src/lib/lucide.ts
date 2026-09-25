@@ -119,6 +119,7 @@ export { default as LogOut } from "lucide-react/dist/esm/icons/log-out.js";
 export { default as Mail } from "lucide-react/dist/esm/icons/mail.js";
 export { default as MailOpen } from "lucide-react/dist/esm/icons/mail-open.js";
 export { default as Map } from "lucide-react/dist/esm/icons/map.js";
+export { default as MapIcon } from "lucide-react/dist/esm/icons/map.js";
 export { default as MapPin } from "lucide-react/dist/esm/icons/map-pin.js";
 export { default as Megaphone } from "lucide-react/dist/esm/icons/megaphone.js";
 export { default as Menu } from "lucide-react/dist/esm/icons/menu.js";
