@@ -355,6 +355,11 @@ function LegacyPortfolioProjectsRedirect() {
   return <Navigate to="/portfolio/dashboard/projects" replace />;
 }
 
+/** The spec's "case studies" entry maps onto the Portfolio projects workspace. */
+function LegacyPortfolioCaseStudiesRedirect() {
+  return <Navigate to="/portfolio/dashboard/projects" replace />;
+}
+
 function LegacyPortfolioSettingsRedirect() {
   return <Navigate to="/portfolio/dashboard/settings" replace />;
 }
@@ -1210,6 +1215,7 @@ createRoot(document.getElementById("root")!).render(
               <Route path="/portfolio/edit" element={<LegacyPortfolioSectionRedirect />} />
               <Route path="/portfolio/edit/:section" element={<LegacyPortfolioSectionRedirect />} />
               <Route path="/portfolio/projects" element={<LegacyPortfolioProjectsRedirect />} />
+              <Route path="/portfolio/case-studies" element={<LegacyPortfolioCaseStudiesRedirect />} />
               <Route path="/portfolio/settings" element={<LegacyPortfolioSettingsRedirect />} />
               <Route path="/portfolio/messages" element={<LegacyPortfolioMessagesRedirect />} />
               <Route path="/portfolio/profile" element={<LegacyPortfolioProfileRedirect />} />
