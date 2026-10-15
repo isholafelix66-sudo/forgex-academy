@@ -47,11 +47,28 @@ export function logDiagnostic(message: string, extra?: Record<string, unknown>) 
   }
 }
 
+export function isReloadThrottled(): boolean {
+  try {
+    return sessionStorage.getItem("fx_reload_throttled") === "1";
+  } catch {
+    return false;
+  }
+}
+
+export function clearReloadThrottle(): void {
+  try {
+    sessionStorage.removeItem("fx_reload_throttled");
+  } catch {
+    // ignore
+  }
+}
+
 /**
  * Attempt a safe reload flow:
  *  - Throttle reloads to avoid loops (2 reloads per 5 minutes)
  *  - Prefer activating a waiting service worker before forcing a reload
- *  - If throttle exceeded, show a clear diagnostic prompt to the user
+ *  - If throttle exceeded, set a throttle flag so the UI can present a
+ *    recovery card instead of auto-reloading.
  * Returns true if a reload was initiated, false if not.
  */
 export async function safeReloadAttempt(): Promise<boolean> {
@@ -59,6 +76,7 @@ export async function safeReloadAttempt(): Promise<boolean> {
   try {
     const KEY_AT = "fx_chunk_reload_at";
     const KEY_COUNT = "fx_chunk_reload_count";
+    const THROTTLE_FLAG = "fx_reload_throttled";
     const now = Date.now();
     const last = Number(sessionStorage.getItem(KEY_AT) ?? 0);
     let count = Number(sessionStorage.getItem(KEY_COUNT) ?? 0);
@@ -68,20 +86,15 @@ export async function safeReloadAttempt(): Promise<boolean> {
       count = 0;
     }
 
-    // If we've already reloaded twice in the window, do not auto-reload again
+    // If we've already reloaded twice in the window, set throttle flag and
+    // avoid auto-reloading again — let the UI present a recovery card.
     if (count >= 2) {
-      logDiagnostic("Reload throttle engaged; presenting recovery UI", { last, count });
-      // Show a clear, non-technical prompt to the user — minimal UI (alert)
       try {
-        // Provide options via alert; this is intentionally conservative and
-        // visible. Support should replace with nicer UI if desired.
-        // eslint-disable-next-line no-alert
-        alert(
-          "ForgeX experienced a loading problem and automatic recovery was paused to avoid a reload loop.\n\nPlease try a hard reload (Ctrl/Cmd+Shift+R), open the site in an Incognito window, or contact support with console logs.",
-        );
+        sessionStorage.setItem(THROTTLE_FLAG, "1");
       } catch {
         // ignore
       }
+      logDiagnostic("Reload throttle engaged; automatic reload suppressed", { last, count });
       return false;
     }
 
