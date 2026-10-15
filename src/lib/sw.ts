@@ -18,6 +18,23 @@ export function registerServiceWorker() {
   if (typeof window === "undefined") return;
   if (!("serviceWorker" in navigator)) return;
 
+  // Short-circuit registration when expressly disabled via env. This is a
+  // temporary, controlled recovery knob so a new deploy can avoid registering
+  // a service worker while we're diagnosing cache mismatch issues. Set this
+  // in Vercel preview or production as VITE_DISABLE_SERVICE_WORKER="1".
+  try {
+    // import.meta.env is replaced at build time — provide a runtime guard so
+    // reading it won't throw in older tooling.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const env: any = (typeof import !== "undefined" && (globalThis as any)?.__vite_injected__?.env) || import.meta.env;
+    if (env && (env.VITE_DISABLE_SERVICE_WORKER === "1" || env.VITE_DISABLE_SERVICE_WORKER === "true")) {
+      console.info("[ForgeX] Service worker registration disabled by VITE_DISABLE_SERVICE_WORKER");
+      return;
+    }
+  } catch {
+    // Fall through and register normally if env access is not available.
+  }
+
   if (import.meta.env.DEV) {
     void removeDevServiceWorkers();
     return;
